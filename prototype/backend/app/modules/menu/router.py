@@ -1,0 +1,79 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.modules.menu import schemas
+from app.modules.menu.models import MenuItem
+
+router = APIRouter(prefix="/api/v1/menu-items", tags=["menu"])
+
+# Ordre logique d'un repas plutôt que l'ordre alphabétique par défaut
+# (audit PO : "Boissons"/"Desserts" passaient avant "Plats"). Toute
+# catégorie absente de cette liste est repoussée en fin de carte.
+CATEGORY_ORDER = ["Entrées", "Plats", "Desserts", "Boissons"]
+
+
+def _category_rank(category: str) -> int:
+    try:
+        return CATEGORY_ORDER.index(category)
+    except ValueError:
+        return len(CATEGORY_ORDER)
+
+
+@router.post("", response_model=schemas.MenuItemOut, status_code=201)
+def create_menu_item(payload: schemas.MenuItemCreate, db: Session = Depends(get_db)):
+    item = MenuItem(**payload.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.MenuItemOut])
+def list_menu(restaurant_id: int, db: Session = Depends(get_db)):
+    """
+    Endpoint public appelé par la page client après scan du QR.
+    Ne renvoie que ce qui est nécessaire pour afficher le menu, triée dans
+    l'ordre logique d'un repas (voir CATEGORY_ORDER).
+    """
+    items = (
+        db.query(MenuItem)
+        .filter(MenuItem.restaurant_id == restaurant_id)
+        .order_by(MenuItem.name)
+        .all()
+    )
+    return sorted(items, key=lambda item: (_category_rank(item.category), item.name))
+
+
+@router.patch("/{item_id}/availability", response_model=schemas.MenuItemOut)
+def set_availability(item_id: int, payload: schemas.MenuItemAvailability, db: Session = Depends(get_db)):
+    """Rupture de stock en un clic — le resto en a besoin en permanence."""
+    item = db.get(MenuItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail={"code": "ITEM_NOT_FOUND", "message": "menu item not found"})
+    item.is_available = payload.is_available
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.patch("/{item_id}", response_model=schemas.MenuItemOut)
+def update_menu_item(item_id: int, payload: schemas.MenuItemUpdate, db: Session = Depends(get_db)):
+    """Édition depuis le dashboard resto (nom, prix, catégorie, description, photo)."""
+    item = db.get(MenuItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail={"code": "ITEM_NOT_FOUND", "message": "menu item not found"})
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.delete("/{item_id}", status_code=204)
+def delete_menu_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.get(MenuItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail={"code": "ITEM_NOT_FOUND", "message": "menu item not found"})
+    db.delete(item)
+    db.commit()

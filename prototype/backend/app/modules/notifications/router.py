@@ -1,0 +1,45 @@
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.modules.notifications.manager import manager
+
+router = APIRouter(tags=["notifications"])
+
+
+@router.websocket("/ws/staff/{restaurant_id}")
+async def ws_staff(websocket: WebSocket, restaurant_id: int):
+    """Le serveur reçoit ici les nouvelles commandes à confirmer pour ses tables."""
+    await manager.connect(websocket, restaurant_id, channel="staff")
+    try:
+        while True:
+            await websocket.receive_text()  # keep-alive / ping du client
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, restaurant_id, channel="staff")
+
+
+@router.websocket("/ws/kitchen/{restaurant_id}")
+async def ws_kitchen(websocket: WebSocket, restaurant_id: int):
+    """Le grand écran cuisine reçoit ici les commandes validées par le serveur."""
+    await manager.connect(websocket, restaurant_id, channel="kitchen")
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, restaurant_id, channel="kitchen")
+
+
+@router.websocket("/ws/order/{restaurant_id}/{order_id}")
+async def ws_order(websocket: WebSocket, restaurant_id: int, order_id: int):
+    """
+    Suivi temps réel côté client après validation de la commande (confirmée
+    / en préparation / prête / servie) — canal ajouté suite à l'audit du
+    2026-08-10 : le client n'avait jusqu'ici aucune visibilité après avoir
+    commandé, alors que toute l'infra WebSocket existait déjà pour
+    serveur/cuisine.
+    """
+    channel = f"order-{order_id}"
+    await manager.connect(websocket, restaurant_id, channel=channel)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, restaurant_id, channel=channel)

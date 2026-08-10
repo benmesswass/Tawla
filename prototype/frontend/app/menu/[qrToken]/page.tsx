@@ -1,0 +1,307 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { api, wsUrl, ApiError, MenuItem, Order, OrderStatus, Restaurant, Table } from "@/lib/api";
+import { toFrenchMessage } from "@/lib/errors";
+import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
+
+type CartLine = { item: MenuItem; quantity: number; note: string };
+
+const STEPS: { status: OrderStatus; label: string }[] = [
+  { status: "pending_confirmation", label: "Envoyée" },
+  { status: "confirmed", label: "Confirmée" },
+  { status: "sent_to_kitchen", label: "En cuisine" },
+  { status: "in_preparation", label: "En préparation" },
+  { status: "ready", label: "Prête" },
+  { status: "served", label: "Servie" },
+];
+
+function lastOrderStorageKey(qrToken: string): string {
+  return `resto-qr-menu:last-order:${qrToken}`;
+}
+
+export default function MenuPage({ params }: { params: { qrToken: string } }) {
+  const { qrToken } = params;
+
+  const [table, setTable] = useState<Table | null>(null);
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<Record<number, CartLine>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
+
+  const load = useCallback(() => {
+    setLoadError(null);
+    setTable(null);
+    api
+      .getTableByToken(qrToken)
+      .then(async (t) => {
+        setTable(t);
+        const [rest, items] = await Promise.all([api.getRestaurant(t.restaurant_id), api.getMenu(t.restaurant_id)]);
+        setRestaurant(rest);
+        setMenu(items);
+
+        // Si le client a déjà une commande en cours pour cette table (ex:
+        // téléphone rafraîchi pendant que le plat était en préparation), on
+        // reprend le suivi au lieu de lui montrer à nouveau tout le menu.
+        const savedId = sessionStorage.getItem(lastOrderStorageKey(qrToken));
+        if (savedId) {
+          try {
+            const order = await api.getOrder(Number(savedId));
+            if (order.status !== "served" && order.status !== "cancelled") {
+              setTrackedOrder(order);
+            } else {
+              sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+            }
+          } catch {
+            sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+          }
+        }
+      })
+      .catch((e) => setLoadError(toFrenchMessage(e)));
+  }, [qrToken]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Suivi temps réel de la commande après validation — jusqu'ici le client
+  // n'avait plus aucune nouvelle après "commande envoyée" (audit PO 2026-08-10).
+  const orderWsUrl =
+    trackedOrder && restaurant ? wsUrl(`/ws/order/${restaurant.id}/${trackedOrder.id}`) : null;
+  useReconnectingSocket(orderWsUrl, (msg) => {
+    if (msg.event === "order.status_changed" && trackedOrder && msg.order_id === trackedOrder.id) {
+      setTrackedOrder((prev) => (prev ? { ...prev, status: msg.status } : prev));
+      if (msg.status === "served" || msg.status === "cancelled") {
+        sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+      }
+    }
+  });
+
+  function addToCart(item: MenuItem) {
+    setCart((prev) => {
+      const existing = prev[item.id];
+      return { ...prev, [item.id]: { item, quantity: (existing?.quantity ?? 0) + 1, note: existing?.note ?? "" } };
+    });
+  }
+
+  function removeFromCart(itemId: number) {
+    setCart((prev) => {
+      const next = { ...prev };
+      if (next[itemId] && next[itemId].quantity > 1) {
+        next[itemId] = { ...next[itemId], quantity: next[itemId].quantity - 1 };
+      } else {
+        delete next[itemId];
+      }
+      return next;
+    });
+  }
+
+  function setNote(itemId: number, note: string) {
+    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], note } } : prev));
+  }
+
+  const cartLines = Object.values(cart);
+  const total = cartLines.reduce((sum, l) => sum + l.item.price * l.quantity, 0);
+
+  async function validateOrder() {
+    if (!table || cartLines.length === 0) return;
+    setSending(true);
+    setOrderError(null);
+    try {
+      const order = await api.createOrder({
+        restaurant_id: table.restaurant_id,
+        table_id: table.id,
+        items: cartLines.map((l) => ({ menu_item_id: l.item.id, quantity: l.quantity, notes: l.note || null })),
+      });
+      sessionStorage.setItem(lastOrderStorageKey(qrToken), String(order.id));
+      setTrackedOrder(order);
+      setCart({});
+    } catch (e) {
+      // Un article devenu indisponible pendant que le client avait le panier
+      // ouvert ne doit plus faire disparaître tout l'écran (bug critique
+      // corrigé suite à l'audit) : on retire juste cet article et le client
+      // peut valider le reste.
+      if (e instanceof ApiError && (e.code === "ITEM_UNAVAILABLE" || e.code === "ITEM_NOT_FOUND")) {
+        const staleId = e.context.menu_item_id as number | undefined;
+        if (staleId) {
+          setCart((prev) => {
+            const next = { ...prev };
+            delete next[staleId];
+            return next;
+          });
+        }
+        api.getMenu(table.restaurant_id).then(setMenu).catch(() => {});
+      }
+      setOrderError(toFrenchMessage(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function orderAgain() {
+    setTrackedOrder(null);
+    sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6 max-w-md mx-auto text-center">
+        <p className="text-red-600 mb-4">{loadError}</p>
+        <button onClick={load} className="bg-neutral-900 text-white px-4 py-2 rounded-lg">
+          Réessayer
+        </button>
+      </div>
+    );
+  }
+  if (!table || !restaurant) return <div className="p-6">Chargement du menu...</div>;
+
+  if (trackedOrder) {
+    const currentStepIndex = STEPS.findIndex((s) => s.status === trackedOrder.status);
+    const cancelled = trackedOrder.status === "cancelled";
+    return (
+      <div className="p-6 max-w-md mx-auto">
+        <h1 className="text-xl font-semibold text-center">
+          {cancelled ? "Commande annulée" : "Commande envoyée 🎉"}
+        </h1>
+        <p className="mt-2 text-neutral-600 text-center">{table.label} — commande #{trackedOrder.id}</p>
+
+        {!cancelled && (
+          <ol className="mt-8 space-y-4">
+            {STEPS.map((step, i) => {
+              const done = i <= currentStepIndex;
+              return (
+                <li key={step.status} className="flex items-center gap-3">
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+                      done ? "bg-amber-600 text-white" : "bg-neutral-200 text-neutral-500"
+                    }`}
+                  >
+                    {done ? "✓" : i + 1}
+                  </span>
+                  <span className={done ? "font-medium text-neutral-900" : "text-neutral-400"}>{step.label}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        <div className="mt-8 border-t pt-4">
+          <p className="text-sm font-medium mb-2">Détail de la commande</p>
+          <ul className="text-sm text-neutral-600 space-y-1">
+            {trackedOrder.items.map((it) => (
+              <li key={it.id}>
+                {it.quantity}× {it.menu_item_name}
+                {it.notes && <span className="text-neutral-400"> — {it.notes}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <button onClick={orderAgain} className="mt-8 w-full border border-neutral-300 rounded-lg py-2.5">
+          Commander à nouveau
+        </button>
+      </div>
+    );
+  }
+
+  const availableItems = menu.filter((m) => m.is_available);
+  const categories = Array.from(new Set(availableItems.map((m) => m.category)));
+
+  return (
+    <div className="pb-32">
+      <header className="bg-amber-700 text-white px-4 py-5">
+        <h1 className="text-xl font-semibold">{restaurant.name}</h1>
+        <p className="text-amber-100 text-sm">{table.label}</p>
+      </header>
+
+      <div className="p-4 max-w-md mx-auto">
+        {orderError && (
+          <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 flex justify-between items-start gap-2">
+            <span>{orderError}</span>
+            <button
+              onClick={() => setOrderError(null)}
+              aria-label="Fermer le message d'erreur"
+              className="text-red-500"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {categories.map((category) => (
+          <section key={category} className="mb-6">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">{category}</h2>
+            {availableItems
+              .filter((m) => m.category === category)
+              .map((item) => (
+                <div key={item.id} className="border-b py-3">
+                  <div className="flex justify-between items-center">
+                    <div className="pr-3">
+                      <div className="font-medium">{item.name}</div>
+                      {item.description && <div className="text-sm text-neutral-500">{item.description}</div>}
+                      <div className="text-sm text-neutral-500 mt-0.5">{item.price.toFixed(2)} DT</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.image_url && (
+                        <img
+                          src={item.image_url}
+                          alt={item.name}
+                          className="w-12 h-12 rounded-lg object-cover hidden sm:block"
+                        />
+                      )}
+                      {cart[item.id] && (
+                        <>
+                          <button
+                            onClick={() => removeFromCart(item.id)}
+                            aria-label={`Retirer un ${item.name} du panier`}
+                            className="w-8 h-8 rounded-full border"
+                          >
+                            -
+                          </button>
+                          <span>{cart[item.id].quantity}</span>
+                        </>
+                      )}
+                      <button
+                        onClick={() => addToCart(item)}
+                        aria-label={`Ajouter ${item.name} au panier`}
+                        className="w-8 h-8 rounded-full bg-neutral-900 text-white"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  {cart[item.id] && (
+                    <input
+                      type="text"
+                      value={cart[item.id].note}
+                      onChange={(e) => setNote(item.id, e.target.value)}
+                      placeholder="Note pour la cuisine (facultatif, ex : sans oignons)"
+                      className="mt-2 w-full text-sm border rounded-lg px-3 py-1.5"
+                    />
+                  )}
+                </div>
+              ))}
+          </section>
+        ))}
+
+        {cartLines.length > 0 && (
+          <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+            <div className="max-w-md mx-auto flex justify-between items-center">
+              <span className="font-medium">{total.toFixed(2)} DT</span>
+              <button
+                onClick={validateOrder}
+                disabled={sending}
+                className="bg-neutral-900 text-white px-4 py-2 rounded-lg"
+              >
+                {sending ? "Envoi..." : "Valider la commande"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
