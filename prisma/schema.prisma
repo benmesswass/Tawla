@@ -1,0 +1,163 @@
+// Schéma initial — Phase 0 (fondations) de ROADMAP.md
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SERVEUR
+  CUISINE
+  MANAGER
+}
+
+enum StatutCommande {
+  EN_ATTENTE
+  CONFIRMEE
+  EN_CUISINE
+  PRETE
+  SERVIE
+  ANNULEE
+}
+
+enum ModePaiement {
+  CARTE
+  CASH
+}
+
+enum StatutPaiement {
+  NON_PAYE
+  EN_ATTENTE
+  PAYE
+}
+
+model Restaurant {
+  id        String   @id @default(cuid())
+  nom       String
+  ville     String
+  adresse   String?
+  createdAt DateTime @default(now())
+
+  utilisateurs Utilisateur[]
+  tables       Table[]
+  categories   Categorie[]
+  plats        Plat[]
+  commandes    Commande[]
+}
+
+model Utilisateur {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  motDePasseHash String
+  nom            String
+  role           Role
+  createdAt      DateTime @default(now())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  commandesPrisesEnCharge Commande[] @relation("ServeurCommande")
+
+  @@index([restaurantId])
+}
+
+model Table {
+  id        String   @id @default(cuid())
+  numero    String
+  qrToken   String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  commandes Commande[]
+
+  @@unique([restaurantId, numero])
+}
+
+model Categorie {
+  id    String @id @default(cuid())
+  nom   String
+  ordre Int    @default(0)
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  plats Plat[]
+
+  @@index([restaurantId])
+}
+
+model Plat {
+  id           String   @id @default(cuid())
+  nom          String
+  description  String?
+  prixMillimes Int
+  photoUrl     String?
+  disponible   Boolean  @default(true)
+  niveauPiment Int?
+  halal        Boolean  @default(true)
+  allergenes   String[] @default([])
+  createdAt    DateTime @default(now())
+
+  categorieId String
+  categorie   Categorie @relation(fields: [categorieId], references: [id], onDelete: Cascade)
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  lignesCommande LigneCommande[]
+
+  @@index([restaurantId])
+  @@index([categorieId])
+}
+
+model Commande {
+  id                String         @id @default(cuid())
+  statut            StatutCommande @default(EN_ATTENTE)
+  modePaiement      ModePaiement?
+  statutPaiement    StatutPaiement @default(NON_PAYE)
+  pourboireMillimes Int?
+
+  createdAt        DateTime  @default(now())
+  priseEnChargeAt  DateTime?
+  confirmeeAt      DateTime?
+  envoyeeCuisineAt DateTime?
+  preteAt          DateTime?
+  servieAt         DateTime?
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  tableId String
+  table   Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  serveurId String?
+  serveur   Utilisateur? @relation("ServeurCommande", fields: [serveurId], references: [id])
+
+  lignes LigneCommande[]
+
+  @@index([restaurantId, statut])
+  @@index([tableId])
+  @@index([serveurId])
+}
+
+model LigneCommande {
+  id                   String  @id @default(cuid())
+  quantite             Int
+  prixUnitaireMillimes Int
+  note                 String?
+
+  commandeId String
+  commande   Commande @relation(fields: [commandeId], references: [id], onDelete: Cascade)
+
+  platId String
+  plat   Plat   @relation(fields: [platId], references: [id])
+
+  @@index([commandeId])
+}

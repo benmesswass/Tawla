@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-typecheck-build:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://tawla:tawla@localhost:5432/tawla?schema=public
+      AUTH_SECRET: ci-only-secret-not-for-production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma generate
+
+      - run: npx next typegen
+
+      - run: npx eslint .
+
+      - run: npx tsc --noEmit
+
+      - run: npx next build
