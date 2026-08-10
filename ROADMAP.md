@@ -12,11 +12,11 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 ## Phase 0 — Fondations
 
-- [ ] Choix de la stack technique (proposition : Next.js + TypeScript + Prisma/PostgreSQL + Tailwind)
-- [ ] CI de base (lint, typecheck, tests)
-- [ ] Modèle de données initial : `Restaurant`, `Table`, `Categorie`, `Plat`, `Commande`, `LigneCommande`, `Utilisateur` (rôles serveur / cuisine / manager)
-- [ ] Auth staff (serveurs, cuisine, manager) — le client, lui, n'a pas de compte : sa session est liée au QR code de la table
-- [ ] Génération des QR codes par table (lien vers le menu, encodant l'identifiant de table)
+- [x] Choix de la stack technique (Next.js 16 + TypeScript + Prisma/PostgreSQL + Tailwind 4) (PR #1)
+- [x] CI de base (lint, typecheck, build — pas encore de tests automatisés, rien à tester avant la Phase 1) (PR #1)
+- [x] Modèle de données initial : `Restaurant`, `Table`, `Categorie`, `Plat`, `Commande`, `LigneCommande`, `Utilisateur` (rôles serveur / cuisine / manager) (PR #1)
+- [x] Auth staff (serveurs, cuisine, manager) — le client, lui, n'a pas de compte : sa session est liée au QR code de la table (PR #1)
+- [x] Génération des QR codes par table (lien vers le menu, encodant l'identifiant de table) (PR #1)
 
 ## Phase 1 — MVP commande client
 
