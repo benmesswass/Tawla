@@ -38,6 +38,8 @@ class OrderOut(BaseModel):
     created_at: datetime
     confirmed_at: datetime | None
     sent_to_kitchen_at: datetime | None
+    ready_at: datetime | None
+    served_at: datetime | None
     taken_by_staff_id: int | None
     taken_by_staff_name: str | None
     items: list[OrderItemOut]

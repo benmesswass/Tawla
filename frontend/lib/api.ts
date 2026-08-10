@@ -69,6 +69,31 @@ export type Order = {
   }[];
 };
 
+export type TimingStats = {
+  avg_wait_confirmation_seconds: number | null;
+  avg_confirmation_to_kitchen_seconds: number | null;
+  avg_kitchen_to_served_seconds: number | null;
+};
+
+export type StaffPerformance = {
+  staff_id: number;
+  staff_name: string;
+  role: StaffRole;
+  orders_taken: number;
+};
+
+export type TopMenuItem = { menu_item_name: string; quantity: number };
+export type HourlyCount = { hour: number; count: number };
+
+export type DashboardStats = {
+  date: string;
+  active_orders_count: number;
+  timing: TimingStats;
+  staff_performance: StaffPerformance[];
+  top_items: TopMenuItem[];
+  orders_by_hour: HourlyCount[];
+};
+
 // Code stable renvoyé par le backend pour chaque erreur (voir
 // backend/app/modules/*/router.py et orders/service.py) — permet de
 // traduire proprement côté client au lieu d'afficher le message brut
@@ -147,6 +172,10 @@ export const api = {
     request<Order>(`/api/v1/orders/${orderId}/start-preparation`, { method: "POST" }),
   markReady: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/mark-ready`, { method: "POST" }),
   markServed: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/mark-served`, { method: "POST" }),
+  getDashboardStats: (restaurantId: number, date?: string) =>
+    request<DashboardStats>(
+      `/api/v1/stats/dashboard/${restaurantId}${date ? `?date=${date}` : ""}`
+    ),
 };
 
 export function wsUrl(path: string): string {
