@@ -69,7 +69,10 @@ cd frontend && npm run lint && npx tsc --noEmit && npm run build
 python backend/scripts/generate_table_qr.py --qr-token <token> --label "Table 5"
 ```
 
-Comptes démo : voir `CREDENTIALS.md` (créé par le script de seed).
+Comptes démo (fixes, mot de passe `tawla2026`) : `manager@tawla.tn` (manager),
+`sami@tawla.tn` (serveur), `cuisine@tawla.tn` (cuisine). Les QR tokens des
+tables, eux, changent à chaque reseed — voir `CREDENTIALS.md` local (généré
+par le script, non commité).
 
 ## Roadmap
 

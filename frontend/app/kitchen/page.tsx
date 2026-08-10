@@ -1,16 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api, wsUrl, ApiError, Order } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
+import { useCurrentStaff } from "@/lib/useCurrentStaff";
+import { clearToken } from "@/lib/auth";
 import ConnectionBadge from "@/components/ConnectionBadge";
-
-function useRestaurantId(): number {
-  if (typeof window === "undefined") return 1;
-  const params = new URLSearchParams(window.location.search);
-  return Number(params.get("restaurant_id") ?? 1);
-}
 
 type KitchenOrder = {
   order_id: number;
@@ -31,11 +28,15 @@ function orderFromApi(o: Order): KitchenOrder {
 }
 
 export default function KitchenPage() {
-  const restaurantId = useRestaurantId();
+  const router = useRouter();
+  const { staff, loading: staffLoading } = useCurrentStaff(["kitchen", "manager"]);
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const restaurantId = staff?.restaurant_id ?? null;
+
   const loadActiveOrders = useCallback(async () => {
+    if (!restaurantId) return;
     try {
       const active = await api.listActiveOrders(restaurantId);
       setOrders(
@@ -52,10 +53,10 @@ export default function KitchenPage() {
   // rafraîchit perd toutes les commandes en cours (bug corrigé suite à
   // l'audit du 2026-08-10).
   useEffect(() => {
-    loadActiveOrders();
-  }, [loadActiveOrders]);
+    if (restaurantId) loadActiveOrders();
+  }, [restaurantId, loadActiveOrders]);
 
-  const status = useReconnectingSocket(wsUrl(`/ws/kitchen/${restaurantId}`), (msg) => {
+  const status = useReconnectingSocket(restaurantId ? wsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.sent_to_kitchen") {
       setOrders((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
@@ -120,6 +121,13 @@ export default function KitchenPage() {
     win.print();
   }
 
+  function logout() {
+    clearToken();
+    router.push("/login");
+  }
+
+  if (staffLoading || !staff) return null;
+
   return (
     <div className="p-6 bg-neutral-950 min-h-screen text-white">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
@@ -131,6 +139,9 @@ export default function KitchenPage() {
             className="text-sm bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-lg border border-neutral-700"
           >
             Imprimer (filet de secours)
+          </button>
+          <button onClick={logout} className="text-sm text-neutral-400 underline">
+            Se déconnecter
           </button>
         </div>
       </div>

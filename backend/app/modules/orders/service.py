@@ -8,6 +8,7 @@ from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
 from app.modules.orders.models import Order, OrderItem, OrderStatus
+from app.modules.staff.models import Staff
 from app.modules.tables.models import Table
 
 logger = get_logger("orders")
@@ -128,9 +129,53 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     return order
 
 
-async def transition_status(db: Session, order_id: int, new_status: OrderStatus) -> Order:
+async def claim_order(db: Session, order_id: int, staff: Staff) -> Order:
+    """
+    Prise en charge d'une commande en attente depuis le pool partagé —
+    c'est ce qui fait passer une commande de "visible par tous les
+    serveurs" à "affectée à Sami", et alimente les stats par serveur
+    (dashboard manager, Phase 3).
+    """
     order = db.get(Order, order_id)
-    if not order:
+    if not order or order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    if order.status != OrderStatus.PENDING_CONFIRMATION:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "INVALID_TRANSITION", "message": "order is not pending confirmation"},
+        )
+    if order.taken_by_staff_id is not None and order.taken_by_staff_id != staff.id:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ALREADY_CLAIMED",
+                "message": "order already claimed by another staff member",
+                "taken_by_staff_id": order.taken_by_staff_id,
+            },
+        )
+
+    order.taken_by_staff_id = staff.id
+    order.taken_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(order)
+
+    log_event(logger, "order.claimed", restaurant_id=order.restaurant_id, order_id=order.id, staff_id=staff.id)
+
+    await manager.broadcast(
+        order.restaurant_id, channel="staff",
+        message={
+            "event": "order.claimed",
+            "order_id": order.id,
+            "taken_by_staff_id": staff.id,
+            "taken_by_staff_name": staff.name,
+        },
+    )
+    return order
+
+
+async def transition_status(db: Session, order_id: int, new_status: OrderStatus, staff: Staff) -> Order:
+    order = db.get(Order, order_id)
+    if not order or order.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
 
     allowed = ALLOWED_TRANSITIONS.get(order.status, set())
@@ -149,6 +194,13 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus)
     now = datetime.now(timezone.utc)
     if new_status == OrderStatus.CONFIRMED:
         order.confirmed_at = now
+        # Un serveur qui confirme sans être passé par le claim explicite
+        # (ex: bouton unique côté UI) se voit quand même attribuer la
+        # commande — les stats par serveur ne doivent jamais dépendre d'une
+        # étape UI facultative.
+        if order.taken_by_staff_id is None:
+            order.taken_by_staff_id = staff.id
+            order.taken_at = now
     if new_status == OrderStatus.SENT_TO_KITCHEN:
         order.sent_to_kitchen_at = now
 

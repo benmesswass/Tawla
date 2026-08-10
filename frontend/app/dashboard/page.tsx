@@ -1,17 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api, MenuItem } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
-
-// MVP mono-restaurant : restaurant_id en query param, comme /staff et
-// /kitchen. Pas d'auth pour l'instant (même limite déjà connue sur les
-// autres écrans internes — à traiter avec l'auth staff globale).
-function useRestaurantId(): number {
-  if (typeof window === "undefined") return 1;
-  const params = new URLSearchParams(window.location.search);
-  return Number(params.get("restaurant_id") ?? 1);
-}
+import { useCurrentStaff } from "@/lib/useCurrentStaff";
+import { clearToken } from "@/lib/auth";
 
 const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Autre"];
 
@@ -30,14 +24,18 @@ function itemToDraft(item: MenuItem): Draft {
 const EMPTY_DRAFT: Draft = { name: "", category: "Plats", price: "", description: "", image_url: "" };
 
 export default function DashboardPage() {
-  const restaurantId = useRestaurantId();
+  const router = useRouter();
+  const { staff, loading: staffLoading } = useCurrentStaff(["manager"]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [newItem, setNewItem] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const restaurantId = staff?.restaurant_id ?? null;
+
   const load = useCallback(async () => {
+    if (!restaurantId) return;
     try {
       const menu = await api.getMenu(restaurantId);
       setItems(menu);
@@ -48,8 +46,13 @@ export default function DashboardPage() {
   }, [restaurantId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (restaurantId) load();
+  }, [restaurantId, load]);
+
+  function logout() {
+    clearToken();
+    router.push("/login");
+  }
 
   function flash(text: string) {
     setMessage(text);
@@ -103,6 +106,7 @@ export default function DashboardPage() {
 
   async function addItem() {
     setError(null);
+    if (!restaurantId) return;
     const price = Number(newItem.price);
     if (!newItem.name.trim() || Number.isNaN(price) || price < 0) {
       setError("Nom et prix (positif) sont obligatoires pour ajouter un article.");
@@ -125,9 +129,16 @@ export default function DashboardPage() {
     }
   }
 
+  if (staffLoading || !staff) return null;
+
   return (
     <div className="p-4 max-w-3xl mx-auto">
-      <h1 className="text-lg font-semibold mb-1">Dashboard resto — gérer le menu</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-lg font-semibold">Dashboard resto — gérer le menu</h1>
+        <button onClick={logout} className="text-sm text-neutral-500 underline">
+          Se déconnecter
+        </button>
+      </div>
       <p className="text-sm text-neutral-500 mb-4">
         Modifier un article, basculer une rupture de stock, ou en ajouter un nouveau — sans passer par Swagger.
       </p>
@@ -204,7 +215,7 @@ export default function DashboardPage() {
             </div>
           );
         })}
-        {items.length === 0 && <p className="text-neutral-500">Aucun article pour l'instant.</p>}
+        {items.length === 0 && <p className="text-neutral-500">Aucun article pour l&apos;instant.</p>}
       </div>
 
       <h2 className="text-base font-semibold mt-8 mb-3">Ajouter un article</h2>

@@ -4,34 +4,44 @@ import { useCallback, useEffect, useState } from "react";
 import { api, wsUrl, Order } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
+import { useCurrentStaff } from "@/lib/useCurrentStaff";
+import { clearToken } from "@/lib/auth";
+import { useRouter } from "next/navigation";
 import ConnectionBadge from "@/components/ConnectionBadge";
 
-// MVP mono-restaurant : restaurant_id en query param (?restaurant_id=1).
-// Passera par une session/login serveur quand on aura plusieurs restos.
-function useRestaurantId(): number {
-  if (typeof window === "undefined") return 1;
-  const params = new URLSearchParams(window.location.search);
-  return Number(params.get("restaurant_id") ?? 1);
+type PendingOrder = {
+  order_id: number;
+  table_id: number;
+  taken_by_staff_id: number | null;
+  taken_by_staff_name: string | null;
+};
+type ReadyOrder = { order_id: number; table_id: number };
+
+function fromApi(o: Order): PendingOrder {
+  return {
+    order_id: o.id,
+    table_id: o.table_id,
+    taken_by_staff_id: o.taken_by_staff_id,
+    taken_by_staff_name: o.taken_by_staff_name,
+  };
 }
 
-type PendingOrder = { order_id: number; table_id: number };
-
 export default function StaffPage() {
-  const restaurantId = useRestaurantId();
+  const router = useRouter();
+  const { staff, loading: staffLoading } = useCurrentStaff(["waiter", "manager"]);
   const [pending, setPending] = useState<PendingOrder[]>([]);
-  const [readyToServe, setReadyToServe] = useState<PendingOrder[]>([]);
+  const [readyToServe, setReadyToServe] = useState<ReadyOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const restaurantId = staff?.restaurant_id ?? null;
+
   const loadActiveOrders = useCallback(async () => {
+    if (!restaurantId) return;
     try {
       const orders = await api.listActiveOrders(restaurantId);
-      setPending(
-        orders
-          .filter((o: Order) => o.status === "pending_confirmation")
-          .map((o) => ({ order_id: o.id, table_id: o.table_id }))
-      );
+      setPending(orders.filter((o) => o.status === "pending_confirmation").map(fromApi));
       setReadyToServe(
-        orders.filter((o: Order) => o.status === "ready").map((o) => ({ order_id: o.id, table_id: o.table_id }))
+        orders.filter((o) => o.status === "ready").map((o) => ({ order_id: o.id, table_id: o.table_id }))
       );
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -39,16 +49,26 @@ export default function StaffPage() {
   }, [restaurantId]);
 
   // Recharge au montage : le WebSocket seul ne rattrape jamais les
-  // commandes déjà en attente avant l'ouverture de cette page (bug corrigé
-  // suite à l'audit du 2026-08-10).
+  // commandes déjà en attente avant l'ouverture de cette page.
   useEffect(() => {
-    loadActiveOrders();
-  }, [loadActiveOrders]);
+    if (restaurantId) loadActiveOrders();
+  }, [restaurantId, loadActiveOrders]);
 
-  const status = useReconnectingSocket(wsUrl(`/ws/staff/${restaurantId}`), (msg) => {
+  const status = useReconnectingSocket(restaurantId ? wsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
       setPending((prev) =>
-        prev.some((o) => o.order_id === msg.order_id) ? prev : [...prev, { order_id: msg.order_id, table_id: msg.table_id }]
+        prev.some((o) => o.order_id === msg.order_id)
+          ? prev
+          : [...prev, { order_id: msg.order_id, table_id: msg.table_id, taken_by_staff_id: null, taken_by_staff_name: null }]
+      );
+    }
+    if (msg.event === "order.claimed") {
+      setPending((prev) =>
+        prev.map((o) =>
+          o.order_id === msg.order_id
+            ? { ...o, taken_by_staff_id: msg.taken_by_staff_id, taken_by_staff_name: msg.taken_by_staff_name }
+            : o
+        )
       );
     }
     if (msg.event === "order.ready") {
@@ -64,6 +84,23 @@ export default function StaffPage() {
   useEffect(() => {
     if (status === "connected") loadActiveOrders();
   }, [status, loadActiveOrders]);
+
+  async function claim(orderId: number) {
+    setError(null);
+    try {
+      const updated = await api.claimOrder(orderId);
+      setPending((prev) =>
+        prev.map((o) =>
+          o.order_id === orderId
+            ? { ...o, taken_by_staff_id: updated.taken_by_staff_id, taken_by_staff_name: updated.taken_by_staff_name }
+            : o
+        )
+      );
+    } catch (e) {
+      setError(toFrenchMessage(e));
+      loadActiveOrders();
+    }
+  }
 
   async function confirmAndSend(orderId: number) {
     setError(null);
@@ -87,11 +124,24 @@ export default function StaffPage() {
     }
   }
 
+  function logout() {
+    clearToken();
+    router.push("/login");
+  }
+
+  if (staffLoading || !staff) return null;
+
   return (
     <div className="p-4 max-w-md mx-auto">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-1">
         <h1 className="text-lg font-semibold">Commandes à confirmer</h1>
         <ConnectionBadge status={status} />
+      </div>
+      <div className="flex items-center justify-between mb-4 text-sm text-neutral-500">
+        <span>{staff.name}</span>
+        <button onClick={logout} className="underline">
+          Se déconnecter
+        </button>
       </div>
 
       {error && (
@@ -104,23 +154,34 @@ export default function StaffPage() {
       )}
 
       {pending.length === 0 && <p className="text-neutral-500">Aucune commande en attente.</p>}
-      {pending.map((o) => (
-        <div key={o.order_id} className="border rounded-lg p-4 mb-3 flex justify-between items-center">
-          <div>
-            <div className="font-medium">Table {o.table_id}</div>
-            <div className="text-sm text-neutral-500">Commande #{o.order_id}</div>
+      {pending.map((o) => {
+        const takenByMe = o.taken_by_staff_id === staff.id;
+        const takenByOther = o.taken_by_staff_id !== null && !takenByMe;
+        return (
+          <div key={o.order_id} className="border rounded-lg p-4 mb-3">
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="font-medium">Table {o.table_id}</div>
+                <div className="text-sm text-neutral-500">Commande #{o.order_id}</div>
+              </div>
+              {!takenByOther && (
+                <button
+                  onClick={() => (takenByMe ? confirmAndSend(o.order_id) : claim(o.order_id))}
+                  className="bg-neutral-900 text-white px-3 py-2 rounded-lg text-sm"
+                >
+                  {takenByMe ? "Confirmé avec la table → cuisine" : "Prendre en charge"}
+                </button>
+              )}
+            </div>
+            {takenByOther && (
+              <p className="text-sm text-neutral-500 mt-2">Pris en charge par {o.taken_by_staff_name}</p>
+            )}
           </div>
-          <button
-            onClick={() => confirmAndSend(o.order_id)}
-            className="bg-neutral-900 text-white px-3 py-2 rounded-lg text-sm"
-          >
-            Confirmé avec la table → cuisine
-          </button>
-        </div>
-      ))}
+        );
+      })}
 
       <h2 className="text-lg font-semibold mt-8 mb-4">Prêtes à servir</h2>
-      {readyToServe.length === 0 && <p className="text-neutral-500">Rien à servir pour l'instant.</p>}
+      {readyToServe.length === 0 && <p className="text-neutral-500">Rien à servir pour l&apos;instant.</p>}
       {readyToServe.map((o) => (
         <div key={o.order_id} className="border rounded-lg p-4 mb-3 flex justify-between items-center bg-emerald-50">
           <div>

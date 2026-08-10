@@ -1,3 +1,5 @@
+import { getToken } from "@/lib/auth";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export type MenuItem = {
@@ -25,6 +27,22 @@ export type Restaurant = {
   slug: string;
 };
 
+export type StaffRole = "waiter" | "kitchen" | "manager";
+
+export type Staff = {
+  id: number;
+  restaurant_id: number;
+  name: string;
+  role: StaffRole;
+  email: string;
+};
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  staff: Staff;
+};
+
 export type OrderStatus =
   | "pending_confirmation"
   | "confirmed"
@@ -39,6 +57,8 @@ export type Order = {
   restaurant_id: number;
   table_id: number;
   status: OrderStatus;
+  taken_by_staff_id: number | null;
+  taken_by_staff_name: string | null;
   items: {
     id: number;
     menu_item_id: number;
@@ -64,9 +84,14 @@ export class ApiError extends Error {
   }
 }
 
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     ...options,
   });
   if (!res.ok) {
@@ -77,6 +102,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     }
     throw new ApiError("UNKNOWN", typeof detail === "string" ? detail : `Erreur API (${res.status})`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -84,6 +110,9 @@ export const api = {
   getRestaurant: (restaurantId: number) => request<Restaurant>(`/api/v1/restaurants/${restaurantId}`),
   getTableByToken: (qrToken: string) => request<Table>(`/api/v1/tables/by-token/${qrToken}`),
   getMenu: (restaurantId: number) => request<MenuItem[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}`),
+  login: (email: string, password: string) =>
+    request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  me: () => request<Staff>("/api/v1/auth/me"),
   createMenuItem: (payload: {
     restaurant_id: number;
     name: string;
@@ -101,10 +130,7 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ is_available: isAvailable }),
     }),
-  deleteMenuItem: async (itemId: number) => {
-    const res = await fetch(`${API_URL}/api/v1/menu-items/${itemId}`, { method: "DELETE" });
-    if (!res.ok) throw new ApiError("UNKNOWN", `Erreur API (${res.status})`);
-  },
+  deleteMenuItem: (itemId: number) => request<void>(`/api/v1/menu-items/${itemId}`, { method: "DELETE" }),
   createOrder: (payload: {
     restaurant_id: number;
     table_id: number;
@@ -113,6 +139,7 @@ export const api = {
   getOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}`),
   listActiveOrders: (restaurantId: number) =>
     request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/active`),
+  claimOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/claim`, { method: "POST" }),
   confirmOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/confirm`, { method: "POST" }),
   sendToKitchen: (orderId: number) =>
     request<Order>(`/api/v1/orders/${orderId}/send-to-kitchen`, { method: "POST" }),

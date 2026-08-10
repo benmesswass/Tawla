@@ -15,6 +15,11 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   INVALID_TRANSITION: () => "Cette commande a déjà changé de statut. La page va se mettre à jour.",
   STAFF_NOT_FOUND: () => "Ce membre du personnel n'existe pas.",
   STAFF_WRONG_RESTAURANT: () => "Ce membre du personnel n'appartient pas à ce restaurant.",
+  INVALID_CREDENTIALS: () => "E-mail ou mot de passe incorrect.",
+  NOT_AUTHENTICATED: () => "Session expirée, merci de vous reconnecter.",
+  INVALID_TOKEN: () => "Session expirée, merci de vous reconnecter.",
+  FORBIDDEN: () => "Vous n'avez pas accès à cette action.",
+  ALREADY_CLAIMED: () => "Cette commande vient d'être prise en charge par un collègue.",
 };
 
 export function toFrenchMessage(error: unknown): string {

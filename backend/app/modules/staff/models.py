@@ -19,3 +19,5 @@ class Staff(Base):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     role: Mapped[StaffRole] = mapped_column(Enum(StaffRole), default=StaffRole.WAITER)
+    email: Mapped[str] = mapped_column(String(180), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)

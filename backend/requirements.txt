@@ -8,3 +8,5 @@ python-dotenv==1.0.1
 websockets==13.1
 alembic==1.13.3
 qrcode[pil]==7.4.2
+bcrypt==4.2.0
+pyjwt==2.9.0

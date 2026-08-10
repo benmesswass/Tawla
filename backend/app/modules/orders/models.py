@@ -36,7 +36,17 @@ class Order(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_to_kitchen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Prise en charge (« claim ») par un serveur depuis le pool partagé —
+    # base des stats "commandes par serveur/jour" (dashboard manager).
+    taken_by_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
+    taken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    taken_by: Mapped["Staff | None"] = relationship()
+
+    @property
+    def taken_by_staff_name(self) -> str | None:
+        return self.taken_by.name if self.taken_by else None
 
 
 class OrderItem(Base):
