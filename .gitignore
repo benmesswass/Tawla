@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+*.db
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+
+# Généré localement par scripts/seed_demo.py (QR tokens différents à chaque
+# reseed) — les comptes démo fixes (e-mails/mdp) sont documentés dans CLAUDE.md.
+CREDENTIALS.md
+
+# Misc
+.DS_Store
+*.log
