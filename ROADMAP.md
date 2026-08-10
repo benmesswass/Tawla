@@ -37,10 +37,10 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 ## Phase 3 — Dashboard manager
 
-- [ ] Vue temps réel de toutes les commandes en cours, par statut
-- [ ] Temps moyen passé à chaque étape (attente de confirmation, confirmée → envoyée en cuisine, cuisine → sortie)
-- [ ] Nombre de commandes prises en charge par serveur et par jour (base de calcul pour les primes de rendement)
-- [ ] Statistiques plats les plus vendus, répartition par heure (identification des pics de charge)
+- [x] Vue temps réel de toutes les commandes en cours, par statut (PR #3)
+- [x] Temps moyen passé à chaque étape (attente de confirmation, confirmée → envoyée en cuisine, cuisine → sortie) (PR #3)
+- [x] Nombre de commandes prises en charge par serveur et par jour (base de calcul pour les primes de rendement) (PR #3)
+- [x] Statistiques plats les plus vendus, répartition par heure (identification des pics de charge) (PR #3)
 
 ## Phase 4 — Paiement
 
