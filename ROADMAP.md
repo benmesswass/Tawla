@@ -1,6 +1,6 @@
 # Tawla — Roadmap
 
-Fichier unique de pilotage du projet. Une tâche cochée `[x]` doit mentionner la PR qui l'a livrée.
+Fichier unique de pilotage du projet. Une tâche cochée `[x]` doit mentionner la PR qui l'a livrée. Prendre la première tâche non cochée en partant du haut, dans l'ordre des phases.
 
 ## Vision produit
 
@@ -8,30 +8,32 @@ Un client s'assoit à table, scanne le QR code, commande depuis un menu digital 
 
 North star : un service fluide en salle (zéro commande perdue ou oubliée) et une visibilité complète pour le manager sur la performance de l'équipe.
 
+**Historique** : une première passe (audit QA/PO/Design du 2026-08-10, commit `e185995`) a livré directement le cœur du produit — flux de commande complet, temps réel WebSocket, isolation multi-tenant testée — avant même que cette roadmap ne soit formalisée en phases. Le détail de cet audit reste consultable dans l'historique git (`prototype/ROADMAP.md` avant sa fusion ici). Cette roadmap reflète l'état réel du code, pas l'ordre chronologique dans lequel il a été écrit.
+
 ---
 
 ## Phase 0 — Fondations
 
-- [ ] Choix de la stack technique (proposition : Next.js + TypeScript + Prisma/PostgreSQL + Tailwind)
-- [ ] CI de base (lint, typecheck, tests)
-- [ ] Modèle de données initial : `Restaurant`, `Table`, `Categorie`, `Plat`, `Commande`, `LigneCommande`, `Utilisateur` (rôles serveur / cuisine / manager)
+- [x] Choix de la stack technique : FastAPI + SQLAlchemy/PostgreSQL (backend) + Next.js/Tailwind (frontend), WebSocket natif pour le temps réel (audit du 2026-08-10)
+- [ ] CI de base (lint, typecheck, tests backend + frontend)
+- [x] Modèle de données initial : `Restaurant` (tenants), `Table`, `MenuItem`, `Order`/`OrderItem`, `Staff` (rôles waiter/kitchen/manager) — multi-tenant-ready dès le départ (audit du 2026-08-10)
 - [ ] Auth staff (serveurs, cuisine, manager) — le client, lui, n'a pas de compte : sa session est liée au QR code de la table
-- [ ] Génération des QR codes par table (lien vers le menu, encodant l'identifiant de table)
+- [x] Génération des QR codes par table (token opaque non-devinable, script `generate_table_qr.py`) (audit du 2026-08-10)
 
 ## Phase 1 — MVP commande client
 
-- [ ] Menu digital consultable depuis le QR (catégories, plats, prix, photo, description)
-- [ ] Panier côté client + validation de la commande
-- [ ] Envoi de la commande vers le pool partagé des serveurs
-- [ ] État de la commande visible côté client (en attente / confirmée / en préparation / prête / servie)
+- [x] Menu digital consultable depuis le QR (catégories, plats, prix, photo, description) (audit du 2026-08-10)
+- [x] Panier côté client + validation de la commande, note libre par article (audit du 2026-08-10)
+- [x] Envoi de la commande vers le pool partagé des serveurs (broadcast WebSocket `order.pending_confirmation`) (audit du 2026-08-10)
+- [x] État de la commande visible côté client, temps réel + persistant au rafraîchissement (audit du 2026-08-10)
 
 ## Phase 2 — Flux serveur & cuisine
 
-- [ ] Écran serveurs : pool de toutes les commandes en attente (toutes tables), prise en charge (« claim ») par un serveur
-- [ ] Confirmation à table : le serveur valide la commande sur l'app après l'avoir vérifiée avec les clients
-- [ ] Transmission automatique à la cuisine dès la confirmation
-- [ ] Écran cuisine : file d'attente des commandes confirmées, statuts (reçue / en préparation / prête)
-- [ ] Statut final « sortie vers le client » (servie), déclenché par le serveur
+- [ ] Écran serveurs : pool de toutes les commandes en attente (toutes tables) — affichage déjà fait (audit du 2026-08-10) ; prise en charge (« claim ») individuelle par un serveur reste à ajouter (nécessaire aussi pour les stats par serveur de la Phase 3)
+- [x] Confirmation à table : le serveur valide la commande sur l'app après l'avoir vérifiée avec les clients (audit du 2026-08-10)
+- [x] Transmission automatique à la cuisine dès la confirmation (audit du 2026-08-10)
+- [x] Écran cuisine : file d'attente des commandes confirmées, statuts (reçue / en préparation / prête) (audit du 2026-08-10)
+- [x] Statut final « sortie vers le client » (servie), déclenché par le serveur (audit du 2026-08-10)
 
 ## Phase 3 — Dashboard manager
 
@@ -53,14 +55,14 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 - [ ] Interface bilingue français / arabe (derja tunisienne), RTL natif ; option anglais/italien pour les zones touristiques
 - [ ] Niveau de piment affiché par plat + mentions allergènes et halal
 - [ ] Bouton « appeler le serveur », indépendant du passage de commande
-- [ ] Gestion de la rupture de stock en temps réel (un plat en rupture est désactivé instantanément côté client)
+- [ ] Gestion de la rupture de stock en temps réel (un plat en rupture est désactivé instantanément côté client) — la bascule dispo existe déjà côté manager (audit du 2026-08-10), reste la désactivation instantanée temps réel côté client
 - [ ] Mode café simplifié : commande de boissons seules, sans structure entrée/plat/dessert
 - [ ] PWA offline-first : file d'attente locale si la connexion mobile est instable, envoi différé automatique
 - [ ] Carte de fidélité digitale (ex. Nème café/plat offert, réduction anniversaire)
 
 ## Phase 6 — Croissance / opérationnel
 
-- [ ] Multi-restaurants (un compte manager peut gérer plusieurs établissements, ou un établissement par compte selon le modèle retenu)
+- [ ] Multi-restaurants : le schéma est déjà multi-tenant-ready (`restaurant_id` partout, isolation testée — audit du 2026-08-10), reste l'auth/onboarding multi-établissement côté manager
 - [ ] Notifications SMS/push au client quand sa commande est prête
 - [ ] Gestion des zones de salle (intérieur / terrasse / plage) pour les établissements concernés (ex. Hammamet, Sousse)
 - [ ] Export des statistiques (manager)
@@ -71,3 +73,5 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 - [ ] Programme de fidélité : par établissement vs mutualisé entre plusieurs restaurants partenaires
 - [ ] Gestion des grands groupes / événements (mariages, réservations de salle)
 - [ ] Nom de marque définitif et identité visuelle (le nom de repo « Tawla » est provisoire)
+- [ ] Montée de version majeure Next.js (14 → 15/16) : breaking change réel, décision produit à part (signalé lors de l'audit du 2026-08-10)
+- [ ] Vraie intégration imprimante cuisine (au-delà du filet de secours navigateur déjà en place)
