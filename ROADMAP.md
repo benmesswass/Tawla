@@ -15,9 +15,9 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 ## Phase 0 — Fondations
 
 - [x] Choix de la stack technique : FastAPI + SQLAlchemy/PostgreSQL (backend) + Next.js/Tailwind (frontend), WebSocket natif pour le temps réel (audit du 2026-08-10)
-- [ ] CI de base (lint, typecheck, tests backend + frontend)
+- [x] CI de base (lint, typecheck, tests backend + frontend) (PR #2)
 - [x] Modèle de données initial : `Restaurant` (tenants), `Table`, `MenuItem`, `Order`/`OrderItem`, `Staff` (rôles waiter/kitchen/manager) — multi-tenant-ready dès le départ (audit du 2026-08-10)
-- [ ] Auth staff (serveurs, cuisine, manager) — le client, lui, n'a pas de compte : sa session est liée au QR code de la table
+- [x] Auth staff (serveurs, cuisine, manager) — JWT + rôles, le client lui n'a pas de compte (PR #2)
 - [x] Génération des QR codes par table (token opaque non-devinable, script `generate_table_qr.py`) (audit du 2026-08-10)
 
 ## Phase 1 — MVP commande client
@@ -29,7 +29,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 ## Phase 2 — Flux serveur & cuisine
 
-- [ ] Écran serveurs : pool de toutes les commandes en attente (toutes tables) — affichage déjà fait (audit du 2026-08-10) ; prise en charge (« claim ») individuelle par un serveur reste à ajouter (nécessaire aussi pour les stats par serveur de la Phase 3)
+- [x] Écran serveurs : pool de toutes les commandes en attente (toutes tables) (audit du 2026-08-10), prise en charge (« claim ») individuelle par un serveur (PR #2) — base des stats par serveur de la Phase 3
 - [x] Confirmation à table : le serveur valide la commande sur l'app après l'avoir vérifiée avec les clients (audit du 2026-08-10)
 - [x] Transmission automatique à la cuisine dès la confirmation (audit du 2026-08-10)
 - [x] Écran cuisine : file d'attente des commandes confirmées, statuts (reçue / en préparation / prête) (audit du 2026-08-10)
