@@ -173,6 +173,8 @@ export const api = {
   getMenu: (restaurantId: number) => request<MenuItem[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}`),
   login: (email: string, password: string) =>
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (payload: { restaurant_name: string; manager_name: string; email: string; password: string }) =>
+    request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request<Staff>("/api/v1/auth/me"),
   createMenuItem: (payload: {
     restaurant_id: number;

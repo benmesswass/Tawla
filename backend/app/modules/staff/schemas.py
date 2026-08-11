@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.staff.models import StaffRole
 
@@ -6,6 +6,13 @@ from app.modules.staff.models import StaffRole
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    restaurant_name: str = Field(min_length=1, max_length=120)
+    manager_name: str = Field(min_length=1, max_length=80)
+    email: str
+    password: str = Field(min_length=8)
 
 
 class StaffOut(BaseModel):

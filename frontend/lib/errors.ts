@@ -23,6 +23,7 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   ALREADY_PAID: () => "Cette commande a déjà été payée.",
   ORDER_CANCELLED: () => "Cette commande a été annulée, le paiement n'est plus possible.",
   NO_PENDING_CASH_PAYMENT: () => "Aucune demande de paiement en espèces en attente pour cette commande.",
+  EMAIL_EXISTS: () => "Un compte existe déjà avec cet e-mail.",
 };
 
 export function toFrenchMessage(error: unknown): string {

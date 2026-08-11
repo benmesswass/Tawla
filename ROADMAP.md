@@ -62,7 +62,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 ## Phase 6 — Croissance / opérationnel
 
-- [ ] Multi-restaurants : le schéma est déjà multi-tenant-ready (`restaurant_id` partout, isolation testée — audit du 2026-08-10), reste l'auth/onboarding multi-établissement côté manager
+- [x] Multi-restaurants : le schéma est déjà multi-tenant-ready (`restaurant_id` partout, isolation testée — audit du 2026-08-10), reste l'auth/onboarding multi-établissement côté manager — nouvel endpoint public `POST /api/v1/auth/register` (self-service, pas de vérification e-mail, cohérent avec l'absence de service payant obligatoire) : crée le restaurant + son premier compte manager en une fois, slug dérivé automatiquement du nom (dédupliqué en cas de collision), connexion immédiate. Page `/signup` côté frontend, reliée depuis `/login`. L'ancien endpoint `POST /api/v1/restaurants` (non authentifié, jamais appelé par le frontend, utilisé uniquement comme fixture par la suite de tests) reste inchangé — le modifier aurait cassé ~9 fichiers de tests sans bénéfice pour cette tâche (PR #15)
 - [ ] Notifications SMS/push au client quand sa commande est prête
 - [ ] Gestion des zones de salle (intérieur / terrasse / plage) pour les établissements concernés (ex. Hammamet, Sousse)
 - [ ] Export des statistiques (manager)
