@@ -15,6 +15,9 @@ class OrderCreate(BaseModel):
     restaurant_id: int
     table_id: int
     items: list[OrderItemCreate]
+    # Pré-commande mode Ramadan : optionnel, réglé côté client sur l'heure
+    # d'iftar du resto quand il choisit "commander pour l'iftar".
+    scheduled_for: datetime | None = None
 
 
 class OrderItemOut(BaseModel):
@@ -46,6 +49,7 @@ class OrderOut(BaseModel):
     served_at: datetime | None
     taken_by_staff_id: int | None
     taken_by_staff_name: str | None
+    scheduled_for: datetime | None
     payment_method: PaymentMethod | None
     payment_status: PaymentStatus
     tip_amount: float

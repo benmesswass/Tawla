@@ -25,6 +25,8 @@ export type Restaurant = {
   id: number;
   name: string;
   slug: string;
+  ramadan_mode_enabled: boolean;
+  iftar_time: string | null;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -62,6 +64,7 @@ export type Order = {
   status: OrderStatus;
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
+  scheduled_for: string | null;
   payment_method: PaymentMethod | null;
   payment_status: PaymentStatus;
   tip_amount: number;
@@ -167,6 +170,7 @@ export const api = {
     restaurant_id: number;
     table_id: number;
     items: { menu_item_id: number; quantity: number; notes?: string | null }[];
+    scheduled_for?: string | null;
   }) => request<Order>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),
   getOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}`),
   listActiveOrders: (restaurantId: number) =>
@@ -194,6 +198,11 @@ export const api = {
     request<Order>(`/api/v1/orders/${orderId}/pay/cash/confirm`, { method: "POST" }),
   listPendingCashPayments: (restaurantId: number) =>
     request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-cash-payments`),
+  setRamadanMode: (restaurantId: number, enabled: boolean, iftarTime: string | null) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/ramadan-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled, iftar_time: iftarTime }),
+    }),
 };
 
 export function wsUrl(path: string): string {

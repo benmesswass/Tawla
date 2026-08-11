@@ -97,7 +97,11 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             detail={"code": "EMPTY_ORDER", "message": "order must contain at least one item"},
         )
 
-    order = Order(restaurant_id=payload.restaurant_id, table_id=payload.table_id)
+    order = Order(
+        restaurant_id=payload.restaurant_id,
+        table_id=payload.table_id,
+        scheduled_for=payload.scheduled_for,
+    )
 
     for line in payload.items:
         menu_item = db.get(MenuItem, line.menu_item_id)
@@ -144,7 +148,12 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # Le serveur assigné à la table doit voir la commande immédiatement.
     await manager.broadcast(
         order.restaurant_id, channel="staff",
-        message={"event": "order.pending_confirmation", "order_id": order.id, "table_id": order.table_id},
+        message={
+            "event": "order.pending_confirmation",
+            "order_id": order.id,
+            "table_id": order.table_id,
+            "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
+        },
     )
     return order
 
@@ -260,6 +269,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                 "event": "order.sent_to_kitchen",
                 "order_id": order.id,
                 "table_id": order.table_id,
+                "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
                 "items": [
                     {"name": i.menu_item_name, "quantity": i.quantity, "notes": i.notes}
                     for i in order.items

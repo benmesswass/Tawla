@@ -21,6 +21,10 @@ function lastOrderStorageKey(qrToken: string): string {
   return `resto-qr-menu:last-order:${qrToken}`;
 }
 
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { qrToken } = params;
 
@@ -35,6 +39,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [tipInput, setTipInput] = useState("");
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [preOrderForIftar, setPreOrderForIftar] = useState(false);
 
   const load = useCallback(() => {
     setLoadError(null);
@@ -159,10 +164,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         restaurant_id: table.restaurant_id,
         table_id: table.id,
         items: cartLines.map((l) => ({ menu_item_id: l.item.id, quantity: l.quantity, notes: l.note || null })),
+        scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       });
       sessionStorage.setItem(lastOrderStorageKey(qrToken), String(order.id));
       setTrackedOrder(order);
       setCart({});
+      setPreOrderForIftar(false);
     } catch (e) {
       // Un article devenu indisponible pendant que le client avait le panier
       // ouvert ne doit plus faire disparaître tout l'écran (bug critique
@@ -211,6 +218,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {cancelled ? "Commande annulée" : "Commande envoyée 🎉"}
         </h1>
         <p className="mt-2 text-neutral-600 text-center">{table.label} — commande #{trackedOrder.id}</p>
+
+        {!cancelled && trackedOrder.scheduled_for && (
+          <p className="mt-4 text-sm text-center bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3">
+            🌙 Pré-commande pour l&apos;iftar — préparation prévue pour {formatTime(trackedOrder.scheduled_for)}.
+          </p>
+        )}
 
         {!cancelled && trackedOrder.taken_by_staff_name && (
           <p className="mt-4 text-sm text-center bg-amber-50 text-amber-800 border border-amber-200 rounded-lg py-2 px-3">
@@ -330,6 +343,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         <p className="text-amber-100 text-sm">{table.label}</p>
       </header>
 
+      {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
+        <div className="bg-indigo-950 text-indigo-100 px-4 py-3 text-sm text-center">
+          🌙 Ramadan Moubarak — rupture du jeûne à {formatTime(restaurant.iftar_time)}. Vous pouvez commander
+          maintenant pour l&apos;iftar, votre plat sera prêt à l&apos;heure.
+        </div>
+      )}
+
       <div className="p-4 max-w-md mx-auto">
         {orderError && (
           <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 flex justify-between items-start gap-2">
@@ -402,15 +422,27 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
         {cartLines.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
-            <div className="max-w-md mx-auto flex justify-between items-center">
-              <span className="font-medium">{total.toFixed(2)} DT</span>
-              <button
-                onClick={validateOrder}
-                disabled={sending}
-                className="bg-neutral-900 text-white px-4 py-2 rounded-lg"
-              >
-                {sending ? "Envoi..." : "Valider la commande"}
-              </button>
+            <div className="max-w-md mx-auto">
+              {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
+                <label className="flex items-center gap-2 text-sm text-indigo-900 mb-3">
+                  <input
+                    type="checkbox"
+                    checked={preOrderForIftar}
+                    onChange={(e) => setPreOrderForIftar(e.target.checked)}
+                  />
+                  🌙 Commander pour l&apos;iftar ({formatTime(restaurant.iftar_time)}) plutôt que maintenant
+                </label>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="font-medium">{total.toFixed(2)} DT</span>
+                <button
+                  onClick={validateOrder}
+                  disabled={sending}
+                  className="bg-neutral-900 text-white px-4 py-2 rounded-lg"
+                >
+                  {sending ? "Envoi..." : "Valider la commande"}
+                </button>
+              </div>
             </div>
           </div>
         )}

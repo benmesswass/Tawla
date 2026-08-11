@@ -49,6 +49,11 @@ class Order(Base):
     ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     served_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Pré-commande mode Ramadan : le client commande avant l'iftar, ce qui
+    # permet à la cuisine de voir le volume à venir à l'avance ("anticipation
+    # du pic de charge"). Null = commande normale, à traiter dès que possible.
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Prise en charge (« claim ») par un serveur depuis le pool partagé —
     # base des stats "commandes par serveur/jour" (dashboard manager).
     taken_by_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
