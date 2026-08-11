@@ -350,7 +350,7 @@ export default function StaffPage() {
         const takenByMe = o.taken_by_staff_id === staff.id;
         const takenByOther = o.taken_by_staff_id !== null && !takenByMe;
         return (
-          <Card key={o.order_id} className="mb-3">
+          <Card key={o.order_id} tone="info" className="mb-3">
             <div className="flex justify-between items-center">
               <div>
                 <div className="font-medium">Table {o.table_id}</div>

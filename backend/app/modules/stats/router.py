@@ -12,6 +12,7 @@ from app.modules.stats import schemas, service
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
+_KITCHEN_OR_MANAGER = require_role(StaffRole.KITCHEN, StaffRole.MANAGER)
 
 
 @router.get("/dashboard/{restaurant_id}", response_model=schemas.DashboardStats)
@@ -28,3 +29,18 @@ async def dashboard(
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     day = date or datetime.now(timezone.utc).date()
     return await service.get_dashboard_stats(db, restaurant_id, day)
+
+
+@router.get("/kitchen-today-count/{restaurant_id}", response_model=schemas.KitchenTodayCount)
+async def kitchen_today_count(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_KITCHEN_OR_MANAGER),
+):
+    """Compteur du jour pour l'écran cuisine : nombre de commandes déjà
+    envoyées en cuisine aujourd'hui — l'état vide de l'écran cuisine n'affiche
+    sinon aucune information (audit Phase 8)."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    day = datetime.now(timezone.utc).date()
+    return await service.get_kitchen_today_count(db, restaurant_id, day)

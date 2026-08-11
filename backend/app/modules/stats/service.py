@@ -92,3 +92,21 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
         top_items=top_items,
         orders_by_hour=orders_by_hour,
     )
+
+
+async def get_kitchen_today_count(db: Session, restaurant_id: int, day: date_type) -> schemas.KitchenTodayCount:
+    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
+
+    count = (
+        db.query(Order)
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.sent_to_kitchen_at.isnot(None),
+            Order.sent_to_kitchen_at >= day_start,
+            Order.sent_to_kitchen_at < day_end,
+        )
+        .count()
+    )
+
+    return schemas.KitchenTodayCount(date=day, count=count)

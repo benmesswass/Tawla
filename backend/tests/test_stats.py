@@ -153,3 +153,51 @@ def test_dashboard_stats_requires_manager_role(client):
     res = client.get(f"/api/v1/stats/dashboard/{restaurant['id']}", headers=auth_headers(waiter))
     assert res.status_code == 403
     assert res.json()["detail"]["code"] == "FORBIDDEN"
+
+
+def test_kitchen_today_count_counts_orders_sent_to_kitchen_today(client):
+    restaurant, _manager, manager_headers, table, item = _setup_restaurant(client)
+    kitchen = create_staff(restaurant["id"], role=StaffRole.KITCHEN)
+
+    order_1 = _create_order(client, restaurant, table, item)
+    order_2 = _create_order(client, restaurant, table, item)
+    _set_order_timestamps(order_1["id"], sent_to_kitchen_at=datetime.now(timezone.utc))
+    _set_order_timestamps(order_2["id"], sent_to_kitchen_at=datetime.now(timezone.utc))
+
+    # Pas encore envoyée en cuisine — ne doit pas compter.
+    _create_order(client, restaurant, table, item)
+
+    res = client.get(f"/api/v1/stats/kitchen-today-count/{restaurant['id']}", headers=auth_headers(kitchen))
+    assert res.status_code == 200
+    assert res.json()["count"] == 2
+
+    res_manager = client.get(f"/api/v1/stats/kitchen-today-count/{restaurant['id']}", headers=manager_headers)
+    assert res_manager.status_code == 200
+    assert res_manager.json()["count"] == 2
+
+
+def test_kitchen_today_count_excludes_yesterday(client):
+    restaurant, _manager, manager_headers, table, item = _setup_restaurant(client)
+    order = _create_order(client, restaurant, table, item)
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    _set_order_timestamps(order["id"], sent_to_kitchen_at=yesterday)
+
+    res = client.get(f"/api/v1/stats/kitchen-today-count/{restaurant['id']}", headers=manager_headers)
+    assert res.json()["count"] == 0
+
+
+def test_kitchen_today_count_forbidden_for_waiter(client):
+    restaurant, _manager, _headers, _table, _item = _setup_restaurant(client)
+    waiter = create_staff(restaurant["id"], role=StaffRole.WAITER)
+
+    res = client.get(f"/api/v1/stats/kitchen-today-count/{restaurant['id']}", headers=auth_headers(waiter))
+    assert res.status_code == 403
+
+
+def test_kitchen_today_count_forbidden_for_other_restaurant(client):
+    restaurant_a, _manager_a, _headers_a, _table, _item = _setup_restaurant(client)
+    restaurant_b = client.post("/api/v1/restaurants", json={"name": "Café D Stats", "slug": "cafe-d-stats"}).json()
+    kitchen_a = create_staff(restaurant_a["id"], role=StaffRole.KITCHEN)
+
+    res = client.get(f"/api/v1/stats/kitchen-today-count/{restaurant_b['id']}", headers=auth_headers(kitchen_a))
+    assert res.status_code == 403

@@ -107,9 +107,9 @@ Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures a
 - [x] Onglets (Menu / Tables & zones / Réglages) — Ramadan et café simplifié déplacés dans « Réglages », le formulaire d'ajout d'article replié derrière un bouton (PR #27)
 
 **8.5 — Écrans serveur & cuisine**
-- [ ] Compteur du jour sur l'écran cuisine (l'état vide actuel est un écran noir sans aucune information)
-- [ ] Distinction visuelle plus tranchée par statut côté serveur (à confirmer / prêtes à servir / demandes de paiement utilisent des teintes trop proches)
-- [ ] Retour sonore optionnel à l'arrivée d'une commande en cuisine (activable par le manager)
+- [x] Compteur du jour sur l'écran cuisine — nouvel endpoint `GET /stats/kitchen-today-count/{id}` (accessible cuisine + manager), sous-titre toujours visible sous "Écran cuisine" y compris à vide, incrémenté en direct à chaque commande reçue par WebSocket (PR #28)
+- [x] Distinction visuelle plus tranchée par statut côté serveur — "à confirmer" passe du blanc neutre au ton `info` (bleu ciel) ; "prêtes à servir" (menthe), "demandes de paiement" (ambre) et "appels en attente" (rose) restent chacun sur une teinte unique, plus aucune combinaison pastel proche (PR #28)
+- [x] Retour sonore optionnel à l'arrivée d'une commande en cuisine — `Restaurant.kitchen_sound_enabled` (défaut désactivé), toggle dans Réglages du dashboard, bip synthétisé en Web Audio côté écran cuisine (aucun fichier audio) ; limite documentée : certains navigateurs bloquent le tout premier son tant qu'aucune interaction n'a eu lieu sur l'écran cuisine (politique autoplay, pas un bug) (PR #28)
 
 **8.6 — Idées "fun" différenciantes** (après 8.1-8.2 : héritent d'une identité cohérente plutôt que d'être des gadgets isolés)
 - [ ] Mini-fait culturel ou anecdote sur le plat pendant l'attente cuisine

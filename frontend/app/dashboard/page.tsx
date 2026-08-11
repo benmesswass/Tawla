@@ -12,7 +12,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
-import { MoonIcon, CoffeeIcon, UtensilsIcon } from "@/components/icons";
+import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons";
 import { MENU_CATEGORIES } from "@/lib/menuCategories";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
@@ -104,6 +104,8 @@ export default function DashboardPage() {
   const [savingRamadan, setSavingRamadan] = useState(false);
   const [cafeModeEnabled, setCafeModeEnabled] = useState(false);
   const [savingCafeMode, setSavingCafeMode] = useState(false);
+  const [kitchenSoundEnabled, setKitchenSoundEnabled] = useState(false);
+  const [savingKitchenSound, setSavingKitchenSound] = useState(false);
   const [tables, setTables] = useState<Table[]>([]);
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
@@ -129,6 +131,7 @@ export default function DashboardPage() {
       setRamadanEnabled(rest.ramadan_mode_enabled);
       setIftarInput(isoToLocalInput(rest.iftar_time));
       setCafeModeEnabled(rest.cafe_mode_enabled);
+      setKitchenSoundEnabled(rest.kitchen_sound_enabled);
       setTables(tableList);
       setTableDrafts(Object.fromEntries(tableList.map((t) => [t.id, tableToDraft(t)])));
     } catch (e) {
@@ -169,6 +172,22 @@ export default function DashboardPage() {
       setError(toFrenchMessage(e));
     } finally {
       setSavingCafeMode(false);
+    }
+  }
+
+  async function saveKitchenSound(nextEnabled: boolean) {
+    if (!restaurantId) return;
+    setError(null);
+    setSavingKitchenSound(true);
+    try {
+      const updated = await api.setKitchenSound(restaurantId, nextEnabled);
+      setRestaurant(updated);
+      setKitchenSoundEnabled(updated.kitchen_sound_enabled);
+      flash(nextEnabled ? "Retour sonore cuisine activé." : "Retour sonore cuisine désactivé.");
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    } finally {
+      setSavingKitchenSound(false);
     }
   }
 
@@ -732,7 +751,7 @@ export default function DashboardPage() {
           )}
 
           {restaurant && (
-            <Card tone="info" padding="sm">
+            <Card tone="info" padding="sm" className="mb-4">
               <label className="flex items-center gap-2 font-medium text-sky-900">
                 <input
                   type="checkbox"
@@ -749,6 +768,29 @@ export default function DashboardPage() {
               <p className="text-xs text-sky-700 mt-2">
                 Pour un établissement qui ne sert que des boissons : le menu client s&apos;affiche en liste simple,
                 sans regrouper par catégorie (entrées/plats/desserts).
+              </p>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm">
+              <label className="flex items-center gap-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={kitchenSoundEnabled}
+                  disabled={savingKitchenSound}
+                  onChange={(e) => {
+                    setKitchenSoundEnabled(e.target.checked);
+                    saveKitchenSound(e.target.checked);
+                  }}
+                />
+                <BellIcon className="w-4 h-4 shrink-0" />
+                Retour sonore en cuisine
+              </label>
+              <p className="text-xs text-neutral-500 mt-2">
+                Un bip se joue sur l&apos;écran cuisine à chaque nouvelle commande envoyée. Certains navigateurs ne
+                joueront le premier son qu&apos;après une interaction sur l&apos;écran cuisine (politique de lecture
+                automatique).
               </p>
             </Card>
           )}

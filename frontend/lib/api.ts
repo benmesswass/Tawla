@@ -32,6 +32,7 @@ export type Restaurant = {
   ramadan_mode_enabled: boolean;
   iftar_time: string | null;
   cafe_mode_enabled: boolean;
+  kitchen_sound_enabled: boolean;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -130,6 +131,8 @@ export type DashboardStats = {
   top_items: TopMenuItem[];
   orders_by_hour: HourlyCount[];
 };
+
+export type KitchenTodayCount = { date: string; count: number };
 
 // Code stable renvoyé par le backend pour chaque erreur (voir
 // backend/app/modules/*/router.py et orders/service.py) — permet de
@@ -230,6 +233,8 @@ export const api = {
     request<DashboardStats>(
       `/api/v1/stats/dashboard/${restaurantId}${date ? `?date=${date}` : ""}`
     ),
+  getKitchenTodayCount: (restaurantId: number) =>
+    request<KitchenTodayCount>(`/api/v1/stats/kitchen-today-count/${restaurantId}`),
   payByCard: (orderId: number, tipAmount: number) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/card`, {
       method: "POST",
@@ -248,6 +253,11 @@ export const api = {
     }),
   setCafeMode: (restaurantId: number, enabled: boolean) =>
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/cafe-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+  setKitchenSound: (restaurantId: number, enabled: boolean) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/kitchen-sound`, {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
     }),
