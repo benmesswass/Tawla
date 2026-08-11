@@ -20,6 +20,9 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   INVALID_TOKEN: () => "Session expirée, merci de vous reconnecter.",
   FORBIDDEN: () => "Vous n'avez pas accès à cette action.",
   ALREADY_CLAIMED: () => "Cette commande vient d'être prise en charge par un collègue.",
+  ALREADY_PAID: () => "Cette commande a déjà été payée.",
+  ORDER_CANCELLED: () => "Cette commande a été annulée, le paiement n'est plus possible.",
+  NO_PENDING_CASH_PAYMENT: () => "Aucune demande de paiement en espèces en attente pour cette commande.",
 };
 
 export function toFrenchMessage(error: unknown): string {

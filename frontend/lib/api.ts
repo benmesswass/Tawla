@@ -52,6 +52,9 @@ export type OrderStatus =
   | "served"
   | "cancelled";
 
+export type PaymentMethod = "card" | "cash";
+export type PaymentStatus = "unpaid" | "pending" | "paid";
+
 export type Order = {
   id: number;
   restaurant_id: number;
@@ -59,6 +62,10 @@ export type Order = {
   status: OrderStatus;
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
+  payment_method: PaymentMethod | null;
+  payment_status: PaymentStatus;
+  tip_amount: number;
+  total_amount: number;
   items: {
     id: number;
     menu_item_id: number;
@@ -176,6 +183,17 @@ export const api = {
     request<DashboardStats>(
       `/api/v1/stats/dashboard/${restaurantId}${date ? `?date=${date}` : ""}`
     ),
+  payByCard: (orderId: number, tipAmount: number) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/card`, {
+      method: "POST",
+      body: JSON.stringify({ tip_amount: tipAmount }),
+    }),
+  requestCashPayment: (orderId: number) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/cash`, { method: "POST" }),
+  confirmCashPayment: (orderId: number) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/cash/confirm`, { method: "POST" }),
+  listPendingCashPayments: (restaurantId: number) =>
+    request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-cash-payments`),
 };
 
 export function wsUrl(path: string): string {

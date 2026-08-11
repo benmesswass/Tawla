@@ -31,6 +31,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
+  const [tipInput, setTipInput] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoadError(null);
@@ -78,7 +81,42 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         sessionStorage.removeItem(lastOrderStorageKey(qrToken));
       }
     }
+    // Le serveur vient d'encaisser un paiement en espèces demandé depuis
+    // cette même page — inutile de faire deviner au client s'il doit
+    // rafraîchir pour le voir.
+    if (msg.event === "order.payment_confirmed" && trackedOrder && msg.order_id === trackedOrder.id) {
+      setTrackedOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
+    }
   });
+
+  async function payByCard() {
+    if (!trackedOrder) return;
+    setPaying(true);
+    setPaymentError(null);
+    const tip = Number(tipInput.replace(",", ".")) || 0;
+    try {
+      const updated = await api.payByCard(trackedOrder.id, tip);
+      setTrackedOrder(updated);
+    } catch (e) {
+      setPaymentError(toFrenchMessage(e));
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  async function payByCash() {
+    if (!trackedOrder) return;
+    setPaying(true);
+    setPaymentError(null);
+    try {
+      const updated = await api.requestCashPayment(trackedOrder.id);
+      setTrackedOrder(updated);
+    } catch (e) {
+      setPaymentError(toFrenchMessage(e));
+    } finally {
+      setPaying(false);
+    }
+  }
 
   function addToCart(item: MenuItem) {
     setCart((prev) => {
@@ -198,7 +236,68 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </li>
             ))}
           </ul>
+          <div className="flex justify-between font-medium mt-2 pt-2 border-t">
+            <span>Total</span>
+            <span>{trackedOrder.total_amount.toFixed(2)} DT</span>
+          </div>
         </div>
+
+        {!cancelled && (
+          <div className="mt-6 border-t pt-4">
+            <p className="text-sm font-medium mb-3">Paiement</p>
+
+            {trackedOrder.payment_status === "paid" && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                Payé ✓ {trackedOrder.payment_method === "card" ? "par carte" : "en espèces"}
+                {trackedOrder.tip_amount > 0 && ` (dont ${trackedOrder.tip_amount.toFixed(2)} DT de pourboire)`}
+              </p>
+            )}
+
+            {trackedOrder.payment_status === "pending" && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                Paiement en espèces demandé — un serveur va passer encaisser {trackedOrder.total_amount.toFixed(2)} DT.
+              </p>
+            )}
+
+            {trackedOrder.payment_status === "unpaid" && (
+              <div className="space-y-3">
+                {paymentError && (
+                  <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">
+                    {paymentError}
+                  </div>
+                )}
+                <div>
+                  <label htmlFor="tip" className="text-sm text-neutral-500">
+                    Pourboire (facultatif, pour un paiement par carte)
+                  </label>
+                  <input
+                    id="tip"
+                    type="text"
+                    inputMode="decimal"
+                    value={tipInput}
+                    onChange={(e) => setTipInput(e.target.value)}
+                    placeholder="0.00 DT"
+                    className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
+                  />
+                </div>
+                <button
+                  onClick={payByCard}
+                  disabled={paying}
+                  className="w-full bg-neutral-900 text-white rounded-lg py-2.5 disabled:opacity-50"
+                >
+                  Payer par carte
+                </button>
+                <button
+                  onClick={payByCash}
+                  disabled={paying}
+                  className="w-full border border-neutral-300 rounded-lg py-2.5 disabled:opacity-50"
+                >
+                  Payer en espèces (le serveur passera encaisser)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <button onClick={orderAgain} className="mt-8 w-full border border-neutral-300 rounded-lg py-2.5">
           Commander à nouveau

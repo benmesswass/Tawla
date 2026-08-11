@@ -16,6 +16,7 @@ type PendingOrder = {
   taken_by_staff_name: string | null;
 };
 type ReadyOrder = { order_id: number; table_id: number };
+type CashRequest = { order_id: number; table_id: number; amount: number };
 
 function fromApi(o: Order): PendingOrder {
   return {
@@ -31,6 +32,7 @@ export default function StaffPage() {
   const { staff, loading: staffLoading } = useCurrentStaff(["waiter", "manager"]);
   const [pending, setPending] = useState<PendingOrder[]>([]);
   const [readyToServe, setReadyToServe] = useState<ReadyOrder[]>([]);
+  const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const restaurantId = staff?.restaurant_id ?? null;
@@ -48,11 +50,24 @@ export default function StaffPage() {
     }
   }, [restaurantId]);
 
+  const loadCashRequests = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const orders = await api.listPendingCashPayments(restaurantId);
+      setCashRequests(orders.map((o) => ({ order_id: o.id, table_id: o.table_id, amount: o.total_amount })));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
   // Recharge au montage : le WebSocket seul ne rattrape jamais les
   // commandes déjà en attente avant l'ouverture de cette page.
   useEffect(() => {
-    if (restaurantId) loadActiveOrders();
-  }, [restaurantId, loadActiveOrders]);
+    if (restaurantId) {
+      loadActiveOrders();
+      loadCashRequests();
+    }
+  }, [restaurantId, loadActiveOrders, loadCashRequests]);
 
   const status = useReconnectingSocket(restaurantId ? wsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
@@ -76,14 +91,24 @@ export default function StaffPage() {
         prev.some((o) => o.order_id === msg.order_id) ? prev : [...prev, { order_id: msg.order_id, table_id: msg.table_id }]
       );
     }
+    if (msg.event === "order.cash_requested") {
+      setCashRequests((prev) =>
+        prev.some((o) => o.order_id === msg.order_id)
+          ? prev
+          : [...prev, { order_id: msg.order_id, table_id: msg.table_id, amount: msg.amount }]
+      );
+    }
   });
 
   // Une reconnexion après coupure peut avoir manqué des événements : on
   // recharge l'état complet à chaque retour en ligne, pas seulement au
   // premier montage.
   useEffect(() => {
-    if (status === "connected") loadActiveOrders();
-  }, [status, loadActiveOrders]);
+    if (status === "connected") {
+      loadActiveOrders();
+      loadCashRequests();
+    }
+  }, [status, loadActiveOrders, loadCashRequests]);
 
   async function claim(orderId: number) {
     setError(null);
@@ -119,6 +144,16 @@ export default function StaffPage() {
     try {
       await api.markServed(orderId);
       setReadyToServe((prev) => prev.filter((o) => o.order_id !== orderId));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function confirmCash(orderId: number) {
+    setError(null);
+    try {
+      await api.confirmCashPayment(orderId);
+      setCashRequests((prev) => prev.filter((o) => o.order_id !== orderId));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -193,6 +228,25 @@ export default function StaffPage() {
             className="bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm"
           >
             Servi
+          </button>
+        </div>
+      ))}
+
+      <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement en espèces</h2>
+      {cashRequests.length === 0 && <p className="text-neutral-500">Aucune demande en attente.</p>}
+      {cashRequests.map((o) => (
+        <div key={o.order_id} className="border rounded-lg p-4 mb-3 flex justify-between items-center bg-amber-50">
+          <div>
+            <div className="font-medium">Table {o.table_id}</div>
+            <div className="text-sm text-neutral-500">
+              Commande #{o.order_id} — {o.amount.toFixed(2)} DT
+            </div>
+          </div>
+          <button
+            onClick={() => confirmCash(o.order_id)}
+            className="bg-amber-700 text-white px-3 py-2 rounded-lg text-sm"
+          >
+            Encaissé
           </button>
         </div>
       ))}
