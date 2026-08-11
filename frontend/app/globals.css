@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --semoule: #f6efdd;
+  --semoule-raised: #fbf7ec;
+  --espresso: #241811;
+  --encre: #2a1b12;
+  --creme: #f3e9d8;
+  --harissa: #d6401e;
+  --harissa-dark: #b8341a;
+  --menthe: #1f6b4f;
+  --laiton: #b8862e;
+  --line: #e3d7bd;
+  --ink-soft: #6b5947;
+}

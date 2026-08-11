@@ -6,6 +6,8 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { toFrenchMessage } from "@/lib/errors";
+import { hankenGrotesk, lalezar } from "@/lib/fonts";
+import TawlaMark from "@/components/brand/TawlaMark";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -36,20 +38,36 @@ export default function SignupPage() {
     }
   }
 
+  const inputClass =
+    "w-full rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[var(--harissa)]/40 focus:border-[var(--harissa)]";
+  const inputStyle = { border: "1px solid var(--line)", background: "white" };
+
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm border rounded-lg p-6 space-y-4">
-        <div>
-          <h1 className="text-lg font-semibold">Créer mon établissement — Tawla</h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            Onboardez votre restaurant ou café et devenez son premier compte manager.
-          </p>
+    <div
+      className={`${hankenGrotesk.className} flex min-h-screen items-center justify-center p-4`}
+      style={{ background: "var(--semoule)" }}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm rounded-xl p-6 space-y-4 shadow-sm"
+        style={{ background: "var(--semoule-raised)", border: "1px solid var(--line)" }}
+      >
+        <div className="flex flex-col items-center gap-3 pb-1 text-center">
+          <TawlaMark size={44} />
+          <div>
+            <h1 className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
+              Créer mon établissement
+            </h1>
+            <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+              Onboardez votre restaurant ou café et devenez son premier compte manager.
+            </p>
+          </div>
         </div>
 
         {error && <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
 
         <div className="space-y-1">
-          <label htmlFor="restaurantName" className="text-sm font-medium">
+          <label htmlFor="restaurantName" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
             Nom de l&apos;établissement
           </label>
           <input
@@ -58,12 +76,13 @@ export default function SignupPage() {
             required
             value={restaurantName}
             onChange={(e) => setRestaurantName(e.target.value)}
-            className="w-full border rounded px-2 py-1.5"
+            className={inputClass}
+            style={inputStyle}
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="managerName" className="text-sm font-medium">
+          <label htmlFor="managerName" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
             Votre nom
           </label>
           <input
@@ -72,12 +91,13 @@ export default function SignupPage() {
             required
             value={managerName}
             onChange={(e) => setManagerName(e.target.value)}
-            className="w-full border rounded px-2 py-1.5"
+            className={inputClass}
+            style={inputStyle}
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">
+          <label htmlFor="email" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
             E-mail
           </label>
           <input
@@ -86,12 +106,13 @@ export default function SignupPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border rounded px-2 py-1.5"
+            className={inputClass}
+            style={inputStyle}
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="password" className="text-sm font-medium">
+          <label htmlFor="password" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
             Mot de passe
           </label>
           <input
@@ -101,22 +122,26 @@ export default function SignupPage() {
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full border rounded px-2 py-1.5"
+            className={inputClass}
+            style={inputStyle}
           />
-          <p className="text-xs text-neutral-500">8 caractères minimum.</p>
+          <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+            8 caractères minimum.
+          </p>
         </div>
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full bg-neutral-900 text-white text-sm px-3 py-2 rounded-lg disabled:opacity-50"
+          className={`${lalezar.className} w-full text-white text-base tracking-wide px-3 py-2 rounded-lg disabled:opacity-50 transition-colors`}
+          style={{ background: "var(--harissa)" }}
         >
           {submitting ? "Création…" : "Créer mon établissement"}
         </button>
 
-        <p className="text-sm text-center text-neutral-500">
+        <p className="text-sm text-center" style={{ color: "var(--ink-soft)" }}>
           Déjà un compte ?{" "}
-          <Link href="/login" className="underline">
+          <Link href="/login" className="underline" style={{ color: "var(--menthe)" }}>
             Se connecter
           </Link>
         </p>

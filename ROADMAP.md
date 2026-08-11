@@ -82,9 +82,11 @@ Ajoutée le 2026-08-11, à la suite de l'audit fonctionnel + design mené une fo
 
 **8.1 — Identité de marque (fondation, bloque le reste de la phase)**
 - [x] Nom de marque définitif — confirmé par Wassim le 2026-08-11 : **Tawla**
-- [ ] Logo + favicon + icônes PWA, lisibles de 32px à 512px
-- [ ] Palette de marque figée (primaire, secondaire, + couleurs sémantiques distinctes de la couleur d'action) en tokens CSS partagés client/staff
-- [ ] Paire typographique (une police d'affichage avec du caractère + une police texte lisible en petit sur mobile)
+- [x] Logo + favicon + icônes PWA, lisibles de 32px à 512px — marque « Le Duo Encadré » (un seul cadre partagé en deux zones : lignes de commande + coche de validation, choisie par Wassim après plusieurs rondes d'options en Artifact) ; `favicon`/`pwa-icon-192`/`pwa-icon-512` régénérés, composants `TawlaMark`/`TawlaLogo` réutilisables (PR #21)
+- [x] Palette de marque figée (primaire, secondaire, + couleurs sémantiques distinctes de la couleur d'action) en tokens CSS partagés client/staff — variables dans `frontend/app/globals.css` (`--harissa`, `--menthe`, `--laiton`, `--semoule`, `--encre`…) (PR #21)
+- [x] Paire typographique (une police d'affichage avec du caractère + une police texte lisible en petit sur mobile) — Lalezar (affichage) + Hanken Grotesk (texte/UI) via `next/font/google`, `frontend/lib/fonts.ts` (PR #21)
+
+Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures avant/après dans la description de la PR). Le reste de l'app (dashboard, staff, cuisine, menu client) garde son style actuel — application progressive prévue en 8.2–8.5, un écran à la fois.
 
 **8.2 — Système de design partagé**
 - [ ] Composants de base nommés (`Button`, `Card`, `Badge` de statut, `EmptyState`) pour remplacer les classes Tailwind dupliquées dans `dashboard/page.tsx`, `staff/page.tsx`, `kitchen/page.tsx`

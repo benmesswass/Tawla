@@ -2,7 +2,7 @@ import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 export const metadata = {
-  title: "Resto QR Menu",
+  title: "Tawla — Commande au restaurant",
   description: "Commande via QR code sur table",
 };
 
