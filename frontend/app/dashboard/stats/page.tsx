@@ -38,6 +38,54 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function csvEscape(value: string | number): string {
+  const s = String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Export volontairement limité aux stats déjà calculées côté serveur pour
+// LA journée affichée — aucun nouvel endpoint : tout est déjà chargé dans
+// `stats`, on ne fait que le reformater en CSV pour Excel/Sheets.
+function statsToCsv(stats: DashboardStats): string {
+  const lines: string[] = [];
+  const row = (...cells: (string | number)[]) => lines.push(cells.map(csvEscape).join(","));
+
+  row("Statistiques Tawla", stats.date);
+  lines.push("");
+
+  row("Commandes en cours", stats.active_orders_count);
+  lines.push("");
+
+  row("Temps moyen par étape", "Secondes");
+  row("Envoyée → confirmée", stats.timing.avg_wait_confirmation_seconds ?? "");
+  row("Confirmée → cuisine", stats.timing.avg_confirmation_to_kitchen_seconds ?? "");
+  row("Cuisine → servie", stats.timing.avg_kitchen_to_served_seconds ?? "");
+  lines.push("");
+
+  row("Serveur", "Commandes prises en charge");
+  stats.staff_performance.forEach((p) => row(p.staff_name, p.orders_taken));
+  lines.push("");
+
+  row("Plat", "Quantité vendue");
+  stats.top_items.forEach((i) => row(i.menu_item_name, i.quantity));
+  lines.push("");
+
+  row("Heure", "Commandes");
+  stats.orders_by_hour.forEach((h) => row(h.hour, h.count));
+
+  return lines.join("\n");
+}
+
+function downloadCsv(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function DashboardStatsPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["manager"]);
@@ -96,7 +144,7 @@ export default function DashboardStatsPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
         <label htmlFor="date" className="text-sm text-neutral-500">
           Journée
         </label>
@@ -108,6 +156,13 @@ export default function DashboardStatsPage() {
           onChange={(e) => setDate(e.target.value)}
           className="border rounded px-2 py-1 text-sm"
         />
+        <button
+          onClick={() => stats && downloadCsv(`tawla-stats-${stats.date}.csv`, statsToCsv(stats))}
+          disabled={!stats}
+          className="text-sm border border-neutral-300 rounded-lg px-3 py-1 disabled:opacity-50"
+        >
+          Exporter en CSV
+        </button>
       </div>
 
       {error && <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
