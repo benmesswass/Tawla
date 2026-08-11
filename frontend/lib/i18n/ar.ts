@@ -41,6 +41,7 @@ export const ar = {
     ready: "لاهية",
     served: "تقدمت",
   },
+  kitchenWaitHint: "عادة من 10 إلى 20 دقيقة، يتبدل حسب الزحمة.",
 
   orderDetailsTitle: "تفاصيل الطلبية",
   sharedTag: "للقسمة",
@@ -83,4 +84,6 @@ export const ar = {
   pushSubscribeButton: "عرفني كي تكون لاهية",
   pushSubscribed: "باش تتعرف كي الطلبية تكون لاهية.",
   pushDenied: "الإشعارات موقوفة — نجم تفعّلها من إعدادات المتصفح إذا بدّلت رايك.",
+
+  cartClearedNotice: "أكلة من القفة تاعك ماعادتش موجودة ونحاتلك. القفة تاعك دلوقتي فاضية.",
 } satisfies Dictionary;

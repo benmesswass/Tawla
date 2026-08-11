@@ -15,3 +15,90 @@
   --line: #e3d7bd;
   --ink-soft: #6b5947;
 }
+
+@keyframes celebration-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes celebration-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0.4);
+    opacity: 0;
+  }
+}
+
+@keyframes cart-bump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(31, 107, 79, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(31, 107, 79, 0);
+  }
+}
+
+.animate-celebration-pop {
+  animation: celebration-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-celebration-fade {
+  animation: celebration-fade 1.8s ease-in forwards;
+}
+
+.animate-confetti {
+  animation: confetti-burst 0.9s ease-out forwards;
+}
+
+.animate-cart-bump {
+  animation: cart-bump 0.3s ease-out;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-celebration-pop,
+  .animate-celebration-fade,
+  .animate-confetti,
+  .animate-cart-bump,
+  .animate-pulse-ring {
+    animation: none;
+  }
+}
