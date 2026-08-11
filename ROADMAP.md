@@ -57,7 +57,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 - [x] Bouton « appeler le serveur », indépendant du passage de commande — nouveau modèle `WaiterCall` persisté (survit à une reconnexion, même logique que les demandes de paiement cash), diffusé en temps réel sur le canal "staff" existant, résolu par un serveur ou le manager ; bouton client avec cooldown 90s anti-spam, traduit fr/ar (PR #10)
 - [x] Gestion de la rupture de stock en temps réel (un plat en rupture est désactivé instantanément côté client) — nouveau canal WebSocket public `/ws/menu/{restaurant_id}`, diffusé depuis la bascule manager déjà existante ; le client voit le plat disparaître du menu et être retiré automatiquement de son panier sans recharger la page (PR #11)
 - [x] Mode café simplifié : commande de boissons seules, sans structure entrée/plat/dessert — toggle manager (`Restaurant.cafe_mode_enabled`, même pattern que le mode Ramadan), le menu client s'affiche alors en liste unique sans en-têtes de catégorie (PR #12)
-- [ ] PWA offline-first : file d'attente locale si la connexion mobile est instable, envoi différé automatique
+- [x] PWA offline-first : file d'attente locale si la connexion mobile est instable, envoi différé automatique — manifest.ts + icônes + service worker minimal (réseau d'abord, secours cache) pour l'installabilité ; côté commande, un échec réseau (pas une erreur API) met la commande de côté en localStorage et la renvoie automatiquement à l'événement `online` ou au prochain chargement de page, avec un bouton « réessayer maintenant » (PR #13)
 - [ ] Carte de fidélité digitale (ex. Nème café/plat offert, réduction anniversaire)
 
 ## Phase 6 — Croissance / opérationnel

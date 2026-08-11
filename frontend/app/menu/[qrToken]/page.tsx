@@ -27,6 +27,12 @@ function lastOrderStorageKey(qrToken: string): string {
   return `resto-qr-menu:last-order:${qrToken}`;
 }
 
+function offlineQueueStorageKey(qrToken: string): string {
+  return `resto-qr-menu:offline-queue:${qrToken}`;
+}
+
+type CreateOrderPayload = Parameters<typeof api.createOrder>[0];
+
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { qrToken } = params;
   const { t, locale, toggleLocale } = useLocale();
@@ -45,6 +51,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
   const [waiterCallState, setWaiterCallState] = useState<"idle" | "calling" | "called">("idle");
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
+  const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
+  const [retryingOffline, setRetryingOffline] = useState(false);
 
   function formatTime(iso: string): string {
     return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
@@ -87,6 +95,47 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // PWA offline-first : une commande mise de côté faute de réseau (voir
+  // validateOrder) est stockée sur l'appareil du client, pas en mémoire —
+  // elle doit survivre à une page fermée puis rouverte.
+  const flushOfflineQueue = useCallback(async () => {
+    const raw = localStorage.getItem(offlineQueueStorageKey(qrToken));
+    if (!raw) return;
+    setRetryingOffline(true);
+    try {
+      const payload: CreateOrderPayload = JSON.parse(raw);
+      const order = await api.createOrder(payload);
+      localStorage.removeItem(offlineQueueStorageKey(qrToken));
+      sessionStorage.setItem(lastOrderStorageKey(qrToken), String(order.id));
+      setOfflineQueuedPayload(null);
+      setTrackedOrder(order);
+    } catch {
+      // Toujours hors ligne (ou erreur transitoire) : on retentera au
+      // prochain événement "online" ou clic manuel — pas d'erreur affichée
+      // à chaque tentative silencieuse, ça n'apporterait rien au client.
+    } finally {
+      setRetryingOffline(false);
+    }
+  }, [qrToken]);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(offlineQueueStorageKey(qrToken));
+    if (!raw) return;
+    try {
+      setOfflineQueuedPayload(JSON.parse(raw));
+    } catch {
+      localStorage.removeItem(offlineQueueStorageKey(qrToken));
+      return;
+    }
+    flushOfflineQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrToken]);
+
+  useEffect(() => {
+    window.addEventListener("online", flushOfflineQueue);
+    return () => window.removeEventListener("online", flushOfflineQueue);
+  }, [flushOfflineQueue]);
 
   // Suivi temps réel de la commande après validation — jusqu'ici le client
   // n'avait plus aucune nouvelle après "commande envoyée" (audit PO 2026-08-10).
@@ -219,23 +268,36 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     if (!table || cartLines.length === 0) return;
     setSending(true);
     setOrderError(null);
+    const payload: CreateOrderPayload = {
+      restaurant_id: table.restaurant_id,
+      table_id: table.id,
+      items: cartLines.map((l) => ({
+        menu_item_id: l.item.id,
+        quantity: l.quantity,
+        notes: l.note || null,
+        is_shared: l.shared,
+      })),
+      scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
+    };
     try {
-      const order = await api.createOrder({
-        restaurant_id: table.restaurant_id,
-        table_id: table.id,
-        items: cartLines.map((l) => ({
-          menu_item_id: l.item.id,
-          quantity: l.quantity,
-          notes: l.note || null,
-          is_shared: l.shared,
-        })),
-        scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
-      });
+      const order = await api.createOrder(payload);
       sessionStorage.setItem(lastOrderStorageKey(qrToken), String(order.id));
       setTrackedOrder(order);
       setCart({});
       setPreOrderForIftar(false);
     } catch (e) {
+      // Échec réseau (pas une réponse de l'API, ex: connexion mobile coupée
+      // en pleine validation) : on garde la commande de côté sur le téléphone
+      // du client plutôt que de la perdre — envoi automatique dès que le
+      // réseau revient (voir flushOfflineQueue).
+      if (e instanceof TypeError) {
+        localStorage.setItem(offlineQueueStorageKey(qrToken), JSON.stringify(payload));
+        setOfflineQueuedPayload(payload);
+        setCart({});
+        setPreOrderForIftar(false);
+        setSending(false);
+        return;
+      }
       // Un article devenu indisponible pendant que le client avait le panier
       // ouvert ne doit plus faire disparaître tout l'écran (bug critique
       // corrigé suite à l'audit) : on retire juste cet article et le client
@@ -279,6 +341,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     return (
       <div dir={dir} className={`p-6 ${wrapperClassName ?? ""}`}>
         {t.loadingMenu}
+      </div>
+    );
+  }
+
+  if (offlineQueuedPayload) {
+    return (
+      <div dir={dir} className={`p-6 max-w-md mx-auto text-center ${wrapperClassName ?? ""}`}>
+        <h1 className="text-xl font-semibold">📶 {t.offlineQueuedTitle}</h1>
+        <p className="mt-4 text-neutral-600">{t.offlineQueuedMessage}</p>
+        <button
+          onClick={flushOfflineQueue}
+          disabled={retryingOffline}
+          className="mt-8 w-full bg-neutral-900 text-white rounded-lg py-2.5 disabled:opacity-50"
+        >
+          {retryingOffline ? t.sending : t.retryNow}
+        </button>
       </div>
     );
   }
