@@ -1,32 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Cairo } from "next/font/google";
 import { api, wsUrl, ApiError, MenuItem, Order, OrderStatus, Restaurant, Table } from "@/lib/api";
-import { toFrenchMessage } from "@/lib/errors";
+import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
+import { useLocale } from "@/lib/i18n/useLocale";
 import SplitBill from "@/components/SplitBill";
+
+const cairo = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700"] });
 
 type CartLine = { item: MenuItem; quantity: number; note: string; shared: boolean };
 
-const STEPS: { status: OrderStatus; label: string }[] = [
-  { status: "pending_confirmation", label: "Envoyée" },
-  { status: "confirmed", label: "Confirmée" },
-  { status: "sent_to_kitchen", label: "En cuisine" },
-  { status: "in_preparation", label: "En préparation" },
-  { status: "ready", label: "Prête" },
-  { status: "served", label: "Servie" },
+type StepStatus = Exclude<OrderStatus, "cancelled">;
+
+const STEP_STATUSES: StepStatus[] = [
+  "pending_confirmation",
+  "confirmed",
+  "sent_to_kitchen",
+  "in_preparation",
+  "ready",
+  "served",
 ];
 
 function lastOrderStorageKey(qrToken: string): string {
   return `resto-qr-menu:last-order:${qrToken}`;
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-}
-
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { qrToken } = params;
+  const { t, locale, toggleLocale } = useLocale();
 
   const [table, setTable] = useState<Table | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -40,6 +43,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
+
+  function formatTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
   const load = useCallback(() => {
     setLoadError(null);
@@ -69,8 +79,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           }
         }
       })
-      .catch((e) => setLoadError(toFrenchMessage(e)));
-  }, [qrToken]);
+      .catch((e) => setLoadError(toLocalizedMessage(e, locale)));
+  }, [qrToken, locale]);
 
   useEffect(() => {
     load();
@@ -109,7 +119,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       const updated = await api.payByCard(trackedOrder.id, tip);
       setTrackedOrder(updated);
     } catch (e) {
-      setPaymentError(toFrenchMessage(e));
+      setPaymentError(toLocalizedMessage(e, locale));
     } finally {
       setPaying(false);
     }
@@ -123,7 +133,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       const updated = await api.requestCashPayment(trackedOrder.id);
       setTrackedOrder(updated);
     } catch (e) {
-      setPaymentError(toFrenchMessage(e));
+      setPaymentError(toLocalizedMessage(e, locale));
     } finally {
       setPaying(false);
     }
@@ -203,7 +213,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         }
         api.getMenu(table.restaurant_id).then(setMenu).catch(() => {});
       }
-      setOrderError(toFrenchMessage(e));
+      setOrderError(toLocalizedMessage(e, locale));
     } finally {
       setSending(false);
     }
@@ -214,55 +224,65 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     sessionStorage.removeItem(lastOrderStorageKey(qrToken));
   }
 
+  const dir = t.dir;
+  const wrapperClassName = locale === "ar" ? cairo.className : undefined;
+
   if (loadError) {
     return (
-      <div className="p-6 max-w-md mx-auto text-center">
+      <div dir={dir} className={`p-6 max-w-md mx-auto text-center ${wrapperClassName ?? ""}`}>
         <p className="text-red-600 mb-4">{loadError}</p>
         <button onClick={load} className="bg-neutral-900 text-white px-4 py-2 rounded-lg">
-          Réessayer
+          {t.retry}
         </button>
       </div>
     );
   }
-  if (!table || !restaurant) return <div className="p-6">Chargement du menu...</div>;
+  if (!table || !restaurant) {
+    return (
+      <div dir={dir} className={`p-6 ${wrapperClassName ?? ""}`}>
+        {t.loadingMenu}
+      </div>
+    );
+  }
 
   if (trackedOrder) {
-    const currentStepIndex = STEPS.findIndex((s) => s.status === trackedOrder.status);
+    const currentStepIndex = STEP_STATUSES.indexOf(trackedOrder.status as StepStatus);
     const cancelled = trackedOrder.status === "cancelled";
     return (
-      <div className="p-6 max-w-md mx-auto">
+      <div dir={dir} className={`p-6 max-w-md mx-auto ${wrapperClassName ?? ""}`}>
         <h1 className="text-xl font-semibold text-center">
-          {cancelled ? "Commande annulée" : "Commande envoyée 🎉"}
+          {cancelled ? t.orderCancelledTitle : t.orderSentTitle}
         </h1>
-        <p className="mt-2 text-neutral-600 text-center">{table.label} — commande #{trackedOrder.id}</p>
+        <p className="mt-2 text-neutral-600 text-center">{t.orderSubtitle(table.label, trackedOrder.id)}</p>
 
         {!cancelled && trackedOrder.scheduled_for && (
           <p className="mt-4 text-sm text-center bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3">
-            🌙 Pré-commande pour l&apos;iftar — préparation prévue pour {formatTime(trackedOrder.scheduled_for)}.
+            {t.preorderBadge(formatTime(trackedOrder.scheduled_for))}
           </p>
         )}
 
         {!cancelled && trackedOrder.taken_by_staff_name && (
           <p className="mt-4 text-sm text-center bg-amber-50 text-amber-800 border border-amber-200 rounded-lg py-2 px-3">
-            <span className="font-medium">{trackedOrder.taken_by_staff_name}</span> est votre serveur dédié pour cette
-            commande.
+            {t.dedicatedServer(trackedOrder.taken_by_staff_name)}
           </p>
         )}
 
         {!cancelled && (
           <ol className="mt-8 space-y-4">
-            {STEPS.map((step, i) => {
+            {STEP_STATUSES.map((status, i) => {
               const done = i <= currentStepIndex;
               return (
-                <li key={step.status} className="flex items-center gap-3">
+                <li key={status} className="flex items-center gap-3">
                   <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
                       done ? "bg-amber-600 text-white" : "bg-neutral-200 text-neutral-500"
                     }`}
                   >
                     {done ? "✓" : i + 1}
                   </span>
-                  <span className={done ? "font-medium text-neutral-900" : "text-neutral-400"}>{step.label}</span>
+                  <span className={done ? "font-medium text-neutral-900" : "text-neutral-400"}>
+                    {t.steps[status]}
+                  </span>
                 </li>
               );
             })}
@@ -270,36 +290,37 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
 
         <div className="mt-8 border-t pt-4">
-          <p className="text-sm font-medium mb-2">Détail de la commande</p>
+          <p className="text-sm font-medium mb-2">{t.orderDetailsTitle}</p>
           <ul className="text-sm text-neutral-600 space-y-1">
             {trackedOrder.items.map((it) => (
               <li key={it.id}>
                 {it.quantity}× {it.menu_item_name}
-                {it.is_shared && <span className="text-amber-700"> · 🍽️ à partager</span>}
+                {it.is_shared && <span className="text-amber-700"> · {t.sharedTag}</span>}
                 {it.notes && <span className="text-neutral-400"> — {it.notes}</span>}
               </li>
             ))}
           </ul>
           <div className="flex justify-between font-medium mt-2 pt-2 border-t">
-            <span>Total</span>
-            <span>{trackedOrder.total_amount.toFixed(2)} DT</span>
+            <span>{t.total}</span>
+            <span>
+              {trackedOrder.total_amount.toFixed(2)} {t.currency}
+            </span>
           </div>
         </div>
 
         {!cancelled && (
           <div className="mt-6 border-t pt-4">
-            <p className="text-sm font-medium mb-3">Paiement</p>
+            <p className="text-sm font-medium mb-3">{t.paymentTitle}</p>
 
             {trackedOrder.payment_status === "paid" && (
               <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                Payé ✓ {trackedOrder.payment_method === "card" ? "par carte" : "en espèces"}
-                {trackedOrder.tip_amount > 0 && ` (dont ${trackedOrder.tip_amount.toFixed(2)} DT de pourboire)`}
+                {t.paidMessage(trackedOrder.payment_method === "card" ? "card" : "cash", trackedOrder.tip_amount)}
               </p>
             )}
 
             {trackedOrder.payment_status === "pending" && (
               <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                Paiement en espèces demandé — un serveur va passer encaisser {trackedOrder.total_amount.toFixed(2)} DT.
+                {t.cashPendingMessage(trackedOrder.total_amount)}
               </p>
             )}
 
@@ -310,10 +331,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {paymentError}
                   </div>
                 )}
-                <SplitBill order={trackedOrder} />
+                <SplitBill order={trackedOrder} t={t} />
                 <div>
                   <label htmlFor="tip" className="text-sm text-neutral-500">
-                    Pourboire (facultatif, pour un paiement par carte)
+                    {t.tipLabel}
                   </label>
                   <input
                     id="tip"
@@ -321,7 +342,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     inputMode="decimal"
                     value={tipInput}
                     onChange={(e) => setTipInput(e.target.value)}
-                    placeholder="0.00 DT"
+                    placeholder={t.tipPlaceholder}
                     className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
                   />
                 </div>
@@ -330,14 +351,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   disabled={paying}
                   className="w-full bg-neutral-900 text-white rounded-lg py-2.5 disabled:opacity-50"
                 >
-                  Payer par carte
+                  {t.payByCard}
                 </button>
                 <button
                   onClick={payByCash}
                   disabled={paying}
                   className="w-full border border-neutral-300 rounded-lg py-2.5 disabled:opacity-50"
                 >
-                  Payer en espèces (le serveur passera encaisser)
+                  {t.payByCash}
                 </button>
               </div>
             )}
@@ -345,7 +366,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
 
         <button onClick={orderAgain} className="mt-8 w-full border border-neutral-300 rounded-lg py-2.5">
-          Commander à nouveau
+          {t.orderAgain}
         </button>
       </div>
     );
@@ -355,16 +376,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const categories = Array.from(new Set(availableItems.map((m) => m.category)));
 
   return (
-    <div className="pb-32">
-      <header className="bg-amber-700 text-white px-4 py-5">
-        <h1 className="text-xl font-semibold">{restaurant.name}</h1>
-        <p className="text-amber-100 text-sm">{table.label}</p>
+    <div dir={dir} className={`pb-32 ${wrapperClassName ?? ""}`}>
+      <header className="bg-amber-700 text-white px-4 py-5 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">{restaurant.name}</h1>
+          <p className="text-amber-100 text-sm">{table.label}</p>
+        </div>
+        <button
+          onClick={toggleLocale}
+          className="shrink-0 text-sm border border-amber-300 rounded-lg px-3 py-1.5 text-amber-50"
+        >
+          {t.localeSwitchLabel}
+        </button>
       </header>
 
       {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
         <div className="bg-indigo-950 text-indigo-100 px-4 py-3 text-sm text-center">
-          🌙 Ramadan Moubarak — rupture du jeûne à {formatTime(restaurant.iftar_time)}. Vous pouvez commander
-          maintenant pour l&apos;iftar, votre plat sera prêt à l&apos;heure.
+          {t.ramadanBanner(formatTime(restaurant.iftar_time))}
         </div>
       )}
 
@@ -372,11 +400,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         {orderError && (
           <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 flex justify-between items-start gap-2">
             <span>{orderError}</span>
-            <button
-              onClick={() => setOrderError(null)}
-              aria-label="Fermer le message d'erreur"
-              className="text-red-500"
-            >
+            <button onClick={() => setOrderError(null)} aria-label={t.closeErrorAria} className="text-red-500">
               ✕
             </button>
           </div>
@@ -390,10 +414,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               .map((item) => (
                 <div key={item.id} className="border-b py-3">
                   <div className="flex justify-between items-center">
-                    <div className="pr-3">
+                    <div className="pe-3">
                       <div className="font-medium">{item.name}</div>
                       {item.description && <div className="text-sm text-neutral-500">{item.description}</div>}
-                      <div className="text-sm text-neutral-500 mt-0.5">{item.price.toFixed(2)} DT</div>
+                      <div className="text-sm text-neutral-500 mt-0.5">
+                        {item.price.toFixed(2)} {t.currency}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {item.image_url && (
@@ -407,7 +433,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                         <>
                           <button
                             onClick={() => removeFromCart(item.id)}
-                            aria-label={`Retirer un ${item.name} du panier`}
+                            aria-label={t.removeFromCartAria(item.name)}
                             className="w-8 h-8 rounded-full border"
                           >
                             -
@@ -417,7 +443,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       )}
                       <button
                         onClick={() => addToCart(item)}
-                        aria-label={`Ajouter ${item.name} au panier`}
+                        aria-label={t.addToCartAria(item.name)}
                         className="w-8 h-8 rounded-full bg-neutral-900 text-white"
                       >
                         +
@@ -430,7 +456,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                         type="text"
                         value={cart[item.id].note}
                         onChange={(e) => setNote(item.id, e.target.value)}
-                        placeholder="Note pour la cuisine (facultatif, ex : sans oignons)"
+                        placeholder={t.notePlaceholder}
                         className="mt-2 w-full text-sm border rounded-lg px-3 py-1.5"
                       />
                       <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
@@ -439,7 +465,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                           checked={cart[item.id].shared}
                           onChange={(e) => setShared(item.id, e.target.checked)}
                         />
-                        🍽️ Plat à partager pour toute la table
+                        {t.sharedCheckboxLabel}
                       </label>
                     </>
                   )}
@@ -458,17 +484,19 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     checked={preOrderForIftar}
                     onChange={(e) => setPreOrderForIftar(e.target.checked)}
                   />
-                  🌙 Commander pour l&apos;iftar ({formatTime(restaurant.iftar_time)}) plutôt que maintenant
+                  {t.preorderCheckboxLabel(formatTime(restaurant.iftar_time))}
                 </label>
               )}
               <div className="flex justify-between items-center">
-                <span className="font-medium">{total.toFixed(2)} DT</span>
+                <span className="font-medium">
+                  {total.toFixed(2)} {t.currency}
+                </span>
                 <button
                   onClick={validateOrder}
                   disabled={sending}
                   className="bg-neutral-900 text-white px-4 py-2 rounded-lg"
                 >
-                  {sending ? "Envoi..." : "Valider la commande"}
+                  {sending ? t.sending : t.validateOrder}
                 </button>
               </div>
             </div>
