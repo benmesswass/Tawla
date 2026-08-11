@@ -12,3 +12,4 @@ from app.modules.orders import models as _orders_models  # noqa: F401
 from app.modules.staff import models as _staff_models  # noqa: F401
 from app.modules.tables import models as _tables_models  # noqa: F401
 from app.modules.tenants import models as _tenants_models  # noqa: F401
+from app.modules.waiter_calls import models as _waiter_calls_models  # noqa: F401

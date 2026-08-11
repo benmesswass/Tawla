@@ -19,6 +19,8 @@ export const ar = {
   removeFromCartAria: (name) => `نقّص ${name} من القفة`,
   allergensLabel: (allergens) => `مسببات الحساسية: ${allergens}`,
   notHalalBadge: "مش حلال",
+  callWaiterButton: "🔔 نادي على الجرسون",
+  callWaiterSent: "✓ الجرسون تعرّف، باش يجي دلوقتي",
   notePlaceholder: "ملاحظة للكوجينة (إختياري، مثال: بلا بصل)",
   sharedCheckboxLabel: "🍽️ أكلة نتقاسموها في الطاولة الكل",
   preorderCheckboxLabel: (time) => `🌙 نطلب للفطور (${time}) بدل دلوقتي`,

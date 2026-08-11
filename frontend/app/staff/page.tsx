@@ -18,6 +18,7 @@ type PendingOrder = {
 };
 type ReadyOrder = { order_id: number; table_id: number };
 type CashRequest = { order_id: number; table_id: number; amount: number; taken_by_staff_id: number | null };
+type WaiterCall = { call_id: number; table_id: number };
 
 function fromApi(o: Order): PendingOrder {
   return {
@@ -39,6 +40,7 @@ export default function StaffPage() {
   const [pending, setPending] = useState<PendingOrder[]>([]);
   const [readyToServe, setReadyToServe] = useState<ReadyOrder[]>([]);
   const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
+  const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const restaurantId = staff?.restaurant_id ?? null;
@@ -73,14 +75,25 @@ export default function StaffPage() {
     }
   }, [restaurantId]);
 
+  const loadWaiterCalls = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const calls = await api.listPendingWaiterCalls(restaurantId);
+      setWaiterCalls(calls.map((c) => ({ call_id: c.id, table_id: c.table_id })));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
   // Recharge au montage : le WebSocket seul ne rattrape jamais les
   // commandes déjà en attente avant l'ouverture de cette page.
   useEffect(() => {
     if (restaurantId) {
       loadActiveOrders();
       loadCashRequests();
+      loadWaiterCalls();
     }
-  }, [restaurantId, loadActiveOrders, loadCashRequests]);
+  }, [restaurantId, loadActiveOrders, loadCashRequests, loadWaiterCalls]);
 
   const status = useReconnectingSocket(restaurantId ? wsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
@@ -128,6 +141,14 @@ export default function StaffPage() {
             ]
       );
     }
+    if (msg.event === "waiter_call.created") {
+      setWaiterCalls((prev) =>
+        prev.some((c) => c.call_id === msg.call_id) ? prev : [...prev, { call_id: msg.call_id, table_id: msg.table_id }]
+      );
+    }
+    if (msg.event === "waiter_call.resolved") {
+      setWaiterCalls((prev) => prev.filter((c) => c.call_id !== msg.call_id));
+    }
   });
 
   // Une reconnexion après coupure peut avoir manqué des événements : on
@@ -137,8 +158,9 @@ export default function StaffPage() {
     if (status === "connected") {
       loadActiveOrders();
       loadCashRequests();
+      loadWaiterCalls();
     }
-  }, [status, loadActiveOrders, loadCashRequests]);
+  }, [status, loadActiveOrders, loadCashRequests, loadWaiterCalls]);
 
   async function claim(orderId: number) {
     setError(null);
@@ -189,6 +211,16 @@ export default function StaffPage() {
     }
   }
 
+  async function resolveWaiterCall(callId: number) {
+    setError(null);
+    try {
+      await api.resolveWaiterCall(callId);
+      setWaiterCalls((prev) => prev.filter((c) => c.call_id !== callId));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
   function logout() {
     clearToken();
     router.push("/login");
@@ -222,6 +254,26 @@ export default function StaffPage() {
           <button onClick={() => setError(null)} aria-label="Fermer le message d'erreur" className="text-red-500">
             ✕
           </button>
+        </div>
+      )}
+
+      {waiterCalls.length > 0 && (
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold mb-2">🔔 Appels en attente</h2>
+          {waiterCalls.map((c) => (
+            <div
+              key={c.call_id}
+              className="border rounded-lg p-4 mb-3 flex justify-between items-center bg-rose-50 border-rose-200"
+            >
+              <div className="font-medium">Table {c.table_id}</div>
+              <button
+                onClick={() => resolveWaiterCall(c.call_id)}
+                className="bg-rose-600 text-white px-3 py-2 rounded-lg text-sm"
+              >
+                Résolu
+              </button>
+            </div>
+          ))}
         </div>
       )}
 

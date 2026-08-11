@@ -83,6 +83,15 @@ export type Order = {
   }[];
 };
 
+export type WaiterCall = {
+  id: number;
+  restaurant_id: number;
+  table_id: number;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by_staff_id: number | null;
+};
+
 export type TimingStats = {
   avg_wait_confirmation_seconds: number | null;
   avg_confirmation_to_kitchen_seconds: number | null;
@@ -215,6 +224,15 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ enabled, iftar_time: iftarTime }),
     }),
+  callWaiter: (restaurantId: number, tableId: number) =>
+    request<WaiterCall>("/api/v1/waiter-calls", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: restaurantId, table_id: tableId }),
+    }),
+  listPendingWaiterCalls: (restaurantId: number) =>
+    request<WaiterCall[]>(`/api/v1/waiter-calls/by-restaurant/${restaurantId}/pending`),
+  resolveWaiterCall: (callId: number) =>
+    request<WaiterCall>(`/api/v1/waiter-calls/${callId}/resolve`, { method: "POST" }),
 };
 
 export function wsUrl(path: string): string {

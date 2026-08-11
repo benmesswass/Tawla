@@ -19,6 +19,8 @@ export const fr = {
   removeFromCartAria: (name: string) => `Retirer un ${name} du panier`,
   allergensLabel: (allergens: string) => `Allergènes : ${allergens}`,
   notHalalBadge: "Non halal",
+  callWaiterButton: "🔔 Appeler le serveur",
+  callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",
   sharedCheckboxLabel: "🍽️ Plat à partager pour toute la table",
   preorderCheckboxLabel: (time: string) => `🌙 Commander pour l'iftar (${time}) plutôt que maintenant`,
