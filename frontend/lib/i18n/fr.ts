@@ -17,6 +17,8 @@ export const fr = {
     `🌙 Ramadan Moubarak — rupture du jeûne à ${time}. Vous pouvez commander maintenant pour l'iftar, votre plat sera prêt à l'heure.`,
   addToCartAria: (name: string) => `Ajouter ${name} au panier`,
   removeFromCartAria: (name: string) => `Retirer un ${name} du panier`,
+  allergensLabel: (allergens: string) => `Allergènes : ${allergens}`,
+  notHalalBadge: "Non halal",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",
   sharedCheckboxLabel: "🍽️ Plat à partager pour toute la table",
   preorderCheckboxLabel: (time: string) => `🌙 Commander pour l'iftar (${time}) plutôt que maintenant`,

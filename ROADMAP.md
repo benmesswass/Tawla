@@ -53,7 +53,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 - [x] Mode Ramadan : menu ftour dédié, pré-commande calée sur l'heure exacte de la rupture du jeûne (variable chaque jour), anticipation du pic de charge en cuisine (PR #6)
 - [x] Commande groupée à table : plats marqués « à partager » (salades, mechouia...) visibles côté cuisine/serveur et pré-signalés dans le split bill de la Phase 4 — scope réduit délibérément : pas de panier temps réel synchronisé entre plusieurs téléphones (ambiguïté produit signalée, arbitrage retenu : un seul appareil compose/valide toujours la commande, cf. `CLAUDE.md` philosophie KISS/YAGNI) (PR #7)
 - [x] Interface bilingue français / arabe (derja tunisienne), RTL natif — scope : parcours client (`/menu/[qrToken]` + split bill), écrans staff/cuisine/manager restent en français (back-office interne) ; anglais/italien non traités (marqués « option » dans la roadmap, à faire si un pilote resto touristique le demande) (PR #8)
-- [ ] Niveau de piment affiché par plat + mentions allergènes et halal
+- [x] Niveau de piment affiché par plat + mentions allergènes et halal — saisi par le manager dans le dashboard (piment 0-3, allergènes en texte libre, case halal — défaut `True`, la quasi-totalité des restos tunisiens l'étant), affiché au client (fr/ar) et sur le menu (PR #9)
 - [ ] Bouton « appeler le serveur », indépendant du passage de commande
 - [ ] Gestion de la rupture de stock en temps réel (un plat en rupture est désactivé instantanément côté client) — la bascule dispo existe déjà côté manager (audit du 2026-08-10), reste la désactivation instantanée temps réel côté client
 - [ ] Mode café simplifié : commande de boissons seules, sans structure entrée/plat/dessert
