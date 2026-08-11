@@ -12,7 +12,7 @@ import ConnectionBadge from "@/components/ConnectionBadge";
 type KitchenOrder = {
   order_id: number;
   table_id: number;
-  items: { name: string; quantity: number; notes: string | null }[];
+  items: { name: string; quantity: number; notes: string | null; is_shared: boolean }[];
   scheduled_for: string | null;
 };
 
@@ -24,7 +24,12 @@ function orderFromApi(o: Order): KitchenOrder {
   return {
     order_id: o.id,
     table_id: o.table_id,
-    items: o.items.map((i) => ({ name: i.menu_item_name, quantity: i.quantity, notes: i.notes })),
+    items: o.items.map((i) => ({
+      name: i.menu_item_name,
+      quantity: i.quantity,
+      notes: i.notes,
+      is_shared: i.is_shared,
+    })),
     scheduled_for: o.scheduled_for,
   };
 }
@@ -117,7 +122,7 @@ export default function KitchenPage() {
           ${o.items
             .map(
               (it) =>
-                `<li>${it.quantity}× ${escapeHtml(it.name)}${it.notes ? " — " + escapeHtml(it.notes) : ""}</li>`
+                `<li>${it.quantity}× ${escapeHtml(it.name)}${it.is_shared ? " (à partager)" : ""}${it.notes ? " — " + escapeHtml(it.notes) : ""}</li>`
             )
             .join("")}
         </ul>
@@ -186,6 +191,7 @@ export default function KitchenPage() {
               {o.items.map((it, i) => (
                 <li key={i}>
                   <span className="font-medium">{it.quantity}×</span> {it.name}
+                  {it.is_shared && <span className="text-amber-400"> · 🍽️ à partager</span>}
                   {it.notes && <span className="text-neutral-500"> — {it.notes}</span>}
                 </li>
               ))}

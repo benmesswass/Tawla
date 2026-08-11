@@ -72,6 +72,7 @@ export default function SplitBill({ order }: { order: Order }) {
             <div key={it.id} className="flex items-center justify-between text-sm gap-2">
               <span className="flex-1">
                 {it.quantity}× {it.menu_item_name}
+                {it.is_shared && <span className="text-amber-700"> · 🍽️ à partager</span>}
               </span>
               <select
                 value={assignments[it.id] ?? 0}

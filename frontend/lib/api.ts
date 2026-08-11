@@ -76,6 +76,7 @@ export type Order = {
     unit_price: number;
     quantity: number;
     notes: string | null;
+    is_shared: boolean;
   }[];
 };
 
@@ -169,7 +170,7 @@ export const api = {
   createOrder: (payload: {
     restaurant_id: number;
     table_id: number;
-    items: { menu_item_id: number; quantity: number; notes?: string | null }[];
+    items: { menu_item_id: number; quantity: number; notes?: string | null; is_shared?: boolean }[];
     scheduled_for?: string | null;
   }) => request<Order>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),
   getOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}`),
