@@ -11,6 +11,7 @@ import ConnectionBadge from "@/components/ConnectionBadge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
+import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
 
 type PendingOrder = {
   order_id: number;
@@ -311,7 +312,10 @@ export default function StaffPage() {
 
       {waiterCalls.length > 0 && (
         <div className="mb-4">
-          <h2 className="text-lg font-semibold mb-2">🔔 Appels en attente</h2>
+          <h2 className="text-lg font-semibold mb-2 flex items-center gap-1.5">
+            <BellIcon className="w-5 h-5 shrink-0" />
+            Appels en attente
+          </h2>
           {waiterCalls.map((c) => (
             <Card key={c.call_id} tone="urgent" className="mb-3 flex justify-between items-center">
               <div className="font-medium">Table {c.table_id}</div>
@@ -324,8 +328,9 @@ export default function StaffPage() {
       )}
 
       {scheduledCount > 0 && (
-        <Card tone="info" padding="sm" className="mb-3 text-sm text-indigo-800">
-          🌙 {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} pour l&apos;iftar à anticiper en cuisine.
+        <Card tone="info" padding="sm" className="mb-3 text-sm text-indigo-800 flex items-center gap-1.5">
+          <MoonIcon className="w-4 h-4 shrink-0" />
+          {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} pour l&apos;iftar à anticiper en cuisine.
         </Card>
       )}
 
@@ -340,7 +345,10 @@ export default function StaffPage() {
                 <div className="font-medium">Table {o.table_id}</div>
                 <div className="text-sm text-neutral-500">Commande #{o.order_id}</div>
                 {o.scheduled_for && (
-                  <div className="text-xs text-indigo-700 mt-1">🌙 Pré-commande iftar {formatTime(o.scheduled_for)}</div>
+                  <div className="text-xs text-indigo-700 mt-1 flex items-center gap-1">
+                    <MoonIcon className="w-3.5 h-3.5 shrink-0" />
+                    Pré-commande iftar {formatTime(o.scheduled_for)}
+                  </div>
                 )}
               </div>
               {!takenByOther && (
@@ -389,11 +397,16 @@ export default function StaffPage() {
             </div>
             {loyaltyMember && (
               <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
-                <span>
-                  🎁 {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
+                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                  <GiftIcon className="w-4 h-4 shrink-0" />
+                  {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
                   {loyaltyMember.order_count > 1 ? "s" : ""}
                   {loyaltyMember.reward_available ? " — récompense disponible" : ""}
-                  {loyaltyMember.is_birthday_today ? " — 🎂 anniversaire aujourd'hui" : ""}
+                  {loyaltyMember.is_birthday_today && (
+                    <span className="inline-flex items-center gap-1">
+                      — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
+                    </span>
+                  )}
                 </span>
                 {loyaltyMember.reward_available && (
                   <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(loyaltyMember)}>
@@ -406,7 +419,10 @@ export default function StaffPage() {
         );
       })}
 
-      <h2 className="text-lg font-semibold mt-8 mb-4">🎁 Fidélité — vérifier un client</h2>
+      <h2 className="text-lg font-semibold mt-8 mb-4 flex items-center gap-1.5">
+        <GiftIcon className="w-5 h-5 shrink-0" />
+        Fidélité — vérifier un client
+      </h2>
       <Card className="mb-3">
         <div className="flex gap-2">
           <input
@@ -421,13 +437,18 @@ export default function StaffPage() {
         {lookupError && <p className="mt-2 text-sm text-red-700">{lookupError}</p>}
         {lookupResult && (
           <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
-            <span>
-              🎁 {lookupResult.phone_number} — {lookupResult.order_count} commande
+            <span className="inline-flex items-center gap-1.5 flex-wrap">
+              <GiftIcon className="w-4 h-4 shrink-0" />
+              {lookupResult.phone_number} — {lookupResult.order_count} commande
               {lookupResult.order_count > 1 ? "s" : ""}
               {lookupResult.reward_available
                 ? " — récompense disponible"
                 : ` — encore ${lookupResult.orders_until_reward} pour un article offert`}
-              {lookupResult.is_birthday_today ? " — 🎂 anniversaire aujourd'hui" : ""}
+              {lookupResult.is_birthday_today && (
+                <span className="inline-flex items-center gap-1">
+                  — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
+                </span>
+              )}
             </span>
             {lookupResult.reward_available && (
               <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(lookupResult)}>

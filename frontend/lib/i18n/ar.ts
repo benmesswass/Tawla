@@ -14,23 +14,23 @@ export const ar = {
   closeErrorAria: "غلق رسالة الخطأ",
 
   ramadanBanner: (time) =>
-    `🌙 رمضان مبارك — الفطور على الساعة ${time}. تنجم تطلب دلوقتي للفطور، الأكلة تكون لاهية وقتها.`,
+    `رمضان مبارك — الفطور على الساعة ${time}. تنجم تطلب دلوقتي للفطور، الأكلة تكون لاهية وقتها.`,
   addToCartAria: (name) => `زيد ${name} للقفة`,
   removeFromCartAria: (name) => `نقّص ${name} من القفة`,
   allergensLabel: (allergens) => `مسببات الحساسية: ${allergens}`,
   notHalalBadge: "مش حلال",
-  callWaiterButton: "🔔 نادي على الجرسون",
+  callWaiterButton: "نادي على الجرسون",
   callWaiterSent: "✓ الجرسون تعرّف، باش يجي دلوقتي",
   notePlaceholder: "ملاحظة للكوجينة (إختياري، مثال: بلا بصل)",
-  sharedCheckboxLabel: "🍽️ أكلة نتقاسموها في الطاولة الكل",
-  preorderCheckboxLabel: (time) => `🌙 نطلب للفطور (${time}) بدل دلوقتي`,
+  sharedCheckboxLabel: "أكلة نتقاسموها في الطاولة الكل",
+  preorderCheckboxLabel: (time) => `نطلب للفطور (${time}) بدل دلوقتي`,
   sending: "قاعد يتبعث...",
   validateOrder: "أكد الطلبية",
 
   orderCancelledTitle: "الطلبية تلغات",
   orderSentTitle: "الطلبية تبعثت 🎉",
   orderSubtitle: (tableLabel, orderId) => `${tableLabel} — الطلبية رقم ${orderId}`,
-  preorderBadge: (time) => `🌙 طلبية مسبقة للفطور — التحضير مبرمج للساعة ${time}.`,
+  preorderBadge: (time) => `طلبية مسبقة للفطور — التحضير مبرمج للساعة ${time}.`,
   dedicatedServer: (staffName) => `${staffName} باش يكون الجرسون تاعك لهاذي الطلبية.`,
 
   steps: {
@@ -43,7 +43,7 @@ export const ar = {
   },
 
   orderDetailsTitle: "تفاصيل الطلبية",
-  sharedTag: "🍽️ للقسمة",
+  sharedTag: "للقسمة",
   total: "المجموع",
 
   paymentTitle: "الخلاص",
@@ -72,15 +72,15 @@ export const ar = {
   offlineQueuedMessage: "الطلبية تسجلت في تليفونك وباش تتبعث وحدها كي ترجع النات.",
   retryNow: "عاود جرب دلوقتي",
 
-  loyaltyToggle: "🎁 بطاقة الولاء (إختياري)",
+  loyaltyToggle: "بطاقة الولاء (إختياري)",
   loyaltyPhoneLabel: "رقم التليفون",
   loyaltyPhonePlaceholder: "مثال : 20 123 456",
   loyaltyBirthDateLabel: "تاريخ الميلاد (إختياري، للتخفيض تاع عيد ميلادك)",
-  loyaltyProgress: (count, remaining) => `🎁 عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
+  loyaltyProgress: (count, remaining) => `عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
   loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",
-  loyaltyBirthdayBanner: "🎂 عيد ميلاد سعيد! اطلب التخفيض الخاص من الجرسون.",
+  loyaltyBirthdayBanner: "عيد ميلاد سعيد! اطلب التخفيض الخاص من الجرسون.",
 
-  pushSubscribeButton: "🔔 عرفني كي تكون لاهية",
-  pushSubscribed: "🔔 باش تتعرف كي الطلبية تكون لاهية.",
+  pushSubscribeButton: "عرفني كي تكون لاهية",
+  pushSubscribed: "باش تتعرف كي الطلبية تكون لاهية.",
   pushDenied: "الإشعارات موقوفة — نجم تفعّلها من إعدادات المتصفح إذا بدّلت رايك.",
 } satisfies Dictionary;

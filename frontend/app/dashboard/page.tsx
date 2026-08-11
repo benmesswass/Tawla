@@ -11,6 +11,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import { MoonIcon, CoffeeIcon } from "@/components/icons";
 
 const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"];
 
@@ -52,7 +53,10 @@ type Draft = {
   isHalal: boolean;
 };
 
-const SPICE_LABELS = ["Pas épicé", "🌶️ Léger", "🌶️🌶️ Moyen", "🌶️🌶️🌶️ Fort"];
+// Les <option> HTML ne peuvent afficher que du texte brut, jamais un
+// composant icône — l'iconographie SVG cohérente (FlameIcon) est réservée à
+// l'affichage du niveau de piment côté menu client (voir menu/[qrToken]).
+const SPICE_LABELS = ["Pas épicé", "Léger", "Moyen", "Fort"];
 
 function itemToDraft(item: MenuItem): Draft {
   return {
@@ -309,7 +313,8 @@ export default function DashboardPage() {
                   saveRamadanMode(e.target.checked);
                 }}
               />
-              🌙 Mode Ramadan
+              <MoonIcon className="w-4 h-4 shrink-0" />
+              Mode Ramadan
             </label>
             {ramadanEnabled && (
               <div className="flex items-center gap-2 text-sm">
@@ -348,7 +353,8 @@ export default function DashboardPage() {
                 saveCafeMode(e.target.checked);
               }}
             />
-            ☕ Mode café simplifié
+            <CoffeeIcon className="w-4 h-4 shrink-0" />
+            Mode café simplifié
           </label>
           <p className="text-xs text-sky-700 mt-2">
             Pour un établissement qui ne sert que des boissons : le menu client s&apos;affiche en liste simple, sans
