@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -93,5 +93,11 @@ class OrderItem(Base):
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     notes: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Plat pensé pour toute la table (entrées communes type salade, mechouia...) —
+    # affiché à la cuisine/au serveur, et pré-rempli comme "partagé" dans le
+    # calculateur de split bill (Phase 4) plutôt que d'attribuer la ligne à
+    # une personne. N'implique aucun panier synchronisé multi-appareils :
+    # une seule personne compose et valide toujours la commande.
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
 
     order: Mapped["Order"] = relationship(back_populates="items")

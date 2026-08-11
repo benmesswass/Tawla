@@ -133,6 +133,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 unit_price=menu_item.price,
                 quantity=line.quantity,
                 notes=line.notes,
+                is_shared=line.is_shared,
             )
         )
 
@@ -271,7 +272,12 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                 "table_id": order.table_id,
                 "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
                 "items": [
-                    {"name": i.menu_item_name, "quantity": i.quantity, "notes": i.notes}
+                    {
+                        "name": i.menu_item_name,
+                        "quantity": i.quantity,
+                        "notes": i.notes,
+                        "is_shared": i.is_shared,
+                    }
                     for i in order.items
                 ],
             },

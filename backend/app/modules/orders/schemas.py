@@ -9,6 +9,7 @@ class OrderItemCreate(BaseModel):
     menu_item_id: int
     quantity: int = 1
     notes: str | None = None
+    is_shared: bool = False
 
 
 class OrderCreate(BaseModel):
@@ -29,6 +30,7 @@ class OrderItemOut(BaseModel):
     unit_price: float
     quantity: int
     notes: str | None
+    is_shared: bool
 
 
 class PayCardRequest(BaseModel):

@@ -6,7 +6,7 @@ import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import SplitBill from "@/components/SplitBill";
 
-type CartLine = { item: MenuItem; quantity: number; note: string };
+type CartLine = { item: MenuItem; quantity: number; note: string; shared: boolean };
 
 const STEPS: { status: OrderStatus; label: string }[] = [
   { status: "pending_confirmation", label: "Envoyée" },
@@ -132,7 +132,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   function addToCart(item: MenuItem) {
     setCart((prev) => {
       const existing = prev[item.id];
-      return { ...prev, [item.id]: { item, quantity: (existing?.quantity ?? 0) + 1, note: existing?.note ?? "" } };
+      return {
+        ...prev,
+        [item.id]: {
+          item,
+          quantity: (existing?.quantity ?? 0) + 1,
+          note: existing?.note ?? "",
+          shared: existing?.shared ?? false,
+        },
+      };
     });
   }
 
@@ -152,6 +160,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], note } } : prev));
   }
 
+  function setShared(itemId: number, shared: boolean) {
+    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], shared } } : prev));
+  }
+
   const cartLines = Object.values(cart);
   const total = cartLines.reduce((sum, l) => sum + l.item.price * l.quantity, 0);
 
@@ -163,7 +175,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       const order = await api.createOrder({
         restaurant_id: table.restaurant_id,
         table_id: table.id,
-        items: cartLines.map((l) => ({ menu_item_id: l.item.id, quantity: l.quantity, notes: l.note || null })),
+        items: cartLines.map((l) => ({
+          menu_item_id: l.item.id,
+          quantity: l.quantity,
+          notes: l.note || null,
+          is_shared: l.shared,
+        })),
         scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       });
       sessionStorage.setItem(lastOrderStorageKey(qrToken), String(order.id));
@@ -258,6 +275,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {trackedOrder.items.map((it) => (
               <li key={it.id}>
                 {it.quantity}× {it.menu_item_name}
+                {it.is_shared && <span className="text-amber-700"> · 🍽️ à partager</span>}
                 {it.notes && <span className="text-neutral-400"> — {it.notes}</span>}
               </li>
             ))}
@@ -407,13 +425,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     </div>
                   </div>
                   {cart[item.id] && (
-                    <input
-                      type="text"
-                      value={cart[item.id].note}
-                      onChange={(e) => setNote(item.id, e.target.value)}
-                      placeholder="Note pour la cuisine (facultatif, ex : sans oignons)"
-                      className="mt-2 w-full text-sm border rounded-lg px-3 py-1.5"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        value={cart[item.id].note}
+                        onChange={(e) => setNote(item.id, e.target.value)}
+                        placeholder="Note pour la cuisine (facultatif, ex : sans oignons)"
+                        className="mt-2 w-full text-sm border rounded-lg px-3 py-1.5"
+                      />
+                      <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+                        <input
+                          type="checkbox"
+                          checked={cart[item.id].shared}
+                          onChange={(e) => setShared(item.id, e.target.checked)}
+                        />
+                        🍽️ Plat à partager pour toute la table
+                      </label>
+                    </>
                   )}
                 </div>
               ))}
