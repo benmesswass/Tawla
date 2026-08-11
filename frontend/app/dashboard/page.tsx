@@ -7,6 +7,10 @@ import { api, MenuItem, Restaurant, Table } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import EmptyState from "@/components/ui/EmptyState";
 
 const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"];
 
@@ -294,7 +298,7 @@ export default function DashboardPage() {
       </p>
 
       {restaurant && (
-        <div className="border rounded-lg p-3 mb-4 bg-amber-50 border-amber-200">
+        <Card tone="warning" padding="sm" className="mb-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <label className="flex items-center gap-2 font-medium text-amber-900">
               <input
@@ -329,11 +333,11 @@ export default function DashboardPage() {
             jour l&apos;heure chaque jour (elle varie). Astuce : classez vos plats de rupture du jeûne dans la
             catégorie « Ftour » pour qu&apos;ils ressortent bien sur le menu client.
           </p>
-        </div>
+        </Card>
       )}
 
       {restaurant && (
-        <div className="border rounded-lg p-3 mb-4 bg-sky-50 border-sky-200">
+        <Card tone="info" padding="sm" className="mb-4">
           <label className="flex items-center gap-2 font-medium text-sky-900">
             <input
               type="checkbox"
@@ -350,23 +354,25 @@ export default function DashboardPage() {
             Pour un établissement qui ne sert que des boissons : le menu client s&apos;affiche en liste simple, sans
             regrouper par catégorie (entrées/plats/desserts).
           </p>
-        </div>
+        </Card>
       )}
 
       {error && (
-        <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
+          {error}
+        </Card>
       )}
       {message && (
-        <div className="mb-4 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg p-3">
+        <Card tone="success" padding="sm" className="mb-4 text-sm text-emerald-700">
           {message}
-        </div>
+        </Card>
       )}
 
       <div className="space-y-3">
         {items.map((item) => {
           const draft = drafts[item.id] ?? itemToDraft(item);
           return (
-            <div key={item.id} className={`border rounded-lg p-3 ${!item.is_available ? "bg-neutral-50" : ""}`}>
+            <Card key={item.id} padding="sm" className={!item.is_available ? "bg-neutral-50" : ""}>
               <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
                 <input
                   value={draft.name}
@@ -435,28 +441,25 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mt-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={item.is_available} onChange={() => toggleAvailability(item)} />
-                  {item.is_available ? "Disponible" : "Rupture de stock"}
+                  <Badge tone={item.is_available ? "success" : "danger"}>
+                    {item.is_available ? "Disponible" : "Rupture de stock"}
+                  </Badge>
                 </label>
                 <div className="flex gap-2">
-                  <button onClick={() => saveItem(item)} className="bg-neutral-900 text-white text-sm px-3 py-1.5 rounded-lg">
-                    Enregistrer
-                  </button>
-                  <button
-                    onClick={() => removeItem(item)}
-                    className="text-red-600 border border-red-200 text-sm px-3 py-1.5 rounded-lg"
-                  >
+                  <Button onClick={() => saveItem(item)}>Enregistrer</Button>
+                  <Button variant="danger" onClick={() => removeItem(item)}>
                     Supprimer
-                  </button>
+                  </Button>
                 </div>
               </div>
-            </div>
+            </Card>
           );
         })}
-        {items.length === 0 && <p className="text-neutral-500">Aucun article pour l&apos;instant.</p>}
+        {items.length === 0 && <EmptyState message="Aucun article pour l'instant." />}
       </div>
 
       <h2 className="text-base font-semibold mt-8 mb-3">Ajouter un article</h2>
-      <div className="border rounded-lg p-3">
+      <Card padding="sm">
         <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
           <input
             value={newItem.name}
@@ -522,10 +525,10 @@ export default function DashboardPage() {
             Halal
           </label>
         </div>
-        <button onClick={addItem} className="mt-3 bg-amber-700 text-white text-sm px-4 py-2 rounded-lg">
+        <Button onClick={addItem} className="mt-3">
           Ajouter au menu
-        </button>
-      </div>
+        </Button>
+      </Card>
 
       <datalist id="zone-suggestions">
         {ZONE_SUGGESTIONS.map((z) => (
@@ -542,7 +545,7 @@ export default function DashboardPage() {
         {tables.map((table) => {
           const draft = tableDrafts[table.id] ?? tableToDraft(table);
           return (
-            <div key={table.id} className="border rounded-lg p-3 grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
+            <Card key={table.id} padding="sm" className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
               <input
                 value={draft.label}
                 onChange={(e) =>
@@ -558,20 +561,15 @@ export default function DashboardPage() {
                 className="border rounded px-2 py-1"
                 placeholder="Zone (facultatif)"
               />
-              <button
-                onClick={() => saveTable(table)}
-                className="bg-neutral-900 text-white text-sm px-3 py-1.5 rounded-lg whitespace-nowrap"
-              >
-                Enregistrer
-              </button>
-            </div>
+              <Button onClick={() => saveTable(table)}>Enregistrer</Button>
+            </Card>
           );
         })}
-        {tables.length === 0 && <p className="text-neutral-500">Aucune table pour l&apos;instant.</p>}
+        {tables.length === 0 && <EmptyState message="Aucune table pour l'instant." />}
       </div>
 
       <h2 className="text-base font-semibold mt-6 mb-3">Ajouter une table</h2>
-      <div className="border rounded-lg p-3 grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
+      <Card padding="sm" className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
         <input
           value={newTable.label}
           onChange={(e) => setNewTable({ ...newTable, label: e.target.value })}
@@ -585,10 +583,8 @@ export default function DashboardPage() {
           className="border rounded px-2 py-1"
           placeholder="Zone (facultatif)"
         />
-        <button onClick={addTable} className="bg-amber-700 text-white text-sm px-4 py-2 rounded-lg whitespace-nowrap">
-          Ajouter la table
-        </button>
-      </div>
+        <Button onClick={addTable}>Ajouter la table</Button>
+      </Card>
     </div>
   );
 }

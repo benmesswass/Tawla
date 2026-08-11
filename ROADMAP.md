@@ -89,7 +89,7 @@ Ajoutée le 2026-08-11, à la suite de l'audit fonctionnel + design mené une fo
 Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures avant/après dans la description de la PR). Le reste de l'app (dashboard, staff, cuisine, menu client) garde son style actuel — application progressive prévue en 8.2–8.5, un écran à la fois.
 
 **8.2 — Système de design partagé**
-- [ ] Composants de base nommés (`Button`, `Card`, `Badge` de statut, `EmptyState`) pour remplacer les classes Tailwind dupliquées dans `dashboard/page.tsx`, `staff/page.tsx`, `kitchen/page.tsx`
+- [x] Composants de base nommés (`Button`, `Card`, `Badge` de statut, `EmptyState`) pour remplacer les classes Tailwind dupliquées dans `dashboard/page.tsx`, `staff/page.tsx`, `kitchen/page.tsx` — `frontend/components/ui/`, chaque composant supportant un variant `dark` (écran cuisine resté volontairement sombre). Couleurs d'action et de statut consolidées sur la palette de marque (harissa = action, menthe = validation d'étape, ambre/sky/rose = alerte contextuelle), remplaçant la douzaine de teintes Tailwind ad hoc utilisées jusque-là. Corrige au passage un bug de config découvert pendant le test visuel : `tailwind.config.js` ne scannait que `./app/**/*`, jamais `./components/**/*` — les classes propres aux nouveaux composants (couleurs de marque en valeur arbitraire `bg-[var(--harissa)]`) n'étaient jamais générées, rendant les boutons invisibles (texte blanc sur fond transparent) (PR #22)
 - [ ] Iconographie cohérente pour remplacer les emoji dans les badges de statut et boutons d'action clés
 - [ ] Skeletons de chargement (menu, dashboard, écrans staff affichent "Chargement…" en texte brut aujourd'hui)
 

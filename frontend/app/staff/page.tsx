@@ -8,6 +8,9 @@ import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import ConnectionBadge from "@/components/ConnectionBadge";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
 
 type PendingOrder = {
   order_id: number;
@@ -298,46 +301,40 @@ export default function StaffPage() {
       </div>
 
       {error && (
-        <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 flex justify-between items-start gap-2">
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700 flex justify-between items-start gap-2">
           <span>{error}</span>
           <button onClick={() => setError(null)} aria-label="Fermer le message d'erreur" className="text-red-500">
             ✕
           </button>
-        </div>
+        </Card>
       )}
 
       {waiterCalls.length > 0 && (
         <div className="mb-4">
           <h2 className="text-lg font-semibold mb-2">🔔 Appels en attente</h2>
           {waiterCalls.map((c) => (
-            <div
-              key={c.call_id}
-              className="border rounded-lg p-4 mb-3 flex justify-between items-center bg-rose-50 border-rose-200"
-            >
+            <Card key={c.call_id} tone="urgent" className="mb-3 flex justify-between items-center">
               <div className="font-medium">Table {c.table_id}</div>
-              <button
-                onClick={() => resolveWaiterCall(c.call_id)}
-                className="bg-rose-600 text-white px-3 py-2 rounded-lg text-sm"
-              >
+              <Button variant="success" onClick={() => resolveWaiterCall(c.call_id)}>
                 Résolu
-              </button>
-            </div>
+              </Button>
+            </Card>
           ))}
         </div>
       )}
 
       {scheduledCount > 0 && (
-        <p className="mb-3 text-sm bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3">
+        <Card tone="info" padding="sm" className="mb-3 text-sm text-indigo-800">
           🌙 {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} pour l&apos;iftar à anticiper en cuisine.
-        </p>
+        </Card>
       )}
 
-      {pending.length === 0 && <p className="text-neutral-500">Aucune commande en attente.</p>}
+      {pending.length === 0 && <EmptyState message="Aucune commande en attente." />}
       {pending.map((o) => {
         const takenByMe = o.taken_by_staff_id === staff.id;
         const takenByOther = o.taken_by_staff_id !== null && !takenByMe;
         return (
-          <div key={o.order_id} className="border rounded-lg p-4 mb-3">
+          <Card key={o.order_id} className="mb-3">
             <div className="flex justify-between items-center">
               <div>
                 <div className="font-medium">Table {o.table_id}</div>
@@ -347,44 +344,38 @@ export default function StaffPage() {
                 )}
               </div>
               {!takenByOther && (
-                <button
-                  onClick={() => (takenByMe ? confirmAndSend(o.order_id) : claim(o.order_id))}
-                  className="bg-neutral-900 text-white px-3 py-2 rounded-lg text-sm"
-                >
+                <Button onClick={() => (takenByMe ? confirmAndSend(o.order_id) : claim(o.order_id))}>
                   {takenByMe ? "Confirmé avec la table → cuisine" : "Prendre en charge"}
-                </button>
+                </Button>
               )}
             </div>
             {takenByOther && (
               <p className="text-sm text-neutral-500 mt-2">Pris en charge par {o.taken_by_staff_name}</p>
             )}
-          </div>
+          </Card>
         );
       })}
 
       <h2 className="text-lg font-semibold mt-8 mb-4">Prêtes à servir</h2>
-      {readyToServe.length === 0 && <p className="text-neutral-500">Rien à servir pour l&apos;instant.</p>}
+      {readyToServe.length === 0 && <EmptyState message="Rien à servir pour l'instant." />}
       {readyToServe.map((o) => (
-        <div key={o.order_id} className="border rounded-lg p-4 mb-3 flex justify-between items-center bg-emerald-50">
+        <Card key={o.order_id} tone="success" className="mb-3 flex justify-between items-center">
           <div>
             <div className="font-medium">Table {o.table_id}</div>
             <div className="text-sm text-neutral-500">Commande #{o.order_id} — prête en cuisine</div>
           </div>
-          <button
-            onClick={() => markServed(o.order_id)}
-            className="bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm"
-          >
+          <Button variant="success" onClick={() => markServed(o.order_id)}>
             Servi
-          </button>
-        </div>
+          </Button>
+        </Card>
       ))}
 
       <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement en espèces</h2>
-      {myCashRequests.length === 0 && <p className="text-neutral-500">Aucune demande en attente.</p>}
+      {myCashRequests.length === 0 && <EmptyState message="Aucune demande en attente." />}
       {myCashRequests.map((o) => {
         const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
         return (
-          <div key={o.order_id} className="border rounded-lg p-4 mb-3 bg-amber-50">
+          <Card key={o.order_id} tone="warning" className="mb-3">
             <div className="flex justify-between items-center">
               <div>
                 <div className="font-medium">Table {o.table_id}</div>
@@ -392,15 +383,12 @@ export default function StaffPage() {
                   Commande #{o.order_id} — {o.amount.toFixed(2)} DT
                 </div>
               </div>
-              <button
-                onClick={() => confirmCash(o.order_id)}
-                className="bg-amber-700 text-white px-3 py-2 rounded-lg text-sm"
-              >
+              <Button variant="success" onClick={() => confirmCash(o.order_id)}>
                 Encaissé
-              </button>
+              </Button>
             </div>
             {loyaltyMember && (
-              <div className="mt-3 text-sm bg-orange-100 text-orange-900 border border-orange-200 rounded-lg py-2 px-3 flex justify-between items-center gap-2">
+              <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
                 <span>
                   🎁 {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
                   {loyaltyMember.order_count > 1 ? "s" : ""}
@@ -408,21 +396,18 @@ export default function StaffPage() {
                   {loyaltyMember.is_birthday_today ? " — 🎂 anniversaire aujourd'hui" : ""}
                 </span>
                 {loyaltyMember.reward_available && (
-                  <button
-                    onClick={() => redeemReward(loyaltyMember)}
-                    className="shrink-0 bg-orange-600 text-white px-2 py-1 rounded text-xs"
-                  >
+                  <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(loyaltyMember)}>
                     Récompense donnée
-                  </button>
+                  </Button>
                 )}
-              </div>
+              </Card>
             )}
-          </div>
+          </Card>
         );
       })}
 
       <h2 className="text-lg font-semibold mt-8 mb-4">🎁 Fidélité — vérifier un client</h2>
-      <div className="border rounded-lg p-4 mb-3">
+      <Card className="mb-3">
         <div className="flex gap-2">
           <input
             type="tel"
@@ -431,13 +416,11 @@ export default function StaffPage() {
             placeholder="Numéro de téléphone du client"
             className="flex-1 border rounded-lg px-3 py-2 text-sm"
           />
-          <button onClick={lookupLoyaltyByPhone} className="bg-neutral-900 text-white px-3 py-2 rounded-lg text-sm">
-            Vérifier
-          </button>
+          <Button onClick={lookupLoyaltyByPhone}>Vérifier</Button>
         </div>
         {lookupError && <p className="mt-2 text-sm text-red-700">{lookupError}</p>}
         {lookupResult && (
-          <div className="mt-3 text-sm bg-orange-50 text-orange-900 border border-orange-200 rounded-lg py-2 px-3 flex justify-between items-center gap-2">
+          <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
             <span>
               🎁 {lookupResult.phone_number} — {lookupResult.order_count} commande
               {lookupResult.order_count > 1 ? "s" : ""}
@@ -447,16 +430,13 @@ export default function StaffPage() {
               {lookupResult.is_birthday_today ? " — 🎂 anniversaire aujourd'hui" : ""}
             </span>
             {lookupResult.reward_available && (
-              <button
-                onClick={() => redeemReward(lookupResult)}
-                className="shrink-0 bg-orange-600 text-white px-2 py-1 rounded text-xs"
-              >
+              <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(lookupResult)}>
                 Récompense donnée
-              </button>
+              </Button>
             )}
-          </div>
+          </Card>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
