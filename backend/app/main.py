@@ -9,6 +9,7 @@ from app.modules.menu.router import router as menu_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import router as orders_router
 from app.modules.staff.router import router as staff_router
+from app.modules.stats.router import router as stats_router
 from app.modules.tables.router import router as tables_router
 from app.modules.tenants.router import router as tenants_router
 
@@ -38,6 +39,7 @@ app.include_router(staff_router)
 app.include_router(tables_router)
 app.include_router(menu_router)
 app.include_router(orders_router)
+app.include_router(stats_router)
 app.include_router(notifications_router)
 
 

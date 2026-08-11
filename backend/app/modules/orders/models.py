@@ -35,6 +35,8 @@ class Order(Base):
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_to_kitchen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    served_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Prise en charge (« claim ») par un serveur depuis le pool partagé —
     # base des stats "commandes par serveur/jour" (dashboard manager).

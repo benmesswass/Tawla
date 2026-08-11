@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, MenuItem } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
@@ -133,11 +134,16 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
         <h1 className="text-lg font-semibold">Dashboard resto — gérer le menu</h1>
-        <button onClick={logout} className="text-sm text-neutral-500 underline">
-          Se déconnecter
-        </button>
+        <div className="flex items-center gap-4 text-sm">
+          <Link href="/dashboard/stats" className="underline">
+            Suivi de l&apos;activité
+          </Link>
+          <button onClick={logout} className="text-neutral-500 underline">
+            Se déconnecter
+          </button>
+        </div>
       </div>
       <p className="text-sm text-neutral-500 mb-4">
         Modifier un article, basculer une rupture de stock, ou en ajouter un nouveau — sans passer par Swagger.

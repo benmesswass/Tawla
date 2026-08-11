@@ -203,6 +203,10 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
             order.taken_at = now
     if new_status == OrderStatus.SENT_TO_KITCHEN:
         order.sent_to_kitchen_at = now
+    if new_status == OrderStatus.READY:
+        order.ready_at = now
+    if new_status == OrderStatus.SERVED:
+        order.served_at = now
 
     db.commit()
     db.refresh(order)
