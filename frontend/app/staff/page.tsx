@@ -14,6 +14,7 @@ type PendingOrder = {
   table_id: number;
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
+  scheduled_for: string | null;
 };
 type ReadyOrder = { order_id: number; table_id: number };
 type CashRequest = { order_id: number; table_id: number; amount: number; taken_by_staff_id: number | null };
@@ -24,7 +25,12 @@ function fromApi(o: Order): PendingOrder {
     table_id: o.table_id,
     taken_by_staff_id: o.taken_by_staff_id,
     taken_by_staff_name: o.taken_by_staff_name,
+    scheduled_for: o.scheduled_for,
   };
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function StaffPage() {
@@ -81,7 +87,16 @@ export default function StaffPage() {
       setPending((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
           ? prev
-          : [...prev, { order_id: msg.order_id, table_id: msg.table_id, taken_by_staff_id: null, taken_by_staff_name: null }]
+          : [
+              ...prev,
+              {
+                order_id: msg.order_id,
+                table_id: msg.table_id,
+                taken_by_staff_id: null,
+                taken_by_staff_name: null,
+                scheduled_for: msg.scheduled_for ?? null,
+              },
+            ]
       );
     }
     if (msg.event === "order.claimed") {
@@ -186,6 +201,8 @@ export default function StaffPage() {
   const myCashRequests =
     staff.role === "manager" ? cashRequests : cashRequests.filter((o) => o.taken_by_staff_id === staff.id);
 
+  const scheduledCount = pending.filter((o) => o.scheduled_for).length;
+
   return (
     <div className="p-4 max-w-md mx-auto">
       <div className="flex items-center justify-between mb-1">
@@ -208,6 +225,12 @@ export default function StaffPage() {
         </div>
       )}
 
+      {scheduledCount > 0 && (
+        <p className="mb-3 text-sm bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3">
+          🌙 {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} pour l&apos;iftar à anticiper en cuisine.
+        </p>
+      )}
+
       {pending.length === 0 && <p className="text-neutral-500">Aucune commande en attente.</p>}
       {pending.map((o) => {
         const takenByMe = o.taken_by_staff_id === staff.id;
@@ -218,6 +241,9 @@ export default function StaffPage() {
               <div>
                 <div className="font-medium">Table {o.table_id}</div>
                 <div className="text-sm text-neutral-500">Commande #{o.order_id}</div>
+                {o.scheduled_for && (
+                  <div className="text-xs text-indigo-700 mt-1">🌙 Pré-commande iftar {formatTime(o.scheduled_for)}</div>
+                )}
               </div>
               {!takenByOther && (
                 <button

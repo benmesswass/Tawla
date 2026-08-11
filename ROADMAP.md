@@ -50,7 +50,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 ## Phase 5 — Spécificités culture tunisienne
 
-- [ ] Mode Ramadan : menu ftour dédié, pré-commande calée sur l'heure exacte de la rupture du jeûne (variable chaque jour), anticipation du pic de charge en cuisine
+- [x] Mode Ramadan : menu ftour dédié, pré-commande calée sur l'heure exacte de la rupture du jeûne (variable chaque jour), anticipation du pic de charge en cuisine (PR #6)
 - [ ] Commande groupée à table : panier commun pour les plats partagés (salades, mechouia...), couplé au split bill de la Phase 4
 - [ ] Interface bilingue français / arabe (derja tunisienne), RTL natif ; option anglais/italien pour les zones touristiques
 - [ ] Niveau de piment affiché par plat + mentions allergènes et halal

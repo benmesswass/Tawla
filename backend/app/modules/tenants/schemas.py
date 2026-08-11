@@ -15,3 +15,10 @@ class RestaurantOut(BaseModel):
     name: str
     slug: str
     created_at: datetime
+    ramadan_mode_enabled: bool
+    iftar_time: datetime | None
+
+
+class RamadanModeUpdate(BaseModel):
+    enabled: bool
+    iftar_time: datetime | None = None

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -20,3 +20,9 @@ class Restaurant(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    # Mode Ramadan — pas de calcul astronomique/API externe (zéro service
+    # payant obligatoire, zéro dépendance réseau) : le manager saisit
+    # lui-même l'heure du jour, comme il le ferait sur un tableau au mur.
+    ramadan_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    iftar_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

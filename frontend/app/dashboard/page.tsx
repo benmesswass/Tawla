@@ -3,12 +3,26 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, MenuItem } from "@/lib/api";
+import { api, MenuItem, Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 
-const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Autre"];
+const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"];
+
+// Convertit un ISO UTC en valeur pour <input type="datetime-local"> (heure
+// locale du navigateur) et inversement — sans lib externe.
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function localInputToIso(value: string): string | null {
+  if (!value) return null;
+  return new Date(value).toISOString();
+}
 
 type Draft = { name: string; category: string; price: string; description: string; image_url: string };
 
@@ -32,15 +46,22 @@ export default function DashboardPage() {
   const [newItem, setNewItem] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [ramadanEnabled, setRamadanEnabled] = useState(false);
+  const [iftarInput, setIftarInput] = useState("");
+  const [savingRamadan, setSavingRamadan] = useState(false);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
   const load = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const menu = await api.getMenu(restaurantId);
+      const [menu, rest] = await Promise.all([api.getMenu(restaurantId), api.getRestaurant(restaurantId)]);
       setItems(menu);
       setDrafts(Object.fromEntries(menu.map((m) => [m.id, itemToDraft(m)])));
+      setRestaurant(rest);
+      setRamadanEnabled(rest.ramadan_mode_enabled);
+      setIftarInput(isoToLocalInput(rest.iftar_time));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -49,6 +70,22 @@ export default function DashboardPage() {
   useEffect(() => {
     if (restaurantId) load();
   }, [restaurantId, load]);
+
+  async function saveRamadanMode(nextEnabled: boolean) {
+    if (!restaurantId) return;
+    setError(null);
+    setSavingRamadan(true);
+    try {
+      const updated = await api.setRamadanMode(restaurantId, nextEnabled, localInputToIso(iftarInput));
+      setRestaurant(updated);
+      setRamadanEnabled(updated.ramadan_mode_enabled);
+      flash(nextEnabled ? "Mode Ramadan activé." : "Mode Ramadan désactivé.");
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    } finally {
+      setSavingRamadan(false);
+    }
+  }
 
   function logout() {
     clearToken();
@@ -148,6 +185,45 @@ export default function DashboardPage() {
       <p className="text-sm text-neutral-500 mb-4">
         Modifier un article, basculer une rupture de stock, ou en ajouter un nouveau — sans passer par Swagger.
       </p>
+
+      {restaurant && (
+        <div className="border rounded-lg p-3 mb-4 bg-amber-50 border-amber-200">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <label className="flex items-center gap-2 font-medium text-amber-900">
+              <input
+                type="checkbox"
+                checked={ramadanEnabled}
+                onChange={(e) => {
+                  setRamadanEnabled(e.target.checked);
+                  saveRamadanMode(e.target.checked);
+                }}
+              />
+              🌙 Mode Ramadan
+            </label>
+            {ramadanEnabled && (
+              <div className="flex items-center gap-2 text-sm">
+                <label htmlFor="iftar-time" className="text-amber-800">
+                  Heure de l&apos;iftar aujourd&apos;hui
+                </label>
+                <input
+                  id="iftar-time"
+                  type="datetime-local"
+                  value={iftarInput}
+                  onChange={(e) => setIftarInput(e.target.value)}
+                  onBlur={() => saveRamadanMode(true)}
+                  disabled={savingRamadan}
+                  className="border rounded px-2 py-1"
+                />
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-amber-700 mt-2">
+            Une fois activé, les clients peuvent pré-commander pour l&apos;iftar depuis le menu. Pensez à mettre à
+            jour l&apos;heure chaque jour (elle varie). Astuce : classez vos plats de rupture du jeûne dans la
+            catégorie « Ftour » pour qu&apos;ils ressortent bien sur le menu client.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>

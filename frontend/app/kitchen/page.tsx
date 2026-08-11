@@ -13,6 +13,7 @@ type KitchenOrder = {
   order_id: number;
   table_id: number;
   items: { name: string; quantity: number; notes: string | null }[];
+  scheduled_for: string | null;
 };
 
 function escapeHtml(value: string): string {
@@ -24,7 +25,12 @@ function orderFromApi(o: Order): KitchenOrder {
     order_id: o.id,
     table_id: o.table_id,
     items: o.items.map((i) => ({ name: i.menu_item_name, quantity: i.quantity, notes: i.notes })),
+    scheduled_for: o.scheduled_for,
   };
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function KitchenPage() {
@@ -61,7 +67,15 @@ export default function KitchenPage() {
       setOrders((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
           ? prev
-          : [...prev, { order_id: msg.order_id, table_id: msg.table_id, items: msg.items }]
+          : [
+              ...prev,
+              {
+                order_id: msg.order_id,
+                table_id: msg.table_id,
+                items: msg.items,
+                scheduled_for: msg.scheduled_for ?? null,
+              },
+            ]
       );
     }
   });
@@ -128,6 +142,8 @@ export default function KitchenPage() {
 
   if (staffLoading || !staff) return null;
 
+  const scheduledCount = orders.filter((o) => o.scheduled_for).length;
+
   return (
     <div className="p-6 bg-neutral-950 min-h-screen text-white">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
@@ -150,6 +166,12 @@ export default function KitchenPage() {
         <div className="mb-4 text-sm bg-red-950 text-red-300 border border-red-800 rounded-lg p-3">{error}</div>
       )}
 
+      {scheduledCount > 0 && (
+        <div className="mb-2 text-sm bg-indigo-950 text-indigo-200 border border-indigo-800 rounded-lg p-3">
+          🌙 {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} iftar à anticiper.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
         {orders.map((o) => (
           <div key={o.order_id} className="bg-neutral-900 rounded-xl p-4 border border-neutral-800">
@@ -157,6 +179,9 @@ export default function KitchenPage() {
               <span className="text-xl font-bold">Table {o.table_id}</span>
               <span className="text-neutral-500 text-sm">#{o.order_id}</span>
             </div>
+            {o.scheduled_for && (
+              <div className="text-xs text-indigo-300 mb-2">🌙 Iftar {formatTime(o.scheduled_for)}</div>
+            )}
             <ul className="space-y-1 mb-4">
               {o.items.map((it, i) => (
                 <li key={i}>
