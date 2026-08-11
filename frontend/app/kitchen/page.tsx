@@ -8,6 +8,10 @@ import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 import ConnectionBadge from "@/components/ConnectionBadge";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import EmptyState from "@/components/ui/EmptyState";
 
 type KitchenOrder = {
   order_id: number;
@@ -155,12 +159,9 @@ export default function KitchenPage() {
         <h1 className="text-2xl font-semibold">Écran cuisine</h1>
         <div className="flex items-center gap-3">
           <ConnectionBadge status={status} dark />
-          <button
-            onClick={printTickets}
-            className="text-sm bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-lg border border-neutral-700"
-          >
+          <Button variant="secondary" dark onClick={printTickets}>
             Imprimer (filet de secours)
-          </button>
+          </Button>
           <button onClick={logout} className="text-sm text-neutral-400 underline">
             Se déconnecter
           </button>
@@ -168,18 +169,20 @@ export default function KitchenPage() {
       </div>
 
       {error && (
-        <div className="mb-4 text-sm bg-red-950 text-red-300 border border-red-800 rounded-lg p-3">{error}</div>
+        <Card tone="danger" dark padding="sm" className="mb-4 text-sm text-red-300">
+          {error}
+        </Card>
       )}
 
       {scheduledCount > 0 && (
-        <div className="mb-2 text-sm bg-indigo-950 text-indigo-200 border border-indigo-800 rounded-lg p-3">
+        <Card tone="info" dark padding="sm" className="mb-2 text-sm text-indigo-200">
           🌙 {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} iftar à anticiper.
-        </div>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
         {orders.map((o) => (
-          <div key={o.order_id} className="bg-neutral-900 rounded-xl p-4 border border-neutral-800">
+          <Card key={o.order_id} dark padding="md" className="text-white">
             <div className="flex justify-between items-baseline mb-3">
               <span className="text-xl font-bold">Table {o.table_id}</span>
               <span className="text-neutral-500 text-sm">#{o.order_id}</span>
@@ -191,21 +194,22 @@ export default function KitchenPage() {
               {o.items.map((it, i) => (
                 <li key={i}>
                   <span className="font-medium">{it.quantity}×</span> {it.name}
-                  {it.is_shared && <span className="text-amber-400"> · 🍽️ à partager</span>}
+                  {it.is_shared && (
+                    <Badge tone="warning" dark className="ms-1.5">
+                      🍽️ à partager
+                    </Badge>
+                  )}
                   {it.notes && <span className="text-neutral-500"> — {it.notes}</span>}
                 </li>
               ))}
             </ul>
-            <button
-              onClick={() => markDone(o.order_id)}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-medium"
-            >
+            <Button variant="success" dark className="w-full" onClick={() => markDone(o.order_id)}>
               Prêt
-            </button>
-          </div>
+            </Button>
+          </Card>
         ))}
       </div>
-      {orders.length === 0 && <p className="text-neutral-500 mt-4">Aucune commande en cuisine.</p>}
+      {orders.length === 0 && <EmptyState message="Aucune commande en cuisine." dark className="mt-4" />}
     </div>
   );
 }
