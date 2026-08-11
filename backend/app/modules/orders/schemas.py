@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.orders.models import OrderStatus
+from app.modules.orders.models import OrderStatus, PaymentMethod, PaymentStatus
 
 
 class OrderItemCreate(BaseModel):
@@ -28,6 +28,10 @@ class OrderItemOut(BaseModel):
     notes: str | None
 
 
+class PayCardRequest(BaseModel):
+    tip_amount: float = Field(default=0, ge=0)
+
+
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,4 +46,8 @@ class OrderOut(BaseModel):
     served_at: datetime | None
     taken_by_staff_id: int | None
     taken_by_staff_name: str | None
+    payment_method: PaymentMethod | None
+    payment_status: PaymentStatus
+    tip_amount: float
+    total_amount: float
     items: list[OrderItemOut]

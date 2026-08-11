@@ -22,6 +22,17 @@ class OrderStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class PaymentMethod(str, enum.Enum):
+    CARD = "card"
+    CASH = "cash"
+
+
+class PaymentStatus(str, enum.Enum):
+    UNPAID = "unpaid"
+    PENDING = "pending"  # cash : demandé par le client, en attente que le serveur encaisse
+    PAID = "paid"
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -43,12 +54,26 @@ class Order(Base):
     taken_by_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
     taken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Paiement — couvre le prix total de la commande (pas juste des frais de
+    # service). Mode simulé pour l'instant (pas de clé Konnect réelle tant
+    # qu'un vrai pilote resto n'existe pas) : `payment_ref` reste vide mais
+    # est déjà là pour accueillir la référence Konnect le jour où l'intégration
+    # réelle est branchée, sans nouvelle migration.
+    payment_method: Mapped[PaymentMethod | None] = mapped_column(Enum(PaymentMethod), nullable=True)
+    payment_status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.UNPAID)
+    tip_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    payment_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     taken_by: Mapped["Staff | None"] = relationship()
 
     @property
     def taken_by_staff_name(self) -> str | None:
         return self.taken_by.name if self.taken_by else None
+
+    @property
+    def total_amount(self) -> float:
+        return sum(float(i.unit_price) * i.quantity for i in self.items)
 
 
 class OrderItem(Base):

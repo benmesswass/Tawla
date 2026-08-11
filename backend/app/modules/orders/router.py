@@ -38,6 +38,34 @@ async def get_order(order_id: int, db: Session = Depends(get_db)):
     return await service.get_order(db, order_id)
 
 
+@router.get("/by-restaurant/{restaurant_id}/pending-cash-payments", response_model=list[schemas.OrderOut])
+async def list_pending_cash_payments(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+):
+    """Tables ayant demandé à payer en espèces, pas encore encaissées."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return await service.list_pending_cash_payments(db, restaurant_id)
+
+
+@router.post("/{order_id}/pay/card", response_model=schemas.OrderOut)
+async def pay_by_card(order_id: int, payload: schemas.PayCardRequest, db: Session = Depends(get_db)):
+    """Paiement carte par le client — mode simulé, public comme la création de commande."""
+    return await service.pay_by_card_simulated(db, order_id, payload.tip_amount)
+
+
+@router.post("/{order_id}/pay/cash", response_model=schemas.OrderOut)
+async def request_cash_payment(order_id: int, db: Session = Depends(get_db)):
+    """Le client demande à payer en espèces — public, prévient le serveur en temps réel."""
+    return await service.request_cash_payment(db, order_id)
+
+
+@router.post("/{order_id}/pay/cash/confirm", response_model=schemas.OrderOut)
+async def confirm_cash_payment(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
+    """Le serveur confirme avoir encaissé le cash à table."""
+    return await service.confirm_cash_payment(db, order_id, staff)
+
+
 @router.post("/{order_id}/claim", response_model=schemas.OrderOut)
 async def claim_order(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Un serveur prend en charge une commande en attente depuis le pool partagé."""

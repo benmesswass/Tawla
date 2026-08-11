@@ -7,7 +7,7 @@ from app.core.logging import get_logger, log_event
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
-from app.modules.orders.models import Order, OrderItem, OrderStatus
+from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import Staff
 from app.modules.tables.models import Table
 
@@ -52,6 +52,26 @@ async def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
     return (
         db.query(Order)
         .filter(Order.restaurant_id == restaurant_id, Order.status.in_(ACTIVE_STATUSES))
+        .order_by(Order.created_at)
+        .all()
+    )
+
+
+async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Order]:
+    """
+    Tables ayant demandé à payer en espèces mais pas encore encaissées. Séparé
+    de `list_active_orders` : le paiement arrive souvent APRÈS "servie", donc
+    hors de `ACTIVE_STATUSES` — sans cette requête dédiée, un écran serveur
+    rafraîchi après la demande de paiement ne la verrait jamais (même classe
+    de bug que l'audit du 2026-08-10 sur les commandes en attente).
+    """
+    return (
+        db.query(Order)
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.payment_method == PaymentMethod.CASH,
+            Order.payment_status == PaymentStatus.PENDING,
+        )
         .order_by(Order.created_at)
         .all()
     )
@@ -170,7 +190,18 @@ async def claim_order(db: Session, order_id: int, staff: Staff) -> Order:
             "taken_by_staff_name": staff.name,
         },
     )
+    await _broadcast_staff_assigned(order, staff)
     return order
+
+
+async def _broadcast_staff_assigned(order: Order, staff: Staff) -> None:
+    """Le client suit sa commande sur son téléphone — dès qu'un serveur est
+    affecté (claim explicite ou auto-claim à la confirmation), on le lui dit
+    par son prénom plutôt que de le laisser deviner."""
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.staff_assigned", "order_id": order.id, "staff_name": staff.name},
+    )
 
 
 async def transition_status(db: Session, order_id: int, new_status: OrderStatus, staff: Staff) -> Order:
@@ -192,6 +223,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
 
     order.status = new_status
     now = datetime.now(timezone.utc)
+    newly_assigned = False
     if new_status == OrderStatus.CONFIRMED:
         order.confirmed_at = now
         # Un serveur qui confirme sans être passé par le claim explicite
@@ -201,6 +233,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
         if order.taken_by_staff_id is None:
             order.taken_by_staff_id = staff.id
             order.taken_at = now
+            newly_assigned = True
     if new_status == OrderStatus.SENT_TO_KITCHEN:
         order.sent_to_kitchen_at = now
     if new_status == OrderStatus.READY:
@@ -215,6 +248,9 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
         logger, "order.status_changed",
         restaurant_id=order.restaurant_id, order_id=order.id, new_status=new_status.value,
     )
+
+    if newly_assigned:
+        await _broadcast_staff_assigned(order, staff)
 
     # La cuisine ne doit voir la commande QUE une fois validée par le serveur.
     if new_status == OrderStatus.SENT_TO_KITCHEN:
@@ -247,4 +283,103 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
         message={"event": "order.status_changed", "order_id": order.id, "status": new_status.value},
     )
 
+    return order
+
+
+def _get_payable_order(db: Session, order_id: int) -> Order:
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    if order.status == OrderStatus.CANCELLED:
+        raise HTTPException(
+            status_code=409, detail={"code": "ORDER_CANCELLED", "message": "cannot pay a cancelled order"}
+        )
+    if order.payment_status == PaymentStatus.PAID:
+        raise HTTPException(status_code=409, detail={"code": "ALREADY_PAID", "message": "order already paid"})
+    return order
+
+
+async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -> Order:
+    """
+    Paiement carte — mode simulé (Konnect choisi comme prestataire, mais pas
+    de vraie intégration tant qu'un pilote resto réel n'a pas de clés API).
+    Couvre le prix total de la commande, pas juste des frais de service.
+    Confirmation immédiate, comme le fallback simulé de Darna quand Konnect
+    est désactivé — `payment_ref` reste vide ici, prêt à accueillir la
+    référence Konnect le jour où l'intégration réelle remplace cette fonction.
+    """
+    order = _get_payable_order(db, order_id)
+
+    order.payment_method = PaymentMethod.CARD
+    order.tip_amount = tip_amount
+    order.payment_status = PaymentStatus.PAID
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.paid_card_simulated",
+        restaurant_id=order.restaurant_id, order_id=order.id,
+        amount=order.total_amount, tip_amount=tip_amount,
+    )
+    return order
+
+
+async def request_cash_payment(db: Session, order_id: int) -> Order:
+    """Le client demande à payer en espèces — prévient le serveur assigné."""
+    order = _get_payable_order(db, order_id)
+
+    order.payment_method = PaymentMethod.CASH
+    order.payment_status = PaymentStatus.PENDING
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.cash_payment_requested",
+        restaurant_id=order.restaurant_id, order_id=order.id, amount=order.total_amount,
+    )
+
+    # Diffusé sur le canal "staff" partagé (pas d'infra par membre du
+    # personnel), mais porte taken_by_staff_id : le frontend n'affiche la
+    # demande qu'au serveur dédié à cette table (ou au manager, qui voit
+    # tout). Toute commande qui en est là est forcément déjà confirmée, donc
+    # taken_by_staff_id est garanti non-nul (auto-claim à la confirmation).
+    await manager.broadcast(
+        order.restaurant_id, channel="staff",
+        message={
+            "event": "order.cash_requested",
+            "order_id": order.id,
+            "table_id": order.table_id,
+            "amount": order.total_amount,
+            "taken_by_staff_id": order.taken_by_staff_id,
+        },
+    )
+    return order
+
+
+async def confirm_cash_payment(db: Session, order_id: int, staff: Staff) -> Order:
+    """Le serveur confirme avoir encaissé le cash à table."""
+    order = db.get(Order, order_id)
+    if not order or order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    if order.payment_method != PaymentMethod.CASH or order.payment_status != PaymentStatus.PENDING:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "NO_PENDING_CASH_PAYMENT", "message": "no pending cash payment for this order"},
+        )
+
+    order.payment_status = PaymentStatus.PAID
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.cash_payment_confirmed",
+        restaurant_id=order.restaurant_id, order_id=order.id, staff_id=staff.id,
+    )
+
+    # Le client qui a demandé à payer en espèces peut avoir sa page ouverte
+    # en attendant que le serveur passe encaisser.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.payment_confirmed", "order_id": order.id},
+    )
     return order
