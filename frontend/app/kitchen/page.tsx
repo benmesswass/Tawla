@@ -12,6 +12,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import { MoonIcon, UtensilsIcon } from "@/components/icons";
 
 type KitchenOrder = {
   order_id: number;
@@ -175,8 +176,9 @@ export default function KitchenPage() {
       )}
 
       {scheduledCount > 0 && (
-        <Card tone="info" dark padding="sm" className="mb-2 text-sm text-indigo-200">
-          🌙 {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} iftar à anticiper.
+        <Card tone="info" dark padding="sm" className="mb-2 text-sm text-indigo-200 flex items-center gap-1.5">
+          <MoonIcon className="w-4 h-4 shrink-0" />
+          {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} iftar à anticiper.
         </Card>
       )}
 
@@ -188,15 +190,19 @@ export default function KitchenPage() {
               <span className="text-neutral-500 text-sm">#{o.order_id}</span>
             </div>
             {o.scheduled_for && (
-              <div className="text-xs text-indigo-300 mb-2">🌙 Iftar {formatTime(o.scheduled_for)}</div>
+              <div className="text-xs text-indigo-300 mb-2 flex items-center gap-1">
+                <MoonIcon className="w-3.5 h-3.5 shrink-0" />
+                Iftar {formatTime(o.scheduled_for)}
+              </div>
             )}
             <ul className="space-y-1 mb-4">
               {o.items.map((it, i) => (
                 <li key={i}>
                   <span className="font-medium">{it.quantity}×</span> {it.name}
                   {it.is_shared && (
-                    <Badge tone="warning" dark className="ms-1.5">
-                      🍽️ à partager
+                    <Badge tone="warning" dark className="ms-1.5 inline-flex items-center gap-1">
+                      <UtensilsIcon className="w-3 h-3 shrink-0" />
+                      à partager
                     </Badge>
                   )}
                   {it.notes && <span className="text-neutral-500"> — {it.notes}</span>}

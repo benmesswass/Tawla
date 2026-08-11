@@ -14,23 +14,23 @@ export const fr = {
   closeErrorAria: "Fermer le message d'erreur",
 
   ramadanBanner: (time: string) =>
-    `🌙 Ramadan Moubarak — rupture du jeûne à ${time}. Vous pouvez commander maintenant pour l'iftar, votre plat sera prêt à l'heure.`,
+    `Ramadan Moubarak — rupture du jeûne à ${time}. Vous pouvez commander maintenant pour l'iftar, votre plat sera prêt à l'heure.`,
   addToCartAria: (name: string) => `Ajouter ${name} au panier`,
   removeFromCartAria: (name: string) => `Retirer un ${name} du panier`,
   allergensLabel: (allergens: string) => `Allergènes : ${allergens}`,
   notHalalBadge: "Non halal",
-  callWaiterButton: "🔔 Appeler le serveur",
+  callWaiterButton: "Appeler le serveur",
   callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",
-  sharedCheckboxLabel: "🍽️ Plat à partager pour toute la table",
-  preorderCheckboxLabel: (time: string) => `🌙 Commander pour l'iftar (${time}) plutôt que maintenant`,
+  sharedCheckboxLabel: "Plat à partager pour toute la table",
+  preorderCheckboxLabel: (time: string) => `Commander pour l'iftar (${time}) plutôt que maintenant`,
   sending: "Envoi...",
   validateOrder: "Valider la commande",
 
   orderCancelledTitle: "Commande annulée",
   orderSentTitle: "Commande envoyée 🎉",
   orderSubtitle: (tableLabel: string, orderId: number) => `${tableLabel} — commande #${orderId}`,
-  preorderBadge: (time: string) => `🌙 Pré-commande pour l'iftar — préparation prévue pour ${time}.`,
+  preorderBadge: (time: string) => `Pré-commande pour l'iftar — préparation prévue pour ${time}.`,
   dedicatedServer: (staffName: string) => `${staffName} est votre serveur dédié pour cette commande.`,
 
   steps: {
@@ -43,7 +43,7 @@ export const fr = {
   },
 
   orderDetailsTitle: "Détail de la commande",
-  sharedTag: "🍽️ à partager",
+  sharedTag: "à partager",
   total: "Total",
 
   paymentTitle: "Paiement",
@@ -73,17 +73,17 @@ export const fr = {
   offlineQueuedMessage: "Votre commande est enregistrée sur votre téléphone et sera envoyée automatiquement dès que la connexion revient.",
   retryNow: "Réessayer maintenant",
 
-  loyaltyToggle: "🎁 Programme fidélité (facultatif)",
+  loyaltyToggle: "Programme fidélité (facultatif)",
   loyaltyPhoneLabel: "Numéro de téléphone",
   loyaltyPhonePlaceholder: "Ex : 20 123 456",
   loyaltyBirthDateLabel: "Date de naissance (facultatif, pour votre réduction anniversaire)",
   loyaltyProgress: (count: number, remaining: number) =>
-    `🎁 Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
+    `Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
   loyaltyRewardAvailable: "🎉 Récompense disponible ! Montrez cet écran à votre serveur.",
-  loyaltyBirthdayBanner: "🎂 Bon anniversaire ! Demandez votre réduction spéciale au serveur.",
+  loyaltyBirthdayBanner: "Bon anniversaire ! Demandez votre réduction spéciale au serveur.",
 
-  pushSubscribeButton: "🔔 Me notifier quand c'est prêt",
-  pushSubscribed: "🔔 Vous serez notifié dès que votre commande sera prête.",
+  pushSubscribeButton: "Me notifier quand c'est prêt",
+  pushSubscribed: "Vous serez notifié dès que votre commande sera prête.",
   pushDenied: "Notifications bloquées — activez-les dans les réglages de votre navigateur si vous changez d'avis.",
 };
 

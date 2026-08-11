@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Order } from "@/lib/api";
 import { fr, type Dictionary } from "@/lib/i18n/fr";
+import { UtensilsIcon } from "@/components/icons";
 
 type SplitMode = "equal" | "items";
 
@@ -73,7 +74,11 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
             <div key={it.id} className="flex items-center justify-between text-sm gap-2">
               <span className="flex-1">
                 {it.quantity}× {it.menu_item_name}
-                {it.is_shared && <span className="text-amber-700"> · {t.sharedTag}</span>}
+                {it.is_shared && (
+                  <span className="text-amber-700 inline-flex items-center gap-1 align-middle">
+                    · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
+                  </span>
+                )}
               </span>
               <select
                 value={assignments[it.id] ?? 0}

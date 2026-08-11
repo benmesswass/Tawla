@@ -7,6 +7,7 @@ import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
 import SplitBill from "@/components/SplitBill";
+import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon } from "@/components/icons";
 
 const cairo = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700"] });
 
@@ -438,7 +439,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   if (offlineQueuedPayload) {
     return (
       <div dir={dir} className={`p-6 max-w-md mx-auto text-center ${wrapperClassName ?? ""}`}>
-        <h1 className="text-xl font-semibold">📶 {t.offlineQueuedTitle}</h1>
+        <h1 className="text-xl font-semibold flex items-center justify-center gap-2">
+          <WifiOffIcon className="w-5 h-5 shrink-0" />
+          {t.offlineQueuedTitle}
+        </h1>
         <p className="mt-4 text-neutral-600">{t.offlineQueuedMessage}</p>
         <button
           onClick={flushOfflineQueue}
@@ -467,13 +471,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             disabled={waiterCallState !== "idle"}
             className="text-sm border border-neutral-300 rounded-lg px-3 py-1.5 disabled:opacity-70"
           >
-            {waiterCallState === "called" ? t.callWaiterSent : t.callWaiterButton}
+            {waiterCallState === "called" ? (
+              t.callWaiterSent
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <BellIcon className="w-4 h-4 shrink-0" />
+                {t.callWaiterButton}
+              </span>
+            )}
           </button>
           {waiterCallError && <p className="mt-2 text-sm text-red-600">{waiterCallError}</p>}
         </div>
 
         {!cancelled && trackedOrder.scheduled_for && (
-          <p className="mt-4 text-sm text-center bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3">
+          <p className="mt-4 text-sm text-center bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3 flex items-center justify-center gap-1.5">
+            <MoonIcon className="w-4 h-4 shrink-0" />
             {t.preorderBadge(formatTime(trackedOrder.scheduled_for))}
           </p>
         )}
@@ -490,7 +502,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           pushState !== "unsupported" && (
             <div className="mt-4 text-center">
               {pushState === "subscribed" ? (
-                <p className="text-sm text-emerald-700">{t.pushSubscribed}</p>
+                <p className="text-sm text-emerald-700 flex items-center justify-center gap-1.5">
+                  <BellIcon className="w-4 h-4 shrink-0" />
+                  {t.pushSubscribed}
+                </p>
               ) : pushState === "denied" ? (
                 <p className="text-sm text-neutral-500">{t.pushDenied}</p>
               ) : (
@@ -499,7 +514,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   disabled={pushState === "subscribing"}
                   className="text-sm border border-neutral-300 rounded-lg px-3 py-1.5 disabled:opacity-70"
                 >
-                  {pushState === "subscribing" ? t.sending : t.pushSubscribeButton}
+                  {pushState === "subscribing" ? (
+                    t.sending
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <BellIcon className="w-4 h-4 shrink-0" />
+                      {t.pushSubscribeButton}
+                    </span>
+                  )}
                 </button>
               )}
             </div>
@@ -510,9 +532,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {loyaltyStatus.reward_available ? (
               <p className="font-medium">{t.loyaltyRewardAvailable}</p>
             ) : (
-              <p>{t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}</p>
+              <p className="flex items-center justify-center gap-1.5">
+                <GiftIcon className="w-4 h-4 shrink-0" />
+                {t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}
+              </p>
             )}
-            {loyaltyStatus.is_birthday_today && <p className="mt-1">{t.loyaltyBirthdayBanner}</p>}
+            {loyaltyStatus.is_birthday_today && (
+              <p className="mt-1 flex items-center justify-center gap-1.5">
+                <CakeIcon className="w-4 h-4 shrink-0" />
+                {t.loyaltyBirthdayBanner}
+              </p>
+            )}
           </div>
         )}
 
@@ -544,7 +574,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {trackedOrder.items.map((it) => (
               <li key={it.id}>
                 {it.quantity}× {it.menu_item_name}
-                {it.is_shared && <span className="text-amber-700"> · {t.sharedTag}</span>}
+                {it.is_shared && (
+                  <span className="text-amber-700 inline-flex items-center gap-1 align-middle">
+                    · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
+                  </span>
+                )}
                 {it.notes && <span className="text-neutral-400"> — {it.notes}</span>}
               </li>
             ))}
@@ -631,7 +665,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           <div className="pe-3">
             <div className="font-medium">
               {item.name}
-              {item.spice_level > 0 && <span className="ms-1">{"🌶️".repeat(item.spice_level)}</span>}
+              {item.spice_level > 0 && (
+                <span className="ms-1 inline-flex items-center gap-0.5 align-middle text-[var(--harissa)]">
+                  {Array.from({ length: item.spice_level }).map((_, i) => (
+                    <FlameIcon key={i} className="w-3.5 h-3.5 shrink-0" />
+                  ))}
+                </span>
+              )}
               {!item.is_halal && (
                 <span className="ms-1 text-xs font-normal text-red-600 border border-red-200 rounded px-1 align-middle">
                   {t.notHalalBadge}
@@ -690,6 +730,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 checked={cart[item.id].shared}
                 onChange={(e) => setShared(item.id, e.target.checked)}
               />
+              <UtensilsIcon className="w-4 h-4 shrink-0" />
               {t.sharedCheckboxLabel}
             </label>
           </>
@@ -717,13 +758,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             disabled={waiterCallState !== "idle"}
             className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 text-amber-50 disabled:opacity-70 whitespace-nowrap"
           >
-            {waiterCallState === "called" ? t.callWaiterSent : t.callWaiterButton}
+            {waiterCallState === "called" ? (
+              t.callWaiterSent
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <BellIcon className="w-4 h-4 shrink-0" />
+                {t.callWaiterButton}
+              </span>
+            )}
           </button>
         </div>
       </header>
 
       {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
-        <div className="bg-indigo-950 text-indigo-100 px-4 py-3 text-sm text-center">
+        <div className="bg-indigo-950 text-indigo-100 px-4 py-3 text-sm flex items-center justify-center gap-1.5">
+          <MoonIcon className="w-4 h-4 shrink-0" />
           {t.ramadanBanner(formatTime(restaurant.iftar_time))}
         </div>
       )}
@@ -747,8 +796,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {!loyaltySectionOpen ? (
             <button
               onClick={() => setLoyaltySectionOpen(true)}
-              className="text-sm underline text-orange-800"
+              className="text-sm underline text-orange-800 inline-flex items-center gap-1.5"
             >
+              <GiftIcon className="w-4 h-4 shrink-0" />
               {t.loyaltyToggle}
             </button>
           ) : (
@@ -779,9 +829,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   {loyaltyStatus.reward_available ? (
                     <p className="font-medium">{t.loyaltyRewardAvailable}</p>
                   ) : (
-                    <p>{t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}</p>
+                    <p className="flex items-center gap-1.5">
+                      <GiftIcon className="w-4 h-4 shrink-0" />
+                      {t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}
+                    </p>
                   )}
-                  {loyaltyStatus.is_birthday_today && <p className="mt-1">{t.loyaltyBirthdayBanner}</p>}
+                  {loyaltyStatus.is_birthday_today && (
+                    <p className="mt-1 flex items-center gap-1.5">
+                      <CakeIcon className="w-4 h-4 shrink-0" />
+                      {t.loyaltyBirthdayBanner}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -809,6 +867,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     checked={preOrderForIftar}
                     onChange={(e) => setPreOrderForIftar(e.target.checked)}
                   />
+                  <MoonIcon className="w-4 h-4 shrink-0" />
                   {t.preorderCheckboxLabel(formatTime(restaurant.iftar_time))}
                 </label>
               )}
