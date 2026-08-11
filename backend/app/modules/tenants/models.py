@@ -26,3 +26,8 @@ class Restaurant(Base):
     # lui-même l'heure du jour, comme il le ferait sur un tableau au mur.
     ramadan_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     iftar_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Mode café simplifié : un établissement qui ne sert que des boissons
+    # n'a pas besoin de la structure entrées/plats/desserts — le menu
+    # client s'affiche alors en liste unique, sans en-têtes de catégorie.
+    cafe_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

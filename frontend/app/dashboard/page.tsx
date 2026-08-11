@@ -73,6 +73,8 @@ export default function DashboardPage() {
   const [ramadanEnabled, setRamadanEnabled] = useState(false);
   const [iftarInput, setIftarInput] = useState("");
   const [savingRamadan, setSavingRamadan] = useState(false);
+  const [cafeModeEnabled, setCafeModeEnabled] = useState(false);
+  const [savingCafeMode, setSavingCafeMode] = useState(false);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -85,6 +87,7 @@ export default function DashboardPage() {
       setRestaurant(rest);
       setRamadanEnabled(rest.ramadan_mode_enabled);
       setIftarInput(isoToLocalInput(rest.iftar_time));
+      setCafeModeEnabled(rest.cafe_mode_enabled);
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -107,6 +110,22 @@ export default function DashboardPage() {
       setError(toFrenchMessage(e));
     } finally {
       setSavingRamadan(false);
+    }
+  }
+
+  async function saveCafeMode(nextEnabled: boolean) {
+    if (!restaurantId) return;
+    setError(null);
+    setSavingCafeMode(true);
+    try {
+      const updated = await api.setCafeMode(restaurantId, nextEnabled);
+      setRestaurant(updated);
+      setCafeModeEnabled(updated.cafe_mode_enabled);
+      flash(nextEnabled ? "Mode café simplifié activé." : "Mode café simplifié désactivé.");
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    } finally {
+      setSavingCafeMode(false);
     }
   }
 
@@ -250,6 +269,27 @@ export default function DashboardPage() {
             Une fois activé, les clients peuvent pré-commander pour l&apos;iftar depuis le menu. Pensez à mettre à
             jour l&apos;heure chaque jour (elle varie). Astuce : classez vos plats de rupture du jeûne dans la
             catégorie « Ftour » pour qu&apos;ils ressortent bien sur le menu client.
+          </p>
+        </div>
+      )}
+
+      {restaurant && (
+        <div className="border rounded-lg p-3 mb-4 bg-sky-50 border-sky-200">
+          <label className="flex items-center gap-2 font-medium text-sky-900">
+            <input
+              type="checkbox"
+              checked={cafeModeEnabled}
+              disabled={savingCafeMode}
+              onChange={(e) => {
+                setCafeModeEnabled(e.target.checked);
+                saveCafeMode(e.target.checked);
+              }}
+            />
+            ☕ Mode café simplifié
+          </label>
+          <p className="text-xs text-sky-700 mt-2">
+            Pour un établissement qui ne sert que des boissons : le menu client s&apos;affiche en liste simple, sans
+            regrouper par catégorie (entrées/plats/desserts).
           </p>
         </div>
       )}
