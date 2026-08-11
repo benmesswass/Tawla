@@ -16,8 +16,31 @@ _MANAGER = require_role(StaffRole.MANAGER)
 def create_table(payload: schemas.TableCreate, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
     if payload.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    table = Table(restaurant_id=payload.restaurant_id, label=payload.label)
+    table = Table(restaurant_id=payload.restaurant_id, label=payload.label, zone=payload.zone)
     db.add(table)
+    db.commit()
+    db.refresh(table)
+    return table
+
+
+@router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.TableOut])
+def list_tables(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """Gestion des tables et de leurs zones de salle côté dashboard manager."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return db.query(Table).filter(Table.restaurant_id == restaurant_id).order_by(Table.id).all()
+
+
+@router.patch("/{table_id}", response_model=schemas.TableOut)
+def update_table(
+    table_id: int, payload: schemas.TableUpdate, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
+):
+    table = db.get(Table, table_id)
+    if not table or table.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "TABLE_NOT_FOUND", "message": "table not found"})
+
+    table.label = payload.label
+    table.zone = payload.zone
     db.commit()
     db.refresh(table)
     return table
