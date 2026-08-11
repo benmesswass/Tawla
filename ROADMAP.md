@@ -72,7 +72,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 - [ ] Modèle de paiement : frais de service uniquement vs vrai paiement intégral en ligne (implication juridique/comptable à valider)
 - [ ] Programme de fidélité : par établissement vs mutualisé entre plusieurs restaurants partenaires
 - [ ] Gestion des grands groupes / événements (mariages, réservations de salle)
-- [ ] Nom de marque définitif et identité visuelle (le nom de repo « Tawla » est provisoire)
+- [x] Nom de marque définitif — confirmé par Wassim le 2026-08-11 : **Tawla** reste le nom définitif. L'identité visuelle (logo, palette, typographie) est tracée en Phase 8.1, désormais débloquée
 - [ ] Montée de version majeure Next.js (14 → 15/16) : breaking change réel, décision produit à part (signalé lors de l'audit du 2026-08-10)
 - [ ] Vraie intégration imprimante cuisine (au-delà du filet de secours navigateur déjà en place)
 
@@ -81,7 +81,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 Ajoutée le 2026-08-11, à la suite de l'audit fonctionnel + design mené une fois les phases 0-6 complètes (18 PR mergées, 104 tests backend verts, aucune tâche non-bloquée restante). Rapport complet avec captures d'écran envoyé à Wassim en Artifact la même session. Constat : le fonctionnel est solide, le design reste au niveau prototype (aucune identité de marque, une seule couleur d'accent partout, zéro micro-interaction). Poids délibérément mis sur le design, à la demande explicite de Wassim ("trop simpliste", envie d'un rendu "attachant, pro, fun").
 
 **8.1 — Identité de marque (fondation, bloque le reste de la phase)**
-- [ ] 🧑 Nom de marque définitif (déjà listé Phase 7 — prérequis strict : impossible de dessiner un logo pour un nom encore provisoire)
+- [x] Nom de marque définitif — confirmé par Wassim le 2026-08-11 : **Tawla**
 - [ ] Logo + favicon + icônes PWA, lisibles de 32px à 512px
 - [ ] Palette de marque figée (primaire, secondaire, + couleurs sémantiques distinctes de la couleur d'action) en tokens CSS partagés client/staff
 - [ ] Paire typographique (une police d'affichage avec du caractère + une police texte lisible en petit sur mobile)
