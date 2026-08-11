@@ -69,6 +69,7 @@ export type Order = {
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
   scheduled_for: string | null;
+  loyalty_phone: string | null;
   payment_method: PaymentMethod | null;
   payment_status: PaymentStatus;
   tip_amount: number;
@@ -91,6 +92,17 @@ export type WaiterCall = {
   created_at: string;
   resolved_at: string | null;
   resolved_by_staff_id: number | null;
+};
+
+export type LoyaltyMember = {
+  id: number;
+  restaurant_id: number;
+  phone_number: string;
+  birth_date: string | null;
+  order_count: number;
+  reward_available: boolean;
+  orders_until_reward: number;
+  is_birthday_today: boolean;
 };
 
 export type TimingStats = {
@@ -193,6 +205,7 @@ export const api = {
     table_id: number;
     items: { menu_item_id: number; quantity: number; notes?: string | null; is_shared?: boolean }[];
     scheduled_for?: string | null;
+    loyalty_phone?: string | null;
   }) => request<Order>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),
   getOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}`),
   listActiveOrders: (restaurantId: number) =>
@@ -239,6 +252,17 @@ export const api = {
     request<WaiterCall[]>(`/api/v1/waiter-calls/by-restaurant/${restaurantId}/pending`),
   resolveWaiterCall: (callId: number) =>
     request<WaiterCall>(`/api/v1/waiter-calls/${callId}/resolve`, { method: "POST" }),
+  lookupLoyalty: (restaurantId: number, phoneNumber: string, birthDate?: string | null) =>
+    request<LoyaltyMember>("/api/v1/loyalty/lookup", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: restaurantId, phone_number: phoneNumber, birth_date: birthDate }),
+    }),
+  getLoyaltyMemberForStaff: (restaurantId: number, phoneNumber: string) =>
+    request<LoyaltyMember>(
+      `/api/v1/loyalty/by-restaurant/${restaurantId}/member?phone_number=${encodeURIComponent(phoneNumber)}`
+    ),
+  redeemLoyaltyReward: (memberId: number) =>
+    request<LoyaltyMember>(`/api/v1/loyalty/${memberId}/redeem`, { method: "POST" }),
 };
 
 export function wsUrl(path: string): string {

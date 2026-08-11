@@ -4,6 +4,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.logging import get_logger, log_event
+from app.modules.loyalty import schemas as loyalty_schemas
+from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
@@ -101,6 +103,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
         restaurant_id=payload.restaurant_id,
         table_id=payload.table_id,
         scheduled_for=payload.scheduled_for,
+        loyalty_phone=payload.loyalty_phone,
     )
 
     for line in payload.items:
@@ -140,6 +143,14 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     db.add(order)
     db.commit()
     db.refresh(order)
+
+    # Enregistre la fiche fidélité dès la commande si le client a saisi son
+    # numéro (même s'il n'est jamais passé par une vérification de statut
+    # séparée) — le compteur, lui, n'avance qu'au paiement confirmé.
+    if order.loyalty_phone:
+        loyalty_service.lookup_or_create(
+            db, loyalty_schemas.LoyaltyLookup(restaurant_id=order.restaurant_id, phone_number=order.loyalty_phone)
+        )
 
     log_event(
         logger, "order.created",
@@ -332,6 +343,9 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -
     db.commit()
     db.refresh(order)
 
+    if order.loyalty_phone:
+        loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
+
     log_event(
         logger, "order.paid_card_simulated",
         restaurant_id=order.restaurant_id, order_id=order.id,
@@ -367,6 +381,7 @@ async def request_cash_payment(db: Session, order_id: int) -> Order:
             "table_id": order.table_id,
             "amount": order.total_amount,
             "taken_by_staff_id": order.taken_by_staff_id,
+            "loyalty_phone": order.loyalty_phone,
         },
     )
     return order
@@ -386,6 +401,9 @@ async def confirm_cash_payment(db: Session, order_id: int, staff: Staff) -> Orde
     order.payment_status = PaymentStatus.PAID
     db.commit()
     db.refresh(order)
+
+    if order.loyalty_phone:
+        loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
 
     log_event(
         logger, "order.cash_payment_confirmed",

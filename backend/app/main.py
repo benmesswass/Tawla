@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import model_registry  # noqa: F401 — enregistre tous les modèles
 from app.core.database import Base, engine
+from app.modules.loyalty.router import router as loyalty_router
 from app.modules.menu.router import router as menu_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import router as orders_router
@@ -43,6 +44,7 @@ app.include_router(orders_router)
 app.include_router(stats_router)
 app.include_router(notifications_router)
 app.include_router(waiter_calls_router)
+app.include_router(loyalty_router)
 
 
 @app.get("/health")

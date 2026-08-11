@@ -71,4 +71,12 @@ export const ar = {
   offlineQueuedTitle: "ما فماش نات",
   offlineQueuedMessage: "الطلبية تسجلت في تليفونك وباش تتبعث وحدها كي ترجع النات.",
   retryNow: "عاود جرب دلوقتي",
+
+  loyaltyToggle: "🎁 بطاقة الولاء (إختياري)",
+  loyaltyPhoneLabel: "رقم التليفون",
+  loyaltyPhonePlaceholder: "مثال : 20 123 456",
+  loyaltyBirthDateLabel: "تاريخ الميلاد (إختياري، للتخفيض تاع عيد ميلادك)",
+  loyaltyProgress: (count, remaining) => `🎁 عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
+  loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",
+  loyaltyBirthdayBanner: "🎂 عيد ميلاد سعيد! اطلب التخفيض الخاص من الجرسون.",
 } satisfies Dictionary;

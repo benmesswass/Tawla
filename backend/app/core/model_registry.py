@@ -7,6 +7,7 @@ Sans ce fichier, un module dont le modèle n'est jamais importé ailleurs
 et toute ForeignKey qui pointe vers lui casse au démarrage — c'est arrivé
 une fois, d'où ce fichier explicite plutôt qu'un import implicite fragile.
 """
+from app.modules.loyalty import models as _loyalty_models  # noqa: F401
 from app.modules.menu import models as _menu_models  # noqa: F401
 from app.modules.orders import models as _orders_models  # noqa: F401
 from app.modules.staff import models as _staff_models  # noqa: F401

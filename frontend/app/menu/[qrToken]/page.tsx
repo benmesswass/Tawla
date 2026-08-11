@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Cairo } from "next/font/google";
-import { api, wsUrl, ApiError, MenuItem, Order, OrderStatus, Restaurant, Table } from "@/lib/api";
+import { api, wsUrl, ApiError, LoyaltyMember, MenuItem, Order, OrderStatus, Restaurant, Table } from "@/lib/api";
 import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
@@ -31,6 +31,10 @@ function offlineQueueStorageKey(qrToken: string): string {
   return `resto-qr-menu:offline-queue:${qrToken}`;
 }
 
+function loyaltyPhoneStorageKey(restaurantId: number): string {
+  return `resto-qr-menu:loyalty-phone:${restaurantId}`;
+}
+
 type CreateOrderPayload = Parameters<typeof api.createOrder>[0];
 
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
@@ -53,6 +57,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
+  const [loyaltySectionOpen, setLoyaltySectionOpen] = useState(false);
+  const [loyaltyPhone, setLoyaltyPhone] = useState("");
+  const [loyaltyBirthDate, setLoyaltyBirthDate] = useState("");
+  const [loyaltyStatus, setLoyaltyStatus] = useState<LoyaltyMember | null>(null);
 
   function formatTime(iso: string): string {
     return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
@@ -137,6 +145,29 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     return () => window.removeEventListener("online", flushOfflineQueue);
   }, [flushOfflineQueue]);
 
+  // Carte de fidélité — pré-remplit le numéro déjà utilisé sur ce resto
+  // (évite de le retaper à chaque visite), sans jamais le rendre obligatoire.
+  useEffect(() => {
+    if (!restaurant) return;
+    const saved = localStorage.getItem(loyaltyPhoneStorageKey(restaurant.id));
+    if (saved) setLoyaltyPhone(saved);
+  }, [restaurant]);
+
+  async function checkLoyaltyStatus(phone: string) {
+    if (!restaurant || !phone.trim()) {
+      setLoyaltyStatus(null);
+      return;
+    }
+    try {
+      const status = await api.lookupLoyalty(restaurant.id, phone.trim(), loyaltyBirthDate || null);
+      setLoyaltyStatus(status);
+      localStorage.setItem(loyaltyPhoneStorageKey(restaurant.id), phone.trim());
+    } catch {
+      // Vérification de statut best-effort — une erreur ici ne doit jamais
+      // bloquer la commande, qui reste possible sans numéro fidélité.
+    }
+  }
+
   // Suivi temps réel de la commande après validation — jusqu'ici le client
   // n'avait plus aucune nouvelle après "commande envoyée" (audit PO 2026-08-10).
   const orderWsUrl =
@@ -180,6 +211,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       }
     }
   });
+
+  // Le compteur de fidélité n'avance qu'au paiement confirmé côté serveur —
+  // on rafraîchit l'affichage client à ce moment précis (carte immédiate,
+  // cash via le WebSocket ci-dessus) plutôt que de deviner la nouvelle valeur.
+  useEffect(() => {
+    if (trackedOrder?.payment_status === "paid" && trackedOrder.loyalty_phone) {
+      checkLoyaltyStatus(trackedOrder.loyalty_phone);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackedOrder?.payment_status]);
 
   async function payByCard() {
     if (!trackedOrder) return;
@@ -278,6 +319,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         is_shared: l.shared,
       })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
+      loyalty_phone: loyaltyPhone.trim() || null,
     };
     try {
       const order = await api.createOrder(payload);
@@ -392,6 +434,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           <p className="mt-4 text-sm text-center bg-amber-50 text-amber-800 border border-amber-200 rounded-lg py-2 px-3">
             {t.dedicatedServer(trackedOrder.taken_by_staff_name)}
           </p>
+        )}
+
+        {!cancelled && trackedOrder.loyalty_phone && loyaltyStatus && (
+          <div className="mt-4 text-sm text-center bg-orange-50 text-orange-900 border border-orange-200 rounded-lg py-2 px-3">
+            {loyaltyStatus.reward_available ? (
+              <p className="font-medium">{t.loyaltyRewardAvailable}</p>
+            ) : (
+              <p>{t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}</p>
+            )}
+            {loyaltyStatus.is_birthday_today && <p className="mt-1">{t.loyaltyBirthdayBanner}</p>}
+          </div>
         )}
 
         {!cancelled && (
@@ -620,6 +673,51 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </button>
           </div>
         )}
+
+        <div className="mb-4 border rounded-lg p-3 bg-orange-50 border-orange-200">
+          {!loyaltySectionOpen ? (
+            <button
+              onClick={() => setLoyaltySectionOpen(true)}
+              className="text-sm underline text-orange-800"
+            >
+              {t.loyaltyToggle}
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <label className="block text-sm text-orange-900">
+                {t.loyaltyPhoneLabel}
+                <input
+                  type="tel"
+                  value={loyaltyPhone}
+                  onChange={(e) => setLoyaltyPhone(e.target.value)}
+                  onBlur={() => checkLoyaltyStatus(loyaltyPhone)}
+                  placeholder={t.loyaltyPhonePlaceholder}
+                  className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
+                />
+              </label>
+              <label className="block text-sm text-orange-900">
+                {t.loyaltyBirthDateLabel}
+                <input
+                  type="date"
+                  value={loyaltyBirthDate}
+                  onChange={(e) => setLoyaltyBirthDate(e.target.value)}
+                  onBlur={() => checkLoyaltyStatus(loyaltyPhone)}
+                  className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
+                />
+              </label>
+              {loyaltyStatus && (
+                <div className="text-sm text-orange-900 pt-1">
+                  {loyaltyStatus.reward_available ? (
+                    <p className="font-medium">{t.loyaltyRewardAvailable}</p>
+                  ) : (
+                    <p>{t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}</p>
+                  )}
+                  {loyaltyStatus.is_birthday_today && <p className="mt-1">{t.loyaltyBirthdayBanner}</p>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {restaurant.cafe_mode_enabled ? (
           <section className="mb-6">{availableItems.map(renderItem)}</section>

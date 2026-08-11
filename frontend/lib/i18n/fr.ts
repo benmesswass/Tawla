@@ -72,6 +72,15 @@ export const fr = {
   offlineQueuedTitle: "Pas de connexion",
   offlineQueuedMessage: "Votre commande est enregistrée sur votre téléphone et sera envoyée automatiquement dès que la connexion revient.",
   retryNow: "Réessayer maintenant",
+
+  loyaltyToggle: "🎁 Programme fidélité (facultatif)",
+  loyaltyPhoneLabel: "Numéro de téléphone",
+  loyaltyPhonePlaceholder: "Ex : 20 123 456",
+  loyaltyBirthDateLabel: "Date de naissance (facultatif, pour votre réduction anniversaire)",
+  loyaltyProgress: (count: number, remaining: number) =>
+    `🎁 Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
+  loyaltyRewardAvailable: "🎉 Récompense disponible ! Montrez cet écran à votre serveur.",
+  loyaltyBirthdayBanner: "🎂 Bon anniversaire ! Demandez votre réduction spéciale au serveur.",
 };
 
 export type Dictionary = typeof fr;
