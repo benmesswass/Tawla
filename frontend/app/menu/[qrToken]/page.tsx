@@ -6,6 +6,7 @@ import { api, wsUrl, ApiError, LoyaltyMember, MenuItem, Order, OrderStatus, Rest
 import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
+import { menuCategoryLabel } from "@/lib/menuCategories";
 import SplitBill from "@/components/SplitBill";
 import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
@@ -910,7 +911,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         ) : (
           categories.map((category) => (
             <section key={category} className="mb-6">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">{category}</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">
+                {menuCategoryLabel(category, locale)}
+              </h2>
               {availableItems.filter((m) => m.category === category).map(renderItem)}
             </section>
           ))
