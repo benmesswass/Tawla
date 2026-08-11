@@ -112,6 +112,26 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
   });
 
+  // Rupture de stock en temps réel : un plat qui devient indisponible doit
+  // disparaître du menu immédiatement, sans attendre que le client tente de
+  // commander pour le découvrir (ex: ITEM_UNAVAILABLE au moment de valider).
+  const menuWsUrl = restaurant ? wsUrl(`/ws/menu/${restaurant.id}`) : null;
+  useReconnectingSocket(menuWsUrl, (msg) => {
+    if (msg.event === "menu_item.availability_changed") {
+      setMenu((prev) =>
+        prev.map((m) => (m.id === msg.menu_item_id ? { ...m, is_available: msg.is_available } : m))
+      );
+      if (!msg.is_available) {
+        setCart((prev) => {
+          if (!prev[msg.menu_item_id]) return prev;
+          const next = { ...prev };
+          delete next[msg.menu_item_id];
+          return next;
+        });
+      }
+    }
+  });
+
   async function payByCard() {
     if (!trackedOrder) return;
     setPaying(true);

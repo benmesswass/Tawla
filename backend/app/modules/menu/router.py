@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.menu import schemas
 from app.modules.menu.models import MenuItem
+from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
 
@@ -59,7 +60,7 @@ def list_menu(restaurant_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{item_id}/availability", response_model=schemas.MenuItemOut)
-def set_availability(
+async def set_availability(
     item_id: int, payload: schemas.MenuItemAvailability, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
 ):
     """Rupture de stock en un clic — le resto en a besoin en permanence."""
@@ -67,6 +68,17 @@ def set_availability(
     item.is_available = payload.is_available
     db.commit()
     db.refresh(item)
+
+    # Un client déjà sur la page menu doit voir la rupture instantanément,
+    # pas seulement au moment où il tente de commander l'article.
+    await manager.broadcast(
+        item.restaurant_id, channel="menu",
+        message={
+            "event": "menu_item.availability_changed",
+            "menu_item_id": item.id,
+            "is_available": item.is_available,
+        },
+    )
     return item
 
 

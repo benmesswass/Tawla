@@ -27,6 +27,22 @@ async def ws_kitchen(websocket: WebSocket, restaurant_id: int):
         manager.disconnect(websocket, restaurant_id, channel="kitchen")
 
 
+@router.websocket("/ws/menu/{restaurant_id}")
+async def ws_menu(websocket: WebSocket, restaurant_id: int):
+    """
+    Le client qui parcourt le menu (avant même de commander) doit voir une
+    rupture de stock disparaître instantanément, sans attendre de tenter de
+    commander pour le découvrir. Public comme le reste du parcours client —
+    pas d'auth, pas de donnée sensible sur ce canal.
+    """
+    await manager.connect(websocket, restaurant_id, channel="menu")
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, restaurant_id, channel="menu")
+
+
 @router.websocket("/ws/order/{restaurant_id}/{order_id}")
 async def ws_order(websocket: WebSocket, restaurant_id: int, order_id: int):
     """
