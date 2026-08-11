@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, wsUrl, Order } from "@/lib/api";
+import { api, wsUrl, LoyaltyMember, Order } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
@@ -17,7 +17,13 @@ type PendingOrder = {
   scheduled_for: string | null;
 };
 type ReadyOrder = { order_id: number; table_id: number };
-type CashRequest = { order_id: number; table_id: number; amount: number; taken_by_staff_id: number | null };
+type CashRequest = {
+  order_id: number;
+  table_id: number;
+  amount: number;
+  taken_by_staff_id: number | null;
+  loyalty_phone: string | null;
+};
 type WaiterCall = { call_id: number; table_id: number };
 
 function fromApi(o: Order): PendingOrder {
@@ -42,8 +48,22 @@ export default function StaffPage() {
   const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loyaltyByPhone, setLoyaltyByPhone] = useState<Record<string, LoyaltyMember>>({});
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   const restaurantId = staff?.restaurant_id ?? null;
+
+  async function fetchLoyaltyForPhone(rId: number, phone: string) {
+    try {
+      const member = await api.getLoyaltyMemberForStaff(rId, phone);
+      setLoyaltyByPhone((prev) => ({ ...prev, [phone]: member }));
+    } catch {
+      // Pas de fiche fidélité pour ce numéro (jamais renseigné côté client) —
+      // rien à afficher, ce n'est pas une erreur.
+    }
+  }
 
   const loadActiveOrders = useCallback(async () => {
     if (!restaurantId) return;
@@ -68,8 +88,12 @@ export default function StaffPage() {
           table_id: o.table_id,
           amount: o.total_amount,
           taken_by_staff_id: o.taken_by_staff_id,
+          loyalty_phone: o.loyalty_phone,
         }))
       );
+      for (const o of orders) {
+        if (o.loyalty_phone) fetchLoyaltyForPhone(restaurantId, o.loyalty_phone);
+      }
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -137,9 +161,11 @@ export default function StaffPage() {
                 table_id: msg.table_id,
                 amount: msg.amount,
                 taken_by_staff_id: msg.taken_by_staff_id,
+                loyalty_phone: msg.loyalty_phone ?? null,
               },
             ]
       );
+      if (msg.loyalty_phone && restaurantId) fetchLoyaltyForPhone(restaurantId, msg.loyalty_phone);
     }
     if (msg.event === "waiter_call.created") {
       setWaiterCalls((prev) =>
@@ -218,6 +244,29 @@ export default function StaffPage() {
       setWaiterCalls((prev) => prev.filter((c) => c.call_id !== callId));
     } catch (e) {
       setError(toFrenchMessage(e));
+    }
+  }
+
+  async function redeemReward(member: LoyaltyMember) {
+    setError(null);
+    try {
+      const updated = await api.redeemLoyaltyReward(member.id);
+      setLoyaltyByPhone((prev) => ({ ...prev, [member.phone_number]: updated }));
+      if (lookupResult?.id === member.id) setLookupResult(updated);
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function lookupLoyaltyByPhone() {
+    if (!restaurantId || !lookupPhone.trim()) return;
+    setLookupError(null);
+    setLookupResult(null);
+    try {
+      const member = await api.getLoyaltyMemberForStaff(restaurantId, lookupPhone.trim());
+      setLookupResult(member);
+    } catch (e) {
+      setLookupError(toFrenchMessage(e));
     }
   }
 
@@ -332,22 +381,82 @@ export default function StaffPage() {
 
       <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement en espèces</h2>
       {myCashRequests.length === 0 && <p className="text-neutral-500">Aucune demande en attente.</p>}
-      {myCashRequests.map((o) => (
-        <div key={o.order_id} className="border rounded-lg p-4 mb-3 flex justify-between items-center bg-amber-50">
-          <div>
-            <div className="font-medium">Table {o.table_id}</div>
-            <div className="text-sm text-neutral-500">
-              Commande #{o.order_id} — {o.amount.toFixed(2)} DT
+      {myCashRequests.map((o) => {
+        const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
+        return (
+          <div key={o.order_id} className="border rounded-lg p-4 mb-3 bg-amber-50">
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="font-medium">Table {o.table_id}</div>
+                <div className="text-sm text-neutral-500">
+                  Commande #{o.order_id} — {o.amount.toFixed(2)} DT
+                </div>
+              </div>
+              <button
+                onClick={() => confirmCash(o.order_id)}
+                className="bg-amber-700 text-white px-3 py-2 rounded-lg text-sm"
+              >
+                Encaissé
+              </button>
             </div>
+            {loyaltyMember && (
+              <div className="mt-3 text-sm bg-orange-100 text-orange-900 border border-orange-200 rounded-lg py-2 px-3 flex justify-between items-center gap-2">
+                <span>
+                  🎁 {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
+                  {loyaltyMember.order_count > 1 ? "s" : ""}
+                  {loyaltyMember.reward_available ? " — récompense disponible" : ""}
+                  {loyaltyMember.is_birthday_today ? " — 🎂 anniversaire aujourd'hui" : ""}
+                </span>
+                {loyaltyMember.reward_available && (
+                  <button
+                    onClick={() => redeemReward(loyaltyMember)}
+                    className="shrink-0 bg-orange-600 text-white px-2 py-1 rounded text-xs"
+                  >
+                    Récompense donnée
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          <button
-            onClick={() => confirmCash(o.order_id)}
-            className="bg-amber-700 text-white px-3 py-2 rounded-lg text-sm"
-          >
-            Encaissé
+        );
+      })}
+
+      <h2 className="text-lg font-semibold mt-8 mb-4">🎁 Fidélité — vérifier un client</h2>
+      <div className="border rounded-lg p-4 mb-3">
+        <div className="flex gap-2">
+          <input
+            type="tel"
+            value={lookupPhone}
+            onChange={(e) => setLookupPhone(e.target.value)}
+            placeholder="Numéro de téléphone du client"
+            className="flex-1 border rounded-lg px-3 py-2 text-sm"
+          />
+          <button onClick={lookupLoyaltyByPhone} className="bg-neutral-900 text-white px-3 py-2 rounded-lg text-sm">
+            Vérifier
           </button>
         </div>
-      ))}
+        {lookupError && <p className="mt-2 text-sm text-red-700">{lookupError}</p>}
+        {lookupResult && (
+          <div className="mt-3 text-sm bg-orange-50 text-orange-900 border border-orange-200 rounded-lg py-2 px-3 flex justify-between items-center gap-2">
+            <span>
+              🎁 {lookupResult.phone_number} — {lookupResult.order_count} commande
+              {lookupResult.order_count > 1 ? "s" : ""}
+              {lookupResult.reward_available
+                ? " — récompense disponible"
+                : ` — encore ${lookupResult.orders_until_reward} pour un article offert`}
+              {lookupResult.is_birthday_today ? " — 🎂 anniversaire aujourd'hui" : ""}
+            </span>
+            {lookupResult.reward_available && (
+              <button
+                onClick={() => redeemReward(lookupResult)}
+                className="shrink-0 bg-orange-600 text-white px-2 py-1 rounded text-xs"
+              >
+                Récompense donnée
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -19,6 +19,9 @@ class OrderCreate(BaseModel):
     # Pré-commande mode Ramadan : optionnel, réglé côté client sur l'heure
     # d'iftar du resto quand il choisit "commander pour l'iftar".
     scheduled_for: datetime | None = None
+    # Carte de fidélité — facultatif, le client peut commander sans jamais
+    # le renseigner.
+    loyalty_phone: str | None = None
 
 
 class OrderItemOut(BaseModel):
@@ -52,6 +55,7 @@ class OrderOut(BaseModel):
     taken_by_staff_id: int | None
     taken_by_staff_name: str | None
     scheduled_for: datetime | None
+    loyalty_phone: str | None
     payment_method: PaymentMethod | None
     payment_status: PaymentStatus
     tip_amount: float

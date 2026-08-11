@@ -69,6 +69,11 @@ class Order(Base):
     tip_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     payment_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    # Carte de fidélité — facultatif, saisi par le client à la commande. Le
+    # compteur ne bouge qu'au paiement confirmé (voir orders/service.py),
+    # jamais à la création : une commande annulée ne doit rien faire gagner.
+    loyalty_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     taken_by: Mapped["Staff | None"] = relationship()
 
