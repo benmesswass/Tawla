@@ -12,7 +12,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
-import { MoonIcon, CoffeeIcon } from "@/components/icons";
+import { MoonIcon, CoffeeIcon, UtensilsIcon } from "@/components/icons";
 import { MENU_CATEGORIES } from "@/lib/menuCategories";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
@@ -82,6 +82,14 @@ const EMPTY_DRAFT: Draft = {
   isHalal: true,
 };
 
+type Tab = "menu" | "tables" | "settings";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "menu", label: "Menu" },
+  { key: "tables", label: "Tables & zones" },
+  { key: "settings", label: "Réglages" },
+];
+
 export default function DashboardPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["manager"]);
@@ -99,6 +107,11 @@ export default function DashboardPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
+  const [activeTab, setActiveTab] = useState<Tab>("menu");
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [addingItem, setAddingItem] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -189,6 +202,7 @@ export default function DashboardPage() {
         is_halal: draft.isHalal,
       });
       flash(`« ${draft.name} » enregistré.`);
+      setEditingItemId(null);
       await load();
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -211,6 +225,7 @@ export default function DashboardPage() {
     try {
       await api.deleteMenuItem(item.id);
       flash(`« ${item.name} » supprimé.`);
+      setEditingItemId(null);
       await load();
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -239,6 +254,7 @@ export default function DashboardPage() {
       });
       flash(`« ${newItem.name} » ajouté au menu.`);
       setNewItem(EMPTY_DRAFT);
+      setAddingItem(false);
       await load();
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -296,6 +312,12 @@ export default function DashboardPage() {
     );
   }
 
+  const filteredItems = items.filter((item) => {
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+    const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
@@ -313,68 +335,6 @@ export default function DashboardPage() {
         Modifier un article, basculer une rupture de stock, ou en ajouter un nouveau — sans passer par Swagger.
       </p>
 
-      {restaurant && (
-        <Card tone="warning" padding="sm" className="mb-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <label className="flex items-center gap-2 font-medium text-amber-900">
-              <input
-                type="checkbox"
-                checked={ramadanEnabled}
-                onChange={(e) => {
-                  setRamadanEnabled(e.target.checked);
-                  saveRamadanMode(e.target.checked);
-                }}
-              />
-              <MoonIcon className="w-4 h-4 shrink-0" />
-              Mode Ramadan
-            </label>
-            {ramadanEnabled && (
-              <div className="flex items-center gap-2 text-sm">
-                <label htmlFor="iftar-time" className="text-amber-800">
-                  Heure de l&apos;iftar aujourd&apos;hui
-                </label>
-                <input
-                  id="iftar-time"
-                  type="datetime-local"
-                  value={iftarInput}
-                  onChange={(e) => setIftarInput(e.target.value)}
-                  onBlur={() => saveRamadanMode(true)}
-                  disabled={savingRamadan}
-                  className="border rounded px-2 py-1"
-                />
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-amber-700 mt-2">
-            Une fois activé, les clients peuvent pré-commander pour l&apos;iftar depuis le menu. Pensez à mettre à
-            jour l&apos;heure chaque jour (elle varie). Astuce : classez vos plats de rupture du jeûne dans la
-            catégorie « Ftour » pour qu&apos;ils ressortent bien sur le menu client.
-          </p>
-        </Card>
-      )}
-
-      {restaurant && (
-        <Card tone="info" padding="sm" className="mb-4">
-          <label className="flex items-center gap-2 font-medium text-sky-900">
-            <input
-              type="checkbox"
-              checked={cafeModeEnabled}
-              disabled={savingCafeMode}
-              onChange={(e) => {
-                setCafeModeEnabled(e.target.checked);
-                saveCafeMode(e.target.checked);
-              }}
-            />
-            <CoffeeIcon className="w-4 h-4 shrink-0" />
-            Mode café simplifié
-          </label>
-          <p className="text-xs text-sky-700 mt-2">
-            Pour un établissement qui ne sert que des boissons : le menu client s&apos;affiche en liste simple, sans
-            regrouper par catégorie (entrées/plats/desserts).
-          </p>
-        </Card>
-      )}
-
       {error && (
         <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
           {error}
@@ -386,223 +346,414 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="space-y-3">
-        {items.map((item) => {
-          const draft = drafts[item.id] ?? itemToDraft(item);
-          return (
-            <Card key={item.id} padding="sm" className={!item.is_available ? "bg-neutral-50" : ""}>
-              <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
-                <input
-                  value={draft.name}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, name: e.target.value } }))}
-                  className="border rounded px-2 py-1"
-                  placeholder="Nom"
-                />
-                <select
-                  value={draft.category}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, category: e.target.value } }))}
-                  className="border rounded px-2 py-1"
-                >
-                  {MENU_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={draft.price}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, price: e.target.value } }))}
-                  className="border rounded px-2 py-1"
-                  placeholder="Prix (DT)"
-                  inputMode="decimal"
-                />
-              </div>
-              <input
-                value={draft.description}
-                onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, description: e.target.value } }))}
-                className="border rounded px-2 py-1 w-full mt-2"
-                placeholder="Description (facultatif)"
-              />
-              <input
-                value={draft.image_url}
-                onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, image_url: e.target.value } }))}
-                className="border rounded px-2 py-1 w-full mt-2"
-                placeholder="URL de la photo (facultatif)"
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
-                <select
-                  value={draft.spiceLevel}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, spiceLevel: e.target.value } }))}
-                  className="border rounded px-2 py-1 text-sm"
-                >
-                  {SPICE_LABELS.map((label, level) => (
-                    <option key={level} value={level}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={draft.allergens}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, allergens: e.target.value } }))}
-                  className="border rounded px-2 py-1 text-sm"
-                  placeholder="Allergènes (facultatif, ex : Gluten, Fruits à coque)"
-                />
-                <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+      <div className="flex gap-1 border-b border-[var(--line)] mb-4">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === tab.key
+                ? "border-[var(--harissa)] text-[var(--harissa)]"
+                : "border-transparent text-neutral-500 hover:text-neutral-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "menu" && (
+        <>
+          <div className="flex flex-col sm:flex-row gap-2 mb-3">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher un plat par nom..."
+              className="border rounded px-2 py-1.5 text-sm flex-1"
+            />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="border rounded px-2 py-1.5 text-sm"
+            >
+              <option value="all">Toutes les catégories</option>
+              {MENU_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            {filteredItems.map((item) => {
+              const draft = drafts[item.id] ?? itemToDraft(item);
+              const isEditing = editingItemId === item.id;
+              return (
+                <Card key={item.id} padding="sm" className={!item.is_available ? "bg-neutral-50" : ""}>
+                  <div className="flex items-center gap-3">
+                    {item.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="w-11 h-11 rounded-lg object-cover shrink-0"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-lg bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-400">
+                        <UtensilsIcon className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{item.name}</div>
+                      <div className="text-xs text-neutral-500 truncate">
+                        {item.category} · {item.price.toFixed(2)} DT
+                      </div>
+                    </div>
+                    <Badge tone={item.is_available ? "success" : "danger"} className="shrink-0 hidden sm:inline-flex">
+                      {item.is_available ? "Disponible" : "Rupture"}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="shrink-0"
+                      onClick={() => setEditingItemId(isEditing ? null : item.id)}
+                    >
+                      {isEditing ? "Fermer" : "Modifier"}
+                    </Button>
+                  </div>
+
+                  {isEditing && (
+                    <div className="mt-3 pt-3 border-t border-[var(--line)]">
+                      <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
+                        <input
+                          value={draft.name}
+                          onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, name: e.target.value } }))}
+                          className="border rounded px-2 py-1"
+                          placeholder="Nom"
+                        />
+                        <select
+                          value={draft.category}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [item.id]: { ...draft, category: e.target.value } }))
+                          }
+                          className="border rounded px-2 py-1"
+                        >
+                          {MENU_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={draft.price}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [item.id]: { ...draft, price: e.target.value } }))
+                          }
+                          className="border rounded px-2 py-1"
+                          placeholder="Prix (DT)"
+                          inputMode="decimal"
+                        />
+                      </div>
+                      <input
+                        value={draft.description}
+                        onChange={(e) =>
+                          setDrafts((d) => ({ ...d, [item.id]: { ...draft, description: e.target.value } }))
+                        }
+                        className="border rounded px-2 py-1 w-full mt-2"
+                        placeholder="Description (facultatif)"
+                      />
+                      <input
+                        value={draft.image_url}
+                        onChange={(e) =>
+                          setDrafts((d) => ({ ...d, [item.id]: { ...draft, image_url: e.target.value } }))
+                        }
+                        className="border rounded px-2 py-1 w-full mt-2"
+                        placeholder="URL de la photo (facultatif)"
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
+                        <select
+                          value={draft.spiceLevel}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [item.id]: { ...draft, spiceLevel: e.target.value } }))
+                          }
+                          className="border rounded px-2 py-1 text-sm"
+                        >
+                          {SPICE_LABELS.map((label, level) => (
+                            <option key={level} value={level}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={draft.allergens}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [item.id]: { ...draft, allergens: e.target.value } }))
+                          }
+                          className="border rounded px-2 py-1 text-sm"
+                          placeholder="Allergènes (facultatif, ex : Gluten, Fruits à coque)"
+                        />
+                        <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={draft.isHalal}
+                            onChange={(e) =>
+                              setDrafts((d) => ({ ...d, [item.id]: { ...draft, isHalal: e.target.checked } }))
+                            }
+                          />
+                          Halal
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={item.is_available}
+                            onChange={() => toggleAvailability(item)}
+                          />
+                          <Badge tone={item.is_available ? "success" : "danger"}>
+                            {item.is_available ? "Disponible" : "Rupture de stock"}
+                          </Badge>
+                        </label>
+                        <div className="flex gap-2">
+                          <Button onClick={() => saveItem(item)}>Enregistrer</Button>
+                          <Button variant="danger" onClick={() => removeItem(item)}>
+                            Supprimer
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+            {filteredItems.length === 0 && items.length > 0 && (
+              <EmptyState message="Aucun plat ne correspond à cette recherche." />
+            )}
+            {items.length === 0 && <EmptyState message="Aucun article pour l'instant." />}
+          </div>
+
+          {addingItem ? (
+            <>
+              <h2 className="text-base font-semibold mt-6 mb-3">Ajouter un article</h2>
+              <Card padding="sm">
+                <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
                   <input
-                    type="checkbox"
-                    checked={draft.isHalal}
-                    onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, isHalal: e.target.checked } }))}
+                    value={newItem.name}
+                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    className="border rounded px-2 py-1"
+                    placeholder="Nom"
                   />
-                  Halal
-                </label>
-              </div>
-              <div className="flex items-center justify-between mt-3">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={item.is_available} onChange={() => toggleAvailability(item)} />
-                  <Badge tone={item.is_available ? "success" : "danger"}>
-                    {item.is_available ? "Disponible" : "Rupture de stock"}
-                  </Badge>
-                </label>
-                <div className="flex gap-2">
-                  <Button onClick={() => saveItem(item)}>Enregistrer</Button>
-                  <Button variant="danger" onClick={() => removeItem(item)}>
-                    Supprimer
+                  <select
+                    value={newItem.category}
+                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
+                    className="border rounded px-2 py-1"
+                  >
+                    {MENU_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={newItem.price}
+                    onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                    className="border rounded px-2 py-1"
+                    placeholder="Prix (DT)"
+                    inputMode="decimal"
+                  />
+                </div>
+                <input
+                  value={newItem.description}
+                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                  className="border rounded px-2 py-1 w-full mt-2"
+                  placeholder="Description (facultatif)"
+                />
+                <input
+                  value={newItem.image_url}
+                  onChange={(e) => setNewItem({ ...newItem, image_url: e.target.value })}
+                  className="border rounded px-2 py-1 w-full mt-2"
+                  placeholder="URL de la photo (facultatif)"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
+                  <select
+                    value={newItem.spiceLevel}
+                    onChange={(e) => setNewItem({ ...newItem, spiceLevel: e.target.value })}
+                    className="border rounded px-2 py-1 text-sm"
+                  >
+                    {SPICE_LABELS.map((label, level) => (
+                      <option key={level} value={level}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={newItem.allergens}
+                    onChange={(e) => setNewItem({ ...newItem, allergens: e.target.value })}
+                    className="border rounded px-2 py-1 text-sm"
+                    placeholder="Allergènes (facultatif, ex : Gluten, Fruits à coque)"
+                  />
+                  <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={newItem.isHalal}
+                      onChange={(e) => setNewItem({ ...newItem, isHalal: e.target.checked })}
+                    />
+                    Halal
+                  </label>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button onClick={addItem}>Ajouter au menu</Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setAddingItem(false);
+                      setNewItem(EMPTY_DRAFT);
+                    }}
+                  >
+                    Annuler
                   </Button>
                 </div>
-              </div>
-            </Card>
-          );
-        })}
-        {items.length === 0 && <EmptyState message="Aucun article pour l'instant." />}
-      </div>
+              </Card>
+            </>
+          ) : (
+            <Button variant="secondary" className="mt-4" onClick={() => setAddingItem(true)}>
+              + Ajouter un article
+            </Button>
+          )}
+        </>
+      )}
 
-      <h2 className="text-base font-semibold mt-8 mb-3">Ajouter un article</h2>
-      <Card padding="sm">
-        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
-          <input
-            value={newItem.name}
-            onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-            className="border rounded px-2 py-1"
-            placeholder="Nom"
-          />
-          <select
-            value={newItem.category}
-            onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-            className="border rounded px-2 py-1"
-          >
-            {MENU_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
+      {activeTab === "tables" && (
+        <>
+          <datalist id="zone-suggestions">
+            {ZONE_SUGGESTIONS.map((z) => (
+              <option key={z} value={z} />
             ))}
-          </select>
-          <input
-            value={newItem.price}
-            onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-            className="border rounded px-2 py-1"
-            placeholder="Prix (DT)"
-            inputMode="decimal"
-          />
-        </div>
-        <input
-          value={newItem.description}
-          onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-          className="border rounded px-2 py-1 w-full mt-2"
-          placeholder="Description (facultatif)"
-        />
-        <input
-          value={newItem.image_url}
-          onChange={(e) => setNewItem({ ...newItem, image_url: e.target.value })}
-          className="border rounded px-2 py-1 w-full mt-2"
-          placeholder="URL de la photo (facultatif)"
-        />
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
-          <select
-            value={newItem.spiceLevel}
-            onChange={(e) => setNewItem({ ...newItem, spiceLevel: e.target.value })}
-            className="border rounded px-2 py-1 text-sm"
-          >
-            {SPICE_LABELS.map((label, level) => (
-              <option key={level} value={level}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <input
-            value={newItem.allergens}
-            onChange={(e) => setNewItem({ ...newItem, allergens: e.target.value })}
-            className="border rounded px-2 py-1 text-sm"
-            placeholder="Allergènes (facultatif, ex : Gluten, Fruits à coque)"
-          />
-          <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+          </datalist>
+
+          <p className="text-sm text-neutral-500 mb-3">
+            Groupez vos tables par zone (intérieur, terrasse, plage...) si votre établissement en a plusieurs —
+            laissez vide sinon.
+          </p>
+          <div className="space-y-2">
+            {tables.map((table) => {
+              const draft = tableDrafts[table.id] ?? tableToDraft(table);
+              return (
+                <Card
+                  key={table.id}
+                  padding="sm"
+                  className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center"
+                >
+                  <input
+                    value={draft.label}
+                    onChange={(e) =>
+                      setTableDrafts((d) => ({ ...d, [table.id]: { ...draft, label: e.target.value } }))
+                    }
+                    className="border rounded px-2 py-1"
+                    placeholder="Nom de la table"
+                  />
+                  <input
+                    value={draft.zone}
+                    onChange={(e) =>
+                      setTableDrafts((d) => ({ ...d, [table.id]: { ...draft, zone: e.target.value } }))
+                    }
+                    list="zone-suggestions"
+                    className="border rounded px-2 py-1"
+                    placeholder="Zone (facultatif)"
+                  />
+                  <Button onClick={() => saveTable(table)}>Enregistrer</Button>
+                </Card>
+              );
+            })}
+            {tables.length === 0 && <EmptyState message="Aucune table pour l'instant." />}
+          </div>
+
+          <h2 className="text-base font-semibold mt-6 mb-3">Ajouter une table</h2>
+          <Card padding="sm" className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
             <input
-              type="checkbox"
-              checked={newItem.isHalal}
-              onChange={(e) => setNewItem({ ...newItem, isHalal: e.target.checked })}
+              value={newTable.label}
+              onChange={(e) => setNewTable({ ...newTable, label: e.target.value })}
+              className="border rounded px-2 py-1"
+              placeholder="Nom de la table (ex : Table 5)"
             />
-            Halal
-          </label>
-        </div>
-        <Button onClick={addItem} className="mt-3">
-          Ajouter au menu
-        </Button>
-      </Card>
+            <input
+              value={newTable.zone}
+              onChange={(e) => setNewTable({ ...newTable, zone: e.target.value })}
+              list="zone-suggestions"
+              className="border rounded px-2 py-1"
+              placeholder="Zone (facultatif)"
+            />
+            <Button onClick={addTable}>Ajouter la table</Button>
+          </Card>
+        </>
+      )}
 
-      <datalist id="zone-suggestions">
-        {ZONE_SUGGESTIONS.map((z) => (
-          <option key={z} value={z} />
-        ))}
-      </datalist>
-
-      <h2 className="text-base font-semibold mt-8 mb-1">Tables &amp; zones de salle</h2>
-      <p className="text-sm text-neutral-500 mb-3">
-        Groupez vos tables par zone (intérieur, terrasse, plage...) si votre établissement en a plusieurs — laissez
-        vide sinon.
-      </p>
-      <div className="space-y-2">
-        {tables.map((table) => {
-          const draft = tableDrafts[table.id] ?? tableToDraft(table);
-          return (
-            <Card key={table.id} padding="sm" className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
-              <input
-                value={draft.label}
-                onChange={(e) =>
-                  setTableDrafts((d) => ({ ...d, [table.id]: { ...draft, label: e.target.value } }))
-                }
-                className="border rounded px-2 py-1"
-                placeholder="Nom de la table"
-              />
-              <input
-                value={draft.zone}
-                onChange={(e) => setTableDrafts((d) => ({ ...d, [table.id]: { ...draft, zone: e.target.value } }))}
-                list="zone-suggestions"
-                className="border rounded px-2 py-1"
-                placeholder="Zone (facultatif)"
-              />
-              <Button onClick={() => saveTable(table)}>Enregistrer</Button>
+      {activeTab === "settings" && (
+        <>
+          {restaurant && (
+            <Card tone="warning" padding="sm" className="mb-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="flex items-center gap-2 font-medium text-amber-900">
+                  <input
+                    type="checkbox"
+                    checked={ramadanEnabled}
+                    onChange={(e) => {
+                      setRamadanEnabled(e.target.checked);
+                      saveRamadanMode(e.target.checked);
+                    }}
+                  />
+                  <MoonIcon className="w-4 h-4 shrink-0" />
+                  Mode Ramadan
+                </label>
+                {ramadanEnabled && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <label htmlFor="iftar-time" className="text-amber-800">
+                      Heure de l&apos;iftar aujourd&apos;hui
+                    </label>
+                    <input
+                      id="iftar-time"
+                      type="datetime-local"
+                      value={iftarInput}
+                      onChange={(e) => setIftarInput(e.target.value)}
+                      onBlur={() => saveRamadanMode(true)}
+                      disabled={savingRamadan}
+                      className="border rounded px-2 py-1"
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-amber-700 mt-2">
+                Une fois activé, les clients peuvent pré-commander pour l&apos;iftar depuis le menu. Pensez à mettre
+                à jour l&apos;heure chaque jour (elle varie). Astuce : classez vos plats de rupture du jeûne dans la
+                catégorie « Ftour » pour qu&apos;ils ressortent bien sur le menu client.
+              </p>
             </Card>
-          );
-        })}
-        {tables.length === 0 && <EmptyState message="Aucune table pour l'instant." />}
-      </div>
+          )}
 
-      <h2 className="text-base font-semibold mt-6 mb-3">Ajouter une table</h2>
-      <Card padding="sm" className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
-        <input
-          value={newTable.label}
-          onChange={(e) => setNewTable({ ...newTable, label: e.target.value })}
-          className="border rounded px-2 py-1"
-          placeholder="Nom de la table (ex : Table 5)"
-        />
-        <input
-          value={newTable.zone}
-          onChange={(e) => setNewTable({ ...newTable, zone: e.target.value })}
-          list="zone-suggestions"
-          className="border rounded px-2 py-1"
-          placeholder="Zone (facultatif)"
-        />
-        <Button onClick={addTable}>Ajouter la table</Button>
-      </Card>
+          {restaurant && (
+            <Card tone="info" padding="sm">
+              <label className="flex items-center gap-2 font-medium text-sky-900">
+                <input
+                  type="checkbox"
+                  checked={cafeModeEnabled}
+                  disabled={savingCafeMode}
+                  onChange={(e) => {
+                    setCafeModeEnabled(e.target.checked);
+                    saveCafeMode(e.target.checked);
+                  }}
+                />
+                <CoffeeIcon className="w-4 h-4 shrink-0" />
+                Mode café simplifié
+              </label>
+              <p className="text-xs text-sky-700 mt-2">
+                Pour un établissement qui ne sert que des boissons : le menu client s&apos;affiche en liste simple,
+                sans regrouper par catégorie (entrées/plats/desserts).
+              </p>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }

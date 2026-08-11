@@ -101,10 +101,10 @@ Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures a
 - [x] État vide du panier illustré — le vrai cas rencontré : un article du panier devient indisponible en temps réel (WS) et le panier se vide silencieusement sans aucune explication (bug UX découvert en implémentant cet item). `EmptyCartIllustration` + message explicite remplacent désormais ce silence (PR #25)
 
 **8.4 — Dashboard manager**
-- [ ] Vue liste compacte + édition en panneau (aujourd'hui : une carte-formulaire complète par plat/table, empilées — illisible sur mobile passé une poignée d'articles)
-- [ ] Miniature photo dans la liste (`image_url` existe déjà en base, jamais utilisée côté dashboard)
-- [ ] Recherche/filtre par catégorie
-- [ ] Onglets (Menu / Tables & zones / Réglages) au lieu d'un défilement qui grandit sans fin
+- [x] Vue liste compacte + édition en panneau — chaque plat est une ligne compacte (miniature, nom, catégorie, prix, statut, bouton "Modifier") ; le clic déplie le formulaire complet dans la même carte, un seul article ouvert à la fois (PR #27)
+- [x] Miniature photo dans la liste — `image_url` affichée en 44×44 avec repli sur une icône `UtensilsIcon` neutre quand l'article n'a pas de photo (PR #27)
+- [x] Recherche/filtre par catégorie — barre de recherche par nom + `<select>` de catégorie au-dessus de la liste (PR #27)
+- [x] Onglets (Menu / Tables & zones / Réglages) — Ramadan et café simplifié déplacés dans « Réglages », le formulaire d'ajout d'article replié derrière un bouton (PR #27)
 
 **8.5 — Écrans serveur & cuisine**
 - [ ] Compteur du jour sur l'écran cuisine (l'état vide actuel est un écran noir sans aucune information)
