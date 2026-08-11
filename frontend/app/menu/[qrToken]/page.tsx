@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, wsUrl, ApiError, MenuItem, Order, OrderStatus, Restaurant, Table } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
+import SplitBill from "@/components/SplitBill";
 
 type CartLine = { item: MenuItem; quantity: number; note: string };
 
@@ -278,6 +279,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {paymentError}
                   </div>
                 )}
+                <SplitBill order={trackedOrder} />
                 <div>
                   <label htmlFor="tip" className="text-sm text-neutral-500">
                     Pourboire (facultatif, pour un paiement par carte)

@@ -46,7 +46,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 - [x] Paiement carte depuis l'app, avec pourboire optionnel — Konnect ciblé, mode simulé pour l'instant (arbitrage Wassim), couvre le prix total (PR #4)
 - [x] Demande de paiement cash depuis l'app (génère l'addition, prévient le serveur concerné) (PR #4)
-- [ ] Partage de l'addition (split bill) : par personne, par plat, ou équitable
+- [x] Partage de l'addition (split bill) : par plat ou équitable — calculateur indicatif, le paiement reste unique pour la table (PR #5)
 
 ## Phase 5 — Spécificités culture tunisienne
 
