@@ -13,8 +13,7 @@ import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { MoonIcon, CoffeeIcon } from "@/components/icons";
-
-const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"];
+import { MENU_CATEGORIES } from "@/lib/menuCategories";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -404,7 +403,7 @@ export default function DashboardPage() {
                   onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, category: e.target.value } }))}
                   className="border rounded px-2 py-1"
                 >
-                  {CATEGORIES.map((c) => (
+                  {MENU_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>
@@ -491,7 +490,7 @@ export default function DashboardPage() {
             onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
             className="border rounded px-2 py-1"
           >
-            {CATEGORIES.map((c) => (
+            {MENU_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
