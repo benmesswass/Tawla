@@ -8,6 +8,7 @@ import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
 import SplitBill from "@/components/SplitBill";
 import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon } from "@/components/icons";
+import Skeleton from "@/components/ui/Skeleton";
 
 const cairo = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700"] });
 
@@ -430,8 +431,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
   if (!table || !restaurant) {
     return (
-      <div dir={dir} className={`p-6 ${wrapperClassName ?? ""}`}>
-        {t.loadingMenu}
+      <div dir={dir} className={`${wrapperClassName ?? ""}`}>
+        <span className="sr-only">{t.loadingMenu}</span>
+        <Skeleton className="h-24 w-full" />
+        <div className="p-4 max-w-md mx-auto space-y-4">
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
       </div>
     );
   }

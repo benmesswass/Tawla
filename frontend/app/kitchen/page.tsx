@@ -13,6 +13,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import { MoonIcon, UtensilsIcon } from "@/components/icons";
+import Skeleton from "@/components/ui/Skeleton";
 
 type KitchenOrder = {
   order_id: number;
@@ -150,7 +151,18 @@ export default function KitchenPage() {
     router.push("/login");
   }
 
-  if (staffLoading || !staff) return null;
+  if (staffLoading || !staff) {
+    return (
+      <div className="p-6 bg-neutral-950 min-h-screen">
+        <Skeleton dark className="h-8 w-48" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+          <Skeleton dark className="h-40 w-full" />
+          <Skeleton dark className="h-40 w-full" />
+          <Skeleton dark className="h-40 w-full" />
+        </div>
+      </div>
+    );
+  }
 
   const scheduledCount = orders.filter((o) => o.scheduled_for).length;
 
