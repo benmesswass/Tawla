@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Order } from "@/lib/api";
+import { fr, type Dictionary } from "@/lib/i18n/fr";
 
 type SplitMode = "equal" | "items";
 
@@ -13,7 +14,7 @@ type SplitMode = "equal" | "items";
  * par commande) — reporté tant qu'un pilote resto réel n'en confirme pas le
  * besoin (cf. philosophie KISS/YAGNI du projet).
  */
-export default function SplitBill({ order }: { order: Order }) {
+export default function SplitBill({ order, t = fr }: { order: Order; t?: Dictionary }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<SplitMode>("equal");
   const [peopleCount, setPeopleCount] = useState(2);
@@ -22,7 +23,7 @@ export default function SplitBill({ order }: { order: Order }) {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} className="text-sm underline text-neutral-600">
-        Partager l&apos;addition entre plusieurs personnes
+        {t.splitBillToggle}
       </button>
     );
   }
@@ -32,9 +33,9 @@ export default function SplitBill({ order }: { order: Order }) {
   return (
     <div className="border rounded-lg p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Partager l&apos;addition</p>
+        <p className="text-sm font-medium">{t.splitBillTitle}</p>
         <button onClick={() => setOpen(false)} className="text-sm text-neutral-500 underline">
-          Fermer
+          {t.close}
         </button>
       </div>
 
@@ -43,18 +44,18 @@ export default function SplitBill({ order }: { order: Order }) {
           onClick={() => setMode("equal")}
           className={`flex-1 rounded-lg py-1.5 border ${mode === "equal" ? "bg-neutral-900 text-white" : ""}`}
         >
-          Équitable
+          {t.splitModeEqual}
         </button>
         <button
           onClick={() => setMode("items")}
           className={`flex-1 rounded-lg py-1.5 border ${mode === "items" ? "bg-neutral-900 text-white" : ""}`}
         >
-          Par plat
+          {t.splitModeByItem}
         </button>
       </div>
 
       <div className="flex items-center gap-2 text-sm">
-        <label htmlFor="split-people-count">Nombre de personnes</label>
+        <label htmlFor="split-people-count">{t.peopleCountLabel}</label>
         <input
           id="split-people-count"
           type="number"
@@ -72,38 +73,38 @@ export default function SplitBill({ order }: { order: Order }) {
             <div key={it.id} className="flex items-center justify-between text-sm gap-2">
               <span className="flex-1">
                 {it.quantity}× {it.menu_item_name}
-                {it.is_shared && <span className="text-amber-700"> · 🍽️ à partager</span>}
+                {it.is_shared && <span className="text-amber-700"> · {t.sharedTag}</span>}
               </span>
               <select
                 value={assignments[it.id] ?? 0}
                 onChange={(e) => setAssignments((prev) => ({ ...prev, [it.id]: Number(e.target.value) }))}
                 className="border rounded px-2 py-1"
               >
-                <option value={0}>Partagé</option>
+                <option value={0}>{t.sharedOption}</option>
                 {Array.from({ length: peopleCount }, (_, i) => i + 1).map((p) => (
                   <option key={p} value={p}>
-                    Personne {p}
+                    {t.personLabel(p)}
                   </option>
                 ))}
               </select>
             </div>
           ))}
-          <p className="text-xs text-neutral-400">Les plats non attribués sont partagés équitablement.</p>
+          <p className="text-xs text-neutral-400">{t.unassignedSharedNote}</p>
         </div>
       )}
 
       <div className="pt-2 border-t space-y-1 text-sm">
         {shares.map((amount, i) => (
           <div key={i} className="flex justify-between">
-            <span>Personne {i + 1}</span>
-            <span className="font-medium">{amount.toFixed(2)} DT</span>
+            <span>{t.personLabel(i + 1)}</span>
+            <span className="font-medium">
+              {amount.toFixed(2)} {t.currency}
+            </span>
           </div>
         ))}
       </div>
 
-      <p className="text-xs text-neutral-500">
-        Indicatif — le paiement se fait pour l&apos;addition complète, une seule fois pour la table.
-      </p>
+      <p className="text-xs text-neutral-500">{t.splitBillDisclaimer}</p>
     </div>
   );
 }

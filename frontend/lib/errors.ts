@@ -32,3 +32,28 @@ export function toFrenchMessage(error: unknown): string {
   }
   return "Une erreur est survenue. Réessayez dans un instant.";
 }
+
+// Sous-ensemble des codes rencontrés côté parcours client (page
+// /menu/[qrToken]) — les codes staff-only (FORBIDDEN, INVALID_CREDENTIALS...)
+// n'ont pas besoin d'arabe, ce parcours ne les déclenche jamais.
+const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
+  INVALID_TABLE_CODE: () => "هاذا الكود ما ينجمش يتعرف على حتى طاولة. إسأل الجرسون يتأكد منه.",
+  TABLE_NOT_FOUND: () => "هاذي الطاولة ما موجودة ش في هاذا المطعم.",
+  ITEM_UNAVAILABLE: (ctx) => `« ${ctx.item_name} » ولات ماشي متوفرة ونحيناها من الطلبية. تنجم تأكد الباقي.`,
+  ITEM_NOT_FOUND: () => "شي أكلة في طلبيتك ما عادش موجودة. المينيو تعاود تحميله.",
+  EMPTY_ORDER: () => "زيد على الأقل أكلة وحدة قبل ما تأكد.",
+  ORDER_NOT_FOUND: () => "هاذي الطلبية ما عادتش موجودة.",
+  INVALID_TRANSITION: () => "هاذي الطلبية تبدل حالتها. الصفحة باش تتجدد.",
+  ALREADY_PAID: () => "هاذي الطلبية تخلصت من قبل.",
+  ORDER_CANCELLED: () => "هاذي الطلبية تلغات، ما عادش ممكن تخلصها.",
+  NO_PENDING_CASH_PAYMENT: () => "ما فماش طلب خلاص كاش قاعد ينتظر لهاذي الطلبية.",
+};
+
+export function toLocalizedMessage(error: unknown, locale: string): string {
+  if (locale !== "ar") return toFrenchMessage(error);
+  if (error instanceof ApiError) {
+    const translate = AR_MESSAGES[error.code];
+    if (translate) return translate(error.context);
+  }
+  return "صار خطأ. عاود جرب من بعد شوية.";
+}
