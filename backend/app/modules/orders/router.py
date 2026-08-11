@@ -48,6 +48,12 @@ async def list_pending_cash_payments(
     return await service.list_pending_cash_payments(db, restaurant_id)
 
 
+@router.post("/{order_id}/push-subscription", status_code=204)
+async def save_push_subscription(order_id: int, payload: schemas.PushSubscriptionIn, db: Session = Depends(get_db)):
+    """Opt-in du client pour être notifié quand SA commande passe "prête" — public."""
+    service.save_push_subscription(db, order_id, payload)
+
+
 @router.post("/{order_id}/pay/card", response_model=schemas.OrderOut)
 async def pay_by_card(order_id: int, payload: schemas.PayCardRequest, db: Session = Depends(get_db)):
     """Paiement carte par le client — mode simulé, public comme la création de commande."""

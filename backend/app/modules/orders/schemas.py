@@ -40,6 +40,11 @@ class PayCardRequest(BaseModel):
     tip_amount: float = Field(default=0, ge=0)
 
 
+class PushSubscriptionIn(BaseModel):
+    endpoint: str
+    keys: dict[str, str]
+
+
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

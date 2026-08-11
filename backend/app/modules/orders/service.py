@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.logging import get_logger, log_event
+from app.core.push import send_push_notification
 from app.modules.loyalty import schemas as loyalty_schemas
 from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
@@ -84,6 +85,20 @@ async def get_order(db: Session, order_id: int) -> Order:
     if not order:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
     return order
+
+
+def save_push_subscription(db: Session, order_id: int, subscription: schemas.PushSubscriptionIn) -> None:
+    """
+    Enregistre l'abonnement Web Push du navigateur qui suit cette commande
+    — opt-in explicite côté client (voir menu/[qrToken]/page.tsx), jamais
+    déclenché automatiquement.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    order.push_subscription = subscription.model_dump_json()
+    db.commit()
 
 
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
@@ -302,6 +317,15 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
             order.restaurant_id, channel="staff",
             message={"event": "order.ready", "order_id": order.id, "table_id": order.table_id},
         )
+        # Le WebSocket ci-dessus ne réveille que l'onglet resté ouvert au
+        # premier plan — la notification push touche aussi le client qui a
+        # quitté la page (best-effort, no-op si pas d'abonnement/clés VAPID).
+        if order.push_subscription:
+            send_push_notification(
+                order.push_subscription,
+                title="Votre commande est prête !",
+                body=f"Commande #{order.id} — un serveur arrive à votre table.",
+            )
 
     # Le client qui a scanné le QR suit sa commande en direct (audit PO —
     # aucune visibilité après "commande envoyée" jusqu'ici).

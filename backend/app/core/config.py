@@ -15,9 +15,14 @@ class Settings(BaseSettings):
     # d'environnement JWT_SECRET). Signe les tokens d'auth staff.
     jwt_secret: str = "dev-only-secret-change-in-production"
 
-    # MVP mono-restaurant : on garde restaurant_id partout dans le modèle
-    # de données pour ne pas avoir à migrer le jour où on ajoute un 2e resto,
-    # mais on ne construit pas encore d'auth multi-tenant / billing (YAGNI).
+    # Notifications push navigateur (Web Push standard, gratuit — pas de
+    # service tiers payant comme un envoi SMS). Vides par défaut : la
+    # fonctionnalité se désactive silencieusement (best-effort, ne bloque
+    # jamais le flux de commande) tant qu'une paire de clés VAPID n'est pas
+    # générée et injectée en variables d'environnement.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_contact_email: str = "contact@tawla.tn"
 
 
 settings = Settings()

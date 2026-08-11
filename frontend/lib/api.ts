@@ -265,6 +265,12 @@ export const api = {
     ),
   redeemLoyaltyReward: (memberId: number) =>
     request<LoyaltyMember>(`/api/v1/loyalty/${memberId}/redeem`, { method: "POST" }),
+  getVapidPublicKey: () => request<{ public_key: string }>("/api/v1/notifications/vapid-public-key"),
+  savePushSubscription: (orderId: number, subscription: PushSubscriptionJSON) =>
+    request<void>(`/api/v1/orders/${orderId}/push-subscription`, {
+      method: "POST",
+      body: JSON.stringify(subscription),
+    }),
 };
 
 export function wsUrl(path: string): string {

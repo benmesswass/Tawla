@@ -81,6 +81,10 @@ export const fr = {
     `🎁 Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
   loyaltyRewardAvailable: "🎉 Récompense disponible ! Montrez cet écran à votre serveur.",
   loyaltyBirthdayBanner: "🎂 Bon anniversaire ! Demandez votre réduction spéciale au serveur.",
+
+  pushSubscribeButton: "🔔 Me notifier quand c'est prêt",
+  pushSubscribed: "🔔 Vous serez notifié dès que votre commande sera prête.",
+  pushDenied: "Notifications bloquées — activez-les dans les réglages de votre navigateur si vous changez d'avis.",
 };
 
 export type Dictionary = typeof fr;

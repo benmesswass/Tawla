@@ -74,6 +74,13 @@ class Order(Base):
     # jamais à la création : une commande annulée ne doit rien faire gagner.
     loyalty_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
+    # Abonnement Web Push du navigateur qui suit CETTE commande (JSON brut
+    # du PushSubscription, opt-in côté client) — pas une identité
+    # persistante, juste "ce téléphone-ci veut être notifié pour cette
+    # commande-ci". Utilisé pour prévenir le client quand elle passe "prête"
+    # même s'il a quitté l'onglet (voir orders/service.py::transition_status).
+    push_subscription: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     taken_by: Mapped["Staff | None"] = relationship()
 

@@ -35,6 +35,15 @@ function loyaltyPhoneStorageKey(restaurantId: number): string {
   return `resto-qr-menu:loyalty-phone:${restaurantId}`;
 }
 
+// Web Push exige la clé VAPID en Uint8Array, pas en base64url brut —
+// conversion standard, aucune lib externe nécessaire pour ça.
+function urlBase64ToUint8Array(base64url: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
+  const base64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
 type CreateOrderPayload = Parameters<typeof api.createOrder>[0];
 
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
@@ -61,6 +70,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [loyaltyPhone, setLoyaltyPhone] = useState("");
   const [loyaltyBirthDate, setLoyaltyBirthDate] = useState("");
   const [loyaltyStatus, setLoyaltyStatus] = useState<LoyaltyMember | null>(null);
+  const [pushState, setPushState] = useState<
+    "idle" | "subscribing" | "subscribed" | "unsupported" | "denied" | "error"
+  >("idle");
 
   function formatTime(iso: string): string {
     return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
@@ -165,6 +177,42 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     } catch {
       // Vérification de statut best-effort — une erreur ici ne doit jamais
       // bloquer la commande, qui reste possible sans numéro fidélité.
+    }
+  }
+
+  // Opt-in explicite pour être notifié quand la commande passe "prête" —
+  // touche le client même s'il a quitté l'onglet, contrairement au suivi
+  // WebSocket seul (voir public/sw.js pour la réception côté navigateur).
+  async function subscribeToPush() {
+    if (!trackedOrder) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      setPushState("unsupported");
+      return;
+    }
+
+    setPushState("subscribing");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState(permission === "denied" ? "denied" : "idle");
+        return;
+      }
+
+      const { public_key } = await api.getVapidPublicKey();
+      if (!public_key) {
+        setPushState("unsupported");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(public_key),
+      });
+      await api.savePushSubscription(trackedOrder.id, subscription.toJSON() as PushSubscriptionJSON);
+      setPushState("subscribed");
+    } catch {
+      setPushState("error");
     }
   }
 
@@ -435,6 +483,27 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {t.dedicatedServer(trackedOrder.taken_by_staff_name)}
           </p>
         )}
+
+        {!cancelled &&
+          trackedOrder.status !== "ready" &&
+          trackedOrder.status !== "served" &&
+          pushState !== "unsupported" && (
+            <div className="mt-4 text-center">
+              {pushState === "subscribed" ? (
+                <p className="text-sm text-emerald-700">{t.pushSubscribed}</p>
+              ) : pushState === "denied" ? (
+                <p className="text-sm text-neutral-500">{t.pushDenied}</p>
+              ) : (
+                <button
+                  onClick={subscribeToPush}
+                  disabled={pushState === "subscribing"}
+                  className="text-sm border border-neutral-300 rounded-lg px-3 py-1.5 disabled:opacity-70"
+                >
+                  {pushState === "subscribing" ? t.sending : t.pushSubscribeButton}
+                </button>
+              )}
+            </div>
+          )}
 
         {!cancelled && trackedOrder.loyalty_phone && loyaltyStatus && (
           <div className="mt-4 text-sm text-center bg-orange-50 text-orange-900 border border-orange-200 rounded-lg py-2 px-3">

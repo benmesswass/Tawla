@@ -79,4 +79,8 @@ export const ar = {
   loyaltyProgress: (count, remaining) => `🎁 عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
   loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",
   loyaltyBirthdayBanner: "🎂 عيد ميلاد سعيد! اطلب التخفيض الخاص من الجرسون.",
+
+  pushSubscribeButton: "🔔 عرفني كي تكون لاهية",
+  pushSubscribed: "🔔 باش تتعرف كي الطلبية تكون لاهية.",
+  pushDenied: "الإشعارات موقوفة — نجم تفعّلها من إعدادات المتصفح إذا بدّلت رايك.",
 } satisfies Dictionary;
