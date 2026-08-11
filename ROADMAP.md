@@ -94,11 +94,11 @@ Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures a
 - [x] Skeletons de chargement — composant `Skeleton` (`frontend/components/ui/`, variant `dark` pour l'écran cuisine) remplaçant les écrans "Chargement…"/blancs sur `dashboard`, `staff`, `kitchen`, `dashboard/stats` et le menu client (PR #24)
 
 **8.3 — Parcours client**
-- [ ] Moment de célébration à la validation de commande (le pic émotionnel du parcours est traité comme un changement d'écran neutre aujourd'hui)
-- [ ] Retour visuel à l'ajout au panier (geste le plus répété du produit, aucun feedback au-delà d'un chiffre qui change)
-- [ ] Timeline de suivi redessinée (les 6 étapes sont une liste à puces ; l'attente cuisine, souvent 10-20 min, mérite mieux)
+- [x] Moment de célébration à la validation de commande — `CelebrationOverlay` (confetti + coche animée, `frontend/components/`), déclenché uniquement sur une validation fraîche (pas sur une reprise de suivi après reload), auto-disparition après 1,8 s, `prefers-reduced-motion` respecté (PR #25)
+- [x] Retour visuel à l'ajout au panier — animation de rebond sur le compteur de quantité + retour tactile (`active:scale-90`) sur le bouton "+" (PR #25)
+- [x] Timeline de suivi redessinée — ligne de connexion verticale, étape courante mise en avant (anneau pulsant), étapes complétées cochées en menthe ; indication de délai ("généralement 10 à 20 minutes") affichée sous l'étape courante quand la commande est en cuisine/en préparation (PR #25)
 - [ ] Catégories de menu bilingues prédéfinies — corrige au passage un bug i18n relevé à l'audit : `MenuItem.category` en texte libre français s'affiche tel quel même en vue arabe ("Entrées" mal coupé en RTL)
-- [ ] État vide du panier illustré
+- [x] État vide du panier illustré — le vrai cas rencontré : un article du panier devient indisponible en temps réel (WS) et le panier se vide silencieusement sans aucune explication (bug UX découvert en implémentant cet item). `EmptyCartIllustration` + message explicite remplacent désormais ce silence (PR #25)
 
 **8.4 — Dashboard manager**
 - [ ] Vue liste compacte + édition en panneau (aujourd'hui : une carte-formulaire complète par plat/table, empilées — illisible sur mobile passé une poignée d'articles)

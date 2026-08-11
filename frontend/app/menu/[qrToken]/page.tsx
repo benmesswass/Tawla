@@ -9,6 +9,8 @@ import { useLocale } from "@/lib/i18n/useLocale";
 import SplitBill from "@/components/SplitBill";
 import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
+import CelebrationOverlay from "@/components/CelebrationOverlay";
+import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
 
 const cairo = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700"] });
 
@@ -75,6 +77,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [pushState, setPushState] = useState<
     "idle" | "subscribing" | "subscribed" | "unsupported" | "denied" | "error"
   >("idle");
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [bumpedItemId, setBumpedItemId] = useState<number | null>(null);
+  const [cartClearedNotice, setCartClearedNotice] = useState(false);
 
   function formatTime(iso: string): string {
     return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
@@ -158,6 +163,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     window.addEventListener("online", flushOfflineQueue);
     return () => window.removeEventListener("online", flushOfflineQueue);
   }, [flushOfflineQueue]);
+
+  useEffect(() => {
+    if (!showCelebration) return;
+    const timer = setTimeout(() => setShowCelebration(false), 1800);
+    return () => clearTimeout(timer);
+  }, [showCelebration]);
 
   // Carte de fidélité — pré-remplit le numéro déjà utilisé sur ce resto
   // (évite de le retaper à chaque visite), sans jamais le rendre obligatoire.
@@ -256,6 +267,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           if (!prev[msg.menu_item_id]) return prev;
           const next = { ...prev };
           delete next[msg.menu_item_id];
+          if (Object.keys(next).length === 0) {
+            setCartClearedNotice(true);
+          }
           return next;
         });
       }
@@ -330,6 +344,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         },
       };
     });
+    setCartClearedNotice(false);
+    setBumpedItemId(item.id);
+    setTimeout(() => setBumpedItemId((cur) => (cur === item.id ? null : cur)), 300);
   }
 
   function removeFromCart(itemId: number) {
@@ -377,6 +394,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       setTrackedOrder(order);
       setCart({});
       setPreOrderForIftar(false);
+      setShowCelebration(true);
     } catch (e) {
       // Échec réseau (pas une réponse de l'API, ex: connexion mobile coupée
       // en pleine validation) : on garde la commande de côté sur le téléphone
@@ -467,7 +485,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     const currentStepIndex = STEP_STATUSES.indexOf(trackedOrder.status as StepStatus);
     const cancelled = trackedOrder.status === "cancelled";
     return (
-      <div dir={dir} className={`p-6 max-w-md mx-auto ${wrapperClassName ?? ""}`}>
+      <>
+        {showCelebration && <CelebrationOverlay />}
+        <div dir={dir} className={`p-6 max-w-md mx-auto ${wrapperClassName ?? ""}`}>
         <h1 className="text-xl font-semibold text-center">
           {cancelled ? t.orderCancelledTitle : t.orderSentTitle}
         </h1>
@@ -555,21 +575,45 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
 
         {!cancelled && (
-          <ol className="mt-8 space-y-4">
+          <ol className="mt-8">
             {STEP_STATUSES.map((status, i) => {
-              const done = i <= currentStepIndex;
+              const done = i < currentStepIndex;
+              const current = i === currentStepIndex;
+              const isLast = i === STEP_STATUSES.length - 1;
+              const showWaitHint = current && (status === "sent_to_kitchen" || status === "in_preparation");
               return (
-                <li key={status} className="flex items-center gap-3">
+                <li key={status} className="relative ps-10 pb-6 last:pb-0">
+                  {!isLast && (
+                    <span
+                      className="absolute top-7 bottom-0 w-0.5 start-[15px]"
+                      style={{ backgroundColor: done ? "var(--menthe)" : "var(--line)" }}
+                    />
+                  )}
                   <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
-                      done ? "bg-amber-600 text-white" : "bg-neutral-200 text-neutral-500"
+                    className={`absolute top-0 start-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${
+                      current ? "animate-pulse-ring" : ""
                     }`}
+                    style={{
+                      backgroundColor: done || current ? "var(--menthe)" : "var(--semoule-raised)",
+                      color: done || current ? "white" : "var(--ink-soft)",
+                      border: done || current ? "none" : "1px solid var(--line)",
+                    }}
                   >
                     {done ? "✓" : i + 1}
                   </span>
-                  <span className={done ? "font-medium text-neutral-900" : "text-neutral-400"}>
-                    {t.steps[status]}
-                  </span>
+                  <div className="pt-1">
+                    <span
+                      className={current || done ? "font-semibold" : "text-neutral-400"}
+                      style={{ color: current ? "var(--encre)" : done ? "var(--menthe)" : undefined }}
+                    >
+                      {t.steps[status]}
+                    </span>
+                    {showWaitHint && (
+                      <p className="text-xs mt-0.5" style={{ color: "var(--ink-soft)" }}>
+                        {t.kitchenWaitHint}
+                      </p>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -659,7 +703,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         <button onClick={orderAgain} className="mt-8 w-full border border-neutral-300 rounded-lg py-2.5">
           {t.orderAgain}
         </button>
-      </div>
+        </div>
+      </>
     );
   }
 
@@ -711,13 +756,19 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 >
                   -
                 </button>
-                <span>{cart[item.id].quantity}</span>
+                <span
+                  className={`inline-block min-w-[1.5rem] text-center ${
+                    bumpedItemId === item.id ? "animate-cart-bump" : ""
+                  }`}
+                >
+                  {cart[item.id].quantity}
+                </span>
               </>
             )}
             <button
               onClick={() => addToCart(item)}
               aria-label={t.addToCartAria(item.name)}
-              className="w-8 h-8 rounded-full bg-neutral-900 text-white"
+              className="w-8 h-8 rounded-full bg-neutral-900 text-white transition-transform active:scale-90"
             >
               +
             </button>
@@ -891,6 +942,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   {sending ? t.sending : t.validateOrder}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {cartLines.length === 0 && cartClearedNotice && (
+          <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+            <div className="max-w-md mx-auto flex items-center gap-3">
+              <EmptyCartIllustration className="w-10 h-10 shrink-0 text-neutral-400" />
+              <p className="text-sm text-neutral-600 flex-1">{t.cartClearedNotice}</p>
+              <button
+                onClick={() => setCartClearedNotice(false)}
+                aria-label={t.closeErrorAria}
+                className="text-neutral-400 shrink-0"
+              >
+                ✕
+              </button>
             </div>
           </div>
         )}

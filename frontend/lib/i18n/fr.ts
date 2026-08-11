@@ -41,6 +41,7 @@ export const fr = {
     ready: "Prête",
     served: "Servie",
   },
+  kitchenWaitHint: "Généralement 10 à 20 minutes selon l'affluence.",
 
   orderDetailsTitle: "Détail de la commande",
   sharedTag: "à partager",
@@ -85,6 +86,9 @@ export const fr = {
   pushSubscribeButton: "Me notifier quand c'est prêt",
   pushSubscribed: "Vous serez notifié dès que votre commande sera prête.",
   pushDenied: "Notifications bloquées — activez-les dans les réglages de votre navigateur si vous changez d'avis.",
+
+  cartClearedNotice:
+    "Un article de votre panier n'est plus disponible et a été retiré. Votre panier est maintenant vide.",
 };
 
 export type Dictionary = typeof fr;
