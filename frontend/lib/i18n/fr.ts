@@ -89,6 +89,10 @@ export const fr = {
 
   cartClearedNotice:
     "Un article de votre panier n'est plus disponible et a été retiré. Votre panier est maintenant vide.",
+
+  shareOrderButton: "Partager ma commande",
+  shareCardTitle: (restaurantName: string) => `Mon repas chez ${restaurantName}`,
+  shareCardText: "Commandé sur Tawla 🍽️",
 };
 
 export type Dictionary = typeof fr;

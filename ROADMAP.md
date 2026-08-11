@@ -112,6 +112,6 @@ Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures a
 - [x] Retour sonore optionnel à l'arrivée d'une commande en cuisine — `Restaurant.kitchen_sound_enabled` (défaut désactivé), toggle dans Réglages du dashboard, bip synthétisé en Web Audio côté écran cuisine (aucun fichier audio) ; limite documentée : certains navigateurs bloquent le tout premier son tant qu'aucune interaction n'a eu lieu sur l'écran cuisine (politique autoplay, pas un bug) (PR #28)
 
 **8.6 — Idées "fun" différenciantes** (après 8.1-8.2 : héritent d'une identité cohérente plutôt que d'être des gadgets isolés)
-- [ ] Mini-fait culturel ou anecdote sur le plat pendant l'attente cuisine
-- [ ] Carte de fidélité visuelle façon carte à tamponner (aujourd'hui : juste un texte "3 commandes, encore 7")
-- [ ] Partage social du plat commandé (carte visuelle générée pour Instagram/WhatsApp Status — fort effet bouche-à-oreille pour le pilote)
+- [x] Mini-fait culturel ou anecdote pendant l'attente cuisine — 8 anecdotes vérifiées (UNESCO couscous/harissa, thé à la menthe, brik, tajine tunisien, huile d'olive, lablabi, dattes Deglet Nour), `frontend/lib/culturalFacts.ts`, rotation toutes les 8s pendant "en cuisine"/"en préparation", fr/ar (PR #29)
+- [x] Carte de fidélité visuelle façon carte à tamponner — `LoyaltyStampCard` (rangée de 10 jetons, remplis en harissa puis en laiton une fois la récompense débloquée) remplace le texte brut sur les deux écrans où la fidélité s'affichait côté client (PR #29)
+- [x] Partage social de la commande — carte visuelle 1080×1920 générée sur `<canvas>` (`frontend/lib/shareCard.ts`, dégradé de marque + nom du resto + plats commandés, aucune image externe), bouton "Partager ma commande" utilisant la Web Share API (fichiers) avec repli sur téléchargement direct si indisponible, fr/ar (PR #29)

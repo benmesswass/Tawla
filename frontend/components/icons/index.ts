@@ -6,3 +6,4 @@ export { default as BellIcon } from "./BellIcon";
 export { default as CoffeeIcon } from "./CoffeeIcon";
 export { default as FlameIcon } from "./FlameIcon";
 export { default as WifiOffIcon } from "./WifiOffIcon";
+export { default as ShareIcon } from "./ShareIcon";

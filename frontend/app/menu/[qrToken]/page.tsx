@@ -8,10 +8,13 @@ import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import SplitBill from "@/components/SplitBill";
-import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon } from "@/components/icons";
+import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon, ShareIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
 import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
+import LoyaltyStampCard from "@/components/LoyaltyStampCard";
+import { CULTURAL_FACTS } from "@/lib/culturalFacts";
+import { generateShareCardBlob } from "@/lib/shareCard";
 
 const cairo = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700"] });
 
@@ -81,12 +84,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [showCelebration, setShowCelebration] = useState(false);
   const [bumpedItemId, setBumpedItemId] = useState<number | null>(null);
   const [cartClearedNotice, setCartClearedNotice] = useState(false);
+  const [culturalFactIndex, setCulturalFactIndex] = useState(0);
+  const [sharingOrder, setSharingOrder] = useState(false);
 
   function formatTime(iso: string): string {
     return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  // Nombre de tampons remplis pour la carte de fidélité visuelle : le cycle
+  // repart de 0 après chaque récompense (order_count % 10), sauf pile au
+  // moment où la récompense vient d'être débloquée (multiple de 10 exact) —
+  // là, la carte doit apparaître pleine, pas vide.
+  function loyaltyStampsFilled(status: LoyaltyMember): number {
+    if (status.reward_available) return 10;
+    return status.order_count % 10;
   }
 
   const load = useCallback(() => {
@@ -170,6 +184,18 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     const timer = setTimeout(() => setShowCelebration(false), 1800);
     return () => clearTimeout(timer);
   }, [showCelebration]);
+
+  // Anecdote culturelle qui tourne pendant l'attente cuisine (10-20 min en
+  // moyenne) — un petit plus pendant l'attente plutôt qu'un écran silencieux.
+  const inKitchenWait =
+    trackedOrder?.status === "sent_to_kitchen" || trackedOrder?.status === "in_preparation";
+  useEffect(() => {
+    if (!inKitchenWait) return;
+    const timer = setInterval(() => {
+      setCulturalFactIndex((i) => (i + 1) % CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"].length);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [inKitchenWait, locale]);
 
   // Carte de fidélité — pré-remplit le numéro déjà utilisé sur ce resto
   // (évite de le retaper à chaque visite), sans jamais le rendre obligatoire.
@@ -435,6 +461,40 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     sessionStorage.removeItem(lastOrderStorageKey(qrToken));
   }
 
+  // Carte de partage social (Instagram/WhatsApp Status) — générée
+  // entièrement côté client sur <canvas>, sans backend ni service tiers.
+  // Web Share API quand elle supporte les fichiers, sinon téléchargement.
+  async function shareOrder() {
+    if (!trackedOrder || !restaurant) return;
+    setSharingOrder(true);
+    try {
+      const blob = await generateShareCardBlob({
+        restaurantName: restaurant.name,
+        items: trackedOrder.items.map((it) => ({ name: it.menu_item_name, quantity: it.quantity })),
+        locale: locale === "ar" ? "ar" : "fr",
+      });
+      if (!blob) return;
+      const file = new File([blob], "ma-commande-tawla.png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: t.shareCardTitle(restaurant.name), text: t.shareCardText });
+          return;
+        } catch {
+          // Partage annulé par le client ou API refusée — on retombe sur le
+          // téléchargement direct plutôt que de laisser un écran bloqué.
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ma-commande-tawla.png";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setSharingOrder(false);
+    }
+  }
+
   const dir = t.dir;
   const wrapperClassName = locale === "ar" ? cairo.className : undefined;
 
@@ -557,11 +617,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           )}
 
         {!cancelled && trackedOrder.loyalty_phone && loyaltyStatus && (
-          <div className="mt-4 text-sm text-center bg-orange-50 text-orange-900 border border-orange-200 rounded-lg py-2 px-3">
+          <div className="mt-4 text-sm text-center bg-orange-50 text-orange-900 border border-orange-200 rounded-lg py-3 px-3">
+            <LoyaltyStampCard
+              filled={loyaltyStampsFilled(loyaltyStatus)}
+              rewardAvailable={loyaltyStatus.reward_available}
+            />
             {loyaltyStatus.reward_available ? (
-              <p className="font-medium">{t.loyaltyRewardAvailable}</p>
+              <p className="font-medium mt-2">{t.loyaltyRewardAvailable}</p>
             ) : (
-              <p className="flex items-center justify-center gap-1.5">
+              <p className="flex items-center justify-center gap-1.5 mt-2">
                 <GiftIcon className="w-4 h-4 shrink-0" />
                 {t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}
               </p>
@@ -619,6 +683,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               );
             })}
           </ol>
+        )}
+
+        {!cancelled && inKitchenWait && (
+          <div
+            className="mt-4 text-sm rounded-lg py-2.5 px-3 flex items-start gap-2"
+            style={{ backgroundColor: "var(--semoule)", border: "1px solid var(--line)", color: "var(--encre)" }}
+          >
+            <FlameIcon className="w-4 h-4 shrink-0 mt-0.5 text-[var(--laiton)]" />
+            <span>{CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"][culturalFactIndex]}</span>
+          </div>
         )}
 
         <div className="mt-8 border-t pt-4">
@@ -701,7 +775,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
         )}
 
-        <button onClick={orderAgain} className="mt-8 w-full border border-neutral-300 rounded-lg py-2.5">
+        <button
+          onClick={shareOrder}
+          disabled={sharingOrder}
+          className="mt-8 w-full border border-neutral-300 rounded-lg py-2.5 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+        >
+          <ShareIcon className="w-4 h-4 shrink-0" />
+          {t.shareOrderButton}
+        </button>
+
+        <button onClick={orderAgain} className="mt-3 w-full border border-neutral-300 rounded-lg py-2.5">
           {t.orderAgain}
         </button>
         </div>
@@ -886,10 +969,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </label>
               {loyaltyStatus && (
                 <div className="text-sm text-orange-900 pt-1">
+                  <LoyaltyStampCard
+                    filled={loyaltyStampsFilled(loyaltyStatus)}
+                    rewardAvailable={loyaltyStatus.reward_available}
+                  />
                   {loyaltyStatus.reward_available ? (
-                    <p className="font-medium">{t.loyaltyRewardAvailable}</p>
+                    <p className="font-medium mt-2">{t.loyaltyRewardAvailable}</p>
                   ) : (
-                    <p className="flex items-center gap-1.5">
+                    <p className="flex items-center gap-1.5 mt-2">
                       <GiftIcon className="w-4 h-4 shrink-0" />
                       {t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}
                     </p>
