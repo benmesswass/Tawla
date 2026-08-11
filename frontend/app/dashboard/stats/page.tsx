@@ -7,6 +7,7 @@ import { api, DashboardStats, Order, OrderStatus } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
+import Skeleton from "@/components/ui/Skeleton";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   pending_confirmation: "En attente de confirmation",
@@ -119,7 +120,17 @@ export default function DashboardStatsPage() {
     router.push("/login");
   }
 
-  if (staffLoading || !staff) return null;
+  if (staffLoading || !staff) {
+    return (
+      <div className="p-4 max-w-4xl mx-auto space-y-3">
+        <Skeleton className="h-6 w-56" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    );
+  }
 
   const ordersByStatus = ACTIVE_STATUS_ORDER.map((status) => ({
     status,
@@ -168,7 +179,10 @@ export default function DashboardStatsPage() {
       {error && <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
 
       {!stats ? (
-        <p className="text-neutral-500">Chargement…</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <section className="border rounded-lg p-4">

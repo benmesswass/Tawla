@@ -11,6 +11,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import Skeleton from "@/components/ui/Skeleton";
 import { MoonIcon, CoffeeIcon } from "@/components/icons";
 
 const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"];
@@ -282,7 +283,19 @@ export default function DashboardPage() {
     }
   }
 
-  if (staffLoading || !staff) return null;
+  if (staffLoading || !staff) {
+    return (
+      <div className="p-4 max-w-3xl mx-auto space-y-3">
+        <Skeleton className="h-6 w-64" />
+        <Skeleton className="h-4 w-96 max-w-full" />
+        <Skeleton className="h-24 w-full mt-4" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-32 w-full mt-4" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 max-w-3xl mx-auto">

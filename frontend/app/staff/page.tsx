@@ -12,6 +12,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
+import Skeleton from "@/components/ui/Skeleton";
 
 type PendingOrder = {
   order_id: number;
@@ -279,7 +280,17 @@ export default function StaffPage() {
     router.push("/login");
   }
 
-  if (staffLoading || !staff) return null;
+  if (staffLoading || !staff) {
+    return (
+      <div className="p-4 max-w-md mx-auto space-y-3">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-20 w-full mt-4" />
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-20 w-full" />
+      </div>
+    );
+  }
 
   // Chaque serveur ne voit que les demandes de paiement de ses propres
   // tables (celles qu'il a prises en charge) — le manager voit tout.
