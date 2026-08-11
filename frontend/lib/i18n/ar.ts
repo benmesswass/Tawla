@@ -86,4 +86,8 @@ export const ar = {
   pushDenied: "الإشعارات موقوفة — نجم تفعّلها من إعدادات المتصفح إذا بدّلت رايك.",
 
   cartClearedNotice: "أكلة من القفة تاعك ماعادتش موجودة ونحاتلك. القفة تاعك دلوقتي فاضية.",
+
+  shareOrderButton: "شارك الطلبية تاعك",
+  shareCardTitle: (restaurantName) => `الماكلة تاعي عند ${restaurantName}`,
+  shareCardText: "طلبت من Tawla 🍽️",
 } satisfies Dictionary;
