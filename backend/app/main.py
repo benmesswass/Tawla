@@ -12,6 +12,7 @@ from app.modules.staff.router import router as staff_router
 from app.modules.stats.router import router as stats_router
 from app.modules.tables.router import router as tables_router
 from app.modules.tenants.router import router as tenants_router
+from app.modules.waiter_calls.router import router as waiter_calls_router
 
 
 @asynccontextmanager
@@ -41,6 +42,7 @@ app.include_router(menu_router)
 app.include_router(orders_router)
 app.include_router(stats_router)
 app.include_router(notifications_router)
+app.include_router(waiter_calls_router)
 
 
 @app.get("/health")

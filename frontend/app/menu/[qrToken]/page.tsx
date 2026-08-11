@@ -43,6 +43,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
+  const [waiterCallState, setWaiterCallState] = useState<"idle" | "calling" | "called">("idle");
+  const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
 
   function formatTime(iso: string): string {
     return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
@@ -136,6 +138,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       setPaymentError(toLocalizedMessage(e, locale));
     } finally {
       setPaying(false);
+    }
+  }
+
+  async function callWaiter() {
+    if (!table || waiterCallState !== "idle") return;
+    setWaiterCallState("calling");
+    setWaiterCallError(null);
+    try {
+      await api.callWaiter(table.restaurant_id, table.id);
+      setWaiterCallState("called");
+      // Cooldown le temps qu'un serveur arrive réellement à table — évite le
+      // spam de clics sans avoir besoin d'un canal temps réel côté client.
+      setTimeout(() => setWaiterCallState("idle"), 90_000);
+    } catch (e) {
+      setWaiterCallError(toLocalizedMessage(e, locale));
+      setWaiterCallState("idle");
     }
   }
 
@@ -254,6 +272,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {cancelled ? t.orderCancelledTitle : t.orderSentTitle}
         </h1>
         <p className="mt-2 text-neutral-600 text-center">{t.orderSubtitle(table.label, trackedOrder.id)}</p>
+
+        <div className="mt-4 text-center">
+          <button
+            onClick={callWaiter}
+            disabled={waiterCallState !== "idle"}
+            className="text-sm border border-neutral-300 rounded-lg px-3 py-1.5 disabled:opacity-70"
+          >
+            {waiterCallState === "called" ? t.callWaiterSent : t.callWaiterButton}
+          </button>
+          {waiterCallError && <p className="mt-2 text-sm text-red-600">{waiterCallError}</p>}
+        </div>
 
         {!cancelled && trackedOrder.scheduled_for && (
           <p className="mt-4 text-sm text-center bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3">
@@ -382,12 +411,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           <h1 className="text-xl font-semibold">{restaurant.name}</h1>
           <p className="text-amber-100 text-sm">{table.label}</p>
         </div>
-        <button
-          onClick={toggleLocale}
-          className="shrink-0 text-sm border border-amber-300 rounded-lg px-3 py-1.5 text-amber-50"
-        >
-          {t.localeSwitchLabel}
-        </button>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <button
+            onClick={toggleLocale}
+            className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 text-amber-50"
+          >
+            {t.localeSwitchLabel}
+          </button>
+          <button
+            onClick={callWaiter}
+            disabled={waiterCallState !== "idle"}
+            className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 text-amber-50 disabled:opacity-70 whitespace-nowrap"
+          >
+            {waiterCallState === "called" ? t.callWaiterSent : t.callWaiterButton}
+          </button>
+        </div>
       </header>
 
       {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
@@ -397,6 +435,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       )}
 
       <div className="p-4 max-w-md mx-auto">
+        {waiterCallError && (
+          <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">
+            {waiterCallError}
+          </div>
+        )}
         {orderError && (
           <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 flex justify-between items-start gap-2">
             <span>{orderError}</span>
