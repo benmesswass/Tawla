@@ -415,8 +415,19 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 <div key={item.id} className="border-b py-3">
                   <div className="flex justify-between items-center">
                     <div className="pe-3">
-                      <div className="font-medium">{item.name}</div>
+                      <div className="font-medium">
+                        {item.name}
+                        {item.spice_level > 0 && <span className="ms-1">{"🌶️".repeat(item.spice_level)}</span>}
+                        {!item.is_halal && (
+                          <span className="ms-1 text-xs font-normal text-red-600 border border-red-200 rounded px-1 align-middle">
+                            {t.notHalalBadge}
+                          </span>
+                        )}
+                      </div>
                       {item.description && <div className="text-sm text-neutral-500">{item.description}</div>}
+                      {item.allergens && (
+                        <div className="text-xs text-neutral-400 mt-0.5">{t.allergensLabel(item.allergens)}</div>
+                      )}
                       <div className="text-sm text-neutral-500 mt-0.5">
                         {item.price.toFixed(2)} {t.currency}
                       </div>

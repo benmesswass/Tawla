@@ -17,6 +17,8 @@ export const ar = {
     `🌙 رمضان مبارك — الفطور على الساعة ${time}. تنجم تطلب دلوقتي للفطور، الأكلة تكون لاهية وقتها.`,
   addToCartAria: (name) => `زيد ${name} للقفة`,
   removeFromCartAria: (name) => `نقّص ${name} من القفة`,
+  allergensLabel: (allergens) => `مسببات الحساسية: ${allergens}`,
+  notHalalBadge: "مش حلال",
   notePlaceholder: "ملاحظة للكوجينة (إختياري، مثال: بلا بصل)",
   sharedCheckboxLabel: "🍽️ أكلة نتقاسموها في الطاولة الكل",
   preorderCheckboxLabel: (time) => `🌙 نطلب للفطور (${time}) بدل دلوقتي`,

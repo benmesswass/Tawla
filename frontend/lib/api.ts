@@ -11,6 +11,9 @@ export type MenuItem = {
   price: number;
   is_available: boolean;
   image_url: string | null;
+  spice_level: number;
+  allergens: string | null;
+  is_halal: boolean;
 };
 
 export type Table = {
@@ -156,10 +159,18 @@ export const api = {
     category?: string;
     price: number;
     image_url?: string | null;
+    spice_level?: number;
+    allergens?: string | null;
+    is_halal?: boolean;
   }) => request<MenuItem>("/api/v1/menu-items", { method: "POST", body: JSON.stringify(payload) }),
   updateMenuItem: (
     itemId: number,
-    payload: Partial<Pick<MenuItem, "name" | "description" | "category" | "price" | "image_url">>
+    payload: Partial<
+      Pick<
+        MenuItem,
+        "name" | "description" | "category" | "price" | "image_url" | "spice_level" | "allergens" | "is_halal"
+      >
+    >
   ) => request<MenuItem>(`/api/v1/menu-items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   setMenuItemAvailability: (itemId: number, isAvailable: boolean) =>
     request<MenuItem>(`/api/v1/menu-items/${itemId}/availability`, {

@@ -24,7 +24,18 @@ function localInputToIso(value: string): string | null {
   return new Date(value).toISOString();
 }
 
-type Draft = { name: string; category: string; price: string; description: string; image_url: string };
+type Draft = {
+  name: string;
+  category: string;
+  price: string;
+  description: string;
+  image_url: string;
+  spiceLevel: string;
+  allergens: string;
+  isHalal: boolean;
+};
+
+const SPICE_LABELS = ["Pas épicé", "🌶️ Léger", "🌶️🌶️ Moyen", "🌶️🌶️🌶️ Fort"];
 
 function itemToDraft(item: MenuItem): Draft {
   return {
@@ -33,10 +44,22 @@ function itemToDraft(item: MenuItem): Draft {
     price: String(item.price),
     description: item.description ?? "",
     image_url: item.image_url ?? "",
+    spiceLevel: String(item.spice_level),
+    allergens: item.allergens ?? "",
+    isHalal: item.is_halal,
   };
 }
 
-const EMPTY_DRAFT: Draft = { name: "", category: "Plats", price: "", description: "", image_url: "" };
+const EMPTY_DRAFT: Draft = {
+  name: "",
+  category: "Plats",
+  price: "",
+  description: "",
+  image_url: "",
+  spiceLevel: "0",
+  allergens: "",
+  isHalal: true,
+};
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -112,6 +135,9 @@ export default function DashboardPage() {
         price,
         description: draft.description.trim() || null,
         image_url: draft.image_url.trim() || null,
+        spice_level: Number(draft.spiceLevel),
+        allergens: draft.allergens.trim() || null,
+        is_halal: draft.isHalal,
       });
       flash(`« ${draft.name} » enregistré.`);
       await load();
@@ -158,6 +184,9 @@ export default function DashboardPage() {
         price,
         description: newItem.description.trim() || null,
         image_url: newItem.image_url.trim() || null,
+        spice_level: Number(newItem.spiceLevel),
+        allergens: newItem.allergens.trim() || null,
+        is_halal: newItem.isHalal,
       });
       flash(`« ${newItem.name} » ajouté au menu.`);
       setNewItem(EMPTY_DRAFT);
@@ -277,6 +306,33 @@ export default function DashboardPage() {
                 className="border rounded px-2 py-1 w-full mt-2"
                 placeholder="URL de la photo (facultatif)"
               />
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
+                <select
+                  value={draft.spiceLevel}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, spiceLevel: e.target.value } }))}
+                  className="border rounded px-2 py-1 text-sm"
+                >
+                  {SPICE_LABELS.map((label, level) => (
+                    <option key={level} value={level}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={draft.allergens}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, allergens: e.target.value } }))}
+                  className="border rounded px-2 py-1 text-sm"
+                  placeholder="Allergènes (facultatif, ex : Gluten, Fruits à coque)"
+                />
+                <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={draft.isHalal}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [item.id]: { ...draft, isHalal: e.target.checked } }))}
+                  />
+                  Halal
+                </label>
+              </div>
               <div className="flex items-center justify-between mt-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={item.is_available} onChange={() => toggleAvailability(item)} />
@@ -340,6 +396,33 @@ export default function DashboardPage() {
           className="border rounded px-2 py-1 w-full mt-2"
           placeholder="URL de la photo (facultatif)"
         />
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
+          <select
+            value={newItem.spiceLevel}
+            onChange={(e) => setNewItem({ ...newItem, spiceLevel: e.target.value })}
+            className="border rounded px-2 py-1 text-sm"
+          >
+            {SPICE_LABELS.map((label, level) => (
+              <option key={level} value={level}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <input
+            value={newItem.allergens}
+            onChange={(e) => setNewItem({ ...newItem, allergens: e.target.value })}
+            className="border rounded px-2 py-1 text-sm"
+            placeholder="Allergènes (facultatif, ex : Gluten, Fruits à coque)"
+          />
+          <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={newItem.isHalal}
+              onChange={(e) => setNewItem({ ...newItem, isHalal: e.target.checked })}
+            />
+            Halal
+          </label>
+        </div>
         <button onClick={addItem} className="mt-3 bg-amber-700 text-white text-sm px-4 py-2 rounded-lg">
           Ajouter au menu
         </button>

@@ -15,3 +15,13 @@ class MenuItem(Base):
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     image_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    # 0 = pas épicé, 1-3 = léger/moyen/fort. Texte libre pour les allergènes
+    # (comme `category`, saisi par le resto — pas de liste fermée qui
+    # obligerait une migration à chaque nouvel allergène courant).
+    spice_level: Mapped[int] = mapped_column(Integer, default=0)
+    allergens: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Par défaut à True : la quasi-totalité des restos tunisiens sont
+    # halal — le champ sert surtout à signaler l'exception (établissement
+    # touristique servant alcool/porc), pas la norme.
+    is_halal: Mapped[bool] = mapped_column(Boolean, default=True)
