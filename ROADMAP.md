@@ -75,3 +75,41 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 - [ ] Nom de marque définitif et identité visuelle (le nom de repo « Tawla » est provisoire)
 - [ ] Montée de version majeure Next.js (14 → 15/16) : breaking change réel, décision produit à part (signalé lors de l'audit du 2026-08-10)
 - [ ] Vraie intégration imprimante cuisine (au-delà du filet de secours navigateur déjà en place)
+
+## Phase 8 — Design & expérience
+
+Ajoutée le 2026-08-11, à la suite de l'audit fonctionnel + design mené une fois les phases 0-6 complètes (18 PR mergées, 104 tests backend verts, aucune tâche non-bloquée restante). Rapport complet avec captures d'écran envoyé à Wassim en Artifact la même session. Constat : le fonctionnel est solide, le design reste au niveau prototype (aucune identité de marque, une seule couleur d'accent partout, zéro micro-interaction). Poids délibérément mis sur le design, à la demande explicite de Wassim ("trop simpliste", envie d'un rendu "attachant, pro, fun").
+
+**8.1 — Identité de marque (fondation, bloque le reste de la phase)**
+- [ ] 🧑 Nom de marque définitif (déjà listé Phase 7 — prérequis strict : impossible de dessiner un logo pour un nom encore provisoire)
+- [ ] Logo + favicon + icônes PWA, lisibles de 32px à 512px
+- [ ] Palette de marque figée (primaire, secondaire, + couleurs sémantiques distinctes de la couleur d'action) en tokens CSS partagés client/staff
+- [ ] Paire typographique (une police d'affichage avec du caractère + une police texte lisible en petit sur mobile)
+
+**8.2 — Système de design partagé**
+- [ ] Composants de base nommés (`Button`, `Card`, `Badge` de statut, `EmptyState`) pour remplacer les classes Tailwind dupliquées dans `dashboard/page.tsx`, `staff/page.tsx`, `kitchen/page.tsx`
+- [ ] Iconographie cohérente pour remplacer les emoji dans les badges de statut et boutons d'action clés
+- [ ] Skeletons de chargement (menu, dashboard, écrans staff affichent "Chargement…" en texte brut aujourd'hui)
+
+**8.3 — Parcours client**
+- [ ] Moment de célébration à la validation de commande (le pic émotionnel du parcours est traité comme un changement d'écran neutre aujourd'hui)
+- [ ] Retour visuel à l'ajout au panier (geste le plus répété du produit, aucun feedback au-delà d'un chiffre qui change)
+- [ ] Timeline de suivi redessinée (les 6 étapes sont une liste à puces ; l'attente cuisine, souvent 10-20 min, mérite mieux)
+- [ ] Catégories de menu bilingues prédéfinies — corrige au passage un bug i18n relevé à l'audit : `MenuItem.category` en texte libre français s'affiche tel quel même en vue arabe ("Entrées" mal coupé en RTL)
+- [ ] État vide du panier illustré
+
+**8.4 — Dashboard manager**
+- [ ] Vue liste compacte + édition en panneau (aujourd'hui : une carte-formulaire complète par plat/table, empilées — illisible sur mobile passé une poignée d'articles)
+- [ ] Miniature photo dans la liste (`image_url` existe déjà en base, jamais utilisée côté dashboard)
+- [ ] Recherche/filtre par catégorie
+- [ ] Onglets (Menu / Tables & zones / Réglages) au lieu d'un défilement qui grandit sans fin
+
+**8.5 — Écrans serveur & cuisine**
+- [ ] Compteur du jour sur l'écran cuisine (l'état vide actuel est un écran noir sans aucune information)
+- [ ] Distinction visuelle plus tranchée par statut côté serveur (à confirmer / prêtes à servir / demandes de paiement utilisent des teintes trop proches)
+- [ ] Retour sonore optionnel à l'arrivée d'une commande en cuisine (activable par le manager)
+
+**8.6 — Idées "fun" différenciantes** (après 8.1-8.2 : héritent d'une identité cohérente plutôt que d'être des gadgets isolés)
+- [ ] Mini-fait culturel ou anecdote sur le plat pendant l'attente cuisine
+- [ ] Carte de fidélité visuelle façon carte à tamponner (aujourd'hui : juste un texte "3 commandes, encore 7")
+- [ ] Partage social du plat commandé (carte visuelle générée pour Instagram/WhatsApp Status — fort effet bouche-à-oreille pour le pilote)
