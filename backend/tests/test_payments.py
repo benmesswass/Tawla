@@ -81,6 +81,24 @@ def test_request_cash_payment_notifies_staff_and_is_confirmable(client):
     assert pending_after.json() == []
 
 
+def test_pending_cash_payment_carries_the_dedicated_server_id(client):
+    """
+    Le frontend n'affiche la demande de paiement qu'au serveur qui a pris en
+    charge la table (le manager voit tout) — ça suppose que taken_by_staff_id
+    est bien porté par la liste des demandes en attente.
+    """
+    restaurant, manager_headers, order = _setup_order(client)
+    sami = create_staff(restaurant["id"], role=StaffRole.WAITER)
+
+    client.post(f"/api/v1/orders/{order['id']}/claim", headers=auth_headers(sami))
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash")
+
+    pending = client.get(
+        f"/api/v1/orders/by-restaurant/{restaurant['id']}/pending-cash-payments", headers=manager_headers
+    )
+    assert pending.json()[0]["taken_by_staff_id"] == sami.id
+
+
 def test_pending_cash_payments_survives_order_being_served(client):
     """
     Le paiement cash arrive souvent après "servie" — l'endpoint dédié ne doit

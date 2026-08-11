@@ -16,7 +16,7 @@ type PendingOrder = {
   taken_by_staff_name: string | null;
 };
 type ReadyOrder = { order_id: number; table_id: number };
-type CashRequest = { order_id: number; table_id: number; amount: number };
+type CashRequest = { order_id: number; table_id: number; amount: number; taken_by_staff_id: number | null };
 
 function fromApi(o: Order): PendingOrder {
   return {
@@ -54,7 +54,14 @@ export default function StaffPage() {
     if (!restaurantId) return;
     try {
       const orders = await api.listPendingCashPayments(restaurantId);
-      setCashRequests(orders.map((o) => ({ order_id: o.id, table_id: o.table_id, amount: o.total_amount })));
+      setCashRequests(
+        orders.map((o) => ({
+          order_id: o.id,
+          table_id: o.table_id,
+          amount: o.total_amount,
+          taken_by_staff_id: o.taken_by_staff_id,
+        }))
+      );
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -95,7 +102,15 @@ export default function StaffPage() {
       setCashRequests((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
           ? prev
-          : [...prev, { order_id: msg.order_id, table_id: msg.table_id, amount: msg.amount }]
+          : [
+              ...prev,
+              {
+                order_id: msg.order_id,
+                table_id: msg.table_id,
+                amount: msg.amount,
+                taken_by_staff_id: msg.taken_by_staff_id,
+              },
+            ]
       );
     }
   });
@@ -166,6 +181,11 @@ export default function StaffPage() {
 
   if (staffLoading || !staff) return null;
 
+  // Chaque serveur ne voit que les demandes de paiement de ses propres
+  // tables (celles qu'il a prises en charge) — le manager voit tout.
+  const myCashRequests =
+    staff.role === "manager" ? cashRequests : cashRequests.filter((o) => o.taken_by_staff_id === staff.id);
+
   return (
     <div className="p-4 max-w-md mx-auto">
       <div className="flex items-center justify-between mb-1">
@@ -233,8 +253,8 @@ export default function StaffPage() {
       ))}
 
       <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement en espèces</h2>
-      {cashRequests.length === 0 && <p className="text-neutral-500">Aucune demande en attente.</p>}
-      {cashRequests.map((o) => (
+      {myCashRequests.length === 0 && <p className="text-neutral-500">Aucune demande en attente.</p>}
+      {myCashRequests.map((o) => (
         <div key={o.order_id} className="border rounded-lg p-4 mb-3 flex justify-between items-center bg-amber-50">
           <div>
             <div className="font-medium">Table {o.table_id}</div>

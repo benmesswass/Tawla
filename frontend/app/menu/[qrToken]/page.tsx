@@ -87,6 +87,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     if (msg.event === "order.payment_confirmed" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
     }
+    // Dès qu'un serveur est affecté (prise en charge ou confirmation), le
+    // client sait qui s'occupe de sa table sans avoir à demander.
+    if (msg.event === "order.staff_assigned" && trackedOrder && msg.order_id === trackedOrder.id) {
+      setTrackedOrder((prev) => (prev ? { ...prev, taken_by_staff_name: msg.staff_name } : prev));
+    }
   });
 
   async function payByCard() {
@@ -205,6 +210,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {cancelled ? "Commande annulée" : "Commande envoyée 🎉"}
         </h1>
         <p className="mt-2 text-neutral-600 text-center">{table.label} — commande #{trackedOrder.id}</p>
+
+        {!cancelled && trackedOrder.taken_by_staff_name && (
+          <p className="mt-4 text-sm text-center bg-amber-50 text-amber-800 border border-amber-200 rounded-lg py-2 px-3">
+            <span className="font-medium">{trackedOrder.taken_by_staff_name}</span> est votre serveur dédié pour cette
+            commande.
+          </p>
+        )}
 
         {!cancelled && (
           <ol className="mt-8 space-y-4">

@@ -190,7 +190,18 @@ async def claim_order(db: Session, order_id: int, staff: Staff) -> Order:
             "taken_by_staff_name": staff.name,
         },
     )
+    await _broadcast_staff_assigned(order, staff)
     return order
+
+
+async def _broadcast_staff_assigned(order: Order, staff: Staff) -> None:
+    """Le client suit sa commande sur son téléphone — dès qu'un serveur est
+    affecté (claim explicite ou auto-claim à la confirmation), on le lui dit
+    par son prénom plutôt que de le laisser deviner."""
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.staff_assigned", "order_id": order.id, "staff_name": staff.name},
+    )
 
 
 async def transition_status(db: Session, order_id: int, new_status: OrderStatus, staff: Staff) -> Order:
@@ -212,6 +223,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
 
     order.status = new_status
     now = datetime.now(timezone.utc)
+    newly_assigned = False
     if new_status == OrderStatus.CONFIRMED:
         order.confirmed_at = now
         # Un serveur qui confirme sans être passé par le claim explicite
@@ -221,6 +233,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
         if order.taken_by_staff_id is None:
             order.taken_by_staff_id = staff.id
             order.taken_at = now
+            newly_assigned = True
     if new_status == OrderStatus.SENT_TO_KITCHEN:
         order.sent_to_kitchen_at = now
     if new_status == OrderStatus.READY:
@@ -235,6 +248,9 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
         logger, "order.status_changed",
         restaurant_id=order.restaurant_id, order_id=order.id, new_status=new_status.value,
     )
+
+    if newly_assigned:
+        await _broadcast_staff_assigned(order, staff)
 
     # La cuisine ne doit voir la commande QUE une fois validée par le serveur.
     if new_status == OrderStatus.SENT_TO_KITCHEN:
@@ -322,6 +338,11 @@ async def request_cash_payment(db: Session, order_id: int) -> Order:
         restaurant_id=order.restaurant_id, order_id=order.id, amount=order.total_amount,
     )
 
+    # Diffusé sur le canal "staff" partagé (pas d'infra par membre du
+    # personnel), mais porte taken_by_staff_id : le frontend n'affiche la
+    # demande qu'au serveur dédié à cette table (ou au manager, qui voit
+    # tout). Toute commande qui en est là est forcément déjà confirmée, donc
+    # taken_by_staff_id est garanti non-nul (auto-claim à la confirmation).
     await manager.broadcast(
         order.restaurant_id, channel="staff",
         message={
@@ -329,6 +350,7 @@ async def request_cash_payment(db: Session, order_id: int) -> Order:
             "order_id": order.id,
             "table_id": order.table_id,
             "amount": order.total_amount,
+            "taken_by_staff_id": order.taken_by_staff_id,
         },
     )
     return order
