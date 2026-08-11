@@ -37,3 +37,8 @@ class DashboardStats(BaseModel):
     staff_performance: list[StaffPerformance]
     top_items: list[TopMenuItem]
     orders_by_hour: list[HourlyCount]
+
+
+class KitchenTodayCount(BaseModel):
+    date: date_type
+    count: int

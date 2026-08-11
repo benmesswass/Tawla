@@ -31,3 +31,8 @@ class Restaurant(Base):
     # n'a pas besoin de la structure entrées/plats/desserts — le menu
     # client s'affiche alors en liste unique, sans en-têtes de catégorie.
     cafe_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Retour sonore optionnel à l'arrivée d'une commande en cuisine — désactivé
+    # par défaut (une cuisine bruyante peut ne pas vouloir d'un bip de plus),
+    # activable par le manager depuis le dashboard.
+    kitchen_sound_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -79,3 +79,25 @@ def set_cafe_mode(
     db.commit()
     db.refresh(restaurant)
     return restaurant
+
+
+@router.patch("/{restaurant_id}/kitchen-sound", response_model=schemas.RestaurantOut)
+def set_kitchen_sound(
+    restaurant_id: int,
+    payload: schemas.KitchenSoundUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant:
+        raise HTTPException(
+            status_code=404, detail={"code": "RESTAURANT_NOT_FOUND", "message": "restaurant not found"}
+        )
+
+    restaurant.kitchen_sound_enabled = payload.enabled
+    db.commit()
+    db.refresh(restaurant)
+    return restaurant

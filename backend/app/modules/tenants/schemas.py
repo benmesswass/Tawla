@@ -18,6 +18,7 @@ class RestaurantOut(BaseModel):
     ramadan_mode_enabled: bool
     iftar_time: datetime | None
     cafe_mode_enabled: bool
+    kitchen_sound_enabled: bool
 
 
 class RamadanModeUpdate(BaseModel):
@@ -26,4 +27,8 @@ class RamadanModeUpdate(BaseModel):
 
 
 class CafeModeUpdate(BaseModel):
+    enabled: bool
+
+
+class KitchenSoundUpdate(BaseModel):
     enabled: bool

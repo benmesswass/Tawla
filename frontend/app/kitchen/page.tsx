@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, wsUrl, ApiError, Order } from "@/lib/api";
+import { api, wsUrl, ApiError, Order, Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
@@ -44,11 +44,42 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
+// Chime synthétisé en Web Audio (deux notes courtes) — zéro fichier audio à
+// héberger. Best-effort : les politiques autoplay de certains navigateurs
+// bloquent l'audio tant qu'aucun geste utilisateur n'a eu lieu sur la page ;
+// ça ne doit jamais faire planter l'écran cuisine.
+function playKitchenChime() {
+  try {
+    const AudioContextCtor =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioContextCtor();
+    const now = ctx.currentTime;
+    [880, 1174.66].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = now + i * 0.14;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.25, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.4);
+    });
+  } catch {
+    // Navigateur sans Web Audio ou audio bloqué — pas de son, rien d'autre.
+  }
+}
+
 export default function KitchenPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["kitchen", "manager"]);
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [todayCount, setTodayCount] = useState<number | null>(null);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -66,12 +97,36 @@ export default function KitchenPage() {
     }
   }, [restaurantId]);
 
+  const loadRestaurant = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      setRestaurant(await api.getRestaurant(restaurantId));
+    } catch {
+      // Best-effort : sans cette info, le retour sonore reste simplement
+      // désactivé (comportement par défaut), rien d'autre ne dépend d'elle.
+    }
+  }, [restaurantId]);
+
+  const loadTodayCount = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const { count } = await api.getKitchenTodayCount(restaurantId);
+      setTodayCount(count);
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
   // Rechargement au montage : sans ça, un écran cuisine qui plante ou se
   // rafraîchit perd toutes les commandes en cours (bug corrigé suite à
   // l'audit du 2026-08-10).
   useEffect(() => {
-    if (restaurantId) loadActiveOrders();
-  }, [restaurantId, loadActiveOrders]);
+    if (restaurantId) {
+      loadActiveOrders();
+      loadRestaurant();
+      loadTodayCount();
+    }
+  }, [restaurantId, loadActiveOrders, loadRestaurant, loadTodayCount]);
 
   const status = useReconnectingSocket(restaurantId ? wsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.sent_to_kitchen") {
@@ -88,12 +143,17 @@ export default function KitchenPage() {
               },
             ]
       );
+      setTodayCount((prev) => (prev === null ? prev : prev + 1));
+      if (restaurant?.kitchen_sound_enabled) playKitchenChime();
     }
   });
 
   useEffect(() => {
-    if (status === "connected") loadActiveOrders();
-  }, [status, loadActiveOrders]);
+    if (status === "connected") {
+      loadActiveOrders();
+      loadTodayCount();
+    }
+  }, [status, loadActiveOrders, loadTodayCount]);
 
   async function markDone(orderId: number) {
     setError(null);
@@ -168,7 +228,7 @@ export default function KitchenPage() {
 
   return (
     <div className="p-6 bg-neutral-950 min-h-screen text-white">
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
         <h1 className="text-2xl font-semibold">Écran cuisine</h1>
         <div className="flex items-center gap-3">
           <ConnectionBadge status={status} dark />
@@ -180,6 +240,12 @@ export default function KitchenPage() {
           </button>
         </div>
       </div>
+
+      <p className="text-sm text-neutral-500 mb-4">
+        {todayCount === null
+          ? "…"
+          : `${todayCount} commande${todayCount > 1 ? "s" : ""} traitée${todayCount > 1 ? "s" : ""} aujourd'hui`}
+      </p>
 
       {error && (
         <Card tone="danger" dark padding="sm" className="mb-4 text-sm text-red-300">
