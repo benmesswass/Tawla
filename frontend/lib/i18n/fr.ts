@@ -68,6 +68,10 @@ export const fr = {
   personLabel: (n: number) => `Personne ${n}`,
   unassignedSharedNote: "Les plats non attribués sont partagés équitablement.",
   splitBillDisclaimer: "Indicatif — le paiement se fait pour l'addition complète, une seule fois pour la table.",
+
+  offlineQueuedTitle: "Pas de connexion",
+  offlineQueuedMessage: "Votre commande est enregistrée sur votre téléphone et sera envoyée automatiquement dès que la connexion revient.",
+  retryNow: "Réessayer maintenant",
 };
 
 export type Dictionary = typeof fr;

@@ -67,4 +67,8 @@ export const ar = {
   personLabel: (n) => `شخص ${n}`,
   unassignedSharedNote: "الأكلات إلي ما تعيّنتش تتقسم بالتساوي.",
   splitBillDisclaimer: "إرشادي بركة — الخلاص يبقى للفاتورة الكل مرة وحدة للطاولة.",
+
+  offlineQueuedTitle: "ما فماش نات",
+  offlineQueuedMessage: "الطلبية تسجلت في تليفونك وباش تتبعث وحدها كي ترجع النات.",
+  retryNow: "عاود جرب دلوقتي",
 } satisfies Dictionary;
