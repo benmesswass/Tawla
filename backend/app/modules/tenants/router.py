@@ -57,3 +57,25 @@ def set_ramadan_mode(
     db.commit()
     db.refresh(restaurant)
     return restaurant
+
+
+@router.patch("/{restaurant_id}/cafe-mode", response_model=schemas.RestaurantOut)
+def set_cafe_mode(
+    restaurant_id: int,
+    payload: schemas.CafeModeUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant:
+        raise HTTPException(
+            status_code=404, detail={"code": "RESTAURANT_NOT_FOUND", "message": "restaurant not found"}
+        )
+
+    restaurant.cafe_mode_enabled = payload.enabled
+    db.commit()
+    db.refresh(restaurant)
+    return restaurant

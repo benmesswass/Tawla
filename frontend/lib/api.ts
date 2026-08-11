@@ -30,6 +30,7 @@ export type Restaurant = {
   slug: string;
   ramadan_mode_enabled: boolean;
   iftar_time: string | null;
+  cafe_mode_enabled: boolean;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -223,6 +224,11 @@ export const api = {
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/ramadan-mode`, {
       method: "PATCH",
       body: JSON.stringify({ enabled, iftar_time: iftarTime }),
+    }),
+  setCafeMode: (restaurantId: number, enabled: boolean) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/cafe-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
     }),
   callWaiter: (restaurantId: number, tableId: number) =>
     request<WaiterCall>("/api/v1/waiter-calls", {

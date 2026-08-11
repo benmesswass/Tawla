@@ -424,6 +424,80 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const availableItems = menu.filter((m) => m.is_available);
   const categories = Array.from(new Set(availableItems.map((m) => m.category)));
 
+  function renderItem(item: MenuItem) {
+    return (
+      <div key={item.id} className="border-b py-3">
+        <div className="flex justify-between items-center">
+          <div className="pe-3">
+            <div className="font-medium">
+              {item.name}
+              {item.spice_level > 0 && <span className="ms-1">{"🌶️".repeat(item.spice_level)}</span>}
+              {!item.is_halal && (
+                <span className="ms-1 text-xs font-normal text-red-600 border border-red-200 rounded px-1 align-middle">
+                  {t.notHalalBadge}
+                </span>
+              )}
+            </div>
+            {item.description && <div className="text-sm text-neutral-500">{item.description}</div>}
+            {item.allergens && (
+              <div className="text-xs text-neutral-400 mt-0.5">{t.allergensLabel(item.allergens)}</div>
+            )}
+            <div className="text-sm text-neutral-500 mt-0.5">
+              {item.price.toFixed(2)} {t.currency}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {item.image_url && (
+              <img
+                src={item.image_url}
+                alt={item.name}
+                className="w-12 h-12 rounded-lg object-cover hidden sm:block"
+              />
+            )}
+            {cart[item.id] && (
+              <>
+                <button
+                  onClick={() => removeFromCart(item.id)}
+                  aria-label={t.removeFromCartAria(item.name)}
+                  className="w-8 h-8 rounded-full border"
+                >
+                  -
+                </button>
+                <span>{cart[item.id].quantity}</span>
+              </>
+            )}
+            <button
+              onClick={() => addToCart(item)}
+              aria-label={t.addToCartAria(item.name)}
+              className="w-8 h-8 rounded-full bg-neutral-900 text-white"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        {cart[item.id] && (
+          <>
+            <input
+              type="text"
+              value={cart[item.id].note}
+              onChange={(e) => setNote(item.id, e.target.value)}
+              placeholder={t.notePlaceholder}
+              className="mt-2 w-full text-sm border rounded-lg px-3 py-1.5"
+            />
+            <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+              <input
+                type="checkbox"
+                checked={cart[item.id].shared}
+                onChange={(e) => setShared(item.id, e.target.checked)}
+              />
+              {t.sharedCheckboxLabel}
+            </label>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div dir={dir} className={`pb-32 ${wrapperClassName ?? ""}`}>
       <header className="bg-amber-700 text-white px-4 py-5 flex items-start justify-between gap-3">
@@ -469,84 +543,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
         )}
 
-        {categories.map((category) => (
-          <section key={category} className="mb-6">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">{category}</h2>
-            {availableItems
-              .filter((m) => m.category === category)
-              .map((item) => (
-                <div key={item.id} className="border-b py-3">
-                  <div className="flex justify-between items-center">
-                    <div className="pe-3">
-                      <div className="font-medium">
-                        {item.name}
-                        {item.spice_level > 0 && <span className="ms-1">{"🌶️".repeat(item.spice_level)}</span>}
-                        {!item.is_halal && (
-                          <span className="ms-1 text-xs font-normal text-red-600 border border-red-200 rounded px-1 align-middle">
-                            {t.notHalalBadge}
-                          </span>
-                        )}
-                      </div>
-                      {item.description && <div className="text-sm text-neutral-500">{item.description}</div>}
-                      {item.allergens && (
-                        <div className="text-xs text-neutral-400 mt-0.5">{t.allergensLabel(item.allergens)}</div>
-                      )}
-                      <div className="text-sm text-neutral-500 mt-0.5">
-                        {item.price.toFixed(2)} {t.currency}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {item.image_url && (
-                        <img
-                          src={item.image_url}
-                          alt={item.name}
-                          className="w-12 h-12 rounded-lg object-cover hidden sm:block"
-                        />
-                      )}
-                      {cart[item.id] && (
-                        <>
-                          <button
-                            onClick={() => removeFromCart(item.id)}
-                            aria-label={t.removeFromCartAria(item.name)}
-                            className="w-8 h-8 rounded-full border"
-                          >
-                            -
-                          </button>
-                          <span>{cart[item.id].quantity}</span>
-                        </>
-                      )}
-                      <button
-                        onClick={() => addToCart(item)}
-                        aria-label={t.addToCartAria(item.name)}
-                        className="w-8 h-8 rounded-full bg-neutral-900 text-white"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  {cart[item.id] && (
-                    <>
-                      <input
-                        type="text"
-                        value={cart[item.id].note}
-                        onChange={(e) => setNote(item.id, e.target.value)}
-                        placeholder={t.notePlaceholder}
-                        className="mt-2 w-full text-sm border rounded-lg px-3 py-1.5"
-                      />
-                      <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
-                        <input
-                          type="checkbox"
-                          checked={cart[item.id].shared}
-                          onChange={(e) => setShared(item.id, e.target.checked)}
-                        />
-                        {t.sharedCheckboxLabel}
-                      </label>
-                    </>
-                  )}
-                </div>
-              ))}
-          </section>
-        ))}
+        {restaurant.cafe_mode_enabled ? (
+          <section className="mb-6">{availableItems.map(renderItem)}</section>
+        ) : (
+          categories.map((category) => (
+            <section key={category} className="mb-6">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">{category}</h2>
+              {availableItems.filter((m) => m.category === category).map(renderItem)}
+            </section>
+          ))
+        )}
 
         {cartLines.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">

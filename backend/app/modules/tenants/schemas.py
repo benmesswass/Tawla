@@ -17,8 +17,13 @@ class RestaurantOut(BaseModel):
     created_at: datetime
     ramadan_mode_enabled: bool
     iftar_time: datetime | None
+    cafe_mode_enabled: bool
 
 
 class RamadanModeUpdate(BaseModel):
     enabled: bool
     iftar_time: datetime | None = None
+
+
+class CafeModeUpdate(BaseModel):
+    enabled: bool

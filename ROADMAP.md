@@ -56,7 +56,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 - [x] Niveau de piment affiché par plat + mentions allergènes et halal — saisi par le manager dans le dashboard (piment 0-3, allergènes en texte libre, case halal — défaut `True`, la quasi-totalité des restos tunisiens l'étant), affiché au client (fr/ar) et sur le menu (PR #9)
 - [x] Bouton « appeler le serveur », indépendant du passage de commande — nouveau modèle `WaiterCall` persisté (survit à une reconnexion, même logique que les demandes de paiement cash), diffusé en temps réel sur le canal "staff" existant, résolu par un serveur ou le manager ; bouton client avec cooldown 90s anti-spam, traduit fr/ar (PR #10)
 - [x] Gestion de la rupture de stock en temps réel (un plat en rupture est désactivé instantanément côté client) — nouveau canal WebSocket public `/ws/menu/{restaurant_id}`, diffusé depuis la bascule manager déjà existante ; le client voit le plat disparaître du menu et être retiré automatiquement de son panier sans recharger la page (PR #11)
-- [ ] Mode café simplifié : commande de boissons seules, sans structure entrée/plat/dessert
+- [x] Mode café simplifié : commande de boissons seules, sans structure entrée/plat/dessert — toggle manager (`Restaurant.cafe_mode_enabled`, même pattern que le mode Ramadan), le menu client s'affiche alors en liste unique sans en-têtes de catégorie (PR #12)
 - [ ] PWA offline-first : file d'attente locale si la connexion mobile est instable, envoi différé automatique
 - [ ] Carte de fidélité digitale (ex. Nème café/plat offert, réduction anniversaire)
 
