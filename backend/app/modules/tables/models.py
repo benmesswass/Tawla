@@ -23,3 +23,8 @@ class Table(Base):
     label: Mapped[str] = mapped_column(String(50), nullable=False)  # ex: "Table 5"
     qr_token: Mapped[str] = mapped_column(String(64), unique=True, default=generate_table_token)
     assigned_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
+
+    # Zone de salle (ex: "Intérieur", "Terrasse", "Plage") — texte libre
+    # comme MenuItem.category, pas un enum figé : tous les établissements
+    # n'ont pas les mêmes zones (un café sans terrasse n'a besoin d'aucune).
+    zone: Mapped[str | None] = mapped_column(String(50), nullable=True)

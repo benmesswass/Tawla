@@ -3,12 +3,25 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, MenuItem, Restaurant } from "@/lib/api";
+import { api, MenuItem, Restaurant, Table } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 
 const CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"];
+
+// Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
+// établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
+// besoin d'aucune — texte libre avec juste un coup de pouce à la saisie.
+const ZONE_SUGGESTIONS = ["Intérieur", "Terrasse", "Plage"];
+
+type TableDraft = { label: string; zone: string };
+
+function tableToDraft(table: Table): TableDraft {
+  return { label: table.label, zone: table.zone ?? "" };
+}
+
+const EMPTY_TABLE_DRAFT: TableDraft = { label: "", zone: "" };
 
 // Convertit un ISO UTC en valeur pour <input type="datetime-local"> (heure
 // locale du navigateur) et inversement — sans lib externe.
@@ -75,19 +88,28 @@ export default function DashboardPage() {
   const [savingRamadan, setSavingRamadan] = useState(false);
   const [cafeModeEnabled, setCafeModeEnabled] = useState(false);
   const [savingCafeMode, setSavingCafeMode] = useState(false);
+  const [tables, setTables] = useState<Table[]>([]);
+  const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
+  const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
   const load = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const [menu, rest] = await Promise.all([api.getMenu(restaurantId), api.getRestaurant(restaurantId)]);
+      const [menu, rest, tableList] = await Promise.all([
+        api.getMenu(restaurantId),
+        api.getRestaurant(restaurantId),
+        api.listTables(restaurantId),
+      ]);
       setItems(menu);
       setDrafts(Object.fromEntries(menu.map((m) => [m.id, itemToDraft(m)])));
       setRestaurant(rest);
       setRamadanEnabled(rest.ramadan_mode_enabled);
       setIftarInput(isoToLocalInput(rest.iftar_time));
       setCafeModeEnabled(rest.cafe_mode_enabled);
+      setTables(tableList);
+      setTableDrafts(Object.fromEntries(tableList.map((t) => [t.id, tableToDraft(t)])));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -209,6 +231,43 @@ export default function DashboardPage() {
       });
       flash(`« ${newItem.name} » ajouté au menu.`);
       setNewItem(EMPTY_DRAFT);
+      await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function saveTable(table: Table) {
+    setError(null);
+    const draft = tableDrafts[table.id];
+    if (!draft.label.trim()) {
+      setError("Le nom de la table est obligatoire.");
+      return;
+    }
+    try {
+      await api.updateTable(table.id, { label: draft.label.trim(), zone: draft.zone.trim() || null });
+      flash(`« ${draft.label} » enregistrée.`);
+      await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function addTable() {
+    setError(null);
+    if (!restaurantId) return;
+    if (!newTable.label.trim()) {
+      setError("Le nom de la table est obligatoire pour l'ajouter.");
+      return;
+    }
+    try {
+      await api.createTable({
+        restaurant_id: restaurantId,
+        label: newTable.label.trim(),
+        zone: newTable.zone.trim() || null,
+      });
+      flash(`« ${newTable.label} » ajoutée.`);
+      setNewTable(EMPTY_TABLE_DRAFT);
       await load();
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -465,6 +524,69 @@ export default function DashboardPage() {
         </div>
         <button onClick={addItem} className="mt-3 bg-amber-700 text-white text-sm px-4 py-2 rounded-lg">
           Ajouter au menu
+        </button>
+      </div>
+
+      <datalist id="zone-suggestions">
+        {ZONE_SUGGESTIONS.map((z) => (
+          <option key={z} value={z} />
+        ))}
+      </datalist>
+
+      <h2 className="text-base font-semibold mt-8 mb-1">Tables &amp; zones de salle</h2>
+      <p className="text-sm text-neutral-500 mb-3">
+        Groupez vos tables par zone (intérieur, terrasse, plage...) si votre établissement en a plusieurs — laissez
+        vide sinon.
+      </p>
+      <div className="space-y-2">
+        {tables.map((table) => {
+          const draft = tableDrafts[table.id] ?? tableToDraft(table);
+          return (
+            <div key={table.id} className="border rounded-lg p-3 grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
+              <input
+                value={draft.label}
+                onChange={(e) =>
+                  setTableDrafts((d) => ({ ...d, [table.id]: { ...draft, label: e.target.value } }))
+                }
+                className="border rounded px-2 py-1"
+                placeholder="Nom de la table"
+              />
+              <input
+                value={draft.zone}
+                onChange={(e) => setTableDrafts((d) => ({ ...d, [table.id]: { ...draft, zone: e.target.value } }))}
+                list="zone-suggestions"
+                className="border rounded px-2 py-1"
+                placeholder="Zone (facultatif)"
+              />
+              <button
+                onClick={() => saveTable(table)}
+                className="bg-neutral-900 text-white text-sm px-3 py-1.5 rounded-lg whitespace-nowrap"
+              >
+                Enregistrer
+              </button>
+            </div>
+          );
+        })}
+        {tables.length === 0 && <p className="text-neutral-500">Aucune table pour l&apos;instant.</p>}
+      </div>
+
+      <h2 className="text-base font-semibold mt-6 mb-3">Ajouter une table</h2>
+      <div className="border rounded-lg p-3 grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2 items-center">
+        <input
+          value={newTable.label}
+          onChange={(e) => setNewTable({ ...newTable, label: e.target.value })}
+          className="border rounded px-2 py-1"
+          placeholder="Nom de la table (ex : Table 5)"
+        />
+        <input
+          value={newTable.zone}
+          onChange={(e) => setNewTable({ ...newTable, zone: e.target.value })}
+          list="zone-suggestions"
+          className="border rounded px-2 py-1"
+          placeholder="Zone (facultatif)"
+        />
+        <button onClick={addTable} className="bg-amber-700 text-white text-sm px-4 py-2 rounded-lg whitespace-nowrap">
+          Ajouter la table
         </button>
       </div>
     </div>

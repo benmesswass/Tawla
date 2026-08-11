@@ -22,6 +22,7 @@ export type Table = {
   label: string;
   qr_token: string;
   assigned_staff_id: number | null;
+  zone: string | null;
 };
 
 export type Restaurant = {
@@ -170,6 +171,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   getRestaurant: (restaurantId: number) => request<Restaurant>(`/api/v1/restaurants/${restaurantId}`),
   getTableByToken: (qrToken: string) => request<Table>(`/api/v1/tables/by-token/${qrToken}`),
+  listTables: (restaurantId: number) => request<Table[]>(`/api/v1/tables/by-restaurant/${restaurantId}`),
+  createTable: (payload: { restaurant_id: number; label: string; zone?: string | null }) =>
+    request<Table>("/api/v1/tables", { method: "POST", body: JSON.stringify(payload) }),
+  updateTable: (tableId: number, payload: { label: string; zone?: string | null }) =>
+    request<Table>(`/api/v1/tables/${tableId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   getMenu: (restaurantId: number) => request<MenuItem[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}`),
   login: (email: string, password: string) =>
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
