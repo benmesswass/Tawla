@@ -1,8 +1,19 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.core.config import settings
 from app.modules.notifications.manager import manager
 
 router = APIRouter(tags=["notifications"])
+
+
+@router.get("/api/v1/notifications/vapid-public-key")
+async def get_vapid_public_key():
+    """
+    Clé publique VAPID pour l'abonnement Web Push côté client — chaîne vide
+    si les clés ne sont pas configurées (le frontend n'affiche alors pas
+    l'option de notification plutôt que d'échouer silencieusement).
+    """
+    return {"public_key": settings.vapid_public_key}
 
 
 @router.websocket("/ws/staff/{restaurant_id}")
