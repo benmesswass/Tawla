@@ -1,5 +1,6 @@
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { hankenGrotesk } from "@/lib/fonts";
 
 export const metadata = {
   title: "Tawla — Commande au restaurant",
@@ -9,7 +10,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className="bg-neutral-50 text-neutral-900">
+      <body
+        className={`${hankenGrotesk.className} bg-[var(--semoule)] text-[var(--espresso)]`}
+      >
         {children}
         <ServiceWorkerRegister />
       </body>

@@ -297,6 +297,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                 "order_id": order.id,
                 "table_id": order.table_id,
                 "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
+                "sent_to_kitchen_at": order.sent_to_kitchen_at.isoformat() if order.sent_to_kitchen_at else None,
                 "items": [
                     {
                         "name": i.menu_item_name,

@@ -120,11 +120,11 @@ Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures a
 
 Ajoutée le 2026-08-12, à la suite d'un audit design mené sur les six rôles/écrans de l'app une fois la Phase 8 mergée (parcours complet en Playwright, captures à l'appui, dossier envoyé à Wassim en Artifact). Aucun des six constats n'est bloquant techniquement — classés ci-dessous par impact décroissant.
 
-- [ ] Identité de marque appliquée au niveau racine — poser les custom properties de marque + Hanken Grotesk dans `app/layout.tsx` (aujourd'hui seuls `/login` et `/signup` en héritent, `<body>` n'a aucune classe de police/couleur), garder Lalezar pour les titres/logo uniquement ; déclarer les couleurs de marque dans `tailwind.config` plutôt que de dépendre du style inline dispersé (impact élevé — audit du 2026-08-12)
-- [ ] États vides illustrés — remplacer le texte brut de `EmptyState.tsx` (`<p>` seul, sans icône) par une variante avec icône (réutiliser `components/icons/`), au minimum sur l'écran serveur où l'écart avec les cartes travaillées à côté est le plus visible (impact moyen — audit du 2026-08-12)
-- [ ] Indicateur de temps écoulé sur l'écran cuisine — chrono relatif par carte de commande, changement de couleur au-delà d'un seuil ; aucune donnée manquante côté serveur (`stats/service.py` calcule déjà les temps par étape pour le dashboard manager), pur affichage client (impact moyen — audit du 2026-08-12)
-- [ ] Page stats retouchée avec les composants Card/Badge de la Phase 8.4 — seule page manager restée au style d'avant refonte (cartes fines à bordure grise, aucun badge) (impact moyen — audit du 2026-08-12)
-- [ ] Nom de l'établissement : gestion du retour à la ligne sur petit écran (`text-wrap: balance` + taille réduite au-delà d'une certaine longueur) — reproduit à 360px de large dans le bandeau du menu client (impact faible — audit du 2026-08-12)
+- [x] Identité de marque appliquée au niveau racine — `app/layout.tsx` applique désormais Hanken Grotesk + les tokens semoule/espresso à `<body>`, Lalezar étendu aux titres staff/cuisine/dashboard/stats, couleurs de marque déclarées dans `tailwind.config` ; corrige au passage l'en-tête du menu client qui utilisait `bg-amber-700` (Tailwind générique) au lieu du vrai token `var(--harissa)` (impact élevé — audit du 2026-08-12) (PR #32)
+- [x] États vides illustrés — `EmptyState.tsx` affiche une icône (`TrayIcon`) au-dessus du message, sur tous les écrans qui l'utilisent (staff, cuisine, dashboard, menu client) (impact moyen — audit du 2026-08-12) (PR #32)
+- [x] Indicateur de temps écoulé sur l'écran cuisine — badge « il y a X min » par carte, passe en rouge après 10 min ; `sent_to_kitchen_at` ajouté au broadcast WebSocket (PR #32)
+- [x] Page stats retouchée avec les composants Card/Badge de la Phase 8.4 (PR #32)
+- [x] Nom de l'établissement : `text-balance` + `min-w-0` sur le bandeau du menu client, corrige le retour à la ligne à 360px (PR #32)
 - [ ] Grand vide sur les écrans manager desktop avec peu d'articles — pas d'action tant qu'un menu réel (20-30 plats) ne comble pas l'espace naturellement ; à surveiller seulement si le premier restaurant pilote démarre avec un très petit menu (impact faible — audit du 2026-08-12)
 
 ## Phase 10 — Mise en production

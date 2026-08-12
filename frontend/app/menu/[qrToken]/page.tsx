@@ -884,22 +884,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   return (
     <div dir={dir} className={`pb-32 ${wrapperClassName ?? ""}`}>
-      <header className="bg-amber-700 text-white px-4 py-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{restaurant.name}</h1>
-          <p className="text-amber-100 text-sm">{table.label}</p>
+      <header className="bg-[var(--harissa)] text-white px-4 py-5 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-balance">{restaurant.name}</h1>
+          <p className="text-white/80 text-sm">{table.label}</p>
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
           <button
             onClick={toggleLocale}
-            className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 text-amber-50"
+            className="text-sm border border-white/40 rounded-lg px-3 py-1.5 text-white/90"
           >
             {t.localeSwitchLabel}
           </button>
           <button
             onClick={callWaiter}
             disabled={waiterCallState !== "idle"}
-            className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 text-amber-50 disabled:opacity-70 whitespace-nowrap"
+            className="text-sm border border-white/40 rounded-lg px-3 py-1.5 text-white/90 disabled:opacity-70 whitespace-nowrap"
           >
             {waiterCallState === "called" ? (
               t.callWaiterSent
