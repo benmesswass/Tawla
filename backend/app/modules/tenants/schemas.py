@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.modules.tenants.models import SubscriptionTier
+
 
 class RestaurantCreate(BaseModel):
     name: str
@@ -19,6 +21,7 @@ class RestaurantOut(BaseModel):
     iftar_time: datetime | None
     cafe_mode_enabled: bool
     kitchen_sound_enabled: bool
+    subscription_tier: SubscriptionTier
 
 
 class RamadanModeUpdate(BaseModel):

@@ -154,7 +154,7 @@ Décidé par Wassim le 2026-08-12 : **abonnement uniquement, sur trois paliers, 
   - **Pro** : + fidélité, export CSV des stats, zones de salle multiples, modes Ramadan/café simplifié (Phases 5-6)
   - **Business** : + multi-établissements sous un même compte, accompagnement prioritaire (formation staff sur place)
 - [ ] Prix de chaque palier 🧑 — aucun montant fixé à ce stade
-- [ ] Champ `Restaurant.subscription_tier` + logique de gating des fonctionnalités Pro/Business (backend + frontend)
+- [x] Champ `Restaurant.subscription_tier` (essentiel/pro/business, défaut essentiel, migration Alembic dédiée) exposé en lecture seule dans le dashboard manager — **logique de gating volontairement pas faite** : aucun prix fixé, aucune facturation active, bloquer des fonctionnalités déjà utilisées par les restaurants pilotes casserait leur expérience sans bénéfice ; chantier séparé à ouvrir une fois les prix tranchés (PR #34)
 - [ ] Page tarifs publique + flux de mise à niveau
 - [ ] Outil de facturation récurrente — mode simulé par défaut au départ (cohérent avec le reste du projet), décision sur l'outil réel à prendre plus tard, pas bloquant avant la fin de la phase pilote gratuite
 - [ ] Ne pas activer la facturation avant la fin d'une phase pilote gratuite avec les premiers établissements (séquence de mise sur le marché proposée dans le dossier du 2026-08-12 : pilotes gratuits d'abord, facturation ensuite une fois la rétention prouvée)
