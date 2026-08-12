@@ -131,10 +131,10 @@ Ajoutée le 2026-08-12, à la suite d'un audit design mené sur les six rôles/�
 
 Ajoutée le 2026-08-12, dossier complet (checklist + hébergement proposé) envoyé à Wassim en Artifact la même session. Rien n'est déployé à ce stade — checklist vérifiée directement dans le code, pas des suppositions.
 
-- [ ] Restreindre CORS à l'origine exacte du frontend de prod — actuellement `allow_origins=["*"]` (`backend/app/main.py`, TODO déjà présent dans le code) — **bloquant**
-- [ ] Générer un vrai `JWT_SECRET` de prod (commande déjà documentée dans `backend/.env.example`) — actuellement une valeur de dev y est documentée en clair — **bloquant**
-- [ ] Trancher la stratégie de migration de schéma avant les premières vraies données — soit initialiser Alembic (déjà listé dans `requirements.txt`, jamais configuré : pas de `alembic.ini` ni de dossier `versions/`), soit formaliser la convention actuelle d'`ALTER TABLE` manuel documenté par PR — **bloquant dès données réelles**
-- [ ] Rate limiting au moins sur `/auth/login` et `/auth/register` — aucune librairie de ce type dans le code actuellement — recommandé
+- [x] Restreindre CORS à l'origine exacte du frontend de prod — `allow_origins` lit désormais `settings.frontend_origin` (variable d'env `FRONTEND_ORIGIN`, liste séparée par virgules), défaut `http://localhost:3000` ; reste à définir la vraie valeur en variable d'env le jour du déploiement (PR #33)
+- [x] Garde-fou `JWT_SECRET` — le démarrage refuse (`ValueError`) si `ENV=production` et que la valeur de dev n'a pas été changée ; générer la vraie valeur de prod (commande déjà documentée dans `backend/.env.example`) reste une action à faire **au moment du déploiement réel**, pas avant (PR #33)
+- [x] Stratégie de migration de schéma — Alembic initialisé (`alembic.ini` + `alembic/env.py` branché sur `Base.metadata`/`settings.database_url`), migration initiale `81067c492c21` vérifiée par diff de schéma contre une base vierge (identique). `create_all()` reste la voie active tant qu'il n'y a pas de vraie prod avec des données — bascule prévue au déploiement réel (PR #33)
+- [x] Rate limiting sur `/auth/login` et `/auth/register` — limiteur en mémoire par (IP, route), 20 req/60s, pas de nouvelle dépendance externe (PR #33)
 - [ ] Sauvegardes automatiques de la base de données — à activer dès le Postgres managé choisi, avant la première vraie commande — **bloquant dès données réelles**
 - [ ] Monitoring basique branché sur l'endpoint `/health` déjà existant (ex. UptimeRobot gratuit) — recommandé
 - [ ] Générer une paire de clés VAPID pour activer les notifications push en prod — optionnel, la fonctionnalité se dégrade déjà proprement sans elles

@@ -1,4 +1,7 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEV_JWT_SECRET = "dev-only-secret-change-in-production"
 
 
 class Settings(BaseSettings):
@@ -12,8 +15,15 @@ class Settings(BaseSettings):
     env: str = "development"
 
     # Défaut de dev uniquement — DOIT être surchargé en prod (variable
-    # d'environnement JWT_SECRET). Signe les tokens d'auth staff.
-    jwt_secret: str = "dev-only-secret-change-in-production"
+    # d'environnement JWT_SECRET). Signe les tokens d'auth staff. Le
+    # garde-fou ci-dessous empêche de démarrer en prod avec cette valeur
+    # par erreur.
+    jwt_secret: str = _DEV_JWT_SECRET
+
+    # Origine(s) autorisées en CORS, séparées par une virgule (ex:
+    # "https://tawla.tn,https://www.tawla.tn"). Défaut = port du frontend
+    # en dev local.
+    frontend_origin: str = "http://localhost:3000"
 
     # Notifications push navigateur (Web Push standard, gratuit — pas de
     # service tiers payant comme un envoi SMS). Vides par défaut : la
@@ -23,6 +33,19 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""
     vapid_private_key: str = ""
     vapid_contact_email: str = "contact@tawla.tn"
+
+    @model_validator(mode="after")
+    def _refuse_dev_secret_in_production(self) -> "Settings":
+        if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:
+            raise ValueError(
+                "JWT_SECRET est encore la valeur de dev alors que ENV=production. "
+                "Générer une vraie valeur (voir backend/.env.example) avant de démarrer."
+            )
+        return self
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
 
 
 settings = Settings()
