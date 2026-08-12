@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
-import { api, MenuItem, Restaurant, Table } from "@/lib/api";
+import { api, MenuItem, Restaurant, SubscriptionTier, Table } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -20,6 +20,12 @@ import { MENU_CATEGORIES } from "@/lib/menuCategories";
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
 // besoin d'aucune — texte libre avec juste un coup de pouce à la saisie.
 const ZONE_SUGGESTIONS = ["Intérieur", "Terrasse", "Plage"];
+
+const TIER_LABELS: Record<SubscriptionTier, string> = {
+  essentiel: "Essentiel",
+  pro: "Pro",
+  business: "Business",
+};
 
 type TableDraft = { label: string; zone: string };
 
@@ -792,6 +798,19 @@ export default function DashboardPage() {
                 Un bip se joue sur l&apos;écran cuisine à chaque nouvelle commande envoyée. Certains navigateurs ne
                 joueront le premier son qu&apos;après une interaction sur l&apos;écran cuisine (politique de lecture
                 automatique).
+              </p>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm" className="mt-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Palier d&apos;abonnement</span>
+                <Badge tone="neutral">{TIER_LABELS[restaurant.subscription_tier]}</Badge>
+              </div>
+              <p className="text-xs text-neutral-500 mt-2">
+                Informatif pour l&apos;instant — aucune fonctionnalité n&apos;est limitée par palier tant que la
+                facturation n&apos;est pas active.
               </p>
             </Card>
           )}

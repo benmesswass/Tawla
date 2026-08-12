@@ -25,6 +25,8 @@ export type Table = {
   zone: string | null;
 };
 
+export type SubscriptionTier = "essentiel" | "pro" | "business";
+
 export type Restaurant = {
   id: number;
   name: string;
@@ -33,6 +35,7 @@ export type Restaurant = {
   iftar_time: string | null;
   cafe_mode_enabled: boolean;
   kitchen_sound_enabled: boolean;
+  subscription_tier: SubscriptionTier;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";

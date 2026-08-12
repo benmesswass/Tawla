@@ -1,9 +1,26 @@
+import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+
+
+class SubscriptionTier(str, enum.Enum):
+    """
+    Modèle économique décidé le 2026-08-12 : abonnement à 3 paliers, aucune
+    commission sur les commandes (voir ROADMAP.md Phase 11). Champ posé ici
+    en préparation — aucune fonctionnalité n'est bloquée par palier pour
+    l'instant (pas de prix fixé, pas de facturation active : gater des
+    fonctionnalités déjà utilisées par les restaurants pilotes avant que ce
+    soit réellement facturé casserait leur expérience sans aucun bénéfice).
+    La logique de gating est un chantier séparé, à ouvrir une fois les prix
+    tranchés par Wassim.
+    """
+    ESSENTIEL = "essentiel"
+    PRO = "pro"
+    BUSINESS = "business"
 
 
 class Restaurant(Base):
@@ -36,3 +53,8 @@ class Restaurant(Base):
     # par défaut (une cuisine bruyante peut ne pas vouloir d'un bip de plus),
     # activable par le manager depuis le dashboard.
     kitchen_sound_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Palier d'abonnement — informationnel pour l'instant, voir SubscriptionTier.
+    subscription_tier: Mapped[SubscriptionTier] = mapped_column(
+        Enum(SubscriptionTier), default=SubscriptionTier.ESSENTIEL
+    )
