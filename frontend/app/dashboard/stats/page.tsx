@@ -3,11 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { lalezar } from "@/lib/fonts";
 import { api, DashboardStats, Order, OrderStatus } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 import Skeleton from "@/components/ui/Skeleton";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import EmptyState from "@/components/ui/EmptyState";
+import Button from "@/components/ui/Button";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   pending_confirmation: "En attente de confirmation",
@@ -144,7 +149,7 @@ export default function DashboardStatsPage() {
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h1 className="text-lg font-semibold">Suivi de l&apos;activité</h1>
+        <h1 className={`${lalezar.className} text-xl`}>Suivi de l&apos;activité</h1>
         <div className="flex items-center gap-4 text-sm">
           <Link href="/dashboard" className="underline">
             Gérer le menu
@@ -156,7 +161,7 @@ export default function DashboardStatsPage() {
       </div>
 
       <div className="flex items-center gap-2 mb-6 flex-wrap">
-        <label htmlFor="date" className="text-sm text-neutral-500">
+        <label htmlFor="date" className="text-sm text-[var(--ink-soft)]">
           Journée
         </label>
         <input
@@ -165,18 +170,23 @@ export default function DashboardStatsPage() {
           value={date}
           max={todayIso()}
           onChange={(e) => setDate(e.target.value)}
-          className="border rounded px-2 py-1 text-sm"
+          className="border border-[var(--line)] rounded-lg px-2 py-1 text-sm"
         />
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => stats && downloadCsv(`tawla-stats-${stats.date}.csv`, statsToCsv(stats))}
           disabled={!stats}
-          className="text-sm border border-neutral-300 rounded-lg px-3 py-1 disabled:opacity-50"
         >
           Exporter en CSV
-        </button>
+        </Button>
       </div>
 
-      {error && <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
+      {error && (
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
+          {error}
+        </Card>
+      )}
 
       {!stats ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -185,78 +195,78 @@ export default function DashboardStatsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <section className="border rounded-lg p-4">
-            <h2 className="font-semibold mb-3">
-              Commandes en cours <span className="text-neutral-400 font-normal">({stats.active_orders_count})</span>
+          <Card padding="md">
+            <h2 className="font-semibold mb-3 flex items-center gap-2">
+              Commandes en cours <Badge tone="info">{stats.active_orders_count}</Badge>
             </h2>
             <div className="space-y-2">
               {ordersByStatus.map(({ status, orders }) => (
-                <div key={status} className="flex justify-between text-sm">
-                  <span className="text-neutral-600">{STATUS_LABELS[status]}</span>
-                  <span className="font-medium">{orders.length}</span>
+                <div key={status} className="flex justify-between items-center text-sm">
+                  <span className="text-[var(--ink-soft)]">{STATUS_LABELS[status]}</span>
+                  <Badge tone={orders.length > 0 ? "success" : "neutral"}>{orders.length}</Badge>
                 </div>
               ))}
             </div>
-          </section>
+          </Card>
 
-          <section className="border rounded-lg p-4">
+          <Card padding="md">
             <h2 className="font-semibold mb-3">Temps moyen par étape</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-neutral-600">Envoyée → confirmée</span>
+                <span className="text-[var(--ink-soft)]">Envoyée → confirmée</span>
                 <span className="font-medium">{formatDuration(stats.timing.avg_wait_confirmation_seconds)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-neutral-600">Confirmée → cuisine</span>
+                <span className="text-[var(--ink-soft)]">Confirmée → cuisine</span>
                 <span className="font-medium">
                   {formatDuration(stats.timing.avg_confirmation_to_kitchen_seconds)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-neutral-600">Cuisine → servie</span>
+                <span className="text-[var(--ink-soft)]">Cuisine → servie</span>
                 <span className="font-medium">{formatDuration(stats.timing.avg_kitchen_to_served_seconds)}</span>
               </div>
             </div>
-          </section>
+          </Card>
 
-          <section className="border rounded-lg p-4">
+          <Card padding="md">
             <h2 className="font-semibold mb-3">Commandes prises en charge par serveur</h2>
-            {stats.staff_performance.length === 0 && <p className="text-sm text-neutral-500">Aucune donnée pour cette journée.</p>}
+            {stats.staff_performance.length === 0 && <EmptyState message="Aucune donnée pour cette journée." />}
             <div className="space-y-2">
               {stats.staff_performance.map((p) => (
-                <div key={p.staff_id} className="flex justify-between text-sm">
-                  <span className="text-neutral-600">{p.staff_name}</span>
-                  <span className="font-medium">{p.orders_taken}</span>
+                <div key={p.staff_id} className="flex justify-between items-center text-sm">
+                  <span className="text-[var(--ink-soft)]">{p.staff_name}</span>
+                  <Badge tone="neutral">{p.orders_taken}</Badge>
                 </div>
               ))}
             </div>
-          </section>
+          </Card>
 
-          <section className="border rounded-lg p-4">
+          <Card padding="md">
             <h2 className="font-semibold mb-3">Plats les plus vendus</h2>
-            {stats.top_items.length === 0 && <p className="text-sm text-neutral-500">Aucune commande pour cette journée.</p>}
+            {stats.top_items.length === 0 && <EmptyState message="Aucune commande pour cette journée." />}
             <div className="space-y-2">
               {stats.top_items.map((item) => (
                 <div key={item.menu_item_name}>
                   <div className="flex justify-between text-sm mb-0.5">
-                    <span className="text-neutral-600">{item.menu_item_name}</span>
+                    <span className="text-[var(--ink-soft)]">{item.menu_item_name}</span>
                     <span className="font-medium">{item.quantity}</span>
                   </div>
-                  <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-[var(--line)] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-amber-700 rounded-full"
+                      className="h-full bg-[var(--harissa)] rounded-full"
                       style={{ width: `${(item.quantity / maxItemQty) * 100}%` }}
                     />
                   </div>
                 </div>
               ))}
             </div>
-          </section>
+          </Card>
 
-          <section className="border rounded-lg p-4 lg:col-span-2">
+          <Card padding="md" className="lg:col-span-2">
             <h2 className="font-semibold mb-3">Heures de pointe</h2>
             {stats.orders_by_hour.length === 0 ? (
-              <p className="text-sm text-neutral-500">Aucune commande pour cette journée.</p>
+              <EmptyState message="Aucune commande pour cette journée." />
             ) : (
               <div className="flex items-end gap-1 h-28">
                 {Array.from({ length: 24 }, (_, hour) => hour).map((hour) => {
@@ -264,16 +274,16 @@ export default function DashboardStatsPage() {
                   return (
                     <div key={hour} className="flex-1 flex flex-col items-center justify-end h-full" title={`${hour}h — ${count} commande(s)`}>
                       <div
-                        className="w-full bg-amber-700 rounded-t"
+                        className="w-full bg-[var(--harissa)] rounded-t"
                         style={{ height: count ? `${(count / maxHourCount) * 100}%` : "1px" }}
                       />
-                      {hour % 3 === 0 && <span className="text-[10px] text-neutral-400 mt-1">{hour}h</span>}
+                      {hour % 3 === 0 && <span className="text-[10px] text-[var(--ink-soft)] mt-1">{hour}h</span>}
                     </div>
                   );
                 })}
               </div>
             )}
-          </section>
+          </Card>
         </div>
       )}
     </div>

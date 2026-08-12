@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { lalezar } from "@/lib/fonts";
 import { api, wsUrl, ApiError, Order, Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
@@ -20,7 +21,20 @@ type KitchenOrder = {
   table_id: number;
   items: { name: string; quantity: number; notes: string | null; is_shared: boolean }[];
   scheduled_for: string | null;
+  sent_to_kitchen_at: string | null;
 };
+
+// Au-delà de ce seuil, l'attente cuisine passe en alerte visuelle (harissa).
+const ELAPSED_ALERT_MINUTES = 10;
+
+function elapsedMinutes(iso: string | null, now: number): number | null {
+  if (!iso) return null;
+  return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
+}
+
+function formatElapsed(minutes: number): string {
+  return minutes < 1 ? "à l'instant" : `il y a ${minutes} min`;
+}
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
@@ -37,6 +51,7 @@ function orderFromApi(o: Order): KitchenOrder {
       is_shared: i.is_shared,
     })),
     scheduled_for: o.scheduled_for,
+    sent_to_kitchen_at: o.sent_to_kitchen_at,
   };
 }
 
@@ -80,6 +95,12 @@ export default function KitchenPage() {
   const [error, setError] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [todayCount, setTodayCount] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, []);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -140,6 +161,7 @@ export default function KitchenPage() {
                 table_id: msg.table_id,
                 items: msg.items,
                 scheduled_for: msg.scheduled_for ?? null,
+                sent_to_kitchen_at: msg.sent_to_kitchen_at ?? null,
               },
             ]
       );
@@ -229,7 +251,7 @@ export default function KitchenPage() {
   return (
     <div className="p-6 bg-neutral-950 min-h-screen text-white">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold">Écran cuisine</h1>
+        <h1 className={`${lalezar.className} text-3xl`}>Écran cuisine</h1>
         <div className="flex items-center gap-3">
           <ConnectionBadge status={status} dark />
           <Button variant="secondary" dark onClick={printTickets}>
@@ -263,10 +285,20 @@ export default function KitchenPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
         {orders.map((o) => (
           <Card key={o.order_id} dark padding="md" className="text-white">
-            <div className="flex justify-between items-baseline mb-3">
+            <div className="flex justify-between items-baseline mb-1">
               <span className="text-xl font-bold">Table {o.table_id}</span>
               <span className="text-neutral-500 text-sm">#{o.order_id}</span>
             </div>
+            {(() => {
+              const mins = elapsedMinutes(o.sent_to_kitchen_at, now);
+              if (mins === null) return null;
+              const late = mins >= ELAPSED_ALERT_MINUTES;
+              return (
+                <Badge tone={late ? "danger" : "neutral"} dark className="mb-2">
+                  {formatElapsed(mins)}
+                </Badge>
+              );
+            })()}
             {o.scheduled_for && (
               <div className="text-xs text-indigo-300 mb-2 flex items-center gap-1">
                 <MoonIcon className="w-3.5 h-3.5 shrink-0" />

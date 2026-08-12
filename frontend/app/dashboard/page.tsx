@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { lalezar } from "@/lib/fonts";
 import { api, MenuItem, Restaurant, Table } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
@@ -340,7 +341,7 @@ export default function DashboardPage() {
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h1 className="text-lg font-semibold">Dashboard resto — gérer le menu</h1>
+        <h1 className={`${lalezar.className} text-xl`}>Dashboard resto — gérer le menu</h1>
         <div className="flex items-center gap-4 text-sm">
           <Link href="/dashboard/stats" className="underline">
             Suivi de l&apos;activité

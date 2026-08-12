@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { lalezar } from "@/lib/fonts";
 import { api, wsUrl, LoyaltyMember, Order } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
@@ -302,7 +303,7 @@ export default function StaffPage() {
   return (
     <div className="p-4 max-w-md mx-auto">
       <div className="flex items-center justify-between mb-1">
-        <h1 className="text-lg font-semibold">Commandes à confirmer</h1>
+        <h1 className={`${lalezar.className} text-xl`}>Commandes à confirmer</h1>
         <ConnectionBadge status={status} />
       </div>
       <div className="flex items-center justify-between mb-4 text-sm text-neutral-500">

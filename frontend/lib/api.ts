@@ -71,6 +71,7 @@ export type Order = {
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
   scheduled_for: string | null;
+  sent_to_kitchen_at: string | null;
   loyalty_phone: string | null;
   payment_method: PaymentMethod | null;
   payment_status: PaymentStatus;
