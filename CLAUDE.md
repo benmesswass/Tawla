@@ -67,6 +67,12 @@ cd frontend && npm run lint && npx tsc --noEmit && npm run build
 
 # Générer le QR d'une table (après création via API)
 python backend/scripts/generate_table_qr.py --qr-token <token> --label "Table 5"
+
+# Migrations Alembic (tooling prêt depuis Phase 10 — create_all() reste la
+# voie active tant qu'il n'y a pas de vraie prod avec des données, cf.
+# ROADMAP.md Phase 10 et le commentaire dans backend/app/main.py)
+cd backend && alembic revision --autogenerate -m "description"
+cd backend && alembic upgrade head
 ```
 
 Comptes démo (fixes, mot de passe `tawla2026`) : `manager@tawla.tn` (manager),
