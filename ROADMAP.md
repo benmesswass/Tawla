@@ -69,12 +69,12 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 ## Phase 7 — Idées à trancher plus tard (🧑 arbitrage produit de Wassim)
 
-- [ ] Modèle de paiement : frais de service uniquement vs vrai paiement intégral en ligne (implication juridique/comptable à valider)
-- [ ] Programme de fidélité : par établissement vs mutualisé entre plusieurs restaurants partenaires
-- [ ] Gestion des grands groupes / événements (mariages, réservations de salle)
+- [x] Modèle de paiement — décidé par Wassim le 2026-08-12 : **frais de service uniquement**. Quand le vrai paiement Konnect sera activé, il ne captera jamais que la commission de service Tawla — jamais le prix intégral du repas, qui continue d'être réglé directement entre le client et le restaurant (cash ou terminal du resto). Aucun code changé par cette décision : le paiement carte actuel (PR #4) reste en **mode simulé** et couvre le prix total à titre de démo — la vraie intégration Konnect (frais de service uniquement) est un chantier futur non encore scopé, à ouvrir comme tâche séparée le jour où elle est priorisée.
+- [x] Programme de fidélité — décidé par Wassim le 2026-08-12 : **par établissement** (statu quo confirmé). Aucun changement de code : `LoyaltyMember` est déjà scopé par `restaurant_id`, conforme à la décision.
+- [ ] Gestion des grands groupes / événements (mariages, réservations de salle) — Wassim a explicitement choisi de ne pas cadrer maintenant (2026-08-12) ; reste ouvert pour une session de cadrage dédiée plus tard, ne pas relancer la question tant qu'il n'en a pas fait la demande
 - [x] Nom de marque définitif — confirmé par Wassim le 2026-08-11 : **Tawla** reste le nom définitif. L'identité visuelle (logo, palette, typographie) est tracée en Phase 8.1, désormais débloquée
-- [ ] Montée de version majeure Next.js (14 → 15/16) : breaking change réel, décision produit à part (signalé lors de l'audit du 2026-08-10)
-- [ ] Vraie intégration imprimante cuisine (au-delà du filet de secours navigateur déjà en place)
+- [x] Montée de version majeure Next.js (14 → 15/16) — décidé par Wassim le 2026-08-12 : **reportée**, pas de fenêtre de maintenance dédiée pour l'instant (breaking change réel, aucun bénéfice utilisateur immédiat)
+- [x] Vraie intégration imprimante cuisine — décidé par Wassim le 2026-08-12 : **on garde le filet de secours navigateur actuel**, pas d'intégration matérielle prévue pour l'instant
 
 ## Phase 8 — Design & expérience
 
