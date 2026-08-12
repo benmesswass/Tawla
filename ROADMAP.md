@@ -69,7 +69,7 @@ North star : un service fluide en salle (zéro commande perdue ou oubliée) et u
 
 ## Phase 7 — Idées à trancher plus tard (🧑 arbitrage produit de Wassim)
 
-- [x] Modèle de paiement — décidé par Wassim le 2026-08-12 : **frais de service uniquement**. Quand le vrai paiement Konnect sera activé, il ne captera jamais que la commission de service Tawla — jamais le prix intégral du repas, qui continue d'être réglé directement entre le client et le restaurant (cash ou terminal du resto). Aucun code changé par cette décision : le paiement carte actuel (PR #4) reste en **mode simulé** et couvre le prix total à titre de démo — la vraie intégration Konnect (frais de service uniquement) est un chantier futur non encore scopé, à ouvrir comme tâche séparée le jour où elle est priorisée.
+- [x] Modèle de paiement — décidé par Wassim le 2026-08-12 : **frais de service uniquement**. Quand le vrai paiement Konnect sera activé, il ne captera jamais que la commission de service Tawla — jamais le prix intégral du repas, qui continue d'être réglé directement entre le client et le restaurant (cash ou terminal du resto). Aucun code changé par cette décision : le paiement carte actuel (PR #4) reste en **mode simulé** et couvre le prix total à titre de démo — la vraie intégration Konnect (frais de service uniquement) est un chantier futur non encore scopé, à ouvrir comme tâche séparée le jour où elle est priorisée. **Mise à jour du 2026-08-12 (arbitrage business model, voir Phase 11) :** le modèle de revenus retenu pour Tawla est finalement l'**abonnement, sans commission** — cette décision-ci ne portait que sur la mécanique de paiement (ce que Konnect capte techniquement), pas sur le modèle de revenus. Le paiement carte reste une fonctionnalité de confort pour le client (règlement + pourboire) ; Tawla n'en capte plus rien.
 - [x] Programme de fidélité — décidé par Wassim le 2026-08-12 : **par établissement** (statu quo confirmé). Aucun changement de code : `LoyaltyMember` est déjà scopé par `restaurant_id`, conforme à la décision.
 - [ ] Gestion des grands groupes / événements (mariages, réservations de salle) — Wassim a explicitement choisi de ne pas cadrer maintenant (2026-08-12) ; reste ouvert pour une session de cadrage dédiée plus tard, ne pas relancer la question tant qu'il n'en a pas fait la demande
 - [x] Nom de marque définitif — confirmé par Wassim le 2026-08-11 : **Tawla** reste le nom définitif. L'identité visuelle (logo, palette, typographie) est tracée en Phase 8.1, désormais débloquée
@@ -115,3 +115,46 @@ Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures a
 - [x] Mini-fait culturel ou anecdote pendant l'attente cuisine — 8 anecdotes vérifiées (UNESCO couscous/harissa, thé à la menthe, brik, tajine tunisien, huile d'olive, lablabi, dattes Deglet Nour), `frontend/lib/culturalFacts.ts`, rotation toutes les 8s pendant "en cuisine"/"en préparation", fr/ar (PR #29)
 - [x] Carte de fidélité visuelle façon carte à tamponner — `LoyaltyStampCard` (rangée de 10 jetons, remplis en harissa puis en laiton une fois la récompense débloquée) remplace le texte brut sur les deux écrans où la fidélité s'affichait côté client (PR #29)
 - [x] Partage social de la commande — carte visuelle 1080×1920 générée sur `<canvas>` (`frontend/lib/shareCard.ts`, dégradé de marque + nom du resto + plats commandés, aucune image externe), bouton "Partager ma commande" utilisant la Web Share API (fichiers) avec repli sur téléchargement direct si indisponible, fr/ar (PR #29)
+
+## Phase 9 — Finition design (post-audit)
+
+Ajoutée le 2026-08-12, à la suite d'un audit design mené sur les six rôles/écrans de l'app une fois la Phase 8 mergée (parcours complet en Playwright, captures à l'appui, dossier envoyé à Wassim en Artifact). Aucun des six constats n'est bloquant techniquement — classés ci-dessous par impact décroissant.
+
+- [ ] Identité de marque appliquée au niveau racine — poser les custom properties de marque + Hanken Grotesk dans `app/layout.tsx` (aujourd'hui seuls `/login` et `/signup` en héritent, `<body>` n'a aucune classe de police/couleur), garder Lalezar pour les titres/logo uniquement ; déclarer les couleurs de marque dans `tailwind.config` plutôt que de dépendre du style inline dispersé (impact élevé — audit du 2026-08-12)
+- [ ] États vides illustrés — remplacer le texte brut de `EmptyState.tsx` (`<p>` seul, sans icône) par une variante avec icône (réutiliser `components/icons/`), au minimum sur l'écran serveur où l'écart avec les cartes travaillées à côté est le plus visible (impact moyen — audit du 2026-08-12)
+- [ ] Indicateur de temps écoulé sur l'écran cuisine — chrono relatif par carte de commande, changement de couleur au-delà d'un seuil ; aucune donnée manquante côté serveur (`stats/service.py` calcule déjà les temps par étape pour le dashboard manager), pur affichage client (impact moyen — audit du 2026-08-12)
+- [ ] Page stats retouchée avec les composants Card/Badge de la Phase 8.4 — seule page manager restée au style d'avant refonte (cartes fines à bordure grise, aucun badge) (impact moyen — audit du 2026-08-12)
+- [ ] Nom de l'établissement : gestion du retour à la ligne sur petit écran (`text-wrap: balance` + taille réduite au-delà d'une certaine longueur) — reproduit à 360px de large dans le bandeau du menu client (impact faible — audit du 2026-08-12)
+- [ ] Grand vide sur les écrans manager desktop avec peu d'articles — pas d'action tant qu'un menu réel (20-30 plats) ne comble pas l'espace naturellement ; à surveiller seulement si le premier restaurant pilote démarre avec un très petit menu (impact faible — audit du 2026-08-12)
+
+## Phase 10 — Mise en production
+
+Ajoutée le 2026-08-12, dossier complet (checklist + hébergement proposé) envoyé à Wassim en Artifact la même session. Rien n'est déployé à ce stade — checklist vérifiée directement dans le code, pas des suppositions.
+
+- [ ] Restreindre CORS à l'origine exacte du frontend de prod — actuellement `allow_origins=["*"]` (`backend/app/main.py`, TODO déjà présent dans le code) — **bloquant**
+- [ ] Générer un vrai `JWT_SECRET` de prod (commande déjà documentée dans `backend/.env.example`) — actuellement une valeur de dev y est documentée en clair — **bloquant**
+- [ ] Trancher la stratégie de migration de schéma avant les premières vraies données — soit initialiser Alembic (déjà listé dans `requirements.txt`, jamais configuré : pas de `alembic.ini` ni de dossier `versions/`), soit formaliser la convention actuelle d'`ALTER TABLE` manuel documenté par PR — **bloquant dès données réelles**
+- [ ] Rate limiting au moins sur `/auth/login` et `/auth/register` — aucune librairie de ce type dans le code actuellement — recommandé
+- [ ] Sauvegardes automatiques de la base de données — à activer dès le Postgres managé choisi, avant la première vraie commande — **bloquant dès données réelles**
+- [ ] Monitoring basique branché sur l'endpoint `/health` déjà existant (ex. UptimeRobot gratuit) — recommandé
+- [ ] Générer une paire de clés VAPID pour activer les notifications push en prod — optionnel, la fonctionnalité se dégrade déjà proprement sans elles
+- [ ] Choisir et provisionner l'hébergement — proposition : backend (déjà dockerisé, `backend/Dockerfile`) sur Railway ou Render (support WebSocket natif + Postgres managé avec sauvegardes), frontend sur Vercel. Contrainte à respecter : le gestionnaire de connexions WebSocket est en mémoire par choix assumé dans le code (`notifications/manager.py`) — donc **une seule instance backend** tant qu'il n'est pas migré vers un pub/sub Redis, pas d'auto-scaling horizontal
+- [ ] Réserver un nom de domaine (`tawla.tn` en priorité vu le positionnement tunisien, `.com` en secours) 🧑
+- [ ] Déployer sur un environnement de staging, générer les vraies clés (JWT_SECRET, VAPID), rejouer le parcours complet (client/serveur/cuisine/manager) sur l'environnement réel avant toute bascule définitive
+- [ ] Bascule finale du domaine + variables de prod, une fois le staging validé par Wassim 🧑
+
+## Phase 11 — Modèle économique
+
+Décidé par Wassim le 2026-08-12 : **abonnement uniquement, sur trois paliers, aucune commission sur les commandes.** Le paiement carte in-app (Konnect) reste une fonctionnalité de confort pour le client — règlement + pourboire — mais Tawla n'en capte plus rien (voir mise à jour de la Phase 7 sur le modèle de paiement, qui ne portait que sur la mécanique de paiement, pas sur le modèle de revenus).
+
+- [x] Zéro commission sur les commandes, quel que soit le mode de paiement (carte in-app ou cash) — décidé par Wassim le 2026-08-12
+- [x] Trois paliers d'abonnement mensuel par établissement — décidé par Wassim le 2026-08-12 (le nombre de paliers ; le contenu détaillé ci-dessous est une proposition, pas encore validé)
+- [ ] Contenu exact de chaque palier 🧑 — proposition à valider, construite sur des frontières déjà réelles dans le code plutôt qu'une segmentation inventée :
+  - **Essentiel** : QR + menu + commande, écrans serveur/cuisine temps réel, paiement carte + demande cash (Phases 0-4)
+  - **Pro** : + fidélité, export CSV des stats, zones de salle multiples, modes Ramadan/café simplifié (Phases 5-6)
+  - **Business** : + multi-établissements sous un même compte, accompagnement prioritaire (formation staff sur place)
+- [ ] Prix de chaque palier 🧑 — aucun montant fixé à ce stade
+- [ ] Champ `Restaurant.subscription_tier` + logique de gating des fonctionnalités Pro/Business (backend + frontend)
+- [ ] Page tarifs publique + flux de mise à niveau
+- [ ] Outil de facturation récurrente — mode simulé par défaut au départ (cohérent avec le reste du projet), décision sur l'outil réel à prendre plus tard, pas bloquant avant la fin de la phase pilote gratuite
+- [ ] Ne pas activer la facturation avant la fin d'une phase pilote gratuite avec les premiers établissements (séquence de mise sur le marché proposée dans le dossier du 2026-08-12 : pilotes gratuits d'abord, facturation ensuite une fois la rétention prouvée)
