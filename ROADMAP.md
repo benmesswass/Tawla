@@ -82,6 +82,29 @@ menés. Ces deux lignes portent 40 % du poids cumulé et **aucune ligne de code 
 peut plus les faire monter** — tout ce qui reste à faire pour atteindre 8/10
 passe par la porte d'un restaurant.
 
+## Où en est la roadmap, et ce qui reste
+
+**Toutes les tâches réalisables sans sortir de la machine sont faites** (phases
+12.1, 12.2, 12.3-code, 13.2, 13.3, 14.1, 14.2, 15, 16). Ce qui reste tient en
+trois blocs, dans cet ordre — et aucun ne se code :
+
+1. **Mettre en ligne** (12.3) — hébergement, domaine, clés, **sauvegardes**,
+   moniteur branché sur `/health`. Les sauvegardes sont bloquantes avant la
+   première commande réelle : un pilote qui perd son service du soir ne
+   revient pas.
+2. **Aller voir des restaurateurs** (13.1) — 20 entretiens. C'est la ligne qui
+   pèse le plus lourd (20 % de la grille, notée 2,0) et la seule qui
+   conditionne les suivantes : la synthèse doit provoquer une **coupe** dans
+   cette roadmap, pas un ajout.
+3. **Trois pilotes, puis deux clients payants** (13.4, 14.3) — avec la semaine
+   de mesure **avant** activation, sinon la preuve ne vaut rien. Fixer le prix
+   au passage, et déposer la déclaration INPDP avant le premier client réel.
+
+Le produit est prêt pour ces trois blocs : installable en une commande, sûr,
+conforme, avec l'instrument de mesure déjà en place. **Écrire du code
+supplémentaire maintenant ferait baisser la note**, en repoussant la seule
+chose qui manque.
+
 ---
 
 ## Phase 12 — Rendre le produit vendable (bloquant absolu)
@@ -204,8 +227,8 @@ chiffre défendable en rendez-vous : « +X % de panier moyen »)
 Phase 11, prise avant tout contact client)
 
 - [ ] Fixer le prix unique 🧑 — proposition de la revue : **120 DT/mois, service d'installation inclus**, cible 45 établissements. Arithmétique : 45 × 120 DT ≈ 65 k DT/an tenable seul, contre 290 clients à 35 DT pour un revenu comparable et une charge de support intenable
-- [ ] Page tarifs publique : un prix, ce qui est inclus, pas de grille à trois colonnes
-- [ ] Garder `Restaurant.subscription_tier` en base (déjà là, sans coût) mais **ne pas coder de gating** : bloquer une fonctionnalité déjà utilisée par un pilote casserait son service sans aucun bénéfice
+- [x] Page tarifs publique : un prix, ce qui est inclus, pas de grille à trois colonnes (PR #39) — **scope réduit et assumé** : ce sont les sections « Un seul prix » et « Tout est inclus » de la page d'accueil, pas une page séparée. Une page tarifs dédiée qui n'affiche aucun tarif n'aurait servi à rien. Le montant apparaît dès que `PRICE_MONTHLY_DT` est renseigné, sans autre changement de code
+- [x] Garder `Restaurant.subscription_tier` en base (déjà là, sans coût) mais **ne pas coder de gating** : bloquer une fonctionnalité déjà utilisée par un pilote casserait son service sans aucun bénéfice — vérifié, le champ n'est lu nulle part ailleurs que pour afficher un badge sur `/dashboard`. Ligne à laisser cochée : elle décrit une chose à **ne pas** faire
 - [ ] Facturation : facture mensuelle manuelle pour les 10 premiers clients (un virement ou un chèque, pas d'outil). N'automatiser qu'au-delà — YAGNI strict
 - [ ] Ne pas activer la facturation avant la fin de la phase pilote gratuite
 

@@ -285,7 +285,7 @@ def test_the_purge_script_runs_end_to_end(tmp_path):
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}"}
 
     simulation = subprocess.run(
-        [sys.executable, str(script)], env=env, capture_output=True, text=True
+        [sys.executable, str(script)], env=env, capture_output=True, text=True, timeout=60
     )
     assert simulation.returncode == 0, simulation.stderr
     assert "1" in simulation.stdout
@@ -293,7 +293,7 @@ def test_the_purge_script_runs_end_to_end(tmp_path):
         assert conn.execute(text("SELECT COUNT(*) FROM loyalty_members")).scalar() == 1
 
     applique = subprocess.run(
-        [sys.executable, str(script), "--appliquer"], env=env, capture_output=True, text=True
+        [sys.executable, str(script), "--appliquer"], env=env, capture_output=True, text=True, timeout=60
     )
     assert applique.returncode == 0, applique.stderr
     with engine.connect() as conn:
