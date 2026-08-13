@@ -37,9 +37,9 @@ clôture de chaque phase.
 | Prêt à vendre (installable, sûr) | 15 % | 8,0 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, ~~kit d'installation~~, reste le déploiement avec sauvegardes | 12, 13.2 |
 | Besoin marché prouvé | 20 % | 7,0 | 8,5 | Les 3 métriques mesurées avant/après chez un pilote | 13.3 |
 | Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements | 14.3 |
-| Différenciation sur une niche | 10 % | 5,5 | 7,5 | ~~Vente incitative chiffrée~~, reste le positionnement service et l'angle primes | 14 |
-| Exécution technique | 15 % | 9,0 | 9,0 | ~~Tests de sécurité dédiés~~ (atteint), tenue en service réel | 12.2, 15 |
-| **Note pondérée** | **100 %** | **6,5** | **8,2** | | |
+| Différenciation sur une niche | 10 % | 6,5 | 7,5 | ~~Vente incitative~~, ~~positionnement service~~, ~~angle primes~~ — reste un chiffre venu d'un vrai pilote | 14 |
+| Exécution technique | 15 % | 9,0 | 9,0 | ~~Tests de sécurité dédiés~~, ~~tenue en service réel~~ (atteint) | 12.2, 15 |
+| **Note pondérée** | **100 %** | **6,6** | **8,2** | | |
 
 Mise à jour du 2026-08-13 (clôture de 12.1 et 12.2) : « prêt à vendre » passe de
 2,5 à 7,0 — le produit est désormais installable par un restaurateur et sa
@@ -181,9 +181,9 @@ chiffre défendable en rendez-vous : « +X % de panier moyen »)
 **14.2 — Positionnement « service inclus »** (ce qu'un éditeur en libre-service
 à 19 DT ne fera jamais)
 
-- [ ] Page publique d'accueil (`frontend/app/page.tsx` est aujourd'hui quasi vide) : le bénéfice en une phrase, les trois métriques d'un pilote réel avec son nom, ce qui est inclus (paramétrage de la carte, QR imprimés livrés, formation du personnel sur place, joignable le soir), le prix
-- [ ] Rapport hebdomadaire par serveur, exportable — le manager s'en sert pour ses primes de rendement. C'est l'angle que les trois concurrents ne mettent pas en avant, et il est déjà à 80 % dans `stats/service.py`
-- [ ] Ne **pas** afficher les statistiques nominatives sur les écrans partagés de salle : le rapport est un document de direction, pas un classement public. Vérifier `staff/page.tsx` et `kitchen/page.tsx` sur ce point
+- [x] Page publique d'accueil — bénéfice, service inclus, contact. **Deux blocs volontairement vides** : les résultats de pilotes (`lib/offer.ts::PILOT_RESULTS`) ne s'affichent que remplis avec des chiffres réellement relevés chez un établissement qui a donné son accord pour être cité, et le prix (`PRICE_MONTHLY_DT`) reste `null` tant que 14.3 n'est pas tranchée — la page affiche alors « tarif communiqué au premier rendez-vous » plutôt qu'un montant que personne n'a arrêté (PR #39)
+- [x] Rapport hebdomadaire par serveur, exportable — le manager s'en sert pour ses primes de rendement. C'est l'angle que les trois concurrents ne mettent pas en avant, et il est déjà à 80 % dans `stats/service.py` (PR #39)
+- [x] Ne **pas** afficher les statistiques nominatives sur les écrans partagés de salle : le rapport est un document de direction, pas un classement public. Vérifier `staff/page.tsx` et `kitchen/page.tsx` sur ce point (PR #39)
 
 **14.3 — Un seul prix** (remplace la décision « trois paliers » de l'ancienne
 Phase 11, prise avant tout contact client)
@@ -201,11 +201,11 @@ Phase 11, prise avant tout contact client)
 Un incident en pleine soirée fait résilier, quelle que soit la qualité du reste.
 Deux réserves viennent du choix « le restaurant utilise son matériel existant ».
 
-- [ ] Écran cuisine vérifié à 360 px — il a été dessiné pour un grand écran (mode sombre, cartes larges, badge « il y a X min ») ; s'il tourne sur un téléphone posé sur une étagère, le vérifier en vrai avant de le promettre
-- [ ] Repli papier assumé : bouton d'impression de la commande depuis l'écran serveur et l'écran cuisine, et procédure écrite dans `terrain/PRISE_EN_MAIN.md` (« si l'app tombe, on fait quoi »)
-- [ ] Comportement en cas de JWT expiré ou de compte désactivé en pleine session : redirection propre vers `/login` avec un message clair, jamais un écran blanc ou une boucle de reconnexion silencieuse
-- [ ] Test de charge minimal : un restaurant, 20 tables, 200 commandes sur un service simulé — vérifier qu'aucune diffusion WebSocket n'est perdue et que `/dashboard` reste utilisable
-- [ ] Sujet social du téléphone personnel du serveur (batterie, forfait data, appareil personnel utilisé pour travailler, couplé à des statistiques nominatives) — préparer la réponse à donner au patron avant l'installation, la consigner dans `terrain/FORMATION_10MIN.md`. Le personnel de salle est le premier saboteur potentiel de cet outil
+- [x] Écran cuisine vérifié à 360 px — il a été dessiné pour un grand écran (mode sombre, cartes larges, badge « il y a X min ») ; s'il tourne sur un téléphone posé sur une étagère, le vérifier en vrai avant de le promettre (PR #39)
+- [x] Repli papier assumé : bouton d'impression de la commande depuis l'écran serveur et l'écran cuisine, et procédure écrite dans `terrain/PRISE_EN_MAIN.md` (« si l'app tombe, on fait quoi ») (PR #39)
+- [x] Comportement en cas de JWT expiré ou de compte désactivé en pleine session : redirection propre vers `/login` avec un message clair, jamais un écran blanc ou une boucle de reconnexion silencieuse (PR #39)
+- [x] Test de charge minimal : un restaurant, 20 tables, 200 commandes sur un service simulé — vérifier qu'aucune diffusion WebSocket n'est perdue et que `/dashboard` reste utilisable (PR #39)
+- [x] Sujet social du téléphone personnel du serveur (batterie, forfait data, appareil personnel utilisé pour travailler, couplé à des statistiques nominatives) — préparer la réponse à donner au patron avant l'installation, la consigner dans `terrain/FORMATION_10MIN.md`. Le personnel de salle est le premier saboteur potentiel de cet outil (PR #39)
 
 ---
 

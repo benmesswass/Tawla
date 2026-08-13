@@ -46,6 +46,11 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+}
+
 export default function StaffPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["waiter", "manager"]);
@@ -293,6 +298,40 @@ export default function StaffPage() {
     router.push("/login");
   }
 
+  /**
+   * Filet de secours papier : quand le réseau tombe en plein service, l'équipe
+   * bascule au carnet (voir terrain/PRISE_EN_MAIN.md). Le serveur doit pouvoir
+   * emporter ce qui est en cours plutôt que de le recopier de mémoire.
+   * L'écran cuisine avait déjà ce bouton, pas le pool serveur — or c'est lui
+   * qui prend les commandes.
+   */
+  function printPending() {
+    const win = window.open("", "_blank", "width=420,height=640");
+    if (!win) return;
+    const rows = pending
+      .map(
+        (o) => `
+      <div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px dashed #000;">
+        <strong>Table ${o.table_id} — Commande #${o.order_id}</strong>
+        ${o.taken_by_staff_name ? `<div>Pris en charge par ${escapeHtml(o.taken_by_staff_name)}</div>` : ""}
+      </div>`
+      )
+      .join("");
+    const cash = cashRequests
+      .map(
+        (c) => `<div>Table ${c.table_id} — addition ${c.amount.toFixed(2)} DT (espèces)</div>`
+      )
+      .join("");
+    win.document.write(
+      `<html><head><title>Service en cours</title></head><body style="font-family:sans-serif;padding:12px;">
+       <h3>À confirmer (${pending.length})</h3>${rows || "<div>aucune</div>"}
+       <h3>Paiements en espèces (${cashRequests.length})</h3>${cash || "<div>aucun</div>"}
+       </body></html>`
+    );
+    win.document.close();
+    win.print();
+  }
+
   if (staffLoading || !staff) {
     return (
       <div className="p-4 max-w-md mx-auto space-y-3">
@@ -318,11 +357,16 @@ export default function StaffPage() {
         <h1 className={`${lalezar.className} text-xl`}>Commandes à confirmer</h1>
         <ConnectionBadge status={status} />
       </div>
-      <div className="flex items-center justify-between mb-4 text-sm text-neutral-500">
+      <div className="flex items-center justify-between mb-4 text-sm text-neutral-500 gap-2 flex-wrap">
         <span>{staff.name}</span>
-        <button onClick={logout} className="underline">
-          Se déconnecter
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={printPending} className="underline">
+            Imprimer (filet de secours)
+          </button>
+          <button onClick={logout} className="underline">
+            Se déconnecter
+          </button>
+        </div>
       </div>
 
       {error && (
