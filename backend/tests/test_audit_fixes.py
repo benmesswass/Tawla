@@ -3,20 +3,18 @@ Régressions ajoutées suite à l'audit QA/PO/Design du 2026-08-10. Chaque test
 reproduit un bug constaté manuellement avant correction.
 """
 from app.modules.staff.models import Staff
-from tests.conftest import _TestingSessionLocal, auth_headers, create_staff
+from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff
 
 
 def _setup_restaurant_with_item(client, available=True, price=3.5):
-    restaurant = client.post(
-        "/api/v1/restaurants", json={"name": "Café Test", "slug": "cafe-test"}
-    ).json()
-    headers = auth_headers(create_staff(restaurant["id"]))
+    restaurant = create_restaurant(name="Café Test", slug="cafe-test")
+    headers = auth_headers(create_staff(restaurant.id))
     table = client.post(
-        "/api/v1/tables", json={"restaurant_id": restaurant["id"], "label": "Table 1"}, headers=headers
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
     ).json()
     item = client.post(
         "/api/v1/menu-items",
-        json={"restaurant_id": restaurant["id"], "name": "Café", "price": price},
+        json={"restaurant_id": restaurant.id, "name": "Café", "price": price},
         headers=headers,
     ).json()
     if not available:
@@ -33,10 +31,10 @@ def test_active_orders_survive_a_late_or_refreshed_screen(client):
     restaurant, table, item, headers = _setup_restaurant_with_item(client)
     order = client.post(
         "/api/v1/orders",
-        json={"restaurant_id": restaurant["id"], "table_id": table["id"], "items": [{"menu_item_id": item["id"]}]},
+        json={"qr_token": table["qr_token"], "items": [{"menu_item_id": item["id"]}]},
     ).json()
 
-    res = client.get(f"/api/v1/orders/by-restaurant/{restaurant['id']}/active", headers=headers)
+    res = client.get(f"/api/v1/orders/by-restaurant/{restaurant.id}/active", headers=headers)
     assert res.status_code == 200
     assert order["id"] in [o["id"] for o in res.json()]
 
@@ -45,7 +43,7 @@ def test_active_orders_excludes_served_and_cancelled(client):
     restaurant, table, item, headers = _setup_restaurant_with_item(client)
     order = client.post(
         "/api/v1/orders",
-        json={"restaurant_id": restaurant["id"], "table_id": table["id"], "items": [{"menu_item_id": item["id"]}]},
+        json={"qr_token": table["qr_token"], "items": [{"menu_item_id": item["id"]}]},
     ).json()
     order_id = order["id"]
     client.post(f"/api/v1/orders/{order_id}/confirm", headers=headers)
@@ -54,7 +52,7 @@ def test_active_orders_excludes_served_and_cancelled(client):
     client.post(f"/api/v1/orders/{order_id}/mark-ready", headers=headers)
     client.post(f"/api/v1/orders/{order_id}/mark-served", headers=headers)
 
-    res = client.get(f"/api/v1/orders/by-restaurant/{restaurant['id']}/active", headers=headers)
+    res = client.get(f"/api/v1/orders/by-restaurant/{restaurant.id}/active", headers=headers)
     assert order_id not in [o["id"] for o in res.json()]
 
 
@@ -68,16 +66,14 @@ def test_error_responses_carry_a_machine_readable_code(client):
     res = client.get("/api/v1/tables/by-token/un-token-invente")
     assert res.json()["detail"]["code"] == "INVALID_TABLE_CODE"
 
-    restaurant = client.post(
-        "/api/v1/restaurants", json={"name": "Café Test 2", "slug": "cafe-test-2"}
-    ).json()
-    headers = auth_headers(create_staff(restaurant["id"]))
+    restaurant = create_restaurant(name="Café Test 2", slug="cafe-test-2")
+    headers = auth_headers(create_staff(restaurant.id))
     table = client.post(
-        "/api/v1/tables", json={"restaurant_id": restaurant["id"], "label": "Table 1"}, headers=headers
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
     ).json()
     unavailable_item = client.post(
         "/api/v1/menu-items",
-        json={"restaurant_id": restaurant["id"], "name": "Plat épuisé", "price": 9},
+        json={"restaurant_id": restaurant.id, "name": "Plat épuisé", "price": 9},
         headers=headers,
     ).json()
     client.patch(
@@ -87,8 +83,7 @@ def test_error_responses_carry_a_machine_readable_code(client):
     res = client.post(
         "/api/v1/orders",
         json={
-            "restaurant_id": restaurant["id"],
-            "table_id": table["id"],
+            "qr_token": table["qr_token"],
             "items": [{"menu_item_id": unavailable_item["id"]}],
         },
     )
@@ -113,11 +108,11 @@ def test_assign_staff_rejects_staff_from_another_restaurant(client):
     pas pouvoir être assigné à une table du resto A.
     """
     resto_a, table_a, _, headers_a = _setup_restaurant_with_item(client)
-    resto_b = client.post("/api/v1/restaurants", json={"name": "Resto B", "slug": "resto-b-audit"}).json()
+    resto_b = create_restaurant(name="Resto B", slug="resto-b-audit")
 
     db = _TestingSessionLocal()
     staff_b = Staff(
-        restaurant_id=resto_b["id"], name="Karim", email="karim-audit@test.local", password_hash="unused"
+        restaurant_id=resto_b.id, name="Karim", email="karim-audit@test.local", password_hash="unused"
     )
     db.add(staff_b)
     db.commit()
@@ -146,7 +141,7 @@ def test_dashboard_can_update_and_delete_menu_items(client):
     res = client.delete(f"/api/v1/menu-items/{item['id']}", headers=headers)
     assert res.status_code == 204
 
-    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant['id']}")
+    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}")
     assert item["id"] not in [i["id"] for i in res.json()]
 
 
@@ -155,8 +150,8 @@ def test_menu_sorted_in_meal_order_not_alphabetically(client):
     Bug mineur (produit) trouvé à l'audit : le tri alphabétique de catégorie
     montrait les boissons/desserts avant les plats.
     """
-    restaurant = client.post("/api/v1/restaurants", json={"name": "Resto Menu", "slug": "resto-menu-audit"}).json()
-    headers = auth_headers(create_staff(restaurant["id"]))
+    restaurant = create_restaurant(name="Resto Menu", slug="resto-menu-audit")
+    headers = auth_headers(create_staff(restaurant.id))
     for category, name in [
         ("Boissons", "Thé"),
         ("Desserts", "Baklawa"),
@@ -165,10 +160,10 @@ def test_menu_sorted_in_meal_order_not_alphabetically(client):
     ]:
         client.post(
             "/api/v1/menu-items",
-            json={"restaurant_id": restaurant["id"], "name": name, "category": category, "price": 5},
+            json={"restaurant_id": restaurant.id, "name": name, "category": category, "price": 5},
             headers=headers,
         )
 
-    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant['id']}")
+    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}")
     categories = [item["category"] for item in res.json()]
     assert categories == ["Entrées", "Plats", "Desserts", "Boissons"]

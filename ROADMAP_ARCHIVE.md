@@ -1,0 +1,179 @@
+# Tawla — Archive des phases 0 à 11 (10-12 août 2026)
+
+**Ce fichier est un historique, pas un document de pilotage.** Le pilotage actif
+est dans [`ROADMAP.md`](./ROADMAP.md), qui repart des phases 12+ après la revue
+d'investissement du 2026-08-13 ([`REVUE_INVESTISSEURS.md`](./REVUE_INVESTISSEURS.md)).
+
+Il est conservé parce que les tâches cochées ci-dessous documentent des
+**décisions et des renoncements** (scopes volontairement réduits, arbitrages de
+Wassim, bugs trouvés en cours de route) qui restent la justification de l'état
+actuel du code. Ne rien y ajouter : les nouvelles tâches vont dans `ROADMAP.md`.
+
+Trois tâches sont restées non cochées ici et ont été reprises, reformulées, dans
+la nouvelle roadmap : hébergement/domaine/déploiement (→ Phase 12.3),
+sauvegardes et monitoring (→ Phase 12.3), contenu et prix des paliers
+d'abonnement (→ Phase 14.3, où la décision « trois paliers » est explicitement
+remplacée par un prix unique). Deux ont été abandonnées : le « grand vide sur
+les écrans manager desktop » (sera comblé par un menu réel) et la gestion des
+grands groupes / événements (hors périmètre, cf. `ROADMAP.md` § hors périmètre).
+
+---
+
+Une tâche cochée `[x]` mentionne la PR qui l'a livrée.
+
+## Vision produit
+
+Un client s'assoit à table, scanne le QR code, commande depuis un menu digital et valide son panier. La commande part vers un écran partagé consulté par tous les serveurs du service (les commandes de toutes les tables s'y empilent). Un serveur la prend en charge, se déplace à la table pour confirmer avec les clients, puis valide sur l'app — ce qui envoie la commande en cuisine. Le manager suit en temps réel l'activité globale : temps passé à chaque étape, charge de travail par serveur (base pour les primes de rendement). Le paiement se fait depuis l'app : carte avec pourboire optionnel, ou demande d'addition pour payer cash à table.
+
+North star : un service fluide en salle (zéro commande perdue ou oubliée) et une visibilité complète pour le manager sur la performance de l'équipe.
+
+**Historique** : une première passe (audit QA/PO/Design du 2026-08-10, commit `e185995`) a livré directement le cœur du produit — flux de commande complet, temps réel WebSocket, isolation multi-tenant testée — avant même que cette roadmap ne soit formalisée en phases. Le détail de cet audit reste consultable dans l'historique git (`prototype/ROADMAP.md` avant sa fusion ici). Cette roadmap reflète l'état réel du code, pas l'ordre chronologique dans lequel il a été écrit.
+
+---
+
+## Phase 0 — Fondations
+
+- [x] Choix de la stack technique : FastAPI + SQLAlchemy/PostgreSQL (backend) + Next.js/Tailwind (frontend), WebSocket natif pour le temps réel (audit du 2026-08-10)
+- [x] CI de base (lint, typecheck, tests backend + frontend) (PR #2)
+- [x] Modèle de données initial : `Restaurant` (tenants), `Table`, `MenuItem`, `Order`/`OrderItem`, `Staff` (rôles waiter/kitchen/manager) — multi-tenant-ready dès le départ (audit du 2026-08-10)
+- [x] Auth staff (serveurs, cuisine, manager) — JWT + rôles, le client lui n'a pas de compte (PR #2)
+- [x] Génération des QR codes par table (token opaque non-devinable, script `generate_table_qr.py`) (audit du 2026-08-10)
+
+## Phase 1 — MVP commande client
+
+- [x] Menu digital consultable depuis le QR (catégories, plats, prix, photo, description) (audit du 2026-08-10)
+- [x] Panier côté client + validation de la commande, note libre par article (audit du 2026-08-10)
+- [x] Envoi de la commande vers le pool partagé des serveurs (broadcast WebSocket `order.pending_confirmation`) (audit du 2026-08-10)
+- [x] État de la commande visible côté client, temps réel + persistant au rafraîchissement (audit du 2026-08-10)
+
+## Phase 2 — Flux serveur & cuisine
+
+- [x] Écran serveurs : pool de toutes les commandes en attente (toutes tables) (audit du 2026-08-10), prise en charge (« claim ») individuelle par un serveur (PR #2) — base des stats par serveur de la Phase 3
+- [x] Confirmation à table : le serveur valide la commande sur l'app après l'avoir vérifiée avec les clients (audit du 2026-08-10)
+- [x] Transmission automatique à la cuisine dès la confirmation (audit du 2026-08-10)
+- [x] Écran cuisine : file d'attente des commandes confirmées, statuts (reçue / en préparation / prête) (audit du 2026-08-10)
+- [x] Statut final « sortie vers le client » (servie), déclenché par le serveur (audit du 2026-08-10)
+
+## Phase 3 — Dashboard manager
+
+- [x] Vue temps réel de toutes les commandes en cours, par statut (PR #3)
+- [x] Temps moyen passé à chaque étape (attente de confirmation, confirmée → envoyée en cuisine, cuisine → sortie) (PR #3)
+- [x] Nombre de commandes prises en charge par serveur et par jour (base de calcul pour les primes de rendement) (PR #3)
+- [x] Statistiques plats les plus vendus, répartition par heure (identification des pics de charge) (PR #3)
+
+## Phase 4 — Paiement
+
+- [x] Paiement carte depuis l'app, avec pourboire optionnel — Konnect ciblé, mode simulé pour l'instant (arbitrage Wassim), couvre le prix total (PR #4)
+- [x] Demande de paiement cash depuis l'app (génère l'addition, prévient le serveur concerné) (PR #4)
+- [x] Partage de l'addition (split bill) : par plat ou équitable — calculateur indicatif, le paiement reste unique pour la table (PR #5)
+
+## Phase 5 — Spécificités culture tunisienne
+
+- [x] Mode Ramadan : menu ftour dédié, pré-commande calée sur l'heure exacte de la rupture du jeûne (variable chaque jour), anticipation du pic de charge en cuisine (PR #6)
+- [x] Commande groupée à table : plats marqués « à partager » (salades, mechouia...) visibles côté cuisine/serveur et pré-signalés dans le split bill de la Phase 4 — scope réduit délibérément : pas de panier temps réel synchronisé entre plusieurs téléphones (ambiguïté produit signalée, arbitrage retenu : un seul appareil compose/valide toujours la commande, cf. `CLAUDE.md` philosophie KISS/YAGNI) (PR #7)
+- [x] Interface bilingue français / arabe (derja tunisienne), RTL natif — scope : parcours client (`/menu/[qrToken]` + split bill), écrans staff/cuisine/manager restent en français (back-office interne) ; anglais/italien non traités (marqués « option » dans la roadmap, à faire si un pilote resto touristique le demande) (PR #8)
+- [x] Niveau de piment affiché par plat + mentions allergènes et halal — saisi par le manager dans le dashboard (piment 0-3, allergènes en texte libre, case halal — défaut `True`, la quasi-totalité des restos tunisiens l'étant), affiché au client (fr/ar) et sur le menu (PR #9)
+- [x] Bouton « appeler le serveur », indépendant du passage de commande — nouveau modèle `WaiterCall` persisté (survit à une reconnexion, même logique que les demandes de paiement cash), diffusé en temps réel sur le canal "staff" existant, résolu par un serveur ou le manager ; bouton client avec cooldown 90s anti-spam, traduit fr/ar (PR #10)
+- [x] Gestion de la rupture de stock en temps réel (un plat en rupture est désactivé instantanément côté client) — nouveau canal WebSocket public `/ws/menu/{restaurant_id}`, diffusé depuis la bascule manager déjà existante ; le client voit le plat disparaître du menu et être retiré automatiquement de son panier sans recharger la page (PR #11)
+- [x] Mode café simplifié : commande de boissons seules, sans structure entrée/plat/dessert — toggle manager (`Restaurant.cafe_mode_enabled`, même pattern que le mode Ramadan), le menu client s'affiche alors en liste unique sans en-têtes de catégorie (PR #12)
+- [x] PWA offline-first : file d'attente locale si la connexion mobile est instable, envoi différé automatique — manifest.ts + icônes + service worker minimal (réseau d'abord, secours cache) pour l'installabilité ; côté commande, un échec réseau (pas une erreur API) met la commande de côté en localStorage et la renvoie automatiquement à l'événement `online` ou au prochain chargement de page, avec un bouton « réessayer maintenant » (PR #13)
+- [x] Carte de fidélité digitale (ex. Nème café/plat offert, réduction anniversaire) — identification par numéro de téléphone (arbitrage Wassim : pas de compte client dans l'app, en cohérence avec l'architecture anonyme existante), suivi côté serveur par restaurant (`LoyaltyMember`, seuil 10 commandes payées). Le compteur n'incrémente qu'au paiement confirmé (carte ou cash), jamais à la création de commande. Récompense = action manuelle du serveur (punch-card, jamais un rabais auto appliqué au prix — domaine paiement volontairement non touché), redemption possible via le badge sur une demande de paiement cash ou via une recherche manuelle par téléphone côté staff. Bandeau anniversaire si la date de naissance (facultative) correspond au jour même (PR #14)
+
+## Phase 6 — Croissance / opérationnel
+
+- [x] Multi-restaurants : le schéma est déjà multi-tenant-ready (`restaurant_id` partout, isolation testée — audit du 2026-08-10), reste l'auth/onboarding multi-établissement côté manager — nouvel endpoint public `POST /api/v1/auth/register` (self-service, pas de vérification e-mail, cohérent avec l'absence de service payant obligatoire) : crée le restaurant + son premier compte manager en une fois, slug dérivé automatiquement du nom (dédupliqué en cas de collision), connexion immédiate. Page `/signup` côté frontend, reliée depuis `/login`. L'ancien endpoint `POST /api/v1/restaurants` (non authentifié, jamais appelé par le frontend, utilisé uniquement comme fixture par la suite de tests) reste inchangé — le modifier aurait cassé ~9 fichiers de tests sans bénéfice pour cette tâche (PR #15)
+- [x] Notifications SMS/push au client quand sa commande est prête — scope réduit délibérément au **push navigateur** (Web Push standard, gratuit, s'appuie sur le service worker déjà posé par la PWA) : l'envoi de SMS exige un service tiers payant (aucun n'existe gratuitement), hors de portée du reste du projet. Opt-in explicite sur l'écran de suivi client (`POST /orders/{id}/push-subscription`), clé VAPID exposée via `GET /notifications/vapid-public-key` (vide = fonctionnalité désactivée, aucune casse). Envoi best-effort à la transition "prête" (`orders/service.py::transition_status`) — une erreur d'envoi (clé absente, abonnement expiré) ne bloque jamais le passage de statut côté cuisine (PR #16)
+- [x] Gestion des zones de salle (intérieur / terrasse / plage) pour les établissements concernés (ex. Hammamet, Sousse) — `Table.zone` en texte libre (comme `MenuItem.category`), pas un enum figé : tous les établissements n'ont pas les mêmes zones. Section « Tables & zones de salle » ajoutée au dashboard manager (liste + édition + création de table), qui n'existait sous aucune forme avant cette PR — sans elle, un manager onboardé via `/signup` (PR #15) n'aurait eu aucun moyen d'assigner de zone, ni même de créer une table, sans passer par Swagger (PR #17)
+- [x] Export des statistiques (manager) — bouton « Exporter en CSV » sur `/dashboard/stats`, généré **côté client** (aucun nouvel endpoint : reformate en CSV les données déjà chargées par `GET /stats/dashboard/{id}` pour la journée affichée — commandes en cours, temps moyen par étape, performance serveurs, plats les plus vendus, heures de pointe), téléchargement via Blob + lien `download` (PR #18)
+
+## Phase 7 — Idées à trancher plus tard (🧑 arbitrage produit de Wassim)
+
+- [x] Modèle de paiement — décidé par Wassim le 2026-08-12 : **frais de service uniquement**. Quand le vrai paiement Konnect sera activé, il ne captera jamais que la commission de service Tawla — jamais le prix intégral du repas, qui continue d'être réglé directement entre le client et le restaurant (cash ou terminal du resto). Aucun code changé par cette décision : le paiement carte actuel (PR #4) reste en **mode simulé** et couvre le prix total à titre de démo — la vraie intégration Konnect (frais de service uniquement) est un chantier futur non encore scopé, à ouvrir comme tâche séparée le jour où elle est priorisée. **Mise à jour du 2026-08-12 (arbitrage business model, voir Phase 11) :** le modèle de revenus retenu pour Tawla est finalement l'**abonnement, sans commission** — cette décision-ci ne portait que sur la mécanique de paiement (ce que Konnect capte techniquement), pas sur le modèle de revenus. Le paiement carte reste une fonctionnalité de confort pour le client (règlement + pourboire) ; Tawla n'en capte plus rien.
+- [x] Programme de fidélité — décidé par Wassim le 2026-08-12 : **par établissement** (statu quo confirmé). Aucun changement de code : `LoyaltyMember` est déjà scopé par `restaurant_id`, conforme à la décision.
+- [ ] Gestion des grands groupes / événements (mariages, réservations de salle) — Wassim a explicitement choisi de ne pas cadrer maintenant (2026-08-12) ; reste ouvert pour une session de cadrage dédiée plus tard, ne pas relancer la question tant qu'il n'en a pas fait la demande
+- [x] Nom de marque définitif — confirmé par Wassim le 2026-08-11 : **Tawla** reste le nom définitif. L'identité visuelle (logo, palette, typographie) est tracée en Phase 8.1, désormais débloquée
+- [x] Montée de version majeure Next.js (14 → 15/16) — décidé par Wassim le 2026-08-12 : **reportée**, pas de fenêtre de maintenance dédiée pour l'instant (breaking change réel, aucun bénéfice utilisateur immédiat)
+- [x] Vraie intégration imprimante cuisine — décidé par Wassim le 2026-08-12 : **on garde le filet de secours navigateur actuel**, pas d'intégration matérielle prévue pour l'instant
+
+## Phase 8 — Design & expérience
+
+Ajoutée le 2026-08-11, à la suite de l'audit fonctionnel + design mené une fois les phases 0-6 complètes (18 PR mergées, 104 tests backend verts, aucune tâche non-bloquée restante). Rapport complet avec captures d'écran envoyé à Wassim en Artifact la même session. Constat : le fonctionnel est solide, le design reste au niveau prototype (aucune identité de marque, une seule couleur d'accent partout, zéro micro-interaction). Poids délibérément mis sur le design, à la demande explicite de Wassim ("trop simpliste", envie d'un rendu "attachant, pro, fun").
+
+**8.1 — Identité de marque (fondation, bloque le reste de la phase)**
+- [x] Nom de marque définitif — confirmé par Wassim le 2026-08-11 : **Tawla**
+- [x] Logo + favicon + icônes PWA, lisibles de 32px à 512px — marque « Le Duo Encadré » (un seul cadre partagé en deux zones : lignes de commande + coche de validation, choisie par Wassim après plusieurs rondes d'options en Artifact) ; `favicon`/`pwa-icon-192`/`pwa-icon-512` régénérés, composants `TawlaMark`/`TawlaLogo` réutilisables (PR #21)
+- [x] Palette de marque figée (primaire, secondaire, + couleurs sémantiques distinctes de la couleur d'action) en tokens CSS partagés client/staff — variables dans `frontend/app/globals.css` (`--harissa`, `--menthe`, `--laiton`, `--semoule`, `--encre`…) (PR #21)
+- [x] Paire typographique (une police d'affichage avec du caractère + une police texte lisible en petit sur mobile) — Lalezar (affichage) + Hanken Grotesk (texte/UI) via `next/font/google`, `frontend/lib/fonts.ts` (PR #21)
+
+Identité posée et appliquée à `/login` + `/signup` dans cette PR (captures avant/après dans la description de la PR). Le reste de l'app (dashboard, staff, cuisine, menu client) garde son style actuel — application progressive prévue en 8.2–8.5, un écran à la fois.
+
+**8.2 — Système de design partagé**
+- [x] Composants de base nommés (`Button`, `Card`, `Badge` de statut, `EmptyState`) pour remplacer les classes Tailwind dupliquées dans `dashboard/page.tsx`, `staff/page.tsx`, `kitchen/page.tsx` — `frontend/components/ui/`, chaque composant supportant un variant `dark` (écran cuisine resté volontairement sombre). Couleurs d'action et de statut consolidées sur la palette de marque (harissa = action, menthe = validation d'étape, ambre/sky/rose = alerte contextuelle), remplaçant la douzaine de teintes Tailwind ad hoc utilisées jusque-là. Corrige au passage un bug de config découvert pendant le test visuel : `tailwind.config.js` ne scannait que `./app/**/*`, jamais `./components/**/*` — les classes propres aux nouveaux composants (couleurs de marque en valeur arbitraire `bg-[var(--harissa)]`) n'étaient jamais générées, rendant les boutons invisibles (texte blanc sur fond transparent) (PR #22)
+- [x] Iconographie cohérente pour remplacer les emoji dans les badges de statut et boutons d'action clés — 8 icônes SVG monochromes (`frontend/components/icons/`, `currentColor`, style trait cohérent) remplaçant 🌙/🍽️/🎁/🔔/☕/🌶️/🎂/📶 dans `dashboard`, `staff`, `kitchen`, le parcours client (`menu/[qrToken]`, `SplitBill`) et les dictionnaires fr/ar. Conservés volontairement : ✓/✕ (symboles monochromes déjà cohérents) et 🎉 (flourish festif, traité par la tâche dédiée « moment de célébration » ci-dessous plutôt qu'ici) ; les libellés de `<select><option>` (niveau de piment dans le dashboard) restent en texte brut — un `<option>` HTML ne peut pas afficher de composant icône (PR #23)
+- [x] Skeletons de chargement — composant `Skeleton` (`frontend/components/ui/`, variant `dark` pour l'écran cuisine) remplaçant les écrans "Chargement…"/blancs sur `dashboard`, `staff`, `kitchen`, `dashboard/stats` et le menu client (PR #24)
+
+**8.3 — Parcours client**
+- [x] Moment de célébration à la validation de commande — `CelebrationOverlay` (confetti + coche animée, `frontend/components/`), déclenché uniquement sur une validation fraîche (pas sur une reprise de suivi après reload), auto-disparition après 1,8 s, `prefers-reduced-motion` respecté (PR #25)
+- [x] Retour visuel à l'ajout au panier — animation de rebond sur le compteur de quantité + retour tactile (`active:scale-90`) sur le bouton "+" (PR #25)
+- [x] Timeline de suivi redessinée — ligne de connexion verticale, étape courante mise en avant (anneau pulsant), étapes complétées cochées en menthe ; indication de délai ("généralement 10 à 20 minutes") affichée sous l'étape courante quand la commande est en cuisine/en préparation (PR #25)
+- [x] Catégories de menu bilingues prédéfinies — `frontend/lib/menuCategories.ts` (liste fermée déjà proposée en `<select>` côté dashboard, traduction d'affichage uniquement, aucune migration de schéma) ; corrige le bug i18n relevé à l'audit : `MenuItem.category` s'affichait en français brut même en vue arabe (PR #26)
+- [x] État vide du panier illustré — le vrai cas rencontré : un article du panier devient indisponible en temps réel (WS) et le panier se vide silencieusement sans aucune explication (bug UX découvert en implémentant cet item). `EmptyCartIllustration` + message explicite remplacent désormais ce silence (PR #25)
+
+**8.4 — Dashboard manager**
+- [x] Vue liste compacte + édition en panneau — chaque plat est une ligne compacte (miniature, nom, catégorie, prix, statut, bouton "Modifier") ; le clic déplie le formulaire complet dans la même carte, un seul article ouvert à la fois (PR #27)
+- [x] Miniature photo dans la liste — `image_url` affichée en 44×44 avec repli sur une icône `UtensilsIcon` neutre quand l'article n'a pas de photo (PR #27)
+- [x] Recherche/filtre par catégorie — barre de recherche par nom + `<select>` de catégorie au-dessus de la liste (PR #27)
+- [x] Onglets (Menu / Tables & zones / Réglages) — Ramadan et café simplifié déplacés dans « Réglages », le formulaire d'ajout d'article replié derrière un bouton (PR #27)
+
+**8.5 — Écrans serveur & cuisine**
+- [x] Compteur du jour sur l'écran cuisine — nouvel endpoint `GET /stats/kitchen-today-count/{id}` (accessible cuisine + manager), sous-titre toujours visible sous "Écran cuisine" y compris à vide, incrémenté en direct à chaque commande reçue par WebSocket (PR #28)
+- [x] Distinction visuelle plus tranchée par statut côté serveur — "à confirmer" passe du blanc neutre au ton `info` (bleu ciel) ; "prêtes à servir" (menthe), "demandes de paiement" (ambre) et "appels en attente" (rose) restent chacun sur une teinte unique, plus aucune combinaison pastel proche (PR #28)
+- [x] Retour sonore optionnel à l'arrivée d'une commande en cuisine — `Restaurant.kitchen_sound_enabled` (défaut désactivé), toggle dans Réglages du dashboard, bip synthétisé en Web Audio côté écran cuisine (aucun fichier audio) ; limite documentée : certains navigateurs bloquent le tout premier son tant qu'aucune interaction n'a eu lieu sur l'écran cuisine (politique autoplay, pas un bug) (PR #28)
+
+**8.6 — Idées "fun" différenciantes** (après 8.1-8.2 : héritent d'une identité cohérente plutôt que d'être des gadgets isolés)
+- [x] Mini-fait culturel ou anecdote pendant l'attente cuisine — 8 anecdotes vérifiées (UNESCO couscous/harissa, thé à la menthe, brik, tajine tunisien, huile d'olive, lablabi, dattes Deglet Nour), `frontend/lib/culturalFacts.ts`, rotation toutes les 8s pendant "en cuisine"/"en préparation", fr/ar (PR #29)
+- [x] Carte de fidélité visuelle façon carte à tamponner — `LoyaltyStampCard` (rangée de 10 jetons, remplis en harissa puis en laiton une fois la récompense débloquée) remplace le texte brut sur les deux écrans où la fidélité s'affichait côté client (PR #29)
+- [x] Partage social de la commande — carte visuelle 1080×1920 générée sur `<canvas>` (`frontend/lib/shareCard.ts`, dégradé de marque + nom du resto + plats commandés, aucune image externe), bouton "Partager ma commande" utilisant la Web Share API (fichiers) avec repli sur téléchargement direct si indisponible, fr/ar (PR #29)
+
+## Phase 9 — Finition design (post-audit)
+
+Ajoutée le 2026-08-12, à la suite d'un audit design mené sur les six rôles/écrans de l'app une fois la Phase 8 mergée (parcours complet en Playwright, captures à l'appui, dossier envoyé à Wassim en Artifact). Aucun des six constats n'est bloquant techniquement — classés ci-dessous par impact décroissant.
+
+- [x] Identité de marque appliquée au niveau racine — `app/layout.tsx` applique désormais Hanken Grotesk + les tokens semoule/espresso à `<body>`, Lalezar étendu aux titres staff/cuisine/dashboard/stats, couleurs de marque déclarées dans `tailwind.config` ; corrige au passage l'en-tête du menu client qui utilisait `bg-amber-700` (Tailwind générique) au lieu du vrai token `var(--harissa)` (impact élevé — audit du 2026-08-12) (PR #32)
+- [x] États vides illustrés — `EmptyState.tsx` affiche une icône (`TrayIcon`) au-dessus du message, sur tous les écrans qui l'utilisent (staff, cuisine, dashboard, menu client) (impact moyen — audit du 2026-08-12) (PR #32)
+- [x] Indicateur de temps écoulé sur l'écran cuisine — badge « il y a X min » par carte, passe en rouge après 10 min ; `sent_to_kitchen_at` ajouté au broadcast WebSocket (PR #32)
+- [x] Page stats retouchée avec les composants Card/Badge de la Phase 8.4 (PR #32)
+- [x] Nom de l'établissement : `text-balance` + `min-w-0` sur le bandeau du menu client, corrige le retour à la ligne à 360px (PR #32)
+- [ ] Grand vide sur les écrans manager desktop avec peu d'articles — pas d'action tant qu'un menu réel (20-30 plats) ne comble pas l'espace naturellement ; à surveiller seulement si le premier restaurant pilote démarre avec un très petit menu (impact faible — audit du 2026-08-12)
+
+## Phase 10 — Mise en production
+
+Ajoutée le 2026-08-12, dossier complet (checklist + hébergement proposé) envoyé à Wassim en Artifact la même session. Rien n'est déployé à ce stade — checklist vérifiée directement dans le code, pas des suppositions.
+
+- [x] Restreindre CORS à l'origine exacte du frontend de prod — `allow_origins` lit désormais `settings.frontend_origin` (variable d'env `FRONTEND_ORIGIN`, liste séparée par virgules), défaut `http://localhost:3000` ; reste à définir la vraie valeur en variable d'env le jour du déploiement (PR #33)
+- [x] Garde-fou `JWT_SECRET` — le démarrage refuse (`ValueError`) si `ENV=production` et que la valeur de dev n'a pas été changée ; générer la vraie valeur de prod (commande déjà documentée dans `backend/.env.example`) reste une action à faire **au moment du déploiement réel**, pas avant (PR #33)
+- [x] Stratégie de migration de schéma — Alembic initialisé (`alembic.ini` + `alembic/env.py` branché sur `Base.metadata`/`settings.database_url`), migration initiale `81067c492c21` vérifiée par diff de schéma contre une base vierge (identique). `create_all()` reste la voie active tant qu'il n'y a pas de vraie prod avec des données — bascule prévue au déploiement réel (PR #33)
+- [x] Rate limiting sur `/auth/login` et `/auth/register` — limiteur en mémoire par (IP, route), 20 req/60s, pas de nouvelle dépendance externe (PR #33)
+- [ ] Sauvegardes automatiques de la base de données — à activer dès le Postgres managé choisi, avant la première vraie commande — **bloquant dès données réelles**
+- [ ] Monitoring basique branché sur l'endpoint `/health` déjà existant (ex. UptimeRobot gratuit) — recommandé
+- [ ] Générer une paire de clés VAPID pour activer les notifications push en prod — optionnel, la fonctionnalité se dégrade déjà proprement sans elles
+- [ ] Choisir et provisionner l'hébergement — proposition : backend (déjà dockerisé, `backend/Dockerfile`) sur Railway ou Render (support WebSocket natif + Postgres managé avec sauvegardes), frontend sur Vercel. Contrainte à respecter : le gestionnaire de connexions WebSocket est en mémoire par choix assumé dans le code (`notifications/manager.py`) — donc **une seule instance backend** tant qu'il n'est pas migré vers un pub/sub Redis, pas d'auto-scaling horizontal
+- [ ] Réserver un nom de domaine (`tawla.tn` en priorité vu le positionnement tunisien, `.com` en secours) 🧑
+- [ ] Déployer sur un environnement de staging, générer les vraies clés (JWT_SECRET, VAPID), rejouer le parcours complet (client/serveur/cuisine/manager) sur l'environnement réel avant toute bascule définitive
+- [ ] Bascule finale du domaine + variables de prod, une fois le staging validé par Wassim 🧑
+
+## Phase 11 — Modèle économique
+
+Décidé par Wassim le 2026-08-12 : **abonnement uniquement, sur trois paliers, aucune commission sur les commandes.** Le paiement carte in-app (Konnect) reste une fonctionnalité de confort pour le client — règlement + pourboire — mais Tawla n'en capte plus rien (voir mise à jour de la Phase 7 sur le modèle de paiement, qui ne portait que sur la mécanique de paiement, pas sur le modèle de revenus).
+
+- [x] Zéro commission sur les commandes, quel que soit le mode de paiement (carte in-app ou cash) — décidé par Wassim le 2026-08-12
+- [x] Trois paliers d'abonnement mensuel par établissement — décidé par Wassim le 2026-08-12 (le nombre de paliers ; le contenu détaillé ci-dessous est une proposition, pas encore validé)
+- [ ] Contenu exact de chaque palier 🧑 — proposition à valider, construite sur des frontières déjà réelles dans le code plutôt qu'une segmentation inventée :
+  - **Essentiel** : QR + menu + commande, écrans serveur/cuisine temps réel, paiement carte + demande cash (Phases 0-4)
+  - **Pro** : + fidélité, export CSV des stats, zones de salle multiples, modes Ramadan/café simplifié (Phases 5-6)
+  - **Business** : + multi-établissements sous un même compte, accompagnement prioritaire (formation staff sur place)
+- [ ] Prix de chaque palier 🧑 — aucun montant fixé à ce stade
+- [x] Champ `Restaurant.subscription_tier` (essentiel/pro/business, défaut essentiel, migration Alembic dédiée) exposé en lecture seule dans le dashboard manager — **logique de gating volontairement pas faite** : aucun prix fixé, aucune facturation active, bloquer des fonctionnalités déjà utilisées par les restaurants pilotes casserait leur expérience sans bénéfice ; chantier séparé à ouvrir une fois les prix tranchés (PR #34)
+- [ ] Page tarifs publique + flux de mise à niveau
+- [ ] Outil de facturation récurrente — mode simulé par défaut au départ (cohérent avec le reste du projet), décision sur l'outil réel à prendre plus tard, pas bloquant avant la fin de la phase pilote gratuite
+- [ ] Ne pas activer la facturation avant la fin d'une phase pilote gratuite avec les premiers établissements (séquence de mise sur le marché proposée dans le dossier du 2026-08-12 : pilotes gratuits d'abord, facturation ensuite une fois la rétention prouvée)

@@ -9,6 +9,15 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    # Le backend lance `alembic upgrade head` à son démarrage : sans attendre
+    # que Postgres accepte réellement les connexions, la migration échoue et le
+    # conteneur s'arrête (`depends_on` seul n'attend que le démarrage du
+    # conteneur, pas la disponibilité du service).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d resto_qr"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
 
   backend:
     build: ./backend
@@ -18,7 +27,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   frontend:
     image: node:20-alpine

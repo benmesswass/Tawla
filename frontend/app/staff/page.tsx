@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { lalezar } from "@/lib/fonts";
-import { api, wsUrl, LoyaltyMember, Order } from "@/lib/api";
+import { api, staffWsUrl, LoyaltyMember, Order } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
@@ -94,7 +94,9 @@ export default function StaffPage() {
           table_id: o.table_id,
           amount: o.total_amount,
           taken_by_staff_id: o.taken_by_staff_id,
-          loyalty_phone: o.loyalty_phone,
+          // Optionnel sur `Order` depuis la Phase 12.2 (absent des réponses
+          // client), mais toujours servi sur cette route protégée par JWT.
+          loyalty_phone: o.loyalty_phone ?? null,
         }))
       );
       for (const o of orders) {
@@ -125,7 +127,7 @@ export default function StaffPage() {
     }
   }, [restaurantId, loadActiveOrders, loadCashRequests, loadWaiterCalls]);
 
-  const status = useReconnectingSocket(restaurantId ? wsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
+  const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
       setPending((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
@@ -182,6 +184,16 @@ export default function StaffPage() {
       setWaiterCalls((prev) => prev.filter((c) => c.call_id !== msg.call_id));
     }
   });
+
+  // Canal refusé (session expirée, compte désactivé par le manager) : le hook
+  // a cessé de réessayer, on renvoie vers la connexion plutôt que de laisser un
+  // écran figé en plein service.
+  useEffect(() => {
+    if (status === "unauthorized") {
+      clearToken();
+      router.push("/login");
+    }
+  }, [status, router]);
 
   // Une reconnexion après coupure peut avoir manqué des événements : on
   // recharge l'état complet à chaque retour en ligne, pas seulement au

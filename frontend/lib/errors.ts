@@ -24,6 +24,9 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   ORDER_CANCELLED: () => "Cette commande a été annulée, le paiement n'est plus possible.",
   NO_PENDING_CASH_PAYMENT: () => "Aucune demande de paiement en espèces en attente pour cette commande.",
   EMAIL_EXISTS: () => "Un compte existe déjà avec cet e-mail.",
+  ACCOUNT_DISABLED: () => "Ce compte a été désactivé. Demandez à votre manager de le réactiver.",
+  LAST_ACTIVE_MANAGER: () =>
+    "C'est le dernier compte manager actif : créez ou réactivez un autre manager avant de le modifier, sinon plus personne ne pourrait gérer l'établissement.",
 };
 
 export function toFrenchMessage(error: unknown): string {

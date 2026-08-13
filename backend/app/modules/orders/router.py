@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.orders import schemas, service
-from app.modules.orders.models import OrderStatus
+from app.modules.orders.dependencies import get_order_by_token
+from app.modules.orders.models import Order, OrderStatus
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 
@@ -13,13 +14,18 @@ _WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 _KITCHEN_OR_MANAGER = require_role(StaffRole.KITCHEN, StaffRole.MANAGER)
 
 
-@router.post("", response_model=schemas.OrderOut, status_code=201)
+@router.post("", response_model=schemas.OrderCreatedOut, status_code=201)
 async def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
-    """Appelé par le client après validation du panier (post-scan QR) — public, pas d'auth."""
+    """
+    Appelé par le client après validation du panier — sans compte, mais avec le
+    `qr_token` de la table qu'il vient de scanner. La réponse contient le
+    `public_token` de la commande : c'est la seule fois où il est renvoyé, le
+    navigateur doit le garder pour suivre et payer sa commande.
+    """
     return await service.create_order(db, payload)
 
 
-@router.get("/by-restaurant/{restaurant_id}/active", response_model=list[schemas.OrderOut])
+@router.get("/by-restaurant/{restaurant_id}/active", response_model=list[schemas.OrderOutStaff])
 async def list_active_orders(
     restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(get_current_staff)
 ):
@@ -33,12 +39,17 @@ async def list_active_orders(
 
 
 @router.get("/{order_id}", response_model=schemas.OrderOut)
-async def get_order(order_id: int, db: Session = Depends(get_db)):
-    """Utilisé par l'écran client pour retrouver le suivi de sa commande après un rafraîchissement — public."""
-    return await service.get_order(db, order_id)
+async def get_order(order: Order = Depends(get_order_by_token)):
+    """
+    Suivi de commande côté client, y compris après un rafraîchissement de page.
+    Sans compte, mais lié : exige l'en-tête `X-Order-Token` reçu à la création.
+    """
+    return order
 
 
-@router.get("/by-restaurant/{restaurant_id}/pending-cash-payments", response_model=list[schemas.OrderOut])
+@router.get(
+    "/by-restaurant/{restaurant_id}/pending-cash-payments", response_model=list[schemas.OrderOutStaff]
+)
 async def list_pending_cash_payments(
     restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
 ):
@@ -49,63 +60,79 @@ async def list_pending_cash_payments(
 
 
 @router.post("/{order_id}/push-subscription", status_code=204)
-async def save_push_subscription(order_id: int, payload: schemas.PushSubscriptionIn, db: Session = Depends(get_db)):
-    """Opt-in du client pour être notifié quand SA commande passe "prête" — public."""
-    service.save_push_subscription(db, order_id, payload)
+async def save_push_subscription(
+    payload: schemas.PushSubscriptionIn,
+    order: Order = Depends(get_order_by_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Opt-in du client pour être notifié quand SA commande passe « prête ».
+    Lié au token : sans ça, n'importe qui pouvait remplacer l'abonnement push
+    d'une commande et détourner sa notification.
+    """
+    service.save_push_subscription(db, order.id, payload)
 
 
 @router.post("/{order_id}/pay/card", response_model=schemas.OrderOut)
-async def pay_by_card(order_id: int, payload: schemas.PayCardRequest, db: Session = Depends(get_db)):
-    """Paiement carte par le client — mode simulé, public comme la création de commande."""
-    return await service.pay_by_card_simulated(db, order_id, payload.tip_amount)
+async def pay_by_card(
+    payload: schemas.PayCardRequest,
+    order: Order = Depends(get_order_by_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Paiement carte par le client — mode simulé. Lié au token : sans ça,
+    n'importe qui pouvait marquer n'importe quelle commande « payée » sans
+    régler un dinar (constat 2 de la revue).
+    """
+    return await service.pay_by_card_simulated(db, order.id, payload.tip_amount)
 
 
 @router.post("/{order_id}/pay/cash", response_model=schemas.OrderOut)
-async def request_cash_payment(order_id: int, db: Session = Depends(get_db)):
-    """Le client demande à payer en espèces — public, prévient le serveur en temps réel."""
-    return await service.request_cash_payment(db, order_id)
+async def request_cash_payment(order: Order = Depends(get_order_by_token), db: Session = Depends(get_db)):
+    """Le client demande à payer en espèces — prévient le serveur en temps réel."""
+    return await service.request_cash_payment(db, order.id)
 
 
-@router.post("/{order_id}/pay/cash/confirm", response_model=schemas.OrderOut)
+@router.post("/{order_id}/pay/cash/confirm", response_model=schemas.OrderOutStaff)
 async def confirm_cash_payment(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Le serveur confirme avoir encaissé le cash à table."""
     return await service.confirm_cash_payment(db, order_id, staff)
 
 
-@router.post("/{order_id}/claim", response_model=schemas.OrderOut)
+@router.post("/{order_id}/claim", response_model=schemas.OrderOutStaff)
 async def claim_order(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Un serveur prend en charge une commande en attente depuis le pool partagé."""
     return await service.claim_order(db, order_id, staff)
 
 
-@router.post("/{order_id}/confirm", response_model=schemas.OrderOut)
+@router.post("/{order_id}/confirm", response_model=schemas.OrderOutStaff)
 async def confirm_order(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Le serveur confirme la commande APRÈS l'avoir vérifiée avec la table."""
     return await service.transition_status(db, order_id, OrderStatus.CONFIRMED, staff)
 
 
-@router.post("/{order_id}/send-to-kitchen", response_model=schemas.OrderOut)
+@router.post("/{order_id}/send-to-kitchen", response_model=schemas.OrderOutStaff)
 async def send_to_kitchen(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Validation finale du serveur -> part sur l'écran cuisine."""
     return await service.transition_status(db, order_id, OrderStatus.SENT_TO_KITCHEN, staff)
 
 
-@router.post("/{order_id}/cancel", response_model=schemas.OrderOut)
+@router.post("/{order_id}/cancel", response_model=schemas.OrderOutStaff)
 async def cancel_order(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     return await service.transition_status(db, order_id, OrderStatus.CANCELLED, staff)
 
 
-@router.post("/{order_id}/start-preparation", response_model=schemas.OrderOut)
+@router.post("/{order_id}/start-preparation", response_model=schemas.OrderOutStaff)
 async def start_preparation(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_KITCHEN_OR_MANAGER)):
     """Bouton côté écran cuisine."""
     return await service.transition_status(db, order_id, OrderStatus.IN_PREPARATION, staff)
 
 
-@router.post("/{order_id}/mark-ready", response_model=schemas.OrderOut)
+@router.post("/{order_id}/mark-ready", response_model=schemas.OrderOutStaff)
 async def mark_ready(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_KITCHEN_OR_MANAGER)):
     return await service.transition_status(db, order_id, OrderStatus.READY, staff)
 
 
-@router.post("/{order_id}/mark-served", response_model=schemas.OrderOut)
+@router.post("/{order_id}/mark-served", response_model=schemas.OrderOutStaff)
 async def mark_served(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     return await service.transition_status(db, order_id, OrderStatus.SERVED, staff)

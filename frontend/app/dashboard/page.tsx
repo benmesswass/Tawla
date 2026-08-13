@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
-import { api, MenuItem, Restaurant, SubscriptionTier, Table } from "@/lib/api";
+import { api, MenuItem, Restaurant, Staff, StaffRole, SubscriptionTier, Table } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -89,13 +89,30 @@ const EMPTY_DRAFT: Draft = {
   isHalal: true,
 };
 
-type Tab = "menu" | "tables" | "settings";
+type Tab = "menu" | "tables" | "team" | "settings";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "menu", label: "Menu" },
   { key: "tables", label: "Tables & zones" },
+  { key: "team", label: "Équipe" },
   { key: "settings", label: "Réglages" },
 ];
+
+const ROLE_LABELS: Record<StaffRole, string> = {
+  waiter: "Serveur",
+  kitchen: "Cuisine",
+  manager: "Manager",
+};
+
+type StaffDraft = { name: string; role: StaffRole };
+
+function staffToDraft(member: Staff): StaffDraft {
+  return { name: member.name, role: member.role };
+}
+
+type NewStaffDraft = { name: string; email: string; role: StaffRole };
+
+const EMPTY_STAFF_DRAFT: NewStaffDraft = { name: "", email: "", role: "waiter" };
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -116,6 +133,14 @@ export default function DashboardPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
+  const [team, setTeam] = useState<Staff[]>([]);
+  const [staffDrafts, setStaffDrafts] = useState<Record<number, StaffDraft>>({});
+  const [newStaff, setNewStaff] = useState<NewStaffDraft>(EMPTY_STAFF_DRAFT);
+  const [savingStaff, setSavingStaff] = useState(false);
+  // Identifiants à transmettre de la main à la main : affichés jusqu'à ce que
+  // le manager les ferme, jamais effacés par un timer — il doit avoir le temps
+  // de les recopier, et ils sont irrécupérables ensuite.
+  const [newCredentials, setNewCredentials] = useState<{ email: string; password: string } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("menu");
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [addingItem, setAddingItem] = useState(false);
@@ -127,10 +152,11 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const [menu, rest, tableList] = await Promise.all([
+      const [menu, rest, tableList, teamList] = await Promise.all([
         api.getMenu(restaurantId),
         api.getRestaurant(restaurantId),
         api.listTables(restaurantId),
+        api.listStaff(restaurantId),
       ]);
       setItems(menu);
       setDrafts(Object.fromEntries(menu.map((m) => [m.id, itemToDraft(m)])));
@@ -141,6 +167,8 @@ export default function DashboardPage() {
       setKitchenSoundEnabled(rest.kitchen_sound_enabled);
       setTables(tableList);
       setTableDrafts(Object.fromEntries(tableList.map((t) => [t.id, tableToDraft(t)])));
+      setTeam(teamList);
+      setStaffDrafts(Object.fromEntries(teamList.map((m) => [m.id, staffToDraft(m)])));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -319,6 +347,76 @@ export default function DashboardPage() {
       flash(`« ${newTable.label} » ajoutée.`);
       setNewTable(EMPTY_TABLE_DRAFT);
       await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function addStaffMember() {
+    setError(null);
+    if (!newStaff.name.trim() || !newStaff.email.trim()) {
+      setError("Le nom et l'e-mail sont obligatoires pour créer un compte.");
+      return;
+    }
+    setSavingStaff(true);
+    try {
+      // Pas de mot de passe fourni : le serveur en génère un, affiché une
+      // seule fois ci-dessous pour que le manager le transmette.
+      const created = await api.createStaff({
+        name: newStaff.name.trim(),
+        email: newStaff.email.trim(),
+        role: newStaff.role,
+      });
+      setNewCredentials(
+        created.temporary_password
+          ? { email: created.staff.email, password: created.temporary_password }
+          : null
+      );
+      flash(`Compte de ${created.staff.name} créé.`);
+      setNewStaff(EMPTY_STAFF_DRAFT);
+      await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    } finally {
+      setSavingStaff(false);
+    }
+  }
+
+  async function saveStaffMember(member: Staff) {
+    setError(null);
+    const draft = staffDrafts[member.id];
+    if (!draft?.name.trim()) {
+      setError("Le nom est obligatoire.");
+      return;
+    }
+    try {
+      await api.updateStaff(member.id, { name: draft.name.trim(), role: draft.role });
+      flash(`${draft.name} mis à jour.`);
+      await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function toggleStaffActive(member: Staff) {
+    setError(null);
+    try {
+      await api.updateStaff(member.id, { is_active: !member.is_active });
+      flash(member.is_active ? `Accès de ${member.name} désactivé.` : `Accès de ${member.name} rétabli.`);
+      await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function resetStaffPassword(member: Staff) {
+    setError(null);
+    try {
+      const reset = await api.resetStaffPassword(member.id);
+      if (reset.temporary_password) {
+        setNewCredentials({ email: reset.staff.email, password: reset.temporary_password });
+      }
+      flash(`Nouveau mot de passe généré pour ${member.name}.`);
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -712,6 +810,134 @@ export default function DashboardPage() {
             />
             <Button onClick={addTable}>Ajouter la table</Button>
           </Card>
+        </>
+      )}
+
+      {activeTab === "team" && (
+        <>
+          <p className="text-sm text-neutral-500 mb-3">
+            Créez un compte par serveur et un compte pour la cuisine : sans compte, un serveur ne voit pas les
+            commandes à confirmer et l&apos;écran cuisine reste vide. Un compte n&apos;est jamais supprimé mais
+            désactivé, pour que les statistiques des commandes qu&apos;il a prises en charge restent intactes.
+          </p>
+
+          {newCredentials && (
+            <Card tone="success" padding="sm" className="mb-4">
+              <p className="font-medium text-emerald-900">Identifiants à transmettre maintenant</p>
+              <dl className="mt-2 text-sm grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-emerald-900">
+                <dt className="text-emerald-700">E-mail</dt>
+                <dd className="font-mono break-all">{newCredentials.email}</dd>
+                <dt className="text-emerald-700">Mot de passe</dt>
+                <dd className="font-mono break-all">{newCredentials.password}</dd>
+              </dl>
+              <p className="text-xs text-emerald-700 mt-2">
+                Notez-le ou dictez-le tout de suite : il n&apos;est pas conservé en clair et ne pourra plus être
+                réaffiché. Vous pourrez en générer un nouveau à tout moment.
+              </p>
+              <Button variant="secondary" size="sm" className="mt-2" onClick={() => setNewCredentials(null)}>
+                J&apos;ai noté, masquer
+              </Button>
+            </Card>
+          )}
+
+          <div className="space-y-2">
+            {team.map((member) => {
+              const draft = staffDrafts[member.id] ?? staffToDraft(member);
+              const isSelf = member.id === staff.id;
+              return (
+                <Card
+                  key={member.id}
+                  padding="sm"
+                  className={member.is_active ? undefined : "opacity-60"}
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_auto] gap-2 items-center">
+                    <input
+                      value={draft.name}
+                      onChange={(e) =>
+                        setStaffDrafts((d) => ({ ...d, [member.id]: { ...draft, name: e.target.value } }))
+                      }
+                      className="border rounded px-2 py-1"
+                      placeholder="Nom"
+                      aria-label={`Nom de ${member.name}`}
+                    />
+                    <select
+                      value={draft.role}
+                      onChange={(e) =>
+                        setStaffDrafts((d) => ({
+                          ...d,
+                          [member.id]: { ...draft, role: e.target.value as StaffRole },
+                        }))
+                      }
+                      className="border rounded px-2 py-1"
+                      aria-label={`Rôle de ${member.name}`}
+                    >
+                      {(Object.keys(ROLE_LABELS) as StaffRole[]).map((role) => (
+                        <option key={role} value={role}>
+                          {ROLE_LABELS[role]}
+                        </option>
+                      ))}
+                    </select>
+                    <Button onClick={() => saveStaffMember(member)}>Enregistrer</Button>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap mt-2 text-sm">
+                    <span className="font-mono text-xs text-neutral-500 break-all">{member.email}</span>
+                    {!member.is_active && <Badge tone="neutral">Désactivé</Badge>}
+                    {isSelf && <Badge tone="info">Vous</Badge>}
+                    <span className="grow" />
+                    <Button variant="secondary" size="sm" onClick={() => resetStaffPassword(member)}>
+                      Nouveau mot de passe
+                    </Button>
+                    <Button
+                      variant={member.is_active ? "danger" : "secondary"}
+                      size="sm"
+                      onClick={() => toggleStaffActive(member)}
+                    >
+                      {member.is_active ? "Désactiver l'accès" : "Réactiver"}
+                    </Button>
+                  </div>
+                </Card>
+              );
+            })}
+            {team.length === 0 && <EmptyState message="Aucun compte dans l'équipe pour l'instant." />}
+          </div>
+
+          <h2 className="text-base font-semibold mt-6 mb-3">Ajouter un membre de l&apos;équipe</h2>
+          <Card padding="sm" className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_1fr_auto] gap-2 items-center">
+            <input
+              value={newStaff.name}
+              onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+              className="border rounded px-2 py-1"
+              placeholder="Nom (ex : Sami)"
+              aria-label="Nom du nouveau membre"
+            />
+            <input
+              value={newStaff.email}
+              onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+              type="email"
+              autoComplete="off"
+              className="border rounded px-2 py-1"
+              placeholder="E-mail de connexion"
+              aria-label="E-mail du nouveau membre"
+            />
+            <select
+              value={newStaff.role}
+              onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value as StaffRole })}
+              className="border rounded px-2 py-1"
+              aria-label="Rôle du nouveau membre"
+            >
+              {(Object.keys(ROLE_LABELS) as StaffRole[]).map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
+            <Button onClick={addStaffMember} disabled={savingStaff}>
+              {savingStaff ? "Création…" : "Créer le compte"}
+            </Button>
+          </Card>
+          <p className="text-xs text-neutral-500 mt-2">
+            Un mot de passe est généré automatiquement et affiché une seule fois après la création.
+          </p>
         </>
       )}
 

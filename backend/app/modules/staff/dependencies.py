@@ -28,6 +28,13 @@ def get_current_staff(
     staff = db.get(Staff, int(payload["sub"]))
     if not staff:
         raise HTTPException(status_code=401, detail={"code": "INVALID_TOKEN", "message": "staff not found"})
+
+    # Contrôlé ici et pas seulement au login : un JWT vit 12h, donc un compte
+    # désactivé (salarié parti) resterait sinon utilisable toute une journée.
+    if not staff.is_active:
+        raise HTTPException(
+            status_code=401, detail={"code": "ACCOUNT_DISABLED", "message": "this account has been disabled"}
+        )
     return staff
 
 

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
-import { api, wsUrl, ApiError, Order, Restaurant } from "@/lib/api";
+import { api, staffWsUrl, ApiError, Order, Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
@@ -149,7 +149,7 @@ export default function KitchenPage() {
     }
   }, [restaurantId, loadActiveOrders, loadRestaurant, loadTodayCount]);
 
-  const status = useReconnectingSocket(restaurantId ? wsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
+  const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.sent_to_kitchen") {
       setOrders((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
@@ -169,6 +169,16 @@ export default function KitchenPage() {
       if (restaurant?.kitchen_sound_enabled) playKitchenChime();
     }
   });
+
+  // Canal refusé (session expirée, compte désactivé par le manager) : le hook
+  // a cessé de réessayer, on renvoie vers la connexion plutôt que de laisser
+  // l'écran cuisine figé en plein service.
+  useEffect(() => {
+    if (status === "unauthorized") {
+      clearToken();
+      router.push("/login");
+    }
+  }, [status, router]);
 
   useEffect(() => {
     if (status === "connected") {

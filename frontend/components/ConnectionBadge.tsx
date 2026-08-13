@@ -4,12 +4,14 @@ const LABELS: Record<SocketStatus, string> = {
   connected: "Connecté",
   connecting: "Connexion...",
   disconnected: "Déconnecté — reconnexion...",
+  unauthorized: "Session expirée — reconnectez-vous",
 };
 
 const DOT_CLASS: Record<SocketStatus, string> = {
   connected: "bg-emerald-500",
   connecting: "bg-amber-500",
   disconnected: "bg-red-500",
+  unauthorized: "bg-red-500",
 };
 
 export default function ConnectionBadge({ status, dark = false }: { status: SocketStatus; dark?: boolean }) {

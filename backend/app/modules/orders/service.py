@@ -80,13 +80,6 @@ async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Or
     )
 
 
-async def get_order(db: Session, order_id: int) -> Order:
-    order = db.get(Order, order_id)
-    if not order:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    return order
-
-
 def save_push_subscription(db: Session, order_id: int, subscription: schemas.PushSubscriptionIn) -> None:
     """
     Enregistre l'abonnement Web Push du navigateur qui suit cette commande
@@ -102,11 +95,14 @@ def save_push_subscription(db: Session, order_id: int, subscription: schemas.Pus
 
 
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
-    table = db.get(Table, payload.table_id)
-    if not table or table.restaurant_id != payload.restaurant_id:
+    # La table est retrouvée par son token de QR code, et le restaurant en est
+    # déduit : aucun identifiant numérique n'est accepté du client, donc rien
+    # n'est devinable (Phase 12.2).
+    table = db.query(Table).filter(Table.qr_token == payload.qr_token).first()
+    if not table:
         raise HTTPException(
             status_code=404,
-            detail={"code": "TABLE_NOT_FOUND", "message": "table not found for this restaurant"},
+            detail={"code": "INVALID_TABLE_CODE", "message": "invalid table code"},
         )
     if not payload.items:
         raise HTTPException(
@@ -114,16 +110,17 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             detail={"code": "EMPTY_ORDER", "message": "order must contain at least one item"},
         )
 
+    restaurant_id = table.restaurant_id
     order = Order(
-        restaurant_id=payload.restaurant_id,
-        table_id=payload.table_id,
+        restaurant_id=restaurant_id,
+        table_id=table.id,
         scheduled_for=payload.scheduled_for,
         loyalty_phone=payload.loyalty_phone,
     )
 
     for line in payload.items:
         menu_item = db.get(MenuItem, line.menu_item_id)
-        if not menu_item or menu_item.restaurant_id != payload.restaurant_id:
+        if not menu_item or menu_item.restaurant_id != restaurant_id:
             raise HTTPException(
                 status_code=404,
                 detail={

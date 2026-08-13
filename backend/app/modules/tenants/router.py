@@ -12,17 +12,12 @@ router = APIRouter(prefix="/api/v1/restaurants", tags=["restaurants"])
 _MANAGER = require_role(StaffRole.MANAGER)
 
 
-@router.post("", response_model=schemas.RestaurantOut, status_code=201)
-def create_restaurant(payload: schemas.RestaurantCreate, db: Session = Depends(get_db)):
-    existing = db.query(Restaurant).filter(Restaurant.slug == payload.slug).first()
-    if existing:
-        raise HTTPException(status_code=409, detail={"code": "SLUG_EXISTS", "message": "slug already exists"})
-
-    restaurant = Restaurant(name=payload.name, slug=payload.slug)
-    db.add(restaurant)
-    db.commit()
-    db.refresh(restaurant)
-    return restaurant
+# `POST /api/v1/restaurants` a été supprimé en Phase 12.2 : il créait un
+# établissement sans aucune authentification (n'importe qui pouvait polluer la
+# base), n'était appelé par aucun frontend, et faisait doublon avec
+# `POST /api/v1/auth/register` qui crée le restaurant ET son premier manager.
+# Les tests s'en servaient comme fixture : ils passent désormais par
+# `tests/conftest.py::create_restaurant`, qui écrit directement en base.
 
 
 @router.get("/{restaurant_id}", response_model=schemas.RestaurantOut)

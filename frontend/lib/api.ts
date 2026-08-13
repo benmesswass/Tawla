@@ -46,6 +46,15 @@ export type Staff = {
   name: string;
   role: StaffRole;
   email: string;
+  is_active: boolean;
+};
+
+// Le mot de passe temporaire n'est renvoyé qu'à la création (quand le manager
+// n'en fournit pas) et à la réinitialisation — il n'est stocké que haché côté
+// serveur, donc il n'y a aucun moyen de le réafficher ensuite.
+export type StaffCreated = {
+  staff: Staff;
+  temporary_password: string | null;
 };
 
 export type LoginResponse = {
@@ -75,7 +84,9 @@ export type Order = {
   taken_by_staff_name: string | null;
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
-  loyalty_phone: string | null;
+  // Présent uniquement sur les réponses servies au staff (routes sous JWT) :
+  // la vue client ne porte plus de donnée personnelle depuis la Phase 12.2.
+  loyalty_phone?: string | null;
   payment_method: PaymentMethod | null;
   payment_status: PaymentStatus;
   tip_amount: number;
@@ -90,6 +101,13 @@ export type Order = {
     is_shared: boolean;
   }[];
 };
+
+/**
+ * Réponse de création d'une commande — la seule qui porte le `public_token`.
+ * Le navigateur doit le conserver : c'est son seul moyen de suivre, payer ou
+ * s'abonner aux notifications de cette commande ensuite.
+ */
+export type OrderCreated = Order & { public_token: string };
 
 export type WaiterCall = {
   id: number;
@@ -158,10 +176,22 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * Routes client d'une commande : le `public_token` reçu à sa création prouve
+ * que l'appel vient bien du navigateur qui l'a passée (Phase 12.2). Sans lui,
+ * le backend répond 404 — un identifiant de commande seul ne donne plus accès
+ * à rien.
+ */
+function orderHeaders(orderToken: string): Record<string, string> {
+  return { "X-Order-Token": orderToken };
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders() },
     ...options,
+    // Après le spread : sinon des en-têtes passés dans `options` écrasent
+    // silencieusement Content-Type et l'Authorization du staff.
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options?.headers ?? {}) },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -189,6 +219,13 @@ export const api = {
   register: (payload: { restaurant_name: string; manager_name: string; email: string; password: string }) =>
     request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request<Staff>("/api/v1/auth/me"),
+  listStaff: (restaurantId: number) => request<Staff[]>(`/api/v1/staff/by-restaurant/${restaurantId}`),
+  createStaff: (payload: { name: string; email: string; role: StaffRole; password?: string }) =>
+    request<StaffCreated>("/api/v1/staff", { method: "POST", body: JSON.stringify(payload) }),
+  updateStaff: (staffId: number, payload: { name?: string; role?: StaffRole; is_active?: boolean }) =>
+    request<Staff>(`/api/v1/staff/${staffId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  resetStaffPassword: (staffId: number) =>
+    request<StaffCreated>(`/api/v1/staff/${staffId}/reset-password`, { method: "POST" }),
   createMenuItem: (payload: {
     restaurant_id: number;
     name: string;
@@ -216,13 +253,15 @@ export const api = {
     }),
   deleteMenuItem: (itemId: number) => request<void>(`/api/v1/menu-items/${itemId}`, { method: "DELETE" }),
   createOrder: (payload: {
-    restaurant_id: number;
-    table_id: number;
+    // Le token du QR scanné, d'où le backend déduit la table et le restaurant :
+    // aucun identifiant numérique n'est envoyé par le client (Phase 12.2).
+    qr_token: string;
     items: { menu_item_id: number; quantity: number; notes?: string | null; is_shared?: boolean }[];
     scheduled_for?: string | null;
     loyalty_phone?: string | null;
-  }) => request<Order>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),
-  getOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}`),
+  }) => request<OrderCreated>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),
+  getOrder: (orderId: number, orderToken: string) =>
+    request<Order>(`/api/v1/orders/${orderId}`, { headers: orderHeaders(orderToken) }),
   listActiveOrders: (restaurantId: number) =>
     request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/active`),
   claimOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/claim`, { method: "POST" }),
@@ -239,13 +278,17 @@ export const api = {
     ),
   getKitchenTodayCount: (restaurantId: number) =>
     request<KitchenTodayCount>(`/api/v1/stats/kitchen-today-count/${restaurantId}`),
-  payByCard: (orderId: number, tipAmount: number) =>
+  payByCard: (orderId: number, tipAmount: number, orderToken: string) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/card`, {
       method: "POST",
       body: JSON.stringify({ tip_amount: tipAmount }),
+      headers: orderHeaders(orderToken),
     }),
-  requestCashPayment: (orderId: number) =>
-    request<Order>(`/api/v1/orders/${orderId}/pay/cash`, { method: "POST" }),
+  requestCashPayment: (orderId: number, orderToken: string) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/cash`, {
+      method: "POST",
+      headers: orderHeaders(orderToken),
+    }),
   confirmCashPayment: (orderId: number) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash/confirm`, { method: "POST" }),
   listPendingCashPayments: (restaurantId: number) =>
@@ -286,13 +329,30 @@ export const api = {
   redeemLoyaltyReward: (memberId: number) =>
     request<LoyaltyMember>(`/api/v1/loyalty/${memberId}/redeem`, { method: "POST" }),
   getVapidPublicKey: () => request<{ public_key: string }>("/api/v1/notifications/vapid-public-key"),
-  savePushSubscription: (orderId: number, subscription: PushSubscriptionJSON) =>
+  savePushSubscription: (orderId: number, subscription: PushSubscriptionJSON, orderToken: string) =>
     request<void>(`/api/v1/orders/${orderId}/push-subscription`, {
       method: "POST",
       body: JSON.stringify(subscription),
+      headers: orderHeaders(orderToken),
     }),
 };
 
 export function wsUrl(path: string): string {
   return `${API_URL.replace(/^http/, "ws")}${path}`;
+}
+
+/**
+ * Canaux WebSocket staff et cuisine : authentifiés depuis la Phase 12.2. Le
+ * token passe en paramètre de requête et non en en-tête — la poignée de main
+ * WebSocket du navigateur ne permet pas d'en-tête personnalisé.
+ */
+export function staffWsUrl(path: string): string | null {
+  const token = getToken();
+  if (!token) return null;
+  return `${wsUrl(path)}?token=${encodeURIComponent(token)}`;
+}
+
+/** Canal de suivi d'une commande : autorisé par son `public_token`. */
+export function orderWsUrl(path: string, orderToken: string): string {
+  return `${wsUrl(path)}?token=${encodeURIComponent(orderToken)}`;
 }

@@ -1,6 +1,6 @@
 import uuid
 
-from tests.conftest import auth_headers, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff
 
 
 def test_new_restaurant_defaults_to_essentiel_tier(client):
@@ -22,9 +22,9 @@ def test_new_restaurant_defaults_to_essentiel_tier(client):
 
 
 def test_existing_restaurants_are_readable_with_a_tier(client):
-    restaurant = client.post("/api/v1/restaurants", json={"name": "Café Palier2", "slug": "cafe-palier2"}).json()
-    manager = create_staff(restaurant["id"])
+    restaurant = create_restaurant(name="Café Palier2", slug="cafe-palier2")
+    manager = create_staff(restaurant.id)
 
-    res = client.get(f"/api/v1/restaurants/{restaurant['id']}", headers=auth_headers(manager))
+    res = client.get(f"/api/v1/restaurants/{restaurant.id}", headers=auth_headers(manager))
     assert res.status_code == 200
     assert res.json()["subscription_tier"] == "essentiel"
