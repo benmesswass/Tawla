@@ -145,6 +145,7 @@ lié à la table qui a scanné ou à la commande créée)
 l'ancienne Phase 10, désormais débloquées par le choix d'hébergeur)
 
 - [x] Basculer sur Alembic : retirer `create_all()` de `backend/app/main.py`, la migration initiale et celles des phases 12.1/12.2 devenant la seule voie (PR #36)
+- [x] Garantir que les migrations décrivent vraiment les modèles (PR #43) — c'était le seul écart que la CI ne pouvait pas voir : elle teste sur un schéma `create_all()`, la production tourne sur Alembic. Un champ ajouté sans migration passait tous les tests et cassait en plein service
 - [ ] Choisir et provisionner l'hébergement 🧑 — backend dockerisé sur Railway ou Render (WebSocket natif + Postgres managé), frontend sur Vercel. Contrainte à respecter : **une seule instance backend** (gestionnaire WebSocket et limiteur de débit en mémoire, cf. `notifications/manager.py`)
 - [ ] Réserver le domaine 🧑 (`tawla.tn` en priorité, `.com` en secours)
 - [ ] Générer les vraies clés en variables d'environnement 🧑 : `JWT_SECRET`, `FRONTEND_ORIGIN` sur l'origine exacte de prod, paire VAPID
