@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -25,3 +25,11 @@ class WaiterCall(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_by_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
+
+    table: Mapped["Table"] = relationship()  # noqa: F821 — résolu par le registre SQLAlchemy
+
+    @property
+    def table_label(self) -> str:
+        """Le nom de la table tel que le restaurant l'a écrit — un serveur ne
+        connaît pas les identifiants de la base, il connaît « Terrasse 2 »."""
+        return self.table.label

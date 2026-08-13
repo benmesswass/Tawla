@@ -69,6 +69,10 @@ async def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
     """
     return (
         db.query(Order)
+        # `table` chargée en une fois : elle est lue pour chaque commande
+        # (le libellé affiché au serveur), et cet écran se recharge en plein
+        # service — une requête par commande n'y a pas sa place.
+        .options(selectinload(Order.table))
         .filter(Order.restaurant_id == restaurant_id, Order.status.in_(ACTIVE_STATUSES))
         .order_by(Order.created_at)
         .all()
@@ -85,6 +89,7 @@ async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Or
     """
     return (
         db.query(Order)
+        .options(selectinload(Order.table))
         .filter(
             Order.restaurant_id == restaurant_id,
             Order.payment_method == PaymentMethod.CASH,
@@ -215,6 +220,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             "event": "order.pending_confirmation",
             "order_id": order.id,
             "table_id": order.table_id,
+                "table_label": order.table_label,
             "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
         },
     )
@@ -337,6 +343,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                 "event": "order.sent_to_kitchen",
                 "order_id": order.id,
                 "table_id": order.table_id,
+                "table_label": order.table_label,
                 "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
                 "sent_to_kitchen_at": order.sent_to_kitchen_at.isoformat() if order.sent_to_kitchen_at else None,
                 "items": [
@@ -357,7 +364,10 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
     if new_status == OrderStatus.READY:
         await manager.broadcast(
             order.restaurant_id, channel="staff",
-            message={"event": "order.ready", "order_id": order.id, "table_id": order.table_id},
+            message={
+                "event": "order.ready", "order_id": order.id,
+                "table_id": order.table_id, "table_label": order.table_label,
+            },
         )
         # Le WebSocket ci-dessus ne réveille que l'onglet resté ouvert au
         # premier plan — la notification push touche aussi le client qui a
@@ -445,6 +455,7 @@ async def request_cash_payment(db: Session, order_id: int) -> Order:
             "event": "order.cash_requested",
             "order_id": order.id,
             "table_id": order.table_id,
+                "table_label": order.table_label,
             "amount": order.total_amount,
             "taken_by_staff_id": order.taken_by_staff_id,
             "loyalty_phone": order.loyalty_phone,

@@ -95,6 +95,9 @@ export type Order = {
   id: number;
   restaurant_id: number;
   table_id: number;
+  /** Le nom écrit sur la table. `table_id` est un identifiant de base, pas
+   *  quelque chose qu'un serveur puisse retrouver en salle. */
+  table_label: string;
   status: OrderStatus;
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
@@ -130,6 +133,7 @@ export type WaiterCall = {
   id: number;
   restaurant_id: number;
   table_id: number;
+  table_label: string;
   created_at: string;
   resolved_at: string | null;
   resolved_by_staff_id: number | null;
@@ -422,10 +426,12 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
     }),
-  callWaiter: (restaurantId: number, tableId: number) =>
+  // Le token du QR, jamais des identifiants : sans ça, une boucle sur
+  // `table_id` faisait sonner tous les écrans serveur, depuis n'importe où.
+  callWaiter: (qrToken: string) =>
     request<WaiterCall>("/api/v1/waiter-calls", {
       method: "POST",
-      body: JSON.stringify({ restaurant_id: restaurantId, table_id: tableId }),
+      body: JSON.stringify({ qr_token: qrToken }),
     }),
   listPendingWaiterCalls: (restaurantId: number) =>
     request<WaiterCall[]>(`/api/v1/waiter-calls/by-restaurant/${restaurantId}/pending`),
