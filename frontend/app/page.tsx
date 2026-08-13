@@ -118,8 +118,13 @@ export default function HomePage() {
       </section>
 
       <footer className="max-w-3xl mx-auto px-6 py-8 text-xs text-[var(--ink-soft)]">
-        Tawla — commande à table par QR code pour les restaurants tunisiens. Si vous êtes client d&apos;un
-        établissement, scannez simplement le QR posé sur votre table.
+        <p>
+          Tawla — commande à table par QR code pour les restaurants tunisiens. Si vous êtes client d&apos;un
+          établissement, scannez simplement le QR posé sur votre table.
+        </p>
+        <Link href="/confidentialite" className="underline mt-2 inline-block">
+          Politique de confidentialité
+        </Link>
       </footer>
     </main>
   );

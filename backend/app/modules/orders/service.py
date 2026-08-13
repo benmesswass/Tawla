@@ -50,6 +50,10 @@ ALLOWED_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.CANCELLED: set(),
 }
 
+# États dont on ne sort plus — dérivés du dict ci-dessus pour qu'ils ne
+# puissent pas diverger le jour où une transition est ajoutée.
+TERMINAL_STATUSES = {status for status, allowed in ALLOWED_TRANSITIONS.items() if not allowed}
+
 
 def _order_channel(order_id: int) -> str:
     """Canal WS dédié à une commande : c'est ce que le client scanne-QR écoute
@@ -103,6 +107,29 @@ def save_push_subscription(db: Session, order_id: int, subscription: schemas.Pus
 
     order.push_subscription = subscription.model_dump_json()
     db.commit()
+
+
+def purge_terminal_push_subscriptions(db: Session, dry_run: bool = False) -> int:
+    """
+    Efface les abonnements push restés sur des commandes déjà terminées
+    (Phase 16). Depuis `transition_status` la purge est immédiate ; cette
+    fonction rattrape les commandes servies avant cette règle, et sert de
+    filet si un jour un chemin d'écriture l'oublie.
+    """
+    stale = (
+        db.query(Order)
+        .filter(Order.status.in_(TERMINAL_STATUSES), Order.push_subscription.isnot(None))
+        .all()
+    )
+    if dry_run:
+        return len(stale)
+
+    for order in stale:
+        order.push_subscription = None
+    db.commit()
+    if stale:
+        log_event(logger, "order.push_subscriptions_purged", count=len(stale))
+    return len(stale)
 
 
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
@@ -285,6 +312,11 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
         order.ready_at = now
     if new_status == OrderStatus.SERVED:
         order.served_at = now
+    # L'abonnement push ne sert qu'à annoncer « votre commande est prête ». Sur
+    # un statut terminal il n'a plus de finalité, et c'est un point de contact
+    # vers le navigateur d'un client : on ne le garde pas (Phase 16).
+    if new_status in TERMINAL_STATUSES:
+        order.push_subscription = None
 
     db.commit()
     db.refresh(order)

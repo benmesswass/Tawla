@@ -53,6 +53,30 @@ Il voit aussi les **demandes de paiement en espèces** (en ambre) et les
 
 ---
 
+## Les numéros de téléphone de vos clients
+
+Le programme de fidélité enregistre le numéro que le client tape lui-même.
+C'est une donnée personnelle : **c'est vous, l'établissement, qui en êtes
+responsable**, pas Tawla.
+
+Ce qui est déjà fait pour vous :
+
+- avant de taper son numéro, le client lit à quoi il sert et combien de temps
+  il est gardé ;
+- la politique de confidentialité est publiée sur **tawla.tn/confidentialite**,
+  en français et en arabe ;
+- les fiches sans commande depuis 24 mois sont supprimées, ainsi que les
+  autorisations de notification des commandes déjà servies.
+
+Ce qui reste de votre côté :
+
+- si un client demande à voir ou à faire supprimer son numéro, transmettez-le à
+  Tawla — la suppression est faite et confirmée ;
+- ne recopiez pas ces numéros ailleurs (carnet, fichier Excel, WhatsApp) : ce
+  qui sort de Tawla sort aussi de ces règles.
+
+---
+
 ## Si ça ne marche pas
 
 | Ce qui se passe | Quoi faire |

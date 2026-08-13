@@ -3,6 +3,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.dates import as_utc
 from app.modules.orders.models import Order, OrderStatus
 from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
 from app.modules.staff.models import Staff
@@ -124,7 +125,7 @@ def _period_proof(
     abandoned = [
         o
         for o in orders
-        if o.status == OrderStatus.PENDING_CONFIRMATION and _as_utc(o.created_at) < abandoned_before
+        if o.status == OrderStatus.PENDING_CONFIRMATION and as_utc(o.created_at) < abandoned_before
     ]
 
     order_to_kitchen = [
@@ -154,15 +155,6 @@ def _period_proof(
         avg_basket_with_suggestion=_average([o.total_amount for o in with_suggestion]),
         avg_basket_without_suggestion=_average([o.total_amount for o in without_suggestion]),
     )
-
-
-def _as_utc(value: datetime) -> datetime:
-    """
-    SQLite rend les datetime sans fuseau (Postgres les rend avec) : sans cette
-    normalisation, la comparaison au seuil d'abandon lève un TypeError sur la
-    base de test et passerait inaperçue jusqu'en production.
-    """
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 async def get_proof_stats(
@@ -225,7 +217,7 @@ async def get_team_report(
         if not member:
             continue
         delays = [
-            (_as_utc(o.taken_at) - _as_utc(o.created_at)).total_seconds()
+            (as_utc(o.taken_at) - as_utc(o.created_at)).total_seconds()
             for o in staff_orders
             if o.taken_at
         ]
