@@ -46,6 +46,15 @@ export type Staff = {
   name: string;
   role: StaffRole;
   email: string;
+  is_active: boolean;
+};
+
+// Le mot de passe temporaire n'est renvoyé qu'à la création (quand le manager
+// n'en fournit pas) et à la réinitialisation — il n'est stocké que haché côté
+// serveur, donc il n'y a aucun moyen de le réafficher ensuite.
+export type StaffCreated = {
+  staff: Staff;
+  temporary_password: string | null;
 };
 
 export type LoginResponse = {
@@ -189,6 +198,13 @@ export const api = {
   register: (payload: { restaurant_name: string; manager_name: string; email: string; password: string }) =>
     request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request<Staff>("/api/v1/auth/me"),
+  listStaff: (restaurantId: number) => request<Staff[]>(`/api/v1/staff/by-restaurant/${restaurantId}`),
+  createStaff: (payload: { name: string; email: string; role: StaffRole; password?: string }) =>
+    request<StaffCreated>("/api/v1/staff", { method: "POST", body: JSON.stringify(payload) }),
+  updateStaff: (staffId: number, payload: { name?: string; role?: StaffRole; is_active?: boolean }) =>
+    request<Staff>(`/api/v1/staff/${staffId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  resetStaffPassword: (staffId: number) =>
+    request<StaffCreated>(`/api/v1/staff/${staffId}/reset-password`, { method: "POST" }),
   createMenuItem: (payload: {
     restaurant_id: number;
     name: string;
