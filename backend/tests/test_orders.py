@@ -1,17 +1,15 @@
-from tests.conftest import auth_headers, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff
 
 
 def _setup_restaurant_with_item(client, available=True, price=3.5):
-    restaurant = client.post(
-        "/api/v1/restaurants", json={"name": "Café Test", "slug": "cafe-test"}
-    ).json()
-    headers = auth_headers(create_staff(restaurant["id"]))
+    restaurant = create_restaurant(name="Café Test", slug="cafe-test")
+    headers = auth_headers(create_staff(restaurant.id))
     table = client.post(
-        "/api/v1/tables", json={"restaurant_id": restaurant["id"], "label": "Table 1"}, headers=headers
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
     ).json()
     item = client.post(
         "/api/v1/menu-items",
-        json={"restaurant_id": restaurant["id"], "name": "Café", "price": price},
+        json={"restaurant_id": restaurant.id, "name": "Café", "price": price},
         headers=headers,
     ).json()
     if not available:
@@ -26,8 +24,7 @@ def test_order_full_happy_path(client):
     order = client.post(
         "/api/v1/orders",
         json={
-            "restaurant_id": restaurant["id"],
-            "table_id": table["id"],
+            "qr_token": table["qr_token"],
             "items": [{"menu_item_id": item["id"], "quantity": 2}],
         },
     ).json()
@@ -51,8 +48,7 @@ def test_cannot_send_to_kitchen_without_waiter_confirmation(client):
     order = client.post(
         "/api/v1/orders",
         json={
-            "restaurant_id": restaurant["id"],
-            "table_id": table["id"],
+            "qr_token": table["qr_token"],
             "items": [{"menu_item_id": item["id"], "quantity": 1}],
         },
     ).json()
@@ -66,8 +62,7 @@ def test_cannot_order_unavailable_item(client):
     res = client.post(
         "/api/v1/orders",
         json={
-            "restaurant_id": restaurant["id"],
-            "table_id": table["id"],
+            "qr_token": table["qr_token"],
             "items": [{"menu_item_id": item["id"], "quantity": 1}],
         },
     )
@@ -83,8 +78,7 @@ def test_order_price_is_frozen_at_order_time(client):
     order = client.post(
         "/api/v1/orders",
         json={
-            "restaurant_id": restaurant["id"],
-            "table_id": table["id"],
+            "qr_token": table["qr_token"],
             "items": [{"menu_item_id": item["id"], "quantity": 1}],
         },
     ).json()
@@ -100,6 +94,6 @@ def test_empty_order_is_rejected(client):
     restaurant, table, _item, _headers = _setup_restaurant_with_item(client)
     res = client.post(
         "/api/v1/orders",
-        json={"restaurant_id": restaurant["id"], "table_id": table["id"], "items": []},
+        json={"qr_token": table["qr_token"], "items": []},
     )
     assert res.status_code == 422

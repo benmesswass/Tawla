@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import rate_limit
 from app.modules.loyalty import schemas, service
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -11,9 +12,16 @@ router = APIRouter(prefix="/api/v1/loyalty", tags=["loyalty"])
 _WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 
 
-@router.post("/lookup", response_model=schemas.LoyaltyMemberOut)
+@router.post("/lookup", response_model=schemas.LoyaltyMemberPublicOut, dependencies=[Depends(rate_limit)])
 def lookup_loyalty(payload: schemas.LoyaltyLookup, db: Session = Depends(get_db)):
-    """Public — appelé par le client quand il saisit son numéro au moment de commander."""
+    """
+    Public — appelé par le client quand il saisit son numéro au moment de
+    commander. Reste public par nécessité (le client n'a pas de compte), mais
+    limité en débit et sans date de naissance en sortie : sans ces deux
+    garde-fous, l'endpoint permettait de balayer des numéros de téléphone pour
+    savoir lesquels sont clients d'un établissement donné, et de récupérer leur
+    date de naissance (constat 4 de la revue du 2026-08-13).
+    """
     return service.lookup_or_create(db, payload)
 
 

@@ -1,11 +1,9 @@
-from tests.conftest import auth_headers, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff
 
 
 def _setup_restaurant(client):
-    restaurant = client.post(
-        "/api/v1/restaurants", json={"name": "Dar Chaabane", "slug": "dar-chaabane-labels"}
-    ).json()
-    headers = auth_headers(create_staff(restaurant["id"]))
+    restaurant = create_restaurant(name="Dar Chaabane", slug="dar-chaabane-labels")
+    headers = auth_headers(create_staff(restaurant.id))
     return restaurant, headers
 
 
@@ -14,7 +12,7 @@ def test_menu_item_defaults_no_spice_and_halal(client):
     restaurant, headers = _setup_restaurant(client)
     item = client.post(
         "/api/v1/menu-items",
-        json={"restaurant_id": restaurant["id"], "name": "Couscous", "price": 15.0},
+        json={"restaurant_id": restaurant.id, "name": "Couscous", "price": 15.0},
         headers=headers,
     ).json()
     assert item["spice_level"] == 0
@@ -27,7 +25,7 @@ def test_menu_item_can_set_spice_allergens_and_halal(client):
     item = client.post(
         "/api/v1/menu-items",
         json={
-            "restaurant_id": restaurant["id"],
+            "restaurant_id": restaurant.id,
             "name": "Merguez piquante",
             "price": 12.0,
             "spice_level": 3,
@@ -44,7 +42,7 @@ def test_menu_item_rejects_out_of_range_spice_level(client):
     restaurant, headers = _setup_restaurant(client)
     res = client.post(
         "/api/v1/menu-items",
-        json={"restaurant_id": restaurant["id"], "name": "Trop épicé", "price": 12.0, "spice_level": 5},
+        json={"restaurant_id": restaurant.id, "name": "Trop épicé", "price": 12.0, "spice_level": 5},
         headers=headers,
     )
     assert res.status_code == 422
@@ -54,7 +52,7 @@ def test_menu_item_update_can_change_labels(client):
     restaurant, headers = _setup_restaurant(client)
     item = client.post(
         "/api/v1/menu-items",
-        json={"restaurant_id": restaurant["id"], "name": "Salade", "price": 6.0},
+        json={"restaurant_id": restaurant.id, "name": "Salade", "price": 6.0},
         headers=headers,
     ).json()
 

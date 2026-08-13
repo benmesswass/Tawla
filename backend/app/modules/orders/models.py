@@ -1,10 +1,25 @@
 import enum
+import secrets
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+
+def generate_order_token() -> str:
+    """
+    Preuve que ce navigateur-ci est bien celui qui a passé cette commande-ci.
+
+    Même raison d'être que `Table.qr_token` : l'id d'une commande est
+    séquentiel, donc devinable. Sans ce token, `GET /orders/3` laissait lire
+    la commande du voisin — et celle d'un autre restaurant — numéro de
+    téléphone du client compris (constat 1 de la revue du 2026-08-13).
+    Le parcours client reste sans compte : ce token ne remplace pas une
+    authentification, il rattache juste chaque appel à une commande réelle.
+    """
+    return secrets.token_urlsafe(32)
 
 
 class OrderStatus(str, enum.Enum):
@@ -40,6 +55,12 @@ class Order(Base):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
     table_id: Mapped[int] = mapped_column(ForeignKey("tables.id"), nullable=False, index=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING_CONFIRMATION)
+
+    # Renvoyé une seule fois, à la création, et exigé ensuite sur toutes les
+    # routes client de cette commande (suivi, paiement, abonnement push).
+    public_token: Mapped[str] = mapped_column(
+        String(64), unique=True, index=True, default=generate_order_token
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
