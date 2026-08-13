@@ -126,7 +126,9 @@ l'ancienne Phase 10, désormais débloquées par le choix d'hébergeur)
 - [ ] Réserver le domaine 🧑 (`tawla.tn` en priorité, `.com` en secours)
 - [ ] Générer les vraies clés en variables d'environnement 🧑 : `JWT_SECRET`, `FRONTEND_ORIGIN` sur l'origine exacte de prod, paire VAPID
 - [ ] Activer les sauvegardes automatiques du Postgres managé 🧑 — **bloquant avant la première commande réelle**
-- [ ] Monitoring externe sur `/health` (UptimeRobot gratuit) + collecte des erreurs backend et frontend (Sentry offre gratuite, ou à défaut un log drain de l'hébergeur)
+- [x] Rendre `/health` digne d'un monitoring : la sonde interroge la base et renvoie 503 si elle est injoignable (PR #41). Avant, elle renvoyait « ok » sans rien vérifier — un moniteur branché dessus aurait certifié que tout allait bien pendant qu'aucune commande ne passait
+- [ ] Brancher le monitoring externe sur `/health` 🧑 (UptimeRobot gratuit) — le code est prêt, il manque le compte et l'URL de prod
+- [ ] Collecte des erreurs 🧑 — Sentry (offre gratuite) ou log drain de l'hébergeur. Rien à coder d'ici là : les logs backend sortent déjà en JSON sur stdout (`app/core/logging.py`), qu'un log drain ramasse tel quel. Ne pas ajouter le SDK Sentry avant d'avoir un DSN : une dépendance inutilisable en production n'est pas une préparation
 - [ ] Rejouer le parcours complet (client / serveur / cuisine / manager) sur staging avant la bascule, puis bascule finale 🧑
 
 ---
