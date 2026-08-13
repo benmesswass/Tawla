@@ -1,4 +1,4 @@
-import { getToken } from "@/lib/auth";
+import { clearToken, getToken } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -188,6 +188,26 @@ export type PeriodProof = {
   avg_basket_without_suggestion: number | null;
 };
 
+/**
+ * Ligne de rapport d'équipe (Phase 14.2) — base d'une prime de rendement.
+ * Réservé au manager : c'est un document de direction, pas un classement à
+ * afficher en salle.
+ */
+export type StaffPeriodReport = {
+  staff_id: number;
+  staff_name: string;
+  role: StaffRole;
+  orders_taken: number;
+  avg_seconds_to_claim: number | null;
+  total_amount_handled: number;
+};
+
+export type TeamReport = {
+  start: string;
+  end: string;
+  staff: StaffPeriodReport[];
+};
+
 export type ProofStats = {
   current: PeriodProof;
   previous: PeriodProof;
@@ -207,6 +227,10 @@ export class ApiError extends Error {
     this.context = context;
   }
 }
+
+// Codes qui signifient « cette session ne vaut plus rien », par opposition à un
+// simple identifiant refusé sur l'écran de connexion (INVALID_CREDENTIALS).
+const SESSION_LOST_CODES = new Set(["NOT_AUTHENTICATED", "INVALID_TOKEN", "ACCOUNT_DISABLED"]);
 
 function authHeaders(): Record<string, string> {
   const token = getToken();
@@ -234,6 +258,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => ({}));
     const detail = body.detail;
     if (detail && typeof detail === "object" && detail.code) {
+      // Session devenue invalide en pleine session : JWT expiré (12 h) ou
+      // compte désactivé par le manager pendant le service. Le garde
+      // `useCurrentStaff` ne s'exécute qu'au montage : sans ce traitement
+      // global, le serveur reste devant un écran qui ne répond plus et croit
+      // à une panne. On ne touche jamais au parcours client, qui n'a pas de
+      // token, ni à l'écran de connexion lui-même.
+      if (res.status === 401 && SESSION_LOST_CODES.has(detail.code) && getToken()) {
+        clearToken();
+        if (typeof window !== "undefined") window.location.replace("/login");
+      }
       throw new ApiError(detail.code, detail.message ?? `Erreur API (${res.status})`, detail);
     }
     throw new ApiError("UNKNOWN", typeof detail === "string" ? detail : `Erreur API (${res.status})`);
@@ -339,6 +373,13 @@ export const api = {
     if (end) params.set("end", end);
     const query = params.toString();
     return request<ProofStats>(`/api/v1/stats/preuve/${restaurantId}${query ? `?${query}` : ""}`);
+  },
+  getTeamReport: (restaurantId: number, start?: string, end?: string) => {
+    const params = new URLSearchParams();
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    const query = params.toString();
+    return request<TeamReport>(`/api/v1/stats/equipe/${restaurantId}${query ? `?${query}` : ""}`);
   },
   getKitchenTodayCount: (restaurantId: number) =>
     request<KitchenTodayCount>(`/api/v1/stats/kitchen-today-count/${restaurantId}`),

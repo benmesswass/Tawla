@@ -184,6 +184,66 @@ async def get_proof_stats(
     )
 
 
+async def get_team_report(
+    db: Session, restaurant_id: int, start: date_type, end: date_type
+) -> schemas.TeamReport:
+    """
+    Activité de chaque membre de l'équipe sur une période — la base des primes
+    de rendement (Phase 14.2).
+
+    Les comptes désactivés qui ont travaillé sur la période restent listés : un
+    serveur parti en milieu de mois a droit à sa prime.
+    """
+    period_start = datetime.combine(start, time.min, tzinfo=timezone.utc)
+    period_end = datetime.combine(end, time.min, tzinfo=timezone.utc) + timedelta(days=1)
+
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.taken_by_staff_id.isnot(None),
+            Order.created_at >= period_start,
+            Order.created_at < period_end,
+            Order.status != OrderStatus.CANCELLED,
+        )
+        .all()
+    )
+
+    by_staff: dict[int, list[Order]] = {}
+    for order in orders:
+        by_staff.setdefault(order.taken_by_staff_id, []).append(order)
+
+    if not by_staff:
+        return schemas.TeamReport(start=start, end=end, staff=[])
+
+    staff_by_id = {s.id: s for s in db.query(Staff).filter(Staff.id.in_(by_staff)).all()}
+
+    rows: list[schemas.StaffPeriodReport] = []
+    for staff_id, staff_orders in by_staff.items():
+        member = staff_by_id.get(staff_id)
+        if not member:
+            continue
+        delays = [
+            (_as_utc(o.taken_at) - _as_utc(o.created_at)).total_seconds()
+            for o in staff_orders
+            if o.taken_at
+        ]
+        rows.append(
+            schemas.StaffPeriodReport(
+                staff_id=member.id,
+                staff_name=member.name,
+                role=member.role,
+                orders_taken=len(staff_orders),
+                avg_seconds_to_claim=_average(delays),
+                total_amount_handled=sum(o.total_amount for o in staff_orders),
+            )
+        )
+
+    rows.sort(key=lambda row: -row.orders_taken)
+    return schemas.TeamReport(start=start, end=end, staff=rows)
+
+
 async def get_kitchen_today_count(db: Session, restaurant_id: int, day: date_type) -> schemas.KitchenTodayCount:
     day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
     day_end = day_start + timedelta(days=1)

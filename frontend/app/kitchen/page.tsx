@@ -259,10 +259,15 @@ export default function KitchenPage() {
   const scheduledCount = orders.filter((o) => o.scheduled_for).length;
 
   return (
-    <div className="p-6 bg-neutral-950 min-h-screen text-white">
+    // L'écran cuisine tourne parfois sur un simple téléphone posé sur une
+    // étagère, pas sur le grand écran pour lequel il a été dessiné : sans
+    // `overflow-x-hidden` et sans passage à la ligne des actions, la page
+    // débordait latéralement à 360 px et le bouton de déconnexion sortait du
+    // cadre sombre (vérifié en navigateur, Phase 15).
+    <div className="p-4 sm:p-6 bg-neutral-950 min-h-screen text-white overflow-x-hidden">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-        <h1 className={`${lalezar.className} text-3xl`}>Écran cuisine</h1>
-        <div className="flex items-center gap-3">
+        <h1 className={`${lalezar.className} text-2xl sm:text-3xl`}>Écran cuisine</h1>
+        <div className="flex items-center gap-3 flex-wrap">
           <ConnectionBadge status={status} dark />
           <Button variant="secondary" dark onClick={printTickets}>
             Imprimer (filet de secours)

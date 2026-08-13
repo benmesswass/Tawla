@@ -84,6 +84,32 @@ class PeriodProof(BaseModel):
     avg_basket_without_suggestion: float | None = None
 
 
+class StaffPeriodReport(BaseModel):
+    """
+    Ligne de rapport d'un membre de l'équipe sur une période.
+
+    Sert à asseoir une prime de rendement, donc les chiffres doivent être ceux
+    que le serveur peut reconnaître comme siens : les commandes qu'il a prises
+    en charge, sa réactivité à les confirmer, et le montant qu'il a traité.
+    Aucun classement, aucune note : le manager arbitre, l'outil compte.
+    """
+
+    staff_id: int
+    staff_name: str
+    role: StaffRole
+    orders_taken: int
+    # De la commande du client à sa prise en charge : c'est la part du délai qui
+    # dépend réellement du serveur, contrairement au temps de cuisson.
+    avg_seconds_to_claim: float | None
+    total_amount_handled: float
+
+
+class TeamReport(BaseModel):
+    start: date_type
+    end: date_type
+    staff: list[StaffPeriodReport]
+
+
 class ProofStats(BaseModel):
     """
     La période demandée et la période de même longueur qui la précède

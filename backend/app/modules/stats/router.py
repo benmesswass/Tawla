@@ -60,6 +60,33 @@ async def proof(
     return await service.get_proof_stats(db, restaurant_id, period_start, period_end)
 
 
+@router.get("/equipe/{restaurant_id}", response_model=schemas.TeamReport)
+async def team_report(
+    restaurant_id: int,
+    start: date_type | None = None,
+    end: date_type | None = None,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Activité de chaque membre de l'équipe sur une période — la base des primes
+    de rendement. Réservé au manager : c'est un document de direction, pas un
+    classement à afficher en salle.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+
+    today = datetime.now(timezone.utc).date()
+    period_end = end or today
+    period_start = start or (period_end - timedelta(days=6))
+    if period_start > period_end:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_PERIOD", "message": "start must not be after end"},
+        )
+    return await service.get_team_report(db, restaurant_id, period_start, period_end)
+
+
 @router.get("/kitchen-today-count/{restaurant_id}", response_model=schemas.KitchenTodayCount)
 async def kitchen_today_count(
     restaurant_id: int,

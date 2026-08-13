@@ -526,6 +526,9 @@ export default function DashboardPage() {
           <Link href="/dashboard/preuve" className="underline">
             Preuve du pilote
           </Link>
+          <Link href="/dashboard/equipe" className="underline">
+            Rapport d&apos;équipe
+          </Link>
           <button onClick={logout} className="text-neutral-500 underline">
             Se déconnecter
           </button>

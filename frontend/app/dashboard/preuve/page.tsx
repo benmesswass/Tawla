@@ -216,6 +216,9 @@ export default function ProofPage() {
           <Link href="/dashboard/stats" className="underline">
             Activité du jour
           </Link>
+          <Link href="/dashboard/equipe" className="underline">
+            Rapport d&apos;équipe
+          </Link>
           <button onClick={logout} className="text-[var(--ink-soft)] underline">
             Se déconnecter
           </button>
