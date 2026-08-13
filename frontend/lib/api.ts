@@ -25,6 +25,18 @@ export type Table = {
   zone: string | null;
 };
 
+/**
+ * Résultat d'un import de carte : les lignes valides sont créées même si
+ * d'autres sont fautives, et `errors` dit précisément lesquelles corriger —
+ * recommencer un fichier de 40 plats pour une faute de frappe serait inacceptable.
+ */
+export type MenuCsvImportResult = {
+  created_count: number;
+  updated_count: number;
+  disabled_count: number;
+  errors: string[];
+};
+
 export type SubscriptionTier = "essentiel" | "pro" | "business";
 
 export type Restaurant = {
@@ -273,6 +285,11 @@ export const api = {
       body: JSON.stringify({ is_available: isAvailable }),
     }),
   deleteMenuItem: (itemId: number) => request<void>(`/api/v1/menu-items/${itemId}`, { method: "DELETE" }),
+  importMenuCsv: (content: string, replaceExisting: boolean) =>
+    request<MenuCsvImportResult>("/api/v1/menu-items/import-csv", {
+      method: "POST",
+      body: JSON.stringify({ content, replace_existing: replaceExisting }),
+    }),
   createOrder: (payload: {
     // Le token du QR scanné, d'où le backend déduit la table et le restaurant :
     // aucun identifiant numérique n'est envoyé par le client (Phase 12.2).

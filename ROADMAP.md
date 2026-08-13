@@ -34,12 +34,12 @@ clôture de chaque phase.
 | Dimension | Poids | Actuelle | Cible | Ce qui la déplace | Phase |
 |---|---:|---:|---:|---|---|
 | Accès au marché & vente | 20 % | 2,0 | 7,5 | 20 entretiens, 3 pilotes actifs, 2 clients payants | 13 |
-| Prêt à vendre (installable, sûr) | 15 % | 7,0 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, reste le déploiement avec sauvegardes | 12 |
+| Prêt à vendre (installable, sûr) | 15 % | 8,0 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, ~~kit d'installation~~, reste le déploiement avec sauvegardes | 12, 13.2 |
 | Besoin marché prouvé | 20 % | 7,0 | 8,5 | Les 3 métriques mesurées avant/après chez un pilote | 13.3 |
 | Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements | 14.3 |
 | Différenciation sur une niche | 10 % | 4,0 | 7,5 | Vente incitative chiffrée, positionnement service, angle primes | 14 |
 | Exécution technique | 15 % | 9,0 | 9,0 | ~~Tests de sécurité dédiés~~ (atteint), tenue en service réel | 12.2, 15 |
-| **Note pondérée** | **100 %** | **6,1** | **8,2** | | |
+| **Note pondérée** | **100 %** | **6,3** | **8,2** | | |
 
 Mise à jour du 2026-08-13 (clôture de 12.1 et 12.2) : « prêt à vendre » passe de
 2,5 à 7,0 — le produit est désormais installable par un restaurateur et sa
@@ -49,10 +49,18 @@ demandent des comptes de Wassim. « Exécution technique » passe à 9,0 : les
 correctifs de sécurité sont couverts par des tests nommés d'après chaque
 constat, pas seulement corrigés.
 
-Les deux lignes qui portent 40 % du poids cumulé — accès au marché et besoin
-prouvé — n'ont pas bougé et ne peuvent pas bouger par du code. Aucune
-fonctionnalité nouvelle ne fera gagner de point tant que la Phase 13 n'est pas
-engagée.
+Mise à jour du 2026-08-13 (13.2 et 13.3) : « prêt à vendre » passe à 8,0 —
+installer un pilote est passé d'une dizaine d'appels Swagger enchaînés à la main
+sur place à une seule commande, chevalets imprimables et fiche de remise
+compris. Il reste le déploiement réel.
+
+**Ces deux sous-phases n'ont déplacé aucune autre note, et c'est normal** :
+elles construisent l'instrument de mesure et l'outil d'installation, pas la
+preuve elle-même. « Besoin marché prouvé » ne bougera qu'avec des chiffres
+relevés chez un vrai restaurant, et « accès au marché » qu'avec des entretiens
+menés. Ces deux lignes portent 40 % du poids cumulé et **aucune ligne de code ne
+peut plus les faire monter** — tout ce qui reste à faire pour atteindre 8/10
+passe par la porte d'un restaurant.
 
 ---
 
@@ -113,31 +121,31 @@ de la Phase 12, ils n'attendent rien.**
 
 **13.1 — Vingt entretiens de restaurateurs** (avant de montrer l'application)
 
-- [ ] Rédiger le guide d'entretien (`terrain/GUIDE_ENTRETIEN.md`) : ouvrir sur « qu'est-ce qui te fait perdre de l'argent chaque semaine ? », ne jamais montrer l'app avant la fin, une question de prix posée franchement (« combien tu paierais par mois pour ça ? » après avoir décrit le bénéfice, jamais la fonctionnalité)
-- [ ] Tableau de dépouillement (`terrain/ENTRETIENS.md`) : une ligne par établissement — type, nombre de tables, douleur citée en premier, outil déjà utilisé, prix accepté, objection principale, verbatim marquant
+- [x] Rédiger le guide d'entretien (`terrain/GUIDE_ENTRETIEN.md`) : ouvrir sur « qu'est-ce qui te fait perdre de l'argent chaque semaine ? », ne jamais montrer l'app avant la fin, une question de prix posée franchement (« combien tu paierais par mois pour ça ? » après avoir décrit le bénéfice, jamais la fonctionnalité) (PR #37)
+- [x] Tableau de dépouillement (`terrain/ENTRETIENS.md`) : une ligne par établissement — type, nombre de tables, douleur citée en premier, outil déjà utilisé, prix accepté, objection principale, verbatim marquant (PR #37)
 - [ ] Mener les 20 entretiens 🧑 — cible : restaurants et brasseries de 6 tables et plus (Tunis, La Marsa, Sousse, Hammamet), pas les petits cafés
 - [ ] Synthèse : les trois douleurs les plus citées, le prix médian accepté, et ce qui dans la roadmap devient inutile au vu des réponses (attendre une coupe, pas un ajout)
 
 **13.2 — Kit d'installation d'un pilote** (ce que Claude Code peut préparer pour
 que Wassim installe un restaurant en une heure)
 
-- [ ] Script d'installation guidée (`backend/scripts/setup_restaurant.py`) : crée le restaurant, le manager, l'équipe, les tables avec leurs zones, importe une carte depuis un CSV, et génère tous les QR en une passe — l'alternative actuelle est une dizaine d'appels Swagger
-- [ ] Import de carte en CSV depuis le dashboard manager (nom, description, catégorie, prix, piment, allergènes) — saisir 30 plats à la main est le premier abandon probable d'un patron
-- [ ] Fiche de prise en main, une page, fr + ar (`terrain/PRISE_EN_MAIN.md`) : ce que fait le serveur, ce que fait la cuisine, quoi faire si le Wi-Fi tombe
-- [ ] Script de formation du personnel en 10 minutes (`terrain/FORMATION_10MIN.md`) — déroulé exact, à jouer pendant un vrai service
-- [ ] Vérifier le rendu des QR sur support imprimé réel (`generate_table_qr.py` existe ; valider taille, contraste et lisibilité à 30 cm sur un chevalet de table)
+- [x] Script d'installation guidée (`backend/scripts/setup_restaurant.py`) : crée le restaurant, le manager, l'équipe, les tables avec leurs zones, importe une carte depuis un CSV, et génère tous les QR en une passe — l'alternative actuelle est une dizaine d'appels Swagger (PR #37)
+- [x] Import de carte en CSV depuis le dashboard manager (nom, description, catégorie, prix, piment, allergènes) — saisir 30 plats à la main est le premier abandon probable d'un patron (PR #37)
+- [x] Fiche de prise en main, une page, fr + ar (`terrain/PRISE_EN_MAIN.md`) : ce que fait le serveur, ce que fait la cuisine, quoi faire si le Wi-Fi tombe (PR #37)
+- [x] Script de formation du personnel en 10 minutes (`terrain/FORMATION_10MIN.md`) — déroulé exact, à jouer pendant un vrai service (PR #37)
+- [x] Vérifier le rendu des QR sur support imprimé réel (`generate_table_qr.py` existe ; valider taille, contraste et lisibilité à 30 cm sur un chevalet de table) (PR #37)
 
 **13.3 — Instrumenter les trois métriques qui valent de l'argent**
 
 Rien d'autre. Ni tableau de bord supplémentaire, ni graphique de plus : ces
 trois chiffres, mesurables avec les horodatages déjà présents sur `Order`.
 
-- [ ] Définir « commande perdue » dans le code : commande annulée + commande restée en `pending_confirmation` au-delà d'un seuil (proposer 10 min, à confirmer avec un pilote) — constante nommée et documentée dans `orders/service.py`
-- [ ] `GET /api/v1/stats/preuve/{restaurant_id}` (manager) — pour une plage de dates : commandes perdues, délai moyen commande → arrivée en cuisine, panier moyen, nombre de commandes. Réutiliser `stats/service.py`
-- [ ] Page `/dashboard/preuve` : les trois chiffres, semaine courante contre semaine précédente, avec l'écart en pourcentage. C'est la page que Wassim montre au patron à la fin du pilote — et au jury
-- [ ] Export CSV de cette page (même mécanique client que `/dashboard/stats`)
+- [x] Définir « commande perdue » dans le code : commande annulée + commande restée en `pending_confirmation` au-delà d'un seuil (proposer 10 min, à confirmer avec un pilote) — constante nommée et documentée dans `orders/service.py` (PR #37)
+- [x] `GET /api/v1/stats/preuve/{restaurant_id}` (manager) — pour une plage de dates : commandes perdues, délai moyen commande → arrivée en cuisine, panier moyen, nombre de commandes. Réutiliser `stats/service.py` (PR #37)
+- [x] Page `/dashboard/preuve` : les trois chiffres, semaine courante contre semaine précédente, avec l'écart en pourcentage. C'est la page que Wassim montre au patron à la fin du pilote — et au jury (PR #37)
+- [x] Export CSV de cette page (même mécanique client que `/dashboard/stats`) (PR #37)
 - [ ] Mesurer une semaine de référence **avant** d'activer la commande QR chez chaque pilote (saisie manuelle par le patron : commandes perdues et panier moyen) — sinon il n'y a pas d'« avant » et la preuve ne vaut rien 🧑
-- [ ] `terrain/PILOTES.md` — un bloc par établissement : date d'installation, contact, matériel utilisé, métriques hebdomadaires, verbatims, incidents
+- [x] `terrain/PILOTES.md` — un bloc par établissement : date d'installation, contact, matériel utilisé, métriques hebdomadaires, verbatims, incidents (PR #37)
 
 **13.4 — Les pilotes eux-mêmes** 🧑
 
