@@ -82,9 +82,27 @@ par le script, non commité).
 
 ## Roadmap
 
-`ROADMAP.md` est le fichier unique de pilotage du projet (phases 0 à 7).
-Prendre la première tâche non cochée en partant du haut, dans l'ordre des
-phases. Une tâche cochée `[x]` doit mentionner la PR qui l'a livrée.
+`ROADMAP.md` est le fichier unique de pilotage du projet (phases 12 à 16 depuis
+la revue d'investissement du 2026-08-13). Prendre la première tâche non cochée
+en partant du haut, dans l'ordre des phases. Une tâche cochée `[x]` doit
+mentionner la PR qui l'a livrée ; si le scope a été réduit, écrire pourquoi sur
+la ligne.
+
+- `ROADMAP_ARCHIVE.md` — historique des phases 0 à 11. Lecture seule, ne rien y
+  ajouter : les décisions et renoncements qu'il documente restent la
+  justification de l'état du code.
+- `REVUE_INVESTISSEURS.md` — revue d'investissement qui fonde la roadmap
+  actuelle (grille de notation, failles vérifiées, plafond de revenus).
+
+Objectif en cours : passer de 5,3/10 à 8/10 au prochain jury. Le tableau en tête
+de `ROADMAP.md` dit quelle dimension chaque phase déplace — le recalculer à la
+clôture de chaque phase. Une tâche qui ne déplace aucune note est une tâche qui
+n'aurait pas dû être faite.
+
+**Cadrage produit (Wassim, 2026-08-13)** : Tawla est une entreprise rentable et
+non diluée, pas un dossier de levée. Conséquences : un prix unique élevé avec
+service inclus plutôt qu'un alignement sur les 19-49 DT du marché, cible
+restaurants de 6 tables et plus, et pas d'expansion régionale.
 
 ## Philosophie d'ingénierie (à appliquer par défaut)
 
