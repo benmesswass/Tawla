@@ -33,8 +33,9 @@ def test_register_derives_slug_from_restaurant_name(client):
         },
     )
     restaurant_id = res.json()["staff"]["restaurant_id"]
+    headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
 
-    restaurant = client.get(f"/api/v1/restaurants/{restaurant_id}").json()
+    restaurant = client.get(f"/api/v1/restaurants/{restaurant_id}", headers=headers).json()
     assert restaurant["slug"] == "le-petit-cafe"
 
 
@@ -59,8 +60,14 @@ def test_register_dedupes_slug_on_name_collision(client):
         },
     )
 
-    slug1 = client.get(f"/api/v1/restaurants/{res1.json()['staff']['restaurant_id']}").json()["slug"]
-    slug2 = client.get(f"/api/v1/restaurants/{res2.json()['staff']['restaurant_id']}").json()["slug"]
+    def _slug(registration: dict) -> str:
+        return client.get(
+            f"/api/v1/restaurants/{registration['staff']['restaurant_id']}",
+            headers={"Authorization": f"Bearer {registration['access_token']}"},
+        ).json()["slug"]
+
+    slug1 = _slug(res1.json())
+    slug2 = _slug(res2.json())
     assert slug1 != slug2
     assert slug2 == f"{slug1}-2"
 

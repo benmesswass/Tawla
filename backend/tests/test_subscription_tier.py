@@ -15,8 +15,13 @@ def test_new_restaurant_defaults_to_essentiel_tier(client):
         },
     )
     restaurant_id = res.json()["staff"]["restaurant_id"]
+    # La fiche complète est sous JWT depuis la fermeture de la lecture par
+    # identifiant : on réutilise le token que `register` vient de renvoyer.
+    token = res.json()["access_token"]
 
-    res = client.get(f"/api/v1/restaurants/{restaurant_id}")
+    res = client.get(
+        f"/api/v1/restaurants/{restaurant_id}", headers={"Authorization": f"Bearer {token}"}
+    )
     assert res.status_code == 200
     assert res.json()["subscription_tier"] == "essentiel"
 
