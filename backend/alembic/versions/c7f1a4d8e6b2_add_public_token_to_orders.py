@@ -32,7 +32,13 @@ def upgrade() -> None:
             orders.update().where(orders.c.id == order_id).values(public_token=secrets.token_urlsafe(32))
         )
 
-    op.alter_column('orders', 'public_token', nullable=False)
+    # batch_alter_table : sur Postgres (la cible réelle) ça émet l'ALTER TABLE
+    # habituel, mais ça rend aussi la migration exécutable sur SQLite, qui ne
+    # sait pas modifier une colonne en place. Sans ça, la chaîne complète n'est
+    # rejouable que sur une vraie base Postgres — donc invérifiable en local.
+    with op.batch_alter_table('orders') as batch:
+        batch.alter_column('public_token', nullable=False)
+
     op.create_index('ix_orders_public_token', 'orders', ['public_token'], unique=True)
 
 

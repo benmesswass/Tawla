@@ -34,16 +34,25 @@ clôture de chaque phase.
 | Dimension | Poids | Actuelle | Cible | Ce qui la déplace | Phase |
 |---|---:|---:|---:|---|---|
 | Accès au marché & vente | 20 % | 2,0 | 7,5 | 20 entretiens, 3 pilotes actifs, 2 clients payants | 13 |
-| Prêt à vendre (installable, sûr) | 15 % | 2,5 | 9,0 | Comptes staff, surface publique fermée, déployé avec sauvegardes | 12 |
+| Prêt à vendre (installable, sûr) | 15 % | 7,0 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, reste le déploiement avec sauvegardes | 12 |
 | Besoin marché prouvé | 20 % | 7,0 | 8,5 | Les 3 métriques mesurées avant/après chez un pilote | 13.3 |
 | Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements | 14.3 |
 | Différenciation sur une niche | 10 % | 4,0 | 7,5 | Vente incitative chiffrée, positionnement service, angle primes | 14 |
-| Exécution technique | 15 % | 8,5 | 9,0 | Tests de sécurité dédiés, tenue en service réel | 12.2, 15 |
-| **Note pondérée** | **100 %** | **5,3** | **8,2** | | |
+| Exécution technique | 15 % | 9,0 | 9,0 | ~~Tests de sécurité dédiés~~ (atteint), tenue en service réel | 12.2, 15 |
+| **Note pondérée** | **100 %** | **6,1** | **8,2** | | |
 
-Deux lignes portent 35 % du poids et sont à 2/10 : c'est là qu'est tout le
-gain. Aucune fonctionnalité nouvelle ne fera bouger la note tant que les
-phases 12 et 13 ne sont pas closes.
+Mise à jour du 2026-08-13 (clôture de 12.1 et 12.2) : « prêt à vendre » passe de
+2,5 à 7,0 — le produit est désormais installable par un restaurateur et sa
+surface publique est fermée, vérifié par 36 tests dédiés et un parcours complet
+rejoué en navigateur. Il reste le déploiement réel et les sauvegardes, qui
+demandent des comptes de Wassim. « Exécution technique » passe à 9,0 : les
+correctifs de sécurité sont couverts par des tests nommés d'après chaque
+constat, pas seulement corrigés.
+
+Les deux lignes qui portent 40 % du poids cumulé — accès au marché et besoin
+prouvé — n'ont pas bougé et ne peuvent pas bouger par du code. Aucune
+fonctionnalité nouvelle ne fera gagner de point tant que la Phase 13 n'est pas
+engagée.
 
 ---
 
@@ -58,33 +67,33 @@ n'importe quel restaurant.
 vendre : un manager onboardé en self-service ne peut donner accès ni au pool
 serveur ni à l'écran cuisine)
 
-- [ ] `Staff.is_active` (booléen, défaut `True`) + migration Alembic + vérification dans `staff/dependencies.py::get_current_staff` — un compte désactivé doit être refusé même avec un JWT déjà émis et encore valide
-- [ ] `POST /api/v1/staff` (manager uniquement, `staff/router.py`) — crée un compte serveur ou cuisine. `restaurant_id` **toujours** pris sur le JWT du manager, jamais accepté depuis le payload (cf. la faille d'isolation déjà corrigée sur `assign-staff`)
-- [ ] `GET /api/v1/staff/by-restaurant/{restaurant_id}` (manager) — liste de l'équipe avec rôle et état
-- [ ] `PATCH /api/v1/staff/{staff_id}` (manager) — renommer, changer de rôle, activer/désactiver. Refuser la désactivation du dernier manager actif du restaurant
-- [ ] `POST /api/v1/staff/{staff_id}/reset-password` (manager) — régénère un mot de passe et le renvoie **une seule fois** dans la réponse ; le manager le transmet de la main à la main (aucun service d'e-mail dans le projet, cohérent avec l'existant)
-- [ ] Onglet « Équipe » dans le dashboard manager (`frontend/app/dashboard/page.tsx`, même pattern que l'onglet « Tables & zones ») : liste, création, édition, désactivation, réinitialisation de mot de passe
-- [ ] Tests (`backend/tests/test_staff_management.py`) : un manager ne crée que dans son restaurant ; un serveur ou un compte cuisine ne peut pas créer de compte (403) ; un compte désactivé ne peut plus se connecter **ni utiliser son JWT existant** ; le dernier manager actif n'est pas désactivable
+- [x] `Staff.is_active` (booléen, défaut `True`) + migration Alembic + vérification dans `staff/dependencies.py::get_current_staff` — un compte désactivé doit être refusé même avec un JWT déjà émis et encore valide (branche `claude/darna-investment-review-ujupel`)
+- [x] `POST /api/v1/staff` (manager uniquement, `staff/router.py`) — crée un compte serveur ou cuisine. `restaurant_id` **toujours** pris sur le JWT du manager, jamais accepté depuis le payload (cf. la faille d'isolation déjà corrigée sur `assign-staff`) (branche `claude/darna-investment-review-ujupel`)
+- [x] `GET /api/v1/staff/by-restaurant/{restaurant_id}` (manager) — liste de l'équipe avec rôle et état (branche `claude/darna-investment-review-ujupel`)
+- [x] `PATCH /api/v1/staff/{staff_id}` (manager) — renommer, changer de rôle, activer/désactiver. Refuser la désactivation du dernier manager actif du restaurant (branche `claude/darna-investment-review-ujupel`)
+- [x] `POST /api/v1/staff/{staff_id}/reset-password` (manager) — régénère un mot de passe et le renvoie **une seule fois** dans la réponse ; le manager le transmet de la main à la main (aucun service d'e-mail dans le projet, cohérent avec l'existant) (branche `claude/darna-investment-review-ujupel`)
+- [x] Onglet « Équipe » dans le dashboard manager (`frontend/app/dashboard/page.tsx`, même pattern que l'onglet « Tables & zones ») : liste, création, édition, désactivation, réinitialisation de mot de passe (branche `claude/darna-investment-review-ujupel`)
+- [x] Tests (`backend/tests/test_staff_management.py`) : un manager ne crée que dans son restaurant ; un serveur ou un compte cuisine ne peut pas créer de compte (403) ; un compte désactivé ne peut plus se connecter **ni utiliser son JWT existant** ; le dernier manager actif n'est pas désactivable — 16 tests (branche `claude/darna-investment-review-ujupel`)
 
 **12.2 — Fermer la surface publique du parcours client** (les sept constats de
 la revue ; le parcours client reste sans compte, mais chaque appel doit être
 lié à la table qui a scanné ou à la commande créée)
 
-- [ ] `Order.public_token` — `secrets.token_urlsafe(32)` comme `Table.qr_token`, généré à la création, renvoyé **une seule fois** dans la réponse de `POST /orders`, jamais dans une autre réponse. Migration Alembic + `model_registry.py`
-- [ ] Exiger ce token (en-tête `X-Order-Token`) sur `GET /orders/{id}`, `pay/card`, `pay/cash` et `push-subscription` — répondre `404 ORDER_NOT_FOUND` sans lui, jamais `403` (ne pas confirmer l'existence de la commande)
-- [ ] `OrderCreate` prend le `qr_token` de la table au lieu de `table_id` brut (`restaurant_id` en est déduit) — le frontend l'a déjà dans son URL. C'est ce qui empêche d'injecter une commande dans un service en cours sans avoir scanné
-- [ ] Retirer `loyalty_phone` de `OrderOut`. Les écrans staff qui en ont besoin (demande de paiement cash, badge fidélité) passent par un schéma séparé `OrderOutStaff`, servi uniquement aux routes authentifiées
-- [ ] JWT obligatoire sur `/ws/staff/{restaurant_id}` et `/ws/kitchen/{restaurant_id}` — token en paramètre de requête, vérifié **avant** `websocket.accept()`, fermeture code 4401 sinon. Vérifier aussi que le `restaurant_id` du token correspond à celui de l'URL. Adapter `frontend/lib/useReconnectingSocket.ts` et ses appelants
-- [ ] `/ws/order/{restaurant_id}/{order_id}` — exiger le `public_token` en paramètre, même règle
-- [ ] `POST /loyalty/lookup` — appliquer `rate_limit` et retirer `birth_date` de la réponse publique (le bandeau anniversaire est calculé côté serveur, le client n'a pas besoin de la date). Empêche de tester si un numéro est client d'un établissement
-- [ ] Supprimer `POST /api/v1/restaurants` (`tenants/router.py`) — inutile depuis `/auth/register`, et ouvert. Remplacer son usage dans les ~9 fichiers de tests par un helper `create_restaurant()` de `conftest.py` qui écrit directement en base
-- [ ] `backend/tests/test_public_surface.py` — **un test par constat de la revue**, nommé d'après lui : lecture anonyme d'une commande, énumération par ID séquentiel, paiement carte anonyme, création de commande sans `qr_token`, énumération fidélité, WebSocket staff sans token, création de restaurant anonyme. Chaque test doit échouer sur le code d'avant la phase et passer après
-- [ ] Vérifier qu'aucun `restaurant_id`/`table_id`/`order_id` ne sert plus de secret nulle part (audit rapide des routers, à noter dans la description de PR)
+- [x] `Order.public_token` — `secrets.token_urlsafe(32)` comme `Table.qr_token`, généré à la création, renvoyé **une seule fois** dans la réponse de `POST /orders`, jamais dans une autre réponse. Migration Alembic + `model_registry.py` (branche `claude/darna-investment-review-ujupel`)
+- [x] Exiger ce token (en-tête `X-Order-Token`) sur `GET /orders/{id}`, `pay/card`, `pay/cash` et `push-subscription` — répondre `404 ORDER_NOT_FOUND` sans lui, jamais `403` (ne pas confirmer l'existence de la commande) (branche `claude/darna-investment-review-ujupel`)
+- [x] `OrderCreate` prend le `qr_token` de la table au lieu de `table_id` brut (`restaurant_id` en est déduit) — le frontend l'a déjà dans son URL. C'est ce qui empêche d'injecter une commande dans un service en cours sans avoir scanné (branche `claude/darna-investment-review-ujupel`)
+- [x] Retirer `loyalty_phone` de `OrderOut`. Les écrans staff qui en ont besoin (demande de paiement cash, badge fidélité) passent par un schéma séparé `OrderOutStaff`, servi uniquement aux routes authentifiées (branche `claude/darna-investment-review-ujupel`)
+- [x] JWT obligatoire sur `/ws/staff/{restaurant_id}` et `/ws/kitchen/{restaurant_id}` — token en paramètre de requête, compte actif et `restaurant_id` du token vérifiés. **Écart assumé par rapport au plan** : le refus accepte la poignée de main puis ferme aussitôt en 4401, au lieu de fermer avant `accept()`. Un rejet avant `accept()` arrive au navigateur en code 1006, indistinguable d'une coupure réseau — le hook de reconnexion martelait alors sans fin un canal interdit. La socket n'est jamais enregistrée dans le `ConnectionManager` et aucun message n'est émis, donc l'accès reste nul ; le frontend, lui, peut désormais renvoyer vers `/login` (branche `claude/darna-investment-review-ujupel`)
+- [x] `/ws/order/{restaurant_id}/{order_id}` — exiger le `public_token` en paramètre, même règle (branche `claude/darna-investment-review-ujupel`)
+- [x] `POST /loyalty/lookup` — appliquer `rate_limit` et retirer `birth_date` de la réponse publique (le bandeau anniversaire est calculé côté serveur, le client n'a pas besoin de la date). Empêche de tester si un numéro est client d'un établissement (branche `claude/darna-investment-review-ujupel`)
+- [x] Supprimer `POST /api/v1/restaurants` (`tenants/router.py`) — inutile depuis `/auth/register`, et ouvert. Remplacer son usage dans les ~9 fichiers de tests par un helper `create_restaurant()` de `conftest.py` qui écrit directement en base (branche `claude/darna-investment-review-ujupel`)
+- [x] `backend/tests/test_public_surface.py` — **un test par constat de la revue**, nommé d'après lui : lecture anonyme d'une commande, énumération par ID séquentiel, paiement carte anonyme, création de commande sans `qr_token`, énumération fidélité, WebSocket staff sans token, création de restaurant anonyme. Chaque test doit échouer sur le code d'avant la phase et passer après — 20 tests (branche `claude/darna-investment-review-ujupel`)
+- [x] Vérifier qu'aucun `restaurant_id`/`table_id`/`order_id` ne sert plus de secret nulle part (audit rapide des routers, à noter dans la description de PR) (branche `claude/darna-investment-review-ujupel`)
 
 **12.3 — Mise en production réelle** (reprise des tâches non faites de
 l'ancienne Phase 10, désormais débloquées par le choix d'hébergeur)
 
-- [ ] Basculer sur Alembic : retirer `create_all()` de `backend/app/main.py`, la migration initiale et celles des phases 12.1/12.2 devenant la seule voie
+- [x] Basculer sur Alembic : retirer `create_all()` de `backend/app/main.py`, la migration initiale et celles des phases 12.1/12.2 devenant la seule voie (branche `claude/darna-investment-review-ujupel`)
 - [ ] Choisir et provisionner l'hébergement 🧑 — backend dockerisé sur Railway ou Render (WebSocket natif + Postgres managé), frontend sur Vercel. Contrainte à respecter : **une seule instance backend** (gestionnaire WebSocket et limiteur de débit en mémoire, cf. `notifications/manager.py`)
 - [ ] Réserver le domaine 🧑 (`tawla.tn` en priorité, `.com` en secours)
 - [ ] Générer les vraies clés en variables d'environnement 🧑 : `JWT_SECRET`, `FRONTEND_ORIGIN` sur l'origine exacte de prod, paire VAPID

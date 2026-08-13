@@ -42,8 +42,18 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
 - Prix figé sur `OrderItem` au moment de la commande — ne jamais recalculer
   depuis `MenuItem.price` après coup.
 - QR token de table = `secrets.token_urlsafe`, jamais un ID incrémental.
-- Nouveau modèle = l'ajouter dans `app/core/model_registry.py`, sinon
-  `create_all()` casse silencieusement sur les foreign keys.
+- Nouveau modèle = l'ajouter dans `app/core/model_registry.py`, sinon SQLAlchemy
+  ignore le modèle et toute foreign key qui le vise casse (tests comme
+  autogénération de migration).
+- Nouveau champ ou nouveau modèle = une migration Alembic dans la même PR.
+  `create_all()` ne tourne plus qu'en test : sans migration, la colonne
+  n'existera pas en production.
+- Routes client (scan QR, commande, suivi, paiement) : publiques par design,
+  mais jamais **non liées**. Chacune exige soit le `qr_token` de la table, soit
+  le `public_token` de la commande, et répond 404 — jamais 401/403 — quand il
+  manque, pour ne pas confirmer l'existence de la ressource. Ne jamais exposer
+  de donnée personnelle sur ces réponses : `loyalty_phone` vit dans
+  `OrderOutStaff`, servi aux seules routes sous JWT.
 - Logs via `app/core/logging.py::log_event(logger, message, **context)` —
   toujours avec `restaurant_id`/`order_id`/`table_id` en contexte.
 - Routes staff/cuisine/manager protégées par `get_current_staff` (JWT) +
@@ -68,9 +78,10 @@ cd frontend && npm run lint && npx tsc --noEmit && npm run build
 # Générer le QR d'une table (après création via API)
 python backend/scripts/generate_table_qr.py --qr-token <token> --label "Table 5"
 
-# Migrations Alembic (tooling prêt depuis Phase 10 — create_all() reste la
-# voie active tant qu'il n'y a pas de vraie prod avec des données, cf.
-# ROADMAP.md Phase 10 et le commentaire dans backend/app/main.py)
+# Migrations Alembic — seule voie d'évolution du schéma depuis la Phase 12.2.
+# L'app ne crée plus les tables au démarrage ; le CMD du Dockerfile lance
+# `alembic upgrade head` avant uvicorn. Tout nouveau champ de modèle exige donc
+# une migration, sinon la colonne manque en prod.
 cd backend && alembic revision --autogenerate -m "description"
 cd backend && alembic upgrade head
 ```

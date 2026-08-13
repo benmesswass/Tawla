@@ -44,9 +44,13 @@ pas seulement côté UI.
 
 ```bash
 cp backend/.env.example backend/.env
-docker compose up --build
+docker compose up --build   # applique les migrations Alembic puis démarre l'API
 cd backend && python scripts/seed_demo.py
 ```
+
+Le schéma n'est plus créé au démarrage de l'app : `alembic upgrade head` tourne
+avant uvicorn (CMD du `Dockerfile`). Hors Docker, lancer la migration à la main
+avant le premier démarrage.
 
 - Backend : http://localhost:8000/docs (Swagger auto-généré)
 - Frontend : http://localhost:3000
@@ -71,9 +75,12 @@ lancer la suite.
 ## Générer le QR code d'une table
 
 ```bash
-# 1. Créer la table via l'API (renvoie un qr_token)
+# 1. Créer la table via l'API (renvoie un qr_token) — réservé au manager,
+#    récupérer son token sur POST /api/v1/auth/login. Plus simple : passer par
+#    l'onglet « Tables & zones » du dashboard.
 curl -X POST http://localhost:8000/api/v1/tables \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token_manager>" \
   -d '{"restaurant_id": 1, "label": "Table 5"}'
 
 # 2. Générer l'image à imprimer
