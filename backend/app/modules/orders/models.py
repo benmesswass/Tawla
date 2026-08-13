@@ -104,10 +104,22 @@ class Order(Base):
 
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     taken_by: Mapped["Staff | None"] = relationship()
+    table: Mapped["Table"] = relationship()
 
     @property
     def taken_by_staff_name(self) -> str | None:
         return self.taken_by.name if self.taken_by else None
+
+    @property
+    def table_label(self) -> str:
+        """
+        Le nom que le restaurant a donné à la table, et que le client voit sur
+        son téléphone. Les écrans serveur et cuisine affichaient `table_id` :
+        les deux coïncident tant que les tables s'appellent « Table 1, 2, 3… »
+        et ont été créées dans cet ordre, donc jamais dans un vrai
+        établissement. Le plat partait à la mauvaise table.
+        """
+        return self.table.label
 
     @property
     def total_amount(self) -> float:

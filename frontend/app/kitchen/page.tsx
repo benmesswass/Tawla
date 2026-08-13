@@ -18,7 +18,7 @@ import Skeleton from "@/components/ui/Skeleton";
 
 type KitchenOrder = {
   order_id: number;
-  table_id: number;
+  table_label: string;
   items: { name: string; quantity: number; notes: string | null; is_shared: boolean }[];
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
@@ -43,7 +43,7 @@ function escapeHtml(value: string): string {
 function orderFromApi(o: Order): KitchenOrder {
   return {
     order_id: o.id,
-    table_id: o.table_id,
+    table_label: o.table_label,
     items: o.items.map((i) => ({
       name: i.menu_item_name,
       quantity: i.quantity,
@@ -158,7 +158,7 @@ export default function KitchenPage() {
               ...prev,
               {
                 order_id: msg.order_id,
-                table_id: msg.table_id,
+                table_label: msg.table_label,
                 items: msg.items,
                 scheduled_for: msg.scheduled_for ?? null,
                 sent_to_kitchen_at: msg.sent_to_kitchen_at ?? null,
@@ -215,7 +215,7 @@ export default function KitchenPage() {
       .map(
         (o) => `
       <div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px dashed #000;">
-        <strong>Table ${o.table_id} — Commande #${o.order_id}</strong>
+        <strong>${o.table_label} — Commande #${o.order_id}</strong>
         <ul style="margin:4px 0 0;padding-left:18px;">
           ${o.items
             .map(
@@ -301,7 +301,7 @@ export default function KitchenPage() {
         {orders.map((o) => (
           <Card key={o.order_id} dark padding="md" className="text-white">
             <div className="flex justify-between items-baseline mb-1">
-              <span className="text-xl font-bold">Table {o.table_id}</span>
+              <span className="text-xl font-bold">{o.table_label}</span>
               <span className="text-neutral-500 text-sm">#{o.order_id}</span>
             </div>
             {(() => {

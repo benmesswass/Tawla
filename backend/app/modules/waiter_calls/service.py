@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.logging import get_logger, log_event
 from app.modules.notifications.manager import manager
@@ -14,14 +14,14 @@ logger = get_logger("waiter_calls")
 
 
 async def create_call(db: Session, payload: schemas.WaiterCallCreate) -> WaiterCall:
-    table = db.get(Table, payload.table_id)
-    if not table or table.restaurant_id != payload.restaurant_id:
+    table = db.query(Table).filter(Table.qr_token == payload.qr_token).first()
+    if not table:
         raise HTTPException(
             status_code=404,
-            detail={"code": "TABLE_NOT_FOUND", "message": "table not found for this restaurant"},
+            detail={"code": "INVALID_TABLE_CODE", "message": "invalid table code"},
         )
 
-    call = WaiterCall(restaurant_id=payload.restaurant_id, table_id=payload.table_id)
+    call = WaiterCall(restaurant_id=table.restaurant_id, table_id=table.id)
     db.add(call)
     db.commit()
     db.refresh(call)
@@ -36,6 +36,7 @@ async def create_call(db: Session, payload: schemas.WaiterCallCreate) -> WaiterC
             "event": "waiter_call.created",
             "call_id": call.id,
             "table_id": call.table_id,
+            "table_label": call.table_label,
         },
     )
     return call
@@ -46,6 +47,7 @@ async def list_pending_calls(db: Session, restaurant_id: int) -> list[WaiterCall
     avant l'ouverture/reconnexion de la page reste invisible."""
     return (
         db.query(WaiterCall)
+        .options(selectinload(WaiterCall.table))
         .filter(WaiterCall.restaurant_id == restaurant_id, WaiterCall.resolved_at.is_(None))
         .order_by(WaiterCall.created_at)
         .all()

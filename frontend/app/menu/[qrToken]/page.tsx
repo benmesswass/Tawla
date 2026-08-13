@@ -418,7 +418,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setWaiterCallState("calling");
     setWaiterCallError(null);
     try {
-      await api.callWaiter(table.restaurant_id, table.id);
+      await api.callWaiter(qrToken);
       setWaiterCallState("called");
       // Cooldown le temps qu'un serveur arrive réellement à table — évite le
       // spam de clics sans avoir besoin d'un canal temps réel côté client.

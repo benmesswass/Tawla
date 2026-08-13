@@ -15,27 +15,30 @@ def _setup_restaurant_with_table(client):
 
 def test_client_can_call_waiter(client):
     restaurant, table, _headers = _setup_restaurant_with_table(client)
-    res = client.post("/api/v1/waiter-calls", json={"restaurant_id": restaurant.id, "table_id": table["id"]})
+    res = client.post("/api/v1/waiter-calls", json={"qr_token": table["qr_token"]})
     assert res.status_code == 201
     body = res.json()
     assert body["resolved_at"] is None
     assert body["table_id"] == table["id"]
 
 
-def test_cannot_call_waiter_for_table_of_another_restaurant(client):
-    restaurant_a, _table_a, _headers = _setup_restaurant_with_table(client)
-    _restaurant_b, table_b, _headers_b = _setup_restaurant_with_table(client)
+def test_a_call_always_belongs_to_the_restaurant_of_its_table(client):
+    """Le restaurant n'est plus reçu du client mais déduit de la table : viser
+    un autre établissement est devenu impossible par construction, là où il
+    suffisait avant d'envoyer un autre `restaurant_id`."""
+    _restaurant_a, _table_a, _headers = _setup_restaurant_with_table(client)
+    restaurant_b, table_b, _headers_b = _setup_restaurant_with_table(client)
 
-    res = client.post(
-        "/api/v1/waiter-calls", json={"restaurant_id": restaurant_a.id, "table_id": table_b["id"]}
-    )
-    assert res.status_code == 404
+    body = client.post("/api/v1/waiter-calls", json={"qr_token": table_b["qr_token"]}).json()
+
+    assert body["restaurant_id"] == restaurant_b.id
+    assert body["table_id"] == table_b["id"]
 
 
 def test_staff_sees_pending_call_and_can_resolve_it(client):
     restaurant, table, headers = _setup_restaurant_with_table(client)
     call = client.post(
-        "/api/v1/waiter-calls", json={"restaurant_id": restaurant.id, "table_id": table["id"]}
+        "/api/v1/waiter-calls", json={"qr_token": table["qr_token"]}
     ).json()
 
     pending = client.get(f"/api/v1/waiter-calls/by-restaurant/{restaurant.id}/pending", headers=headers).json()
@@ -55,7 +58,7 @@ def test_staff_sees_pending_call_and_can_resolve_it(client):
 def test_cannot_resolve_already_resolved_call(client):
     restaurant, table, headers = _setup_restaurant_with_table(client)
     call = client.post(
-        "/api/v1/waiter-calls", json={"restaurant_id": restaurant.id, "table_id": table["id"]}
+        "/api/v1/waiter-calls", json={"qr_token": table["qr_token"]}
     ).json()
     client.post(f"/api/v1/waiter-calls/{call['id']}/resolve", headers=headers)
 
@@ -67,8 +70,8 @@ def test_pending_calls_isolated_per_restaurant(client):
     restaurant_a, table_a, headers_a = _setup_restaurant_with_table(client)
     restaurant_b, table_b, headers_b = _setup_restaurant_with_table(client)
 
-    client.post("/api/v1/waiter-calls", json={"restaurant_id": restaurant_a.id, "table_id": table_a["id"]})
-    client.post("/api/v1/waiter-calls", json={"restaurant_id": restaurant_b.id, "table_id": table_b["id"]})
+    client.post("/api/v1/waiter-calls", json={"qr_token": table_a["qr_token"]})
+    client.post("/api/v1/waiter-calls", json={"qr_token": table_b["qr_token"]})
 
     pending_a = client.get(f"/api/v1/waiter-calls/by-restaurant/{restaurant_a.id}/pending", headers=headers_a).json()
     assert len(pending_a) == 1

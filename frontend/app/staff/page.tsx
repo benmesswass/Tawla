@@ -17,25 +17,25 @@ import Skeleton from "@/components/ui/Skeleton";
 
 type PendingOrder = {
   order_id: number;
-  table_id: number;
+  table_label: string;
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
   scheduled_for: string | null;
 };
-type ReadyOrder = { order_id: number; table_id: number };
+type ReadyOrder = { order_id: number; table_label: string };
 type CashRequest = {
   order_id: number;
-  table_id: number;
+  table_label: string;
   amount: number;
   taken_by_staff_id: number | null;
   loyalty_phone: string | null;
 };
-type WaiterCall = { call_id: number; table_id: number };
+type WaiterCall = { call_id: number; table_label: string };
 
 function fromApi(o: Order): PendingOrder {
   return {
     order_id: o.id,
-    table_id: o.table_id,
+    table_label: o.table_label,
     taken_by_staff_id: o.taken_by_staff_id,
     taken_by_staff_name: o.taken_by_staff_name,
     scheduled_for: o.scheduled_for,
@@ -82,7 +82,7 @@ export default function StaffPage() {
       const orders = await api.listActiveOrders(restaurantId);
       setPending(orders.filter((o) => o.status === "pending_confirmation").map(fromApi));
       setReadyToServe(
-        orders.filter((o) => o.status === "ready").map((o) => ({ order_id: o.id, table_id: o.table_id }))
+        orders.filter((o) => o.status === "ready").map((o) => ({ order_id: o.id, table_label: o.table_label }))
       );
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -96,7 +96,7 @@ export default function StaffPage() {
       setCashRequests(
         orders.map((o) => ({
           order_id: o.id,
-          table_id: o.table_id,
+          table_label: o.table_label,
           amount: o.total_amount,
           taken_by_staff_id: o.taken_by_staff_id,
           // Optionnel sur `Order` depuis la Phase 12.2 (absent des réponses
@@ -116,7 +116,7 @@ export default function StaffPage() {
     if (!restaurantId) return;
     try {
       const calls = await api.listPendingWaiterCalls(restaurantId);
-      setWaiterCalls(calls.map((c) => ({ call_id: c.id, table_id: c.table_id })));
+      setWaiterCalls(calls.map((c) => ({ call_id: c.id, table_label: c.table_label })));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -141,7 +141,7 @@ export default function StaffPage() {
               ...prev,
               {
                 order_id: msg.order_id,
-                table_id: msg.table_id,
+                table_label: msg.table_label,
                 taken_by_staff_id: null,
                 taken_by_staff_name: null,
                 scheduled_for: msg.scheduled_for ?? null,
@@ -160,7 +160,7 @@ export default function StaffPage() {
     }
     if (msg.event === "order.ready") {
       setReadyToServe((prev) =>
-        prev.some((o) => o.order_id === msg.order_id) ? prev : [...prev, { order_id: msg.order_id, table_id: msg.table_id }]
+        prev.some((o) => o.order_id === msg.order_id) ? prev : [...prev, { order_id: msg.order_id, table_label: msg.table_label }]
       );
     }
     if (msg.event === "order.cash_requested") {
@@ -171,7 +171,7 @@ export default function StaffPage() {
               ...prev,
               {
                 order_id: msg.order_id,
-                table_id: msg.table_id,
+                table_label: msg.table_label,
                 amount: msg.amount,
                 taken_by_staff_id: msg.taken_by_staff_id,
                 loyalty_phone: msg.loyalty_phone ?? null,
@@ -182,7 +182,7 @@ export default function StaffPage() {
     }
     if (msg.event === "waiter_call.created") {
       setWaiterCalls((prev) =>
-        prev.some((c) => c.call_id === msg.call_id) ? prev : [...prev, { call_id: msg.call_id, table_id: msg.table_id }]
+        prev.some((c) => c.call_id === msg.call_id) ? prev : [...prev, { call_id: msg.call_id, table_label: msg.table_label }]
       );
     }
     if (msg.event === "waiter_call.resolved") {
@@ -312,14 +312,14 @@ export default function StaffPage() {
       .map(
         (o) => `
       <div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px dashed #000;">
-        <strong>Table ${o.table_id} — Commande #${o.order_id}</strong>
+        <strong>${o.table_label} — Commande #${o.order_id}</strong>
         ${o.taken_by_staff_name ? `<div>Pris en charge par ${escapeHtml(o.taken_by_staff_name)}</div>` : ""}
       </div>`
       )
       .join("");
     const cash = cashRequests
       .map(
-        (c) => `<div>Table ${c.table_id} — addition ${c.amount.toFixed(2)} DT (espèces)</div>`
+        (c) => `<div>${c.table_label} — addition ${c.amount.toFixed(2)} DT (espèces)</div>`
       )
       .join("");
     win.document.write(
@@ -386,7 +386,7 @@ export default function StaffPage() {
           </h2>
           {waiterCalls.map((c) => (
             <Card key={c.call_id} tone="urgent" className="mb-3 flex justify-between items-center">
-              <div className="font-medium">Table {c.table_id}</div>
+              <div className="font-medium">{c.table_label}</div>
               <Button variant="success" onClick={() => resolveWaiterCall(c.call_id)}>
                 Résolu
               </Button>
@@ -410,7 +410,7 @@ export default function StaffPage() {
           <Card key={o.order_id} tone="info" className="mb-3">
             <div className="flex justify-between items-center">
               <div>
-                <div className="font-medium">Table {o.table_id}</div>
+                <div className="font-medium">{o.table_label}</div>
                 <div className="text-sm text-neutral-500">Commande #{o.order_id}</div>
                 {o.scheduled_for && (
                   <div className="text-xs text-indigo-700 mt-1 flex items-center gap-1">
@@ -437,7 +437,7 @@ export default function StaffPage() {
       {readyToServe.map((o) => (
         <Card key={o.order_id} tone="success" className="mb-3 flex justify-between items-center">
           <div>
-            <div className="font-medium">Table {o.table_id}</div>
+            <div className="font-medium">{o.table_label}</div>
             <div className="text-sm text-neutral-500">Commande #{o.order_id} — prête en cuisine</div>
           </div>
           <Button variant="success" onClick={() => markServed(o.order_id)}>
@@ -454,7 +454,7 @@ export default function StaffPage() {
           <Card key={o.order_id} tone="warning" className="mb-3">
             <div className="flex justify-between items-center">
               <div>
-                <div className="font-medium">Table {o.table_id}</div>
+                <div className="font-medium">{o.table_label}</div>
                 <div className="text-sm text-neutral-500">
                   Commande #{o.order_id} — {o.amount.toFixed(2)} DT
                 </div>

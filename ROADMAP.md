@@ -246,6 +246,7 @@ Deux réserves viennent du choix « le restaurant utilise son matériel existant
 - [x] Comportement en cas de JWT expiré ou de compte désactivé en pleine session : redirection propre vers `/login` avec un message clair, jamais un écran blanc ou une boucle de reconnexion silencieuse (PR #39)
 - [x] Test de charge minimal : un restaurant, 20 tables, 200 commandes sur un service simulé — vérifier qu'aucune diffusion WebSocket n'est perdue et que `/dashboard` reste utilisable (PR #39)
 - [x] Sujet social du téléphone personnel du serveur (batterie, forfait data, appareil personnel utilisé pour travailler, couplé à des statistiques nominatives) — préparer la réponse à donner au patron avant l'installation, la consigner dans `terrain/FORMATION_10MIN.md`. Le personnel de salle est le premier saboteur potentiel de cet outil (PR #39)
+- [x] Deux défauts trouvés en rejouant un service, corrigés (PR #45) : l'appel serveur acceptait des identifiants devinables — deux boucles suffisaient à faire sonner tous les écrans de tous les établissements, sans entrer nulle part ; et les écrans serveur/cuisine affichaient `Table {table_id}`, l'identifiant en base et non le nom de la table. Le client lisait « Terrasse 2 », le serveur « Table 1 », et le plat partait au mauvais endroit
 
 ---
 

@@ -70,6 +70,9 @@ class OrderOut(BaseModel):
     id: int
     restaurant_id: int
     table_id: int
+    # Ce que le restaurant a écrit sur la table, et ce que le client lit sur son
+    # téléphone. `table_id` seul envoyait le serveur à la mauvaise table.
+    table_label: str
     status: OrderStatus
     created_at: datetime
     confirmed_at: datetime | None
