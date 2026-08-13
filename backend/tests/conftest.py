@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core import model_registry  # noqa: F401 — enregistre tous les modèles
 from app.core.database import Base, get_db
+from app.core.rate_limit import _hits as _rate_limit_hits
 from app.main import app
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import create_access_token, hash_password
@@ -39,6 +40,21 @@ def _fresh_schema():
     Base.metadata.create_all(bind=_engine)
     yield
     Base.metadata.drop_all(bind=_engine)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limiter():
+    """
+    Le limiteur de débit de `/auth/login` et `/auth/register` compte les appels
+    dans un dict de module (20 req/60s par IP+route). Toute la suite tourne
+    dans le même processus, depuis la même « IP » TestClient : sans cette
+    remise à zéro, le nombre total d'appels d'authentification de la suite
+    finit par déclencher des 429, et les tests deviennent dépendants de leur
+    ordre et de leur nombre. Découvert en ajoutant les tests de la Phase 12.1.
+    """
+    _rate_limit_hits.clear()
+    yield
+    _rate_limit_hits.clear()
 
 
 @pytest.fixture()
