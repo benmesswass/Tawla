@@ -15,6 +15,82 @@ plafond de revenus) : voir l'Artifact envoyé à Wassim le 2026-08-13.
 
 ---
 
+## 0. Addendum — après réponses du fondateur (même jour)
+
+Quatre réponses ont été apportées après la rédaction de ce qui suit. La
+première invalide en partie ma grille : **l'objectif est une entreprise
+rentable et non diluée**, pas une levée de fonds. J'ai donc noté un dossier de
+capital-risque qui n'a jamais prétendu en être un.
+
+Sur la bonne grille — viabilité d'une activité rentable tenue par une à deux
+personnes — **la note passe de 3,9 à 5,3**, et atteindrait ~6,5 dès la
+priorité 0 close et les vingt entretiens faits. Les ~120 k DT de revenu
+récurrent atteignable, disqualifiants pour un fonds, constituent _un bon
+revenu_ pour deux personnes avec quelques centaines de dinars de coûts
+mensuels. Les chiffres de la section 5 restent justes ; c'est leur conclusion
+qui change de signe.
+
+Ce qui ne change pas : les deux points bloquants (3.1 et section 4), et
+l'absence de tout contact restaurateur. **Le facteur limitant n'est plus la
+technique ni le marché, c'est l'accès au marché** — la seule dimension que le
+code ne peut pas résoudre.
+
+### Les concurrents sont une bonne nouvelle
+
+Digital Menu, Scanny et Menu-QR étaient une découverte. Pour une levée,
+c'était le constat le plus dur. Pour une activité rentable, il s'inverse :
+**trois acteurs qui vendent cette catégorie prouvent que le marché tunisien
+paie pour ça.** Plus besoin d'évangéliser une idée — le travail le plus
+coûteux et le plus incertain qui existe. La question devient « quelle niche je
+sers mieux qu'eux ».
+
+### La conséquence qui inverse la recommandation de prix (point 8)
+
+La recommandation « un seul prix aligné sur le marché » était juste pour une
+trajectoire de levée. Pour une activité rentable en solo, c'est **l'inverse**
+qu'il faut faire.
+
+Digital Menu est ancré à 19–49 DT parce qu'il joue le volume en libre-service.
+Un fondateur seul ne peut pas gagner une guerre de volume : chaque client
+ajouté coûte du support, de la formation, du déplacement. La seule arithmétique
+gagnante est inverse — **moins de clients, mieux payés, mieux servis** :
+
+| Stratégie | Prix/mois | Clients | Revenu/an | Charge réelle |
+|---|---:|---:|---:|---|
+| Volume, aligné concurrence | 35 DT | 290 | ≈ 122 k DT | 290 restos à supporter et dépanner en pleine soirée. Impossible seul. |
+| **Valeur, service inclus** | **120 DT** | **45** | **≈ 65 k DT** | 45 clients, chaque patron connu par son prénom. Tenable seul. |
+| **Valeur, à deux** | **120 DT** | **90** | **≈ 130 k DT** | Même revenu que la ligne 1, trois fois moins de clients à porter. |
+
+Ce qui justifie 120 DT face à un concurrent à 39 DT n'est pas une
+fonctionnalité de plus — c'est ce qu'un éditeur en libre-service ne fera
+jamais : **venir sur place.** Paramétrer la carte complète, imprimer et livrer
+les QR sur supports propres, former le personnel pendant un service réel, être
+joignable un vendredi soir.
+
+Cible cohérente avec ce prix : **restaurants et brasseries de 6 tables et
+plus** (Tunis, La Marsa, Sousse, Hammamet), pas les petits cafés. Ticket plus
+élevé, plus de personnel, donc une commande perdue coûte réellement de
+l'argent — et le tableau de bord « performance par serveur » y devient un
+argument de direction. C'est le seul angle que les trois concurrents ne mettent
+pas en avant.
+
+### Matériel existant : bonne réponse, avec un piège
+
+S'appuyer sur les téléphones du personnel et un écran déjà présent lève le
+frein d'installation le plus courant. Deux réserves à tester dès le premier
+pilote, invisibles dans le code :
+
+- **Le téléphone personnel du serveur est un sujet social, pas technique** :
+  batterie, forfait data, et l'idée de travailler sur son propre appareil —
+  couplée à des statistiques nominatives servant à calculer des primes. Le
+  personnel de salle est le premier saboteur potentiel de cet outil. À aborder
+  de front avec le patron avant l'installation.
+- **L'écran cuisine a été dessiné pour un grand écran** (mode sombre, cartes
+  larges, badge « il y a X min »). S'il est affiché sur un téléphone posé sur
+  une étagère, le vérifier en vrai à 360 px avant de promettre quoi que ce soit.
+
+---
+
 ## 1. Grille de notation pondérée
 
 | Dimension | Poids | Note | Ce qui fixe la note |
