@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.logging import get_logger, log_event
-from app.modules.menu import csv_import, schemas
+from app.modules.menu import csv_import, schemas, suggestions
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
@@ -100,6 +100,36 @@ def list_menu(restaurant_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return sorted(items, key=lambda item: (_category_rank(item.category), item.name))
+
+
+@router.get("/by-restaurant/{restaurant_id}/suggestions", response_model=dict[int, list[int]])
+def list_suggestions(restaurant_id: int, db: Session = Depends(get_db)):
+    """
+    Toutes les suggestions du restaurant, en une requête : `{id du plat: [ids
+    proposés]}`. Public comme le menu, et n'expose que des identifiants
+    d'articles déjà publics.
+
+    Les articles indisponibles sont écartés — proposer un plat en rupture est
+    pire que ne rien proposer.
+    """
+    return suggestions.get_suggestions_map(db, restaurant_id, only_available=True)
+
+
+@router.put("/{item_id}/suggestions", response_model=schemas.MenuItemSuggestionsOut)
+def set_suggestions(
+    item_id: int,
+    payload: schemas.MenuSuggestionsUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """Le manager choisit ce qui est proposé « avec ce plat » — remplacement en
+    bloc, ce qui rend l'appel rejouable sans effet de bord."""
+    suggested = suggestions.set_suggestions(db, item_id, payload.suggested_item_ids, staff.restaurant_id)
+    log_event(
+        logger, "menu.suggestions_set",
+        restaurant_id=staff.restaurant_id, menu_item_id=item_id, count=len(suggested),
+    )
+    return schemas.MenuItemSuggestionsOut(menu_item_id=item_id, suggested_items=suggested)
 
 
 @router.patch("/{item_id}/availability", response_model=schemas.MenuItemOut)

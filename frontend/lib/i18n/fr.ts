@@ -87,6 +87,10 @@ export const fr = {
   pushSubscribed: "Vous serez notifié dès que votre commande sera prête.",
   pushDenied: "Notifications bloquées — activez-les dans les réglages de votre navigateur si vous changez d'avis.",
 
+  suggestionTitle: (name: string) => `Avec « ${name} » ?`,
+  suggestionHint: "Proposé par le restaurant — vous pouvez ignorer.",
+  suggestionAdd: "Ajouter",
+  suggestionDismiss: "Non merci",
   cartClearedNotice:
     "Un article de votre panier n'est plus disponible et a été retiré. Votre panier est maintenant vide.",
 

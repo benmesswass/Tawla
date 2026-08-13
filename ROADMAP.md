@@ -37,9 +37,9 @@ clôture de chaque phase.
 | Prêt à vendre (installable, sûr) | 15 % | 8,0 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, ~~kit d'installation~~, reste le déploiement avec sauvegardes | 12, 13.2 |
 | Besoin marché prouvé | 20 % | 7,0 | 8,5 | Les 3 métriques mesurées avant/après chez un pilote | 13.3 |
 | Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements | 14.3 |
-| Différenciation sur une niche | 10 % | 4,0 | 7,5 | Vente incitative chiffrée, positionnement service, angle primes | 14 |
+| Différenciation sur une niche | 10 % | 5,5 | 7,5 | ~~Vente incitative chiffrée~~, reste le positionnement service et l'angle primes | 14 |
 | Exécution technique | 15 % | 9,0 | 9,0 | ~~Tests de sécurité dédiés~~ (atteint), tenue en service réel | 12.2, 15 |
-| **Note pondérée** | **100 %** | **6,3** | **8,2** | | |
+| **Note pondérée** | **100 %** | **6,5** | **8,2** | | |
 
 Mise à jour du 2026-08-13 (clôture de 12.1 et 12.2) : « prêt à vendre » passe de
 2,5 à 7,0 — le produit est désormais installable par un restaurateur et sa
@@ -54,7 +54,14 @@ installer un pilote est passé d'une dizaine d'appels Swagger enchaînés à la 
 sur place à une seule commande, chevalets imprimables et fiche de remise
 compris. Il reste le déploiement réel.
 
-**Ces deux sous-phases n'ont déplacé aucune autre note, et c'est normal** :
+Mise à jour du 2026-08-13 (14.1) : « différenciation » passe de 4,0 à 5,5 — la
+vente incitative existe et son effet est **mesuré** (panier moyen avec et sans
+suggestion acceptée, sur la même période et le même établissement). C'est le
+seul chiffre du produit qui se cite en rendez-vous. La note n'atteint pas la
+cible parce qu'il manque encore le positionnement « service inclus » (14.2) et
+un chiffre issu d'un vrai restaurant, pas d'un jeu de données de test.
+
+**Ces sous-phases n'ont déplacé aucune autre note, et c'est normal** :
 elles construisent l'instrument de mesure et l'outil d'installation, pas la
 preuve elle-même. « Besoin marché prouvé » ne bougera qu'avec des chiffres
 relevés chez un vrai restaurant, et « accès au marché » qu'avec des entretiens
@@ -165,10 +172,10 @@ le marché paie — mais elle interdit de vendre la même chose au même prix.
 **14.1 — Vente incitative** (la seule fonctionnalité manquante qui produit un
 chiffre défendable en rendez-vous : « +X % de panier moyen »)
 
-- [ ] Table de liaison `menu_suggestions` (`menu_item_id`, `suggested_item_id`, `restaurant_id`) + migration + `model_registry.py` — pas un champ texte libre, pour que la suggestion reste un vrai article commandable en un geste
-- [ ] Gestion des suggestions dans le dashboard manager : sur la ligne d'un plat, choisir jusqu'à 3 articles associés
-- [ ] Côté client : à l'ajout au panier, proposer les articles associés (« avec ce plat »), ajout en un tap, jamais bloquant, traduit fr/ar
-- [ ] Mesurer l'effet : compter les articles ajoutés depuis une suggestion (`OrderItem.from_suggestion`) et exposer sur `/dashboard/preuve` le panier moyen avec et sans suggestion acceptée
+- [x] Table de liaison `menu_suggestions` (`menu_item_id`, `suggested_item_id`, `restaurant_id`) + migration + `model_registry.py` — pas un champ texte libre, pour que la suggestion reste un vrai article commandable en un geste (PR #38)
+- [x] Gestion des suggestions dans le dashboard manager : sur la ligne d'un plat, choisir jusqu'à 3 articles associés (PR #38)
+- [x] Côté client : à l'ajout au panier, proposer les articles associés (« avec ce plat »), ajout en un tap, jamais bloquant, traduit fr/ar (PR #38)
+- [x] Mesurer l'effet : compter les articles ajoutés depuis une suggestion (`OrderItem.from_suggestion`) et exposer sur `/dashboard/preuve` le panier moyen avec et sans suggestion acceptée (PR #38)
 - [ ] Formules / menus du jour — **seulement si les entretiens de 13.1 les font remonter.** Ne pas construire avant
 
 **14.2 — Positionnement « service inclus »** (ce qu'un éditeur en libre-service

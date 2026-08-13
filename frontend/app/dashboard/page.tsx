@@ -159,6 +159,8 @@ export default function DashboardPage() {
   const [csvReplace, setCsvReplace] = useState(false);
   const [csvResult, setCsvResult] = useState<MenuCsvImportResult | null>(null);
   const [savingCsv, setSavingCsv] = useState(false);
+  const [suggestions, setSuggestions] = useState<Record<string, number[]>>({});
+  const [savingSuggestionsFor, setSavingSuggestionsFor] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
@@ -167,11 +169,12 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const [menu, rest, tableList, teamList] = await Promise.all([
+      const [menu, rest, tableList, teamList, suggested] = await Promise.all([
         api.getMenu(restaurantId),
         api.getRestaurant(restaurantId),
         api.listTables(restaurantId),
         api.listStaff(restaurantId),
+        api.getMenuSuggestions(restaurantId),
       ]);
       setItems(menu);
       setDrafts(Object.fromEntries(menu.map((m) => [m.id, itemToDraft(m)])));
@@ -184,6 +187,7 @@ export default function DashboardPage() {
       setTableDrafts(Object.fromEntries(tableList.map((t) => [t.id, tableToDraft(t)])));
       setTeam(teamList);
       setStaffDrafts(Object.fromEntries(teamList.map((m) => [m.id, staffToDraft(m)])));
+      setSuggestions(suggested);
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -364,6 +368,31 @@ export default function DashboardPage() {
       await load();
     } catch (e) {
       setError(toFrenchMessage(e));
+    }
+  }
+
+  async function toggleSuggestion(item: MenuItem, suggestedId: number) {
+    setError(null);
+    const current = suggestions[String(item.id)] ?? [];
+    const next = current.includes(suggestedId)
+      ? current.filter((id) => id !== suggestedId)
+      : [...current, suggestedId];
+    if (next.length > 3) {
+      setError("Trois suggestions au maximum par plat — au-delà, le client referme la proposition.");
+      return;
+    }
+    setSavingSuggestionsFor(item.id);
+    try {
+      await api.setMenuSuggestions(item.id, next);
+      // L'endpoint public ne renvoie que les articles disponibles ; on garde
+      // l'état local tel qu'enregistré pour que le manager voie bien sa
+      // sélection même si un plat suggéré est en rupture.
+      setSuggestions((prev) => ({ ...prev, [String(item.id)]: next }));
+      flash("Suggestions enregistrées.");
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    } finally {
+      setSavingSuggestionsFor(null);
     }
   }
 
@@ -691,6 +720,37 @@ export default function DashboardPage() {
                           <Button variant="danger" onClick={() => removeItem(item)}>
                             Supprimer
                           </Button>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-[var(--line)]">
+                        <p className="text-sm font-medium">Proposer avec ce plat</p>
+                        <p className="text-xs text-neutral-500 mb-2">
+                          Jusqu&apos;à 3 articles proposés au client quand il ajoute « {item.name} » à son
+                          panier. C&apos;est ce qui fait monter le panier moyen — et le chiffre se mesure sur
+                          la page « Preuve du pilote ».
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {items
+                            .filter((candidate) => candidate.id !== item.id)
+                            .map((candidate) => {
+                              const selected = (suggestions[String(item.id)] ?? []).includes(candidate.id);
+                              return (
+                                <button
+                                  key={candidate.id}
+                                  onClick={() => toggleSuggestion(item, candidate.id)}
+                                  disabled={savingSuggestionsFor === item.id}
+                                  aria-pressed={selected}
+                                  className={`text-xs px-2 py-1 rounded-full border transition-colors disabled:opacity-50 ${
+                                    selected
+                                      ? "bg-[var(--harissa)] text-white border-[var(--harissa)]"
+                                      : "border-[var(--line)] text-neutral-600 hover:bg-[var(--semoule)]"
+                                  }`}
+                                >
+                                  {candidate.name}
+                                </button>
+                              );
+                            })}
                         </div>
                       </div>
                     </div>

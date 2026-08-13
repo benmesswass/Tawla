@@ -130,7 +130,16 @@ def _period_proof(
     order_to_kitchen = [
         (o.sent_to_kitchen_at - o.created_at).total_seconds() for o in orders if o.sent_to_kitchen_at
     ]
-    baskets = [o.total_amount for o in orders if o.status != OrderStatus.CANCELLED]
+    paid_orders = [o for o in orders if o.status != OrderStatus.CANCELLED]
+    baskets = [o.total_amount for o in paid_orders]
+
+    # Une commande « avec suggestion » est une commande où le client a accepté
+    # au moins une proposition. Comparer ces paniers aux autres est la seule
+    # façon d'attribuer une hausse à la vente incitative plutôt qu'à une table
+    # plus nombreuse.
+    with_suggestion = [o for o in paid_orders if any(line.from_suggestion for line in o.items)]
+    boosted_ids = {o.id for o in with_suggestion}
+    without_suggestion = [o for o in paid_orders if o.id not in boosted_ids]
 
     return schemas.PeriodProof(
         start=start,
@@ -141,6 +150,9 @@ def _period_proof(
         abandoned_count=len(abandoned),
         avg_order_to_kitchen_seconds=_average(order_to_kitchen),
         avg_basket_amount=_average(baskets),
+        orders_with_suggestion_count=len(with_suggestion),
+        avg_basket_with_suggestion=_average([o.total_amount for o in with_suggestion]),
+        avg_basket_without_suggestion=_average([o.total_amount for o in without_suggestion]),
     )
 
 

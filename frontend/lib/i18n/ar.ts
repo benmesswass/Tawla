@@ -85,6 +85,10 @@ export const ar = {
   pushSubscribed: "باش تتعرف كي الطلبية تكون لاهية.",
   pushDenied: "الإشعارات موقوفة — نجم تفعّلها من إعدادات المتصفح إذا بدّلت رايك.",
 
+  suggestionTitle: (name: string) => `مع « ${name} » ؟`,
+  suggestionHint: "المطعم ينصحك بيه — تنجم تتجاوز.",
+  suggestionAdd: "زيدها",
+  suggestionDismiss: "لا شكرا",
   cartClearedNotice: "أكلة من القفة تاعك ماعادتش موجودة ونحاتلك. القفة تاعك دلوقتي فاضية.",
 
   shareOrderButton: "شارك الطلبية تاعك",

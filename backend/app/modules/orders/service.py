@@ -160,6 +160,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 quantity=line.quantity,
                 notes=line.notes,
                 is_shared=line.is_shared,
+                from_suggestion=line.from_suggestion,
             )
         )
 

@@ -133,4 +133,11 @@ class OrderItem(Base):
     # une seule personne compose et valide toujours la commande.
     is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Ligne ajoutée depuis une suggestion « avec ce plat » plutôt que depuis la
+    # carte. Sans ce drapeau, l'effet de la vente incitative est invérifiable :
+    # on ne saurait dire si un panier plus élevé vient des suggestions ou d'une
+    # table plus nombreuse. C'est ce qui transforme la fonctionnalité en
+    # argument chiffré (Phase 14.1).
+    from_suggestion: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     order: Mapped["Order"] = relationship(back_populates="items")
