@@ -47,7 +47,10 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
   autogénération de migration).
 - Nouveau champ ou nouveau modèle = une migration Alembic dans la même PR.
   `create_all()` ne tourne plus qu'en test : sans migration, la colonne
-  n'existera pas en production.
+  n'existera pas en production. `tests/test_migrations.py` le vérifie en
+  lançant `alembic upgrade head` et en comparant le schéma obtenu aux modèles —
+  quand il échoue, la correction est de générer la migration, jamais de
+  toucher au test.
 - Routes client (scan QR, commande, suivi, paiement) : publiques par design,
   mais jamais **non liées**. Chacune exige soit le `qr_token` de la table, soit
   le `public_token` de la commande, et répond 404 — jamais 401/403 — quand il
