@@ -25,6 +25,9 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   NO_PENDING_CASH_PAYMENT: () => "Aucune demande de paiement en espèces en attente pour cette commande.",
   EMAIL_EXISTS: () => "Un compte existe déjà avec cet e-mail.",
   ACCOUNT_DISABLED: () => "Ce compte a été désactivé. Demandez à votre manager de le réactiver.",
+  CSV_UNREADABLE: () =>
+    "Ce fichier n'a pas pu être lu. Vérifiez qu'il contient une ligne d'en-tête avec au moins les colonnes « nom » et « prix ».",
+  INVALID_PERIOD: () => "La date de début doit précéder la date de fin.",
   LAST_ACTIVE_MANAGER: () =>
     "C'est le dernier compte manager actif : créez ou réactivez un autre manager avant de le modifier, sinon plus personne ne pourrait gérer l'établissement.",
 };

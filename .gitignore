@@ -20,6 +20,12 @@ out/
 # reseed) — les comptes démo fixes (e-mails/mdp) sont documentés dans CLAUDE.md.
 CREDENTIALS.md
 
+# Sorties de scripts/setup_restaurant.py : fiche de remise (contient les mots de
+# passe générés, lisibles une seule fois) et chevalets QR d'un établissement
+# réel. Rien de tout ça n'a sa place dans le dépôt.
+INSTALLATION-*.md
+qr-*/
+
 # Misc
 .DS_Store
 *.log

@@ -3,8 +3,8 @@ from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.modules.orders.models import Order
-from app.modules.orders.service import ACTIVE_STATUSES
+from app.modules.orders.models import Order, OrderStatus
+from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
 from app.modules.staff.models import Staff
 from app.modules.stats import schemas
 
@@ -91,6 +91,84 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
         staff_performance=staff_performance,
         top_items=top_items,
         orders_by_hour=orders_by_hour,
+    )
+
+
+def _period_proof(
+    db: Session, restaurant_id: int, start: date_type, end: date_type, now: datetime
+) -> schemas.PeriodProof:
+    """
+    Calcule les trois chiffres de preuve sur une période bornée (jours inclus).
+
+    `now` est passé en paramètre plutôt que lu ici : la période précédente et la
+    période courante doivent être évaluées avec la même référence temporelle,
+    sinon le seuil d'abandon ne veut pas dire la même chose des deux côtés de la
+    comparaison.
+    """
+    period_start = datetime.combine(start, time.min, tzinfo=timezone.utc)
+    period_end = datetime.combine(end, time.min, tzinfo=timezone.utc) + timedelta(days=1)
+
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.created_at >= period_start,
+            Order.created_at < period_end,
+        )
+        .all()
+    )
+
+    abandoned_before = now - ABANDONED_PENDING_AFTER
+    cancelled = [o for o in orders if o.status == OrderStatus.CANCELLED]
+    abandoned = [
+        o
+        for o in orders
+        if o.status == OrderStatus.PENDING_CONFIRMATION and _as_utc(o.created_at) < abandoned_before
+    ]
+
+    order_to_kitchen = [
+        (o.sent_to_kitchen_at - o.created_at).total_seconds() for o in orders if o.sent_to_kitchen_at
+    ]
+    baskets = [o.total_amount for o in orders if o.status != OrderStatus.CANCELLED]
+
+    return schemas.PeriodProof(
+        start=start,
+        end=end,
+        orders_count=len(orders),
+        lost_orders_count=len(cancelled) + len(abandoned),
+        cancelled_count=len(cancelled),
+        abandoned_count=len(abandoned),
+        avg_order_to_kitchen_seconds=_average(order_to_kitchen),
+        avg_basket_amount=_average(baskets),
+    )
+
+
+def _as_utc(value: datetime) -> datetime:
+    """
+    SQLite rend les datetime sans fuseau (Postgres les rend avec) : sans cette
+    normalisation, la comparaison au seuil d'abandon lève un TypeError sur la
+    base de test et passerait inaperçue jusqu'en production.
+    """
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+async def get_proof_stats(
+    db: Session, restaurant_id: int, start: date_type, end: date_type
+) -> schemas.ProofStats:
+    """
+    Période demandée + période de même longueur juste avant. C'est cette
+    comparaison, et pas les chiffres bruts, qui se montre à un patron à la fin
+    d'un pilote (Phase 13.3).
+    """
+    now = datetime.now(timezone.utc)
+    span_days = (end - start).days + 1
+    previous_end = start - timedelta(days=1)
+    previous_start = previous_end - timedelta(days=span_days - 1)
+
+    return schemas.ProofStats(
+        current=_period_proof(db, restaurant_id, start, end, now),
+        previous=_period_proof(db, restaurant_id, previous_start, previous_end, now),
     )
 
 

@@ -72,6 +72,13 @@ docker compose up --build
 # Seed de démo (restaurant + comptes staff + tables + menu)
 cd backend && python scripts/seed_demo.py
 
+# Installer un établissement pilote en une passe (restaurant, équipe, tables,
+# carte depuis CSV, chevalets QR à imprimer, fiche de remise des identifiants).
+# Idempotent : relancer après correction du CSV met à jour, ne duplique pas.
+cd backend && python scripts/setup_restaurant.py --config mon-pilote.json \
+  --frontend-url https://tawla.tn
+# Modèle de configuration : backend/scripts/pilote-exemple.json
+
 # Frontend — lint / typecheck / build
 cd frontend && npm run lint && npx tsc --noEmit && npm run build
 
@@ -104,6 +111,10 @@ la ligne.
   justification de l'état du code.
 - `REVUE_INVESTISSEURS.md` — revue d'investissement qui fonde la roadmap
   actuelle (grille de notation, failles vérifiées, plafond de revenus).
+- `terrain/` — documents de terrain, pas du code : guide d'entretien
+  restaurateur, dépouillement des entretiens, fiche de prise en main fr/ar,
+  script de formation de l'équipe, journal des pilotes. Ils se tiennent à jour à
+  la main, sur place ; ne pas les remplir depuis une session.
 
 Objectif en cours : passer de 5,3/10 à 8/10 au prochain jury. Le tableau en tête
 de `ROADMAP.md` dit quelle dimension chaque phase déplace — le recalculer à la

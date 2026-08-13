@@ -4,7 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
-import { api, MenuItem, Restaurant, Staff, StaffRole, SubscriptionTier, Table } from "@/lib/api";
+import {
+  api,
+  MenuCsvImportResult,
+  MenuItem,
+  Restaurant,
+  Staff,
+  StaffRole,
+  SubscriptionTier,
+  Table,
+} from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -144,6 +154,11 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<Tab>("menu");
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [addingItem, setAddingItem] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [csvContent, setCsvContent] = useState("");
+  const [csvReplace, setCsvReplace] = useState(false);
+  const [csvResult, setCsvResult] = useState<MenuCsvImportResult | null>(null);
+  const [savingCsv, setSavingCsv] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
@@ -352,6 +367,35 @@ export default function DashboardPage() {
     }
   }
 
+  async function importMenuCsv() {
+    setError(null);
+    setCsvResult(null);
+    setSavingCsv(true);
+    try {
+      const result = await api.importMenuCsv(csvContent, csvReplace);
+      setCsvResult(result);
+      flash(`${result.created_count + result.updated_count} article(s) importé(s).`);
+      setCsvContent("");
+      await load();
+    } catch (e) {
+      // Fichier totalement illisible : le backend renvoie la liste des raisons
+      // dans le détail de l'erreur — les afficher vaut mieux qu'un message
+      // générique, le manager doit savoir quoi corriger dans son tableur.
+      if (e instanceof ApiError && Array.isArray(e.context.errors)) {
+        setCsvResult({
+          created_count: 0,
+          updated_count: 0,
+          disabled_count: 0,
+          errors: e.context.errors as string[],
+        });
+      } else {
+        setError(toFrenchMessage(e));
+      }
+    } finally {
+      setSavingCsv(false);
+    }
+  }
+
   async function addStaffMember() {
     setError(null);
     if (!newStaff.name.trim() || !newStaff.email.trim()) {
@@ -449,6 +493,9 @@ export default function DashboardPage() {
         <div className="flex items-center gap-4 text-sm">
           <Link href="/dashboard/stats" className="underline">
             Suivi de l&apos;activité
+          </Link>
+          <Link href="/dashboard/preuve" className="underline">
+            Preuve du pilote
           </Link>
           <button onClick={logout} className="text-neutral-500 underline">
             Se déconnecter
@@ -745,6 +792,102 @@ export default function DashboardPage() {
               + Ajouter un article
             </Button>
           )}
+
+          <div className="mt-8 pt-6 border-t border-[var(--line)]">
+            {!importing ? (
+              <>
+                <Button variant="secondary" onClick={() => setImporting(true)}>
+                  Importer une carte (CSV)
+                </Button>
+                <p className="text-xs text-neutral-500 mt-2">
+                  Pour saisir une carte entière d&apos;un coup, depuis un export Excel.
+                </p>
+              </>
+            ) : (
+              <Card padding="sm">
+                <h2 className="text-base font-semibold mb-1">Importer une carte</h2>
+                <p className="text-xs text-neutral-500 mb-3">
+                  Fichier CSV avec une ligne d&apos;en-tête. Colonnes obligatoires :{" "}
+                  <code>nom</code> et <code>prix</code>. Facultatives : <code>categorie</code>,{" "}
+                  <code>description</code>, <code>piment</code> (0 à 3), <code>allergenes</code>,{" "}
+                  <code>halal</code>. Les prix à virgule et les fichiers à point-virgule d&apos;Excel sont
+                  acceptés.
+                </p>
+
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  aria-label="Fichier CSV de la carte"
+                  className="text-sm"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setCsvContent(await file.text());
+                  }}
+                />
+
+                <textarea
+                  value={csvContent}
+                  onChange={(e) => setCsvContent(e.target.value)}
+                  rows={6}
+                  aria-label="Contenu du CSV"
+                  placeholder={"nom;categorie;prix\nCouscous poisson;Plats;24,000"}
+                  className="w-full border rounded px-2 py-1 mt-3 font-mono text-xs"
+                />
+
+                <label className="flex items-center gap-2 text-sm mt-3">
+                  <input
+                    type="checkbox"
+                    checked={csvReplace}
+                    onChange={(e) => setCsvReplace(e.target.checked)}
+                  />
+                  Ce fichier est ma carte complète
+                </label>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Les articles absents du fichier seront rendus indisponibles — jamais supprimés, les
+                  commandes déjà passées y font référence. Sans cette case, l&apos;import ajoute les
+                  nouveaux plats et met à jour les prix des plats déjà présents.
+                </p>
+
+                {csvResult && (
+                  <Card tone={csvResult.errors.length ? "warning" : "success"} padding="sm" className="mt-3">
+                    <p className="text-sm font-medium">
+                      {csvResult.created_count} article(s) ajouté(s)
+                      {csvResult.updated_count > 0 && `, ${csvResult.updated_count} mis à jour`}
+                      {csvResult.disabled_count > 0 &&
+                        `, ${csvResult.disabled_count} rendu(s) indisponible(s)`}
+                      .
+                    </p>
+                    {csvResult.errors.length > 0 && (
+                      <>
+                        <p className="text-sm mt-2">Lignes à corriger dans votre fichier :</p>
+                        <ul className="list-disc pl-5 text-xs mt-1 space-y-1">
+                          {csvResult.errors.map((message) => (
+                            <li key={message}>{message}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </Card>
+                )}
+
+                <div className="flex gap-2 mt-3">
+                  <Button onClick={importMenuCsv} disabled={savingCsv || !csvContent.trim()}>
+                    {savingCsv ? "Import…" : "Importer"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setImporting(false);
+                      setCsvContent("");
+                      setCsvResult(null);
+                    }}
+                  >
+                    Fermer
+                  </Button>
+                </div>
+              </Card>
+            )}
+          </div>
         </>
       )}
 

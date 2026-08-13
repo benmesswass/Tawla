@@ -1,5 +1,5 @@
 from datetime import date as date_type
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -29,6 +29,35 @@ async def dashboard(
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     day = date or datetime.now(timezone.utc).date()
     return await service.get_dashboard_stats(db, restaurant_id, day)
+
+
+@router.get("/preuve/{restaurant_id}", response_model=schemas.ProofStats)
+async def proof(
+    restaurant_id: int,
+    start: date_type | None = None,
+    end: date_type | None = None,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Les trois chiffres à montrer au patron à la fin d'un pilote : commandes
+    perdues, délai commande → cuisine, panier moyen — et les mêmes sur la
+    période précédente de même longueur, pour avoir un « avant ».
+
+    Par défaut les 7 derniers jours, aujourd'hui inclus.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+
+    today = datetime.now(timezone.utc).date()
+    period_end = end or today
+    period_start = start or (period_end - timedelta(days=6))
+    if period_start > period_end:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_PERIOD", "message": "start must not be after end"},
+        )
+    return await service.get_proof_stats(db, restaurant_id, period_start, period_end)
 
 
 @router.get("/kitchen-today-count/{restaurant_id}", response_model=schemas.KitchenTodayCount)

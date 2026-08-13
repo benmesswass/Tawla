@@ -1,0 +1,18 @@
+nom;categorie;prix;description;piment;allergenes;halal
+Salade méchouia;Entrées;6,500;Poivrons et tomates grillés, thon, olives;1;Poisson;oui
+Brik à l'œuf;Entrées;4,000;Feuille de brik, œuf, thon, persil;0;Œuf, gluten, poisson;oui
+Chorba frik;Entrées;5,000;Soupe d'orge vert à l'agneau;1;Gluten;oui
+Couscous au poisson;Plats;24,000;Semoule, mérou, légumes de saison;1;Poisson;oui
+Couscous à l'agneau;Plats;22,000;Semoule, épaule d'agneau, pois chiches;1;;oui
+Ojja merguez;Plats;14,000;Œufs, tomates, merguez maison;3;Œuf;oui
+Grillade mixte;Plats;26,000;Agneau, poulet, merguez, frites;2;;oui
+Poisson du jour grillé;Plats;28,000;Selon la pêche, servi avec tastira;0;Poisson;oui
+Lablabi;Plats;7,000;Pois chiches, pain rassis, harissa, œuf;2;Gluten, œuf;oui
+Baklawa;Desserts;5,000;Pâte feuilletée, amandes, miel;0;Fruits à coque, gluten;oui
+Assiette de fruits;Desserts;6,000;Fruits frais de saison;0;;oui
+Crème brûlée;Desserts;6,500;;0;Œuf, lait;oui
+Thé à la menthe;Boissons;2,500;Servi avec pignons;0;Fruits à coque;oui
+Café direct;Boissons;2,000;;0;;oui
+Eau minérale 1L;Boissons;2,000;;0;;oui
+Boga cidre;Boissons;3,000;;0;;oui
+Jus d'orange pressé;Boissons;5,000;;0;;oui

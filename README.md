@@ -72,6 +72,23 @@ non-devinables, authentification et prise en charge (claim) des commandes.
 Base SQLite en mémoire, isolée par test — aucune dépendance à Postgres pour
 lancer la suite.
 
+## Installer un établissement pilote
+
+```bash
+cd backend
+cp scripts/pilote-exemple.json mon-pilote.json   # à adapter (équipe, tables, CSV de la carte)
+python scripts/setup_restaurant.py --config mon-pilote.json --frontend-url https://tawla.tn
+```
+
+Crée le restaurant, le compte manager, les comptes de l'équipe, les tables et
+leurs zones, importe la carte depuis un CSV, génère les chevalets QR à imprimer
+(4 par page A4) et écrit une fiche de remise avec les identifiants — lisibles
+une seule fois. Relancer le script après avoir corrigé le CSV met à jour la
+carte sans créer de doublons.
+
+Les documents à emporter sur place (prise en main fr/ar, script de formation en
+10 minutes, guide d'entretien) sont dans [`terrain/`](./terrain).
+
 ## Générer le QR code d'une table
 
 ```bash

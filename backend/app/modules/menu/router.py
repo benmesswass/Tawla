@@ -2,11 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.modules.menu import schemas
+from app.core.logging import get_logger, log_event
+from app.modules.menu import csv_import, schemas
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
+
+logger = get_logger("menu")
 
 router = APIRouter(prefix="/api/v1/menu-items", tags=["menu"])
 
@@ -41,6 +44,46 @@ def create_menu_item(payload: schemas.MenuItemCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.post("/import-csv", response_model=schemas.MenuCsvImportResult)
+def import_menu_csv(
+    payload: schemas.MenuCsvImport, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
+):
+    """
+    Import d'une carte complète depuis un export de tableur. Saisir 30 plats un
+    par un est le premier abandon probable d'un restaurateur (Phase 13.2).
+
+    Les lignes valides sont importées même si d'autres sont fautives : le
+    manager reçoit la liste précise des lignes à corriger, plutôt que de devoir
+    recommencer tout le fichier pour une faute de frappe.
+    """
+    result = csv_import.parse_menu_csv(payload.content)
+    if not result.items:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "CSV_UNREADABLE",
+                "message": "aucun article n'a pu être lu dans ce fichier",
+                "errors": result.errors,
+            },
+        )
+
+    applied = csv_import.apply_items(
+        db, staff.restaurant_id, result.items, disable_missing=payload.replace_existing
+    )
+
+    log_event(
+        logger, "menu.csv_imported",
+        restaurant_id=staff.restaurant_id, created=applied.created_count,
+        updated=applied.updated_count, disabled=applied.disabled_count, errors=len(result.errors),
+    )
+    return schemas.MenuCsvImportResult(
+        created_count=applied.created_count,
+        updated_count=applied.updated_count,
+        disabled_count=applied.disabled_count,
+        errors=result.errors,
+    )
 
 
 @router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.MenuItemOut])

@@ -1,0 +1,22 @@
+{
+  "_comment": "Modèle de configuration d'un pilote. Copier, adapter, puis lancer : python scripts/setup_restaurant.py --config mon-pilote.json --frontend-url https://tawla.tn",
+  "restaurant": {
+    "name": "Chez Slah",
+    "slug": "chez-slah"
+  },
+  "manager": {
+    "name": "Slah",
+    "email": "slah@chezslah.tn"
+  },
+  "staff": [
+    { "name": "Sami", "role": "waiter", "email": "sami@chezslah.tn" },
+    { "name": "Nadia", "role": "waiter", "email": "nadia@chezslah.tn" },
+    { "name": "Poste chaud", "role": "kitchen", "email": "cuisine@chezslah.tn" }
+  ],
+  "tables": [
+    { "zone": "Terrasse", "count": 6 },
+    { "zone": "Intérieur", "count": 8 },
+    { "zone": "Salon", "labels": ["Salon VIP"] }
+  ],
+  "menu_csv": "carte-exemple.csv"
+}
