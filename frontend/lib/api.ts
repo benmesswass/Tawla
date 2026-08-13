@@ -39,13 +39,17 @@ export type MenuCsvImportResult = {
 
 export type SubscriptionTier = "essentiel" | "pro" | "business";
 
-export type Restaurant = {
+/** Ce que le parcours client reçoit : aucune donnée commerciale. */
+export type RestaurantPublic = {
   id: number;
   name: string;
-  slug: string;
   ramadan_mode_enabled: boolean;
   iftar_time: string | null;
   cafe_mode_enabled: boolean;
+};
+
+export type Restaurant = RestaurantPublic & {
+  slug: string;
   kitchen_sound_enabled: boolean;
   subscription_tier: SubscriptionTier;
 };
@@ -277,7 +281,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // Fiche complète — écrans staff uniquement, sous JWT.
   getRestaurant: (restaurantId: number) => request<Restaurant>(`/api/v1/restaurants/${restaurantId}`),
+  // Vue client, liée à la table scannée. La lecture par identifiant était
+  // publique et incrémentale : elle listait tous les établissements clients.
+  getRestaurantByToken: (qrToken: string) =>
+    request<RestaurantPublic>(`/api/v1/restaurants/by-token/${qrToken}`),
   getTableByToken: (qrToken: string) => request<Table>(`/api/v1/tables/by-token/${qrToken}`),
   listTables: (restaurantId: number) => request<Table[]>(`/api/v1/tables/by-restaurant/${restaurantId}`),
   createTable: (payload: { restaurant_id: number; label: string; zone?: string | null }) =>

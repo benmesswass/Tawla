@@ -12,7 +12,7 @@ import {
   MenuItem,
   Order,
   OrderStatus,
-  Restaurant,
+  RestaurantPublic,
   Table,
 } from "@/lib/api";
 import { toLocalizedMessage } from "@/lib/errors";
@@ -104,7 +104,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { t, locale, toggleLocale } = useLocale();
 
   const [table, setTable] = useState<Table | null>(null);
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [restaurant, setRestaurant] = useState<RestaurantPublic | null>(null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, CartLine>>({});
   const [suggestions, setSuggestions] = useState<Record<string, number[]>>({});
@@ -164,7 +164,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       .then(async (t) => {
         setTable(t);
         const [rest, items, suggested] = await Promise.all([
-          api.getRestaurant(t.restaurant_id),
+          api.getRestaurantByToken(qrToken),
           api.getMenu(t.restaurant_id),
           // Best-effort : une carte sans suggestions reste une carte utilisable,
           // l'échec de cet appel ne doit jamais bloquer la commande.

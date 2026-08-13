@@ -140,6 +140,7 @@ lié à la table qui a scanné ou à la commande créée)
 - [x] Supprimer `POST /api/v1/restaurants` (`tenants/router.py`) — inutile depuis `/auth/register`, et ouvert. Remplacer son usage dans les ~9 fichiers de tests par un helper `create_restaurant()` de `conftest.py` qui écrit directement en base (PR #36)
 - [x] `backend/tests/test_public_surface.py` — **un test par constat de la revue**, nommé d'après lui : lecture anonyme d'une commande, énumération par ID séquentiel, paiement carte anonyme, création de commande sans `qr_token`, énumération fidélité, WebSocket staff sans token, création de restaurant anonyme. Chaque test doit échouer sur le code d'avant la phase et passer après — 20 tests (PR #36)
 - [x] Vérifier qu'aucun `restaurant_id`/`table_id`/`order_id` ne sert plus de secret nulle part (audit rapide des routers, à noter dans la description de PR) (PR #36)
+- [x] Reprise de l'audit, une route avait survécu (PR #44) : `GET /restaurants/{id}` était publique et incrémentale — parcourir 1, 2, 3… donnait la liste des établissements clients de Tawla avec leur formule d'abonnement. Remplacée côté client par `GET /restaurants/by-token/{qr_token}`, qui ne sert que le nom et les réglages de service ; la fiche complète passe sous JWT et refuse un autre établissement
 
 **12.3 — Mise en production réelle** (reprise des tâches non faites de
 l'ancienne Phase 10, désormais débloquées par le choix d'hébergeur)
