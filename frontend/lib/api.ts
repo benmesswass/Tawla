@@ -111,6 +111,7 @@ export type Order = {
     quantity: number;
     notes: string | null;
     is_shared: boolean;
+    from_suggestion: boolean;
   }[];
 };
 
@@ -182,6 +183,9 @@ export type PeriodProof = {
   abandoned_count: number;
   avg_order_to_kitchen_seconds: number | null;
   avg_basket_amount: number | null;
+  orders_with_suggestion_count: number;
+  avg_basket_with_suggestion: number | null;
+  avg_basket_without_suggestion: number | null;
 };
 
 export type ProofStats = {
@@ -247,6 +251,15 @@ export const api = {
   updateTable: (tableId: number, payload: { label: string; zone?: string | null }) =>
     request<Table>(`/api/v1/tables/${tableId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   getMenu: (restaurantId: number) => request<MenuItem[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}`),
+  // { id du plat: [ids proposés] } — une seule requête pour toute la carte,
+  // le menu client se charge d'un coup sur une connexion mobile de salle.
+  getMenuSuggestions: (restaurantId: number) =>
+    request<Record<string, number[]>>(`/api/v1/menu-items/by-restaurant/${restaurantId}/suggestions`),
+  setMenuSuggestions: (itemId: number, suggestedItemIds: number[]) =>
+    request<{ menu_item_id: number; suggested_items: MenuItem[] }>(
+      `/api/v1/menu-items/${itemId}/suggestions`,
+      { method: "PUT", body: JSON.stringify({ suggested_item_ids: suggestedItemIds }) }
+    ),
   login: (email: string, password: string) =>
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (payload: { restaurant_name: string; manager_name: string; email: string; password: string }) =>
@@ -294,7 +307,13 @@ export const api = {
     // Le token du QR scanné, d'où le backend déduit la table et le restaurant :
     // aucun identifiant numérique n'est envoyé par le client (Phase 12.2).
     qr_token: string;
-    items: { menu_item_id: number; quantity: number; notes?: string | null; is_shared?: boolean }[];
+    items: {
+      menu_item_id: number;
+      quantity: number;
+      notes?: string | null;
+      is_shared?: boolean;
+      from_suggestion?: boolean;
+    }[];
     scheduled_for?: string | null;
     loyalty_phone?: string | null;
   }) => request<OrderCreated>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),

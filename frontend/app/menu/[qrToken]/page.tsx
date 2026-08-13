@@ -29,7 +29,15 @@ import { generateShareCardBlob } from "@/lib/shareCard";
 
 const cairo = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700"] });
 
-type CartLine = { item: MenuItem; quantity: number; note: string; shared: boolean };
+type CartLine = {
+  item: MenuItem;
+  quantity: number;
+  note: string;
+  shared: boolean;
+  // Ajoutée depuis une proposition « avec ce plat » plutôt que depuis la carte.
+  // Sert uniquement à mesurer l'effet de la vente incitative (Phase 14.1).
+  fromSuggestion: boolean;
+};
 
 type StepStatus = Exclude<OrderStatus, "cancelled">;
 
@@ -98,6 +106,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, CartLine>>({});
+  const [suggestions, setSuggestions] = useState<Record<string, number[]>>({});
+  // Plat dont on propose les accompagnements juste après l'ajout au panier.
+  // Un seul à la fois : empiler les propositions transformerait la page en
+  // tunnel de vente, ce qu'un client de restaurant ne supporte pas.
+  const [suggestFor, setSuggestFor] = useState<MenuItem | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -149,9 +162,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       .getTableByToken(qrToken)
       .then(async (t) => {
         setTable(t);
-        const [rest, items] = await Promise.all([api.getRestaurant(t.restaurant_id), api.getMenu(t.restaurant_id)]);
+        const [rest, items, suggested] = await Promise.all([
+          api.getRestaurant(t.restaurant_id),
+          api.getMenu(t.restaurant_id),
+          // Best-effort : une carte sans suggestions reste une carte utilisable,
+          // l'échec de cet appel ne doit jamais bloquer la commande.
+          api.getMenuSuggestions(t.restaurant_id).catch(() => ({})),
+        ]);
         setRestaurant(rest);
         setMenu(items);
+        setSuggestions(suggested);
 
         // Si le client a déjà une commande en cours pour cette table (ex:
         // téléphone rafraîchi pendant que le plat était en préparation), on
@@ -408,7 +428,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
   }
 
-  function addToCart(item: MenuItem) {
+  function addToCart(item: MenuItem, fromSuggestion = false) {
     setCart((prev) => {
       const existing = prev[item.id];
       return {
@@ -418,12 +438,24 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           quantity: (existing?.quantity ?? 0) + 1,
           note: existing?.note ?? "",
           shared: existing?.shared ?? false,
+          // Une ligne déjà au panier garde son origine : si le client a d'abord
+          // pris le plat depuis la carte, en reprendre un depuis une suggestion
+          // n'en fait pas une vente incitative.
+          fromSuggestion: existing?.fromSuggestion ?? fromSuggestion,
         },
       };
     });
     setCartClearedNotice(false);
     setBumpedItemId(item.id);
     setTimeout(() => setBumpedItemId((cur) => (cur === item.id ? null : cur)), 300);
+
+    // Propose les accompagnements du plat qu'on vient d'ajouter — jamais ceux
+    // d'un article lui-même issu d'une suggestion, pour ne pas enchaîner.
+    if (!fromSuggestion) {
+      const suggestedIds = suggestions[String(item.id)] ?? [];
+      const proposable = suggestedIds.filter((id) => !cart[id]);
+      setSuggestFor(proposable.length ? item : null);
+    }
   }
 
   function removeFromCart(itemId: number) {
@@ -460,6 +492,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         quantity: l.quantity,
         notes: l.note || null,
         is_shared: l.shared,
+        from_suggestion: l.fromSuggestion,
       })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       loyalty_phone: loyaltyPhone.trim() || null,
@@ -1083,6 +1116,55 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   {sending ? t.sending : t.validateOrder}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {suggestFor && (
+          <div
+            className={`fixed left-0 right-0 bg-white border-t p-4 shadow-lg ${
+              cartLines.length > 0 ? "bottom-[132px]" : "bottom-0"
+            }`}
+          >
+            <div className="max-w-md mx-auto">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{t.suggestionTitle(suggestFor.name)}</p>
+                  <p className="text-xs text-neutral-500">{t.suggestionHint}</p>
+                </div>
+                <button
+                  onClick={() => setSuggestFor(null)}
+                  aria-label={t.closeErrorAria}
+                  className="text-neutral-400 shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+              <ul className="mt-3 space-y-2">
+                {(suggestions[String(suggestFor.id)] ?? [])
+                  .map((id) => menu.find((m) => m.id === id))
+                  .filter((item): item is MenuItem => !!item && item.is_available && !cart[item.id])
+                  .map((item) => (
+                    <li key={item.id} className="flex items-center gap-3">
+                      <span className="flex-1 text-sm">
+                        {item.name}
+                        <span className="text-neutral-500"> · {item.price.toFixed(2)} DT</span>
+                      </span>
+                      <button
+                        onClick={() => addToCart(item, true)}
+                        className="text-sm font-medium px-3 py-1.5 rounded-lg bg-[var(--harissa)] text-white"
+                      >
+                        {t.suggestionAdd}
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+              <button
+                onClick={() => setSuggestFor(null)}
+                className="mt-3 text-sm text-neutral-500 underline"
+              >
+                {t.suggestionDismiss}
+              </button>
             </div>
           </div>
         )}

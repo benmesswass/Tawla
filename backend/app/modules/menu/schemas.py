@@ -33,6 +33,18 @@ class MenuItemAvailability(BaseModel):
     is_available: bool
 
 
+class MenuSuggestionsUpdate(BaseModel):
+    """Remplace d'un bloc les articles proposés avec un plat. Trois au maximum :
+    au-delà, la proposition devient une deuxième carte et le client la referme."""
+
+    suggested_item_ids: list[int] = Field(default_factory=list, max_length=3)
+
+
+class MenuItemSuggestionsOut(BaseModel):
+    menu_item_id: int
+    suggested_items: list[MenuItemOut]
+
+
 class MenuCsvImport(BaseModel):
     """Contenu brut du fichier, envoyé tel quel : le parsing et les messages
     d'erreur ligne par ligne vivent dans `menu/csv_import.py`, partagé avec le

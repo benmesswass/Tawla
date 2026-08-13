@@ -75,6 +75,14 @@ class PeriodProof(BaseModel):
     # panier réel et tirerait la moyenne vers le bas sans rien dire du service.
     avg_basket_amount: float | None
 
+    # Effet mesuré de la vente incitative (Phase 14.1) : le panier moyen des
+    # commandes où le client a accepté au moins une suggestion, comparé à celui
+    # des autres. C'est ce couple de chiffres qui produit l'argument
+    # commercial — « +X % de panier moyen » — au lieu d'une intuition.
+    orders_with_suggestion_count: int = 0
+    avg_basket_with_suggestion: float | None = None
+    avg_basket_without_suggestion: float | None = None
+
 
 class ProofStats(BaseModel):
     """

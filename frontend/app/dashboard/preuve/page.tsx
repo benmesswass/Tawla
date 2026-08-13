@@ -308,6 +308,48 @@ export default function ProofPage() {
             />
           </div>
 
+          {proof.current.orders_with_suggestion_count > 0 && (
+            <Card tone="success" padding="sm" className="mt-4">
+              <p className="text-sm font-medium text-emerald-900">Effet des suggestions « avec ce plat »</p>
+              {proof.current.avg_basket_with_suggestion !== null &&
+              proof.current.avg_basket_without_suggestion !== null ? (
+                <>
+                  <p className="text-sm text-emerald-900 mt-1">
+                    Panier moyen <strong>{formatAmount(proof.current.avg_basket_with_suggestion)}</strong>{" "}
+                    quand le client accepte une suggestion, contre{" "}
+                    <strong>{formatAmount(proof.current.avg_basket_without_suggestion)}</strong> sinon —{" "}
+                    <strong>
+                      {(() => {
+                        const change = relativeChange(
+                          proof.current.avg_basket_with_suggestion,
+                          proof.current.avg_basket_without_suggestion
+                        );
+                        return change === null ? "—" : `${change > 0 ? "+" : ""}${change.toFixed(0)} %`;
+                      })()}
+                    </strong>
+                    .
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-2">
+                    Sur {proof.current.orders_with_suggestion_count} commande(s) où une suggestion a été
+                    acceptée. C&apos;est le chiffre à citer en rendez-vous : il compare des commandes du même
+                    établissement sur la même période, donc il n&apos;attribue pas à Tawla une hausse due à
+                    des tables plus nombreuses.
+                  </p>
+                </>
+              ) : (
+                // Toutes les commandes de la période comportent une suggestion :
+                // il n'y a donc rien à quoi les comparer. Le dire vaut mieux que
+                // masquer le bloc — sinon le manager croit que rien n'est mesuré.
+                <p className="text-sm text-emerald-900 mt-1">
+                  {proof.current.orders_with_suggestion_count} commande(s) avec une suggestion acceptée, pour
+                  un panier moyen de{" "}
+                  <strong>{formatAmount(proof.current.avg_basket_with_suggestion)}</strong>. La comparaison
+                  s&apos;affichera dès qu&apos;une commande sera passée sans suggestion sur la même période.
+                </p>
+              )}
+            </Card>
+          )}
+
           <Card padding="sm" className="mt-4 text-sm text-[var(--ink-soft)]">
             <p>
               <strong className="text-[var(--encre)]">{proof.current.orders_count} commande(s)</strong> du{" "}

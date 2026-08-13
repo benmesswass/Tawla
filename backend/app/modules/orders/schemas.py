@@ -10,6 +10,12 @@ class OrderItemCreate(BaseModel):
     quantity: int = 1
     notes: str | None = None
     is_shared: bool = False
+    # Ajouté depuis une suggestion « avec ce plat » plutôt que depuis la carte.
+    # Déclaratif côté client : ça ne sert qu'à mesurer l'effet de la vente
+    # incitative, jamais à autoriser ou tarifer quoi que ce soit — un client qui
+    # mentirait sur ce drapeau ne fausserait qu'une statistique de son propre
+    # restaurant.
+    from_suggestion: bool = False
 
 
 class OrderCreate(BaseModel):
@@ -38,6 +44,7 @@ class OrderItemOut(BaseModel):
     quantity: int
     notes: str | None
     is_shared: bool
+    from_suggestion: bool
 
 
 class PayCardRequest(BaseModel):
