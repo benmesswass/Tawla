@@ -78,6 +78,11 @@ export const fr = {
   loyaltyPhoneLabel: "Numéro de téléphone",
   loyaltyPhonePlaceholder: "Ex : 20 123 456",
   loyaltyBirthDateLabel: "Date de naissance (facultatif, pour votre réduction anniversaire)",
+  // Consentement explicite (Phase 16) : le client doit savoir à quoi sert son
+  // numéro AVANT de le taper, pas dans une page qu'il n'ouvrira jamais.
+  loyaltyConsentNotice:
+    "Votre numéro sert uniquement à la carte de fidélité de ce restaurant. Il n'est jamais partagé, jamais utilisé pour vous démarcher, et il est supprimé après 24 mois sans commande.",
+  loyaltyPrivacyLink: "Politique de confidentialité",
   loyaltyProgress: (count: number, remaining: number) =>
     `Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
   loyaltyRewardAvailable: "🎉 Récompense disponible ! Montrez cet écran à votre serveur.",

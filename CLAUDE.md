@@ -54,6 +54,11 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
   manque, pour ne pas confirmer l'existence de la ressource. Ne jamais exposer
   de donnée personnelle sur ces réponses : `loyalty_phone` vit dans
   `OrderOutStaff`, servi aux seules routes sous JWT.
+- Nouvelle donnée personnelle collectée (ou durée de conservation modifiée) =
+  mettre à jour `frontend/lib/i18n/privacy.ts` (fr **et** ar) dans la même PR.
+  Une politique de confidentialité qui ne décrit plus ce que le code fait est
+  pire que pas de politique. Même règle pour toute purge : elle vit dans le
+  service du module concerné et passe par `scripts/purge_donnees_personnelles.py`.
 - Logs via `app/core/logging.py::log_event(logger, message, **context)` —
   toujours avec `restaurant_id`/`order_id`/`table_id` en contexte.
 - Routes staff/cuisine/manager protégées par `get_current_staff` (JWT) +
@@ -84,6 +89,10 @@ cd frontend && npm run lint && npx tsc --noEmit && npm run build
 
 # Générer le QR d'une table (après création via API)
 python backend/scripts/generate_table_qr.py --qr-token <token> --label "Table 5"
+
+# Purge de rétention des données personnelles (Phase 16) — à lancer à la main,
+# simule par défaut, n'efface qu'avec --appliquer.
+cd backend && python scripts/purge_donnees_personnelles.py [--appliquer]
 
 # Migrations Alembic — seule voie d'évolution du schéma depuis la Phase 12.2.
 # L'app ne crée plus les tables au démarrage ; le CMD du Dockerfile lance

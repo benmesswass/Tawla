@@ -1,11 +1,21 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.dates import as_utc
 from app.core.logging import get_logger, log_event
 from app.modules.loyalty import schemas
 from app.modules.loyalty.models import LOYALTY_REWARD_THRESHOLD, LoyaltyMember
 
 logger = get_logger("loyalty")
+
+# Durée de conservation d'une fiche fidélité sans nouvelle commande (Phase 16).
+# 24 mois : un client qui n'est pas revenu depuis deux ans n'a plus de
+# programme de fidélité en cours, donc plus de finalité au stockage de son
+# numéro. Volontairement une constante et non un réglage par restaurant : un
+# délai de rétention négociable au cas par cas n'est plus une politique.
+RETENTION_WITHOUT_ORDER = timedelta(days=730)
 
 
 def _get_member(db: Session, restaurant_id: int, phone_number: str) -> LoyaltyMember | None:
@@ -52,6 +62,7 @@ def record_completed_order(db: Session, restaurant_id: int, phone_number: str) -
         return
 
     member.order_count += 1
+    member.last_order_at = datetime.now(timezone.utc)
     if member.order_count % LOYALTY_REWARD_THRESHOLD == 0:
         member.reward_available = True
     db.commit()
@@ -59,6 +70,39 @@ def record_completed_order(db: Session, restaurant_id: int, phone_number: str) -
         logger, "loyalty.order_recorded",
         restaurant_id=restaurant_id, member_id=member.id, order_count=member.order_count,
     )
+
+
+def purge_inactive_members(db: Session, now: datetime | None = None, dry_run: bool = False) -> int:
+    """
+    Supprime les fiches fidélité sans commande depuis `RETENTION_WITHOUT_ORDER`
+    (Phase 16 — loi organique 2004-63 : pas de conservation sans finalité).
+
+    Lancée à la main via `scripts/purge_donnees_personnelles.py`, pas par un
+    ordonnanceur : à ce stade il n'y a pas assez de trafic pour justifier une
+    tâche de fond, et une purge automatique mal réglée détruit des données
+    qu'on ne peut pas récupérer. `dry_run` compte sans supprimer.
+
+    La suppression est réelle et non un drapeau `is_deleted` : garder la ligne
+    avec le numéro dedans ne serait pas une purge.
+    """
+    threshold = (now or datetime.now(timezone.utc)) - RETENTION_WITHOUT_ORDER
+    # `last_order_at` est nul pour les fiches créées avant la Phase 16 et pour
+    # celles qui n'ont jamais abouti à une commande payée : c'est `created_at`
+    # qui fait alors foi, sinon ces fiches ne seraient jamais purgées.
+    stale = [
+        member
+        for member in db.query(LoyaltyMember).all()
+        if as_utc(member.last_order_at or member.created_at) < threshold
+    ]
+    if dry_run:
+        return len(stale)
+
+    for member in stale:
+        db.delete(member)
+    db.commit()
+    if stale:
+        log_event(logger, "loyalty.members_purged", count=len(stale))
+    return len(stale)
 
 
 def get_member_for_staff(db: Session, restaurant_id: int, phone_number: str) -> LoyaltyMember:

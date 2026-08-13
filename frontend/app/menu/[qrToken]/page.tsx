@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Cairo } from "next/font/google";
 import {
   api,
@@ -1030,6 +1031,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </button>
           ) : (
             <div className="space-y-2">
+              {/* Le client doit savoir à quoi sert son numéro avant de le
+                  taper — pas dans une page qu'il n'ouvrira jamais (Phase 16). */}
+              <p className="text-xs text-orange-900/80 leading-relaxed">
+                {t.loyaltyConsentNotice}{" "}
+                <Link href="/confidentialite" className="underline">
+                  {t.loyaltyPrivacyLink}
+                </Link>
+              </p>
               <label className="block text-sm text-orange-900">
                 {t.loyaltyPhoneLabel}
                 <input

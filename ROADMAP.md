@@ -34,12 +34,12 @@ clôture de chaque phase.
 | Dimension | Poids | Actuelle | Cible | Ce qui la déplace | Phase |
 |---|---:|---:|---:|---|---|
 | Accès au marché & vente | 20 % | 2,0 | 7,5 | 20 entretiens, 3 pilotes actifs, 2 clients payants | 13 |
-| Prêt à vendre (installable, sûr) | 15 % | 8,0 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, ~~kit d'installation~~, reste le déploiement avec sauvegardes | 12, 13.2 |
+| Prêt à vendre (installable, sûr) | 15 % | 8,5 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, ~~kit d'installation~~, ~~conformité 2004-63~~, reste le déploiement avec sauvegardes | 12, 13.2, 16 |
 | Besoin marché prouvé | 20 % | 7,0 | 8,5 | Les 3 métriques mesurées avant/après chez un pilote | 13.3 |
 | Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements | 14.3 |
 | Différenciation sur une niche | 10 % | 6,5 | 7,5 | ~~Vente incitative~~, ~~positionnement service~~, ~~angle primes~~ — reste un chiffre venu d'un vrai pilote | 14 |
 | Exécution technique | 15 % | 9,0 | 9,0 | ~~Tests de sécurité dédiés~~, ~~tenue en service réel~~ (atteint) | 12.2, 15 |
-| **Note pondérée** | **100 %** | **6,6** | **8,2** | | |
+| **Note pondérée** | **100 %** | **6,5** | **8,2** | | |
 
 Mise à jour du 2026-08-13 (clôture de 12.1 et 12.2) : « prêt à vendre » passe de
 2,5 à 7,0 — le produit est désormais installable par un restaurateur et sa
@@ -60,6 +60,19 @@ suggestion acceptée, sur la même période et le même établissement). C'est l
 seul chiffre du produit qui se cite en rendez-vous. La note n'atteint pas la
 cible parce qu'il manque encore le positionnement « service inclus » (14.2) et
 un chiffre issu d'un vrai restaurant, pas d'un jeu de données de test.
+
+Mise à jour du 2026-08-13 (16) : « prêt à vendre » passe à 8,5 — un produit qui
+collecte des numéros de téléphone sans dire à quoi ils servent ni les supprimer
+jamais n'est pas vendable à un restaurateur qui, lui, sera le responsable du
+traitement. La finalité est maintenant écrite au-dessus du champ, la politique
+de confidentialité existe en français et en arabe, et la purge est un script
+réel — vérifié en le lançant, pas seulement en le lisant. Il reste la
+déclaration INPDP (🧑) et le déploiement, qui demandent Wassim.
+
+**Correction du total pondéré** : le tableau affichait 6,6 alors que ses propres
+lignes donnaient 6,4. Recalculé ici (6,5 avec la nouvelle note de « prêt à
+vendre »). Le total n'était pas faux dans les conclusions qu'il servait, mais un
+instrument de pilotage qui ne s'additionne pas ne pilote rien.
 
 **Ces sous-phases n'ont déplacé aucune autre note, et c'est normal** :
 elles construisent l'instrument de mesure et l'outil d'installation, pas la
@@ -216,9 +229,9 @@ personnelle au sens de la loi organique tunisienne 2004-63, dont l'article 7
 impose une déclaration préalable auprès de l'INPDP.
 
 - [ ] Déclaration du traitement auprès de l'INPDP 🧑 (formulaires sur `inpdp.tn`) — avant le premier client réel, pas après
-- [ ] Politique de confidentialité, page publique + lien depuis l'écran de saisie du numéro, fr et ar
-- [ ] Consentement explicite à la saisie du téléphone : dire à quoi il sert (fidélité de cet établissement uniquement) et qu'il n'est jamais partagé
-- [ ] Rétention : purger `Order.push_subscription` une fois la commande servie, et les `LoyaltyMember` inactifs au-delà de 24 mois (tâche de nettoyage à lancer à la main au départ, pas d'ordonnanceur)
+- [x] Politique de confidentialité, page publique + lien depuis l'écran de saisie du numéro, fr et ar (PR #40) — `/confidentialite`, dans la langue déjà choisie sur le menu ; le texte ne décrit que ce que le code fait, et rien d'autre
+- [x] Consentement explicite à la saisie du téléphone : dire à quoi il sert (fidélité de cet établissement uniquement) et qu'il n'est jamais partagé (PR #40) — affiché **au-dessus** du champ, pas derrière un lien que personne n'ouvre
+- [x] Rétention : purger `Order.push_subscription` une fois la commande servie, et les `LoyaltyMember` inactifs au-delà de 24 mois (tâche de nettoyage à lancer à la main au départ, pas d'ordonnanceur) (PR #40) — l'abonnement push est effacé sur tout statut terminal (servi *et* annulé) ; `scripts/purge_donnees_personnelles.py` simule par défaut et n'efface qu'avec `--appliquer`
 
 ---
 

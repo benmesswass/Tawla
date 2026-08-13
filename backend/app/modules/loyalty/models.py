@@ -30,3 +30,9 @@ class LoyaltyMember(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # Date de la dernière commande payée — seule base de la purge de rétention
+    # (Phase 16) : garder indéfiniment le numéro d'un client qui n'est jamais
+    # revenu n'a aucune finalité, et la loi 2004-63 interdit une conservation
+    # sans finalité. Nullable car les fiches créées avant cette colonne n'ont
+    # pas d'historique : la purge retombe alors sur `created_at`.
+    last_order_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

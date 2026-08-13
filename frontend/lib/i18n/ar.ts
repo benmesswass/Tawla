@@ -77,6 +77,9 @@ export const ar = {
   loyaltyPhoneLabel: "رقم التليفون",
   loyaltyPhonePlaceholder: "مثال : 20 123 456",
   loyaltyBirthDateLabel: "تاريخ الميلاد (إختياري، للتخفيض تاع عيد ميلادك)",
+  loyaltyConsentNotice:
+    "رقمك يخدم كان لبطاقة الولاء تاع هذا المطعم. عمرو ما يتشارك، عمرو ما يتستعمل باش يعيطولك، ويتمسح بعد 24 شهر بلا طلبية.",
+  loyaltyPrivacyLink: "سياسة الخصوصية",
   loyaltyProgress: (count, remaining) => `عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
   loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",
   loyaltyBirthdayBanner: "عيد ميلاد سعيد! اطلب التخفيض الخاص من الجرسون.",
