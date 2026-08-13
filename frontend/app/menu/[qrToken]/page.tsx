@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Cairo } from "next/font/google";
-import { api, wsUrl, ApiError, LoyaltyMember, MenuItem, Order, OrderStatus, Restaurant, Table } from "@/lib/api";
+import {
+  api,
+  wsUrl,
+  orderWsUrl as buildOrderWsUrl,
+  ApiError,
+  LoyaltyMember,
+  MenuItem,
+  Order,
+  OrderStatus,
+  Restaurant,
+  Table,
+} from "@/lib/api";
 import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
@@ -33,6 +44,31 @@ const STEP_STATUSES: StepStatus[] = [
 
 function lastOrderStorageKey(qrToken: string): string {
   return `resto-qr-menu:last-order:${qrToken}`;
+}
+
+/**
+ * Reprise du suivi après un rafraîchissement de page : il faut désormais
+ * conserver le `public_token` en plus de l'identifiant, puisque l'identifiant
+ * seul ne donne plus accès à la commande (Phase 12.2).
+ */
+type TrackedOrderRef = { id: number; token: string };
+
+function storeTrackedOrderRef(qrToken: string, id: number, token: string): void {
+  sessionStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify({ id, token }));
+}
+
+function readTrackedOrderRef(qrToken: string): TrackedOrderRef | null {
+  const raw = sessionStorage.getItem(lastOrderStorageKey(qrToken));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.id === "number" && typeof parsed?.token === "string") return parsed;
+  } catch {
+    // Ancien format (l'identifiant seul, avant la Phase 12.2) : inutilisable
+    // sans token, on l'oublie plutôt que de tenter un appel voué au 404.
+  }
+  sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+  return null;
 }
 
 function offlineQueueStorageKey(qrToken: string): string {
@@ -66,6 +102,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
+  // Reçu une seule fois à la création de la commande : sans lui, plus aucun
+  // appel de suivi ni de paiement n'est autorisé (Phase 12.2).
+  const [orderToken, setOrderToken] = useState<string | null>(null);
   const [tipInput, setTipInput] = useState("");
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -117,12 +156,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         // Si le client a déjà une commande en cours pour cette table (ex:
         // téléphone rafraîchi pendant que le plat était en préparation), on
         // reprend le suivi au lieu de lui montrer à nouveau tout le menu.
-        const savedId = sessionStorage.getItem(lastOrderStorageKey(qrToken));
-        if (savedId) {
+        const saved = readTrackedOrderRef(qrToken);
+        if (saved) {
           try {
-            const order = await api.getOrder(Number(savedId));
+            const order = await api.getOrder(saved.id, saved.token);
             if (order.status !== "served" && order.status !== "cancelled") {
               setTrackedOrder(order);
+              setOrderToken(saved.token);
             } else {
               sessionStorage.removeItem(lastOrderStorageKey(qrToken));
             }
@@ -149,9 +189,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       const payload: CreateOrderPayload = JSON.parse(raw);
       const order = await api.createOrder(payload);
       localStorage.removeItem(offlineQueueStorageKey(qrToken));
-      sessionStorage.setItem(lastOrderStorageKey(qrToken), String(order.id));
+      storeTrackedOrderRef(qrToken, order.id, order.public_token);
       setOfflineQueuedPayload(null);
       setTrackedOrder(order);
+      setOrderToken(order.public_token);
     } catch {
       // Toujours hors ligne (ou erreur transitoire) : on retentera au
       // prochain événement "online" ou clic manuel — pas d'erreur affichée
@@ -249,7 +290,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(public_key),
       });
-      await api.savePushSubscription(trackedOrder.id, subscription.toJSON() as PushSubscriptionJSON);
+      if (!orderToken) return;
+      await api.savePushSubscription(
+        trackedOrder.id,
+        subscription.toJSON() as PushSubscriptionJSON,
+        orderToken
+      );
       setPushState("subscribed");
     } catch {
       setPushState("error");
@@ -258,9 +304,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   // Suivi temps réel de la commande après validation — jusqu'ici le client
   // n'avait plus aucune nouvelle après "commande envoyée" (audit PO 2026-08-10).
-  const orderWsUrl =
-    trackedOrder && restaurant ? wsUrl(`/ws/order/${restaurant.id}/${trackedOrder.id}`) : null;
-  useReconnectingSocket(orderWsUrl, (msg) => {
+  const orderSocketUrl =
+    trackedOrder && restaurant && orderToken
+      ? buildOrderWsUrl(`/ws/order/${restaurant.id}/${trackedOrder.id}`, orderToken)
+      : null;
+  useReconnectingSocket(orderSocketUrl, (msg) => {
     if (msg.event === "order.status_changed" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, status: msg.status } : prev));
       if (msg.status === "served" || msg.status === "cancelled") {
@@ -307,8 +355,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // on rafraîchit l'affichage client à ce moment précis (carte immédiate,
   // cash via le WebSocket ci-dessus) plutôt que de deviner la nouvelle valeur.
   useEffect(() => {
-    if (trackedOrder?.payment_status === "paid" && trackedOrder.loyalty_phone) {
-      checkLoyaltyStatus(trackedOrder.loyalty_phone);
+    if (trackedOrder?.payment_status === "paid" && loyaltyPhone.trim()) {
+      checkLoyaltyStatus(loyaltyPhone);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackedOrder?.payment_status]);
@@ -319,7 +367,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setPaymentError(null);
     const tip = Number(tipInput.replace(",", ".")) || 0;
     try {
-      const updated = await api.payByCard(trackedOrder.id, tip);
+      if (!orderToken) return;
+      const updated = await api.payByCard(trackedOrder.id, tip, orderToken);
       setTrackedOrder(updated);
     } catch (e) {
       setPaymentError(toLocalizedMessage(e, locale));
@@ -333,7 +382,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setPaying(true);
     setPaymentError(null);
     try {
-      const updated = await api.requestCashPayment(trackedOrder.id);
+      if (!orderToken) return;
+      const updated = await api.requestCashPayment(trackedOrder.id, orderToken);
       setTrackedOrder(updated);
     } catch (e) {
       setPaymentError(toLocalizedMessage(e, locale));
@@ -404,8 +454,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setSending(true);
     setOrderError(null);
     const payload: CreateOrderPayload = {
-      restaurant_id: table.restaurant_id,
-      table_id: table.id,
+      qr_token: qrToken,
       items: cartLines.map((l) => ({
         menu_item_id: l.item.id,
         quantity: l.quantity,
@@ -417,8 +466,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     };
     try {
       const order = await api.createOrder(payload);
-      sessionStorage.setItem(lastOrderStorageKey(qrToken), String(order.id));
+      storeTrackedOrderRef(qrToken, order.id, order.public_token);
       setTrackedOrder(order);
+      setOrderToken(order.public_token);
       setCart({});
       setPreOrderForIftar(false);
       setShowCelebration(true);
@@ -458,6 +508,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   function orderAgain() {
     setTrackedOrder(null);
+    setOrderToken(null);
     sessionStorage.removeItem(lastOrderStorageKey(qrToken));
   }
 

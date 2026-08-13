@@ -11,9 +11,12 @@ doit être **lié** à quelque chose que seul le vrai client possède — le
 `qr_token` de la table qu'il a scannée, ou le `public_token` que la création de
 sa commande lui a renvoyé. « Public » ne veut pas dire « non lié ».
 """
+from starlette.websockets import WebSocketDisconnect
+
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.modules.menu.models import MenuItem
+from app.modules.notifications.dependencies import WS_UNAUTHORIZED
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table
 
@@ -309,9 +312,14 @@ def _token_of(staff) -> str:
 
 class pytest_raises_ws:
     """
-    Petit contexte : une poignée de main WebSocket refusée lève une exception
-    côté TestClient (le serveur ferme avant `accept()`). On veut affirmer ce
-    refus sans dépendre du type exact d'exception de Starlette.
+    Petit contexte : affirme qu'un canal refuse la connexion avec le code
+    applicatif 4401.
+
+    Le serveur accepte la poignée de main puis ferme immédiatement, à dessein :
+    un rejet avant `accept()` arriverait au navigateur en code 1006, que le
+    frontend ne peut pas distinguer d'une coupure réseau — il réessaierait
+    indéfiniment. La socket n'est jamais enregistrée côté serveur, donc aucun
+    message ne peut lui parvenir.
     """
 
     def __init__(self, client, path: str):
@@ -323,8 +331,24 @@ class pytest_raises_ws:
 
     def __exit__(self, *_exc):
         try:
-            with self._client.websocket_connect(self._path):
-                pass
-        except Exception:
+            with self._client.websocket_connect(self._path) as ws:
+                # Le TestClient renvoie la trame de fermeture comme un message
+                # `websocket.close` ; seuls receive_text/json lèvent.
+                message = ws.receive()
+        except WebSocketDisconnect as disconnect:
+            assert disconnect.code == WS_UNAUTHORIZED, (
+                f"{self._path} fermé avec {disconnect.code}, attendu {WS_UNAUTHORIZED}"
+            )
             return True
-        raise AssertionError(f"la connexion à {self._path} aurait dû être refusée")
+        except Exception:
+            # Refus au niveau de la poignée de main : acceptable pour la
+            # sécurité, mais indistinguable d'une coupure réseau côté client.
+            raise AssertionError(f"{self._path} refusé sans code applicatif 4401")
+
+        assert message["type"] == "websocket.close", (
+            f"{self._path} a laissé passer un message : {message}"
+        )
+        assert message.get("code") == WS_UNAUTHORIZED, (
+            f"{self._path} fermé avec {message.get('code')}, attendu {WS_UNAUTHORIZED}"
+        )
+        return True
