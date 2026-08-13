@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.core import model_registry  # noqa: F401 — enregistre tous les modèles
 from app.core.config import settings
+from app.core.database import get_db
+from app.core.logging import get_logger
 from app.modules.loyalty.router import router as loyalty_router
 from app.modules.menu.router import router as menu_router
 from app.modules.notifications.router import router as notifications_router
@@ -37,6 +41,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
+logger = get_logger("app")
+
 app = FastAPI(title="resto-qr-menu API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
@@ -59,5 +65,23 @@ app.include_router(loyalty_router)
 
 
 @app.get("/health")
-def health():
+def health(response: Response, db: Session = Depends(get_db)):
+    """
+    Sonde destinée à un monitoring externe (Phase 12.3).
+
+    Elle vérifie la base, et pas seulement que le processus répond : sans ça,
+    un Postgres injoignable laisse cette route renvoyer « ok » pendant que
+    chaque commande échoue en salle — le monitoring dirait « tout va bien »
+    précisément quand il faut réveiller quelqu'un.
+
+    En cas d'échec : 503 (un moniteur externe déclenche sur le code HTTP) et
+    un code stable, jamais le message de l'exception — cette route est
+    publique et l'erreur SQL nomme l'hôte et la base.
+    """
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("health.database_unreachable")
+        response.status_code = 503
+        return {"status": "degraded", "code": "DATABASE_UNREACHABLE"}
     return {"status": "ok"}
