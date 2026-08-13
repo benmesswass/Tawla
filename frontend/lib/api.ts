@@ -156,6 +156,27 @@ export type DashboardStats = {
 
 export type KitchenTodayCount = { date: string; count: number };
 
+/**
+ * Les trois chiffres de preuve d'un pilote (Phase 13.3) : commandes perdues,
+ * délai commande → cuisine, panier moyen. `null` sur les moyennes veut dire
+ * « aucune donnée », pas zéro — la distinction compte devant un patron.
+ */
+export type PeriodProof = {
+  start: string;
+  end: string;
+  orders_count: number;
+  lost_orders_count: number;
+  cancelled_count: number;
+  abandoned_count: number;
+  avg_order_to_kitchen_seconds: number | null;
+  avg_basket_amount: number | null;
+};
+
+export type ProofStats = {
+  current: PeriodProof;
+  previous: PeriodProof;
+};
+
 // Code stable renvoyé par le backend pour chaque erreur (voir
 // backend/app/modules/*/router.py et orders/service.py) — permet de
 // traduire proprement côté client au lieu d'afficher le message brut
@@ -276,6 +297,13 @@ export const api = {
     request<DashboardStats>(
       `/api/v1/stats/dashboard/${restaurantId}${date ? `?date=${date}` : ""}`
     ),
+  getProofStats: (restaurantId: number, start?: string, end?: string) => {
+    const params = new URLSearchParams();
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    const query = params.toString();
+    return request<ProofStats>(`/api/v1/stats/preuve/${restaurantId}${query ? `?${query}` : ""}`);
+  },
   getKitchenTodayCount: (restaurantId: number) =>
     request<KitchenTodayCount>(`/api/v1/stats/kitchen-today-count/${restaurantId}`),
   payByCard: (orderId: number, tipAmount: number, orderToken: string) =>

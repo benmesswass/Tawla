@@ -154,6 +154,9 @@ export default function DashboardStatsPage() {
           <Link href="/dashboard" className="underline">
             Gérer le menu
           </Link>
+          <Link href="/dashboard/preuve" className="underline">
+            Preuve du pilote
+          </Link>
           <button onClick={logout} className="text-neutral-500 underline">
             Se déconnecter
           </button>
