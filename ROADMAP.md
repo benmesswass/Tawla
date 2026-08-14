@@ -35,7 +35,7 @@ clôture de chaque phase.
 
 | Dimension | Poids | Actuelle | Cible | Ce qui la déplace | Phase |
 |---|---:|---:|---:|---|---|
-| Accès au marché & vente | 20 % | 2,0 | 7,5 | 20 entretiens, 3 pilotes actifs, 2 clients payants | 13 |
+| Accès au marché & vente | 20 % | 2,0 | 7,5 | 20 entretiens, 3 pilotes actifs, 2 clients payants — le plan de salle est l'écran qui fait comprendre Tawla en deux secondes | 13, 18 |
 | Prêt à vendre (installable, sûr) | 15 % | 8,5 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, ~~kit d'installation~~, ~~conformité 2004-63~~, reste le déploiement avec sauvegardes | 12, 13.2, 16 |
 | Besoin marché prouvé | 20 % | 7,0 | 8,5 | Les 3 métriques mesurées avant/après chez un pilote | 13.3 |
 | Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements, et un outil qu'on rouvre tous les soirs | 14.3, 17 |
@@ -335,6 +335,30 @@ contourne l'outil, et le patron résilie sans jamais dire pourquoi)
 **17.4 — Fin de pilote visible** 🧑 (différé : demande le prix tranché en 14.3)
 
 - [ ] `Restaurant.pilot_ends_on` + bandeau « pilote gratuit jusqu'au JJ/MM » sur le dashboard. Rend l'échéance explicite au lieu d'une conversation gênante à avoir
+
+---
+
+## Phase 18 — Le plan de salle
+
+Idée de Wassim (2026-08-14). J'avais proposé une grille de tuiles par zone,
+moins chère ; il a tranché pour le vrai plan, et il a eu raison sur un point
+que j'avais sous-estimé : un restaurateur reconnaît **sa** salle en deux
+secondes, et « accès au marché » est la note la plus faible de la grille.
+
+Ce que le plan règle, au-delà de la démonstration : **une liste grandit
+indéfiniment, un plan a exactement le nombre de tables de la salle.** L'écran
+serveur accumulait les commandes abandonnées sans borne de date ; sur un plan,
+une table est occupée ou ne l'est pas.
+
+- [x] `Table.pos_x`, `pos_y` (en **pourcentage**, jamais en pixels) et `shape`, + migration (PR #48) — le même plan se lit sur un téléphone de 360 px et sur l'écran du bureau
+- [x] `PUT /api/v1/tables/plan/{restaurant_id}` — tout le plan en une écriture, vérifié entièrement avant d'écrire quoi que ce soit : une table étrangère glissée en fin de liste ne doit pas laisser la salle à moitié enregistrée (PR #48)
+- [x] `GET /api/v1/tables/plan/{restaurant_id}` — ouvert à toute l'équipe, **sans les `qr_token`** : ils n'ont rien à faire sur un écran de service (PR #48)
+- [x] Éditeur manager : glisser-déposer, trois formes, réserve des tables non posées. Dessiner la salle reste un acte de gestion — un serveur ne peut pas la réorganiser en plein service (PR #48)
+- [x] Vue serveur en direct, alimentée par les **mêmes listes** que celles affichées dessous : deux sources finiraient par se contredire, et un plan qui ment est pire qu'aucun plan (PR #48)
+- [x] L'anneau autour d'une table est un **compte à rebours avant perte** : il se referme exactement à `ABANDONED_PENDING_AFTER`, le seuil dont la page de preuve tire l'argent perdu (PR #48)
+- [x] Pas de clignotement — ignoré au bout de dix minutes ou insupportable. Seule la table la plus urgente respire, et rien ne bouge sous `prefers-reduced-motion` (PR #48)
+- [ ] **Borner les commandes actives dans le temps** — le plan a rendu le défaut visible : deux tables restaient rouges avec « +1 h » pour des commandes abandonnées la veille. Arbitrage produit à trancher avec Wassim (masquer au-delà de N heures ? un bouton « classer sans suite » pour le serveur ?)
+- [ ] Confronter le plan aux entretiens de 13.1 : les zones suffisaient-elles, ou le plan dessiné change-t-il vraiment la conversation ?
 
 ---
 

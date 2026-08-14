@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.modules.staff.dependencies import require_role
+from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import schemas
 from app.modules.tables.models import Table
@@ -81,3 +81,61 @@ def assign_staff(
     db.commit()
     db.refresh(table)
     return table
+
+
+@router.get("/plan/{restaurant_id}", response_model=list[schemas.TablePlanOut])
+def read_plan(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(get_current_staff),
+):
+    """Le plan tel que le service le lit. Ouvert à tous les rôles : le serveur
+    et la cuisine regardent la même salle que le manager."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return db.query(Table).filter(Table.restaurant_id == restaurant_id).order_by(Table.id).all()
+
+
+@router.put("/plan/{restaurant_id}", response_model=list[schemas.TableOut])
+def save_plan(
+    restaurant_id: int,
+    payload: schemas.PlanUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Enregistre le plan de salle en une seule écriture.
+
+    Dessiner la salle est un acte de gestion, réservé au manager : un plan qui
+    se réorganiserait en plein service serait pire qu'aucun plan.
+
+    Les tables sont d'abord toutes vérifiées, puis toutes écrites. Sans ce
+    découpage, une table étrangère glissée en fin de liste laisserait le plan
+    à moitié enregistré — et un plan à moitié juste envoie un serveur au
+    mauvais endroit.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+
+    tables: list[tuple[Table, schemas.TablePlacement]] = []
+    for placement in payload.placements:
+        table = db.get(Table, placement.table_id)
+        if not table or table.restaurant_id != restaurant_id:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "TABLE_NOT_FOUND", "message": f"table {placement.table_id} not found"},
+            )
+        tables.append((table, placement))
+
+    for table, placement in tables:
+        table.pos_x = placement.pos_x
+        table.pos_y = placement.pos_y
+        table.shape = placement.shape
+    db.commit()
+
+    return (
+        db.query(Table)
+        .filter(Table.restaurant_id == restaurant_id)
+        .order_by(Table.id)
+        .all()
+    )

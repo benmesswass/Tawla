@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { lalezar } from "@/lib/fonts";
-import { api, staffWsUrl, LoyaltyMember, MyShift, Order } from "@/lib/api";
+import { api, staffWsUrl, LoyaltyMember, MyShift, Order, PlanTable } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
@@ -13,32 +13,42 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import MaSoiree from "@/components/MaSoiree";
+import PlanDeSalle from "@/components/plan/PlanDeSalle";
+import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 
 type PendingOrder = {
   order_id: number;
+  table_id: number;
   table_label: string;
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
+  created_at: string | null;
   scheduled_for: string | null;
 };
-type ReadyOrder = { order_id: number; table_label: string };
+type ReadyOrder = { order_id: number; table_id: number; table_label: string; ready_at: string | null };
 type CashRequest = {
   order_id: number;
+  table_id: number;
   table_label: string;
   amount: number;
   taken_by_staff_id: number | null;
   loyalty_phone: string | null;
 };
-type WaiterCall = { call_id: number; table_label: string };
+type WaiterCall = { call_id: number; table_id: number; table_label: string; created_at: string | null };
+/** Commandes parties en cuisine : rien à faire pour le serveur, mais la table
+ *  n'est pas libre pour autant — le plan doit la montrer occupée. */
+type EnCuisine = { order_id: number; table_id: number };
 
 function fromApi(o: Order): PendingOrder {
   return {
     order_id: o.id,
+    table_id: o.table_id,
     table_label: o.table_label,
     taken_by_staff_id: o.taken_by_staff_id,
     taken_by_staff_name: o.taken_by_staff_name,
+    created_at: o.created_at ?? null,
     scheduled_for: o.scheduled_for,
   };
 }
@@ -61,6 +71,10 @@ export default function StaffPage() {
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [myShift, setMyShift] = useState<MyShift | null>(null);
+  const [plan, setPlan] = useState<PlanTable[]>([]);
+  const [enCuisine, setEnCuisine] = useState<EnCuisine[]>([]);
+  const [vuePlan, setVuePlan] = useState(true);
+  const [tableOuverte, setTableOuverte] = useState<number | null>(null);
   const [loyaltyByPhone, setLoyaltyByPhone] = useState<Record<string, LoyaltyMember>>({});
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
@@ -84,7 +98,14 @@ export default function StaffPage() {
       const orders = await api.listActiveOrders(restaurantId);
       setPending(orders.filter((o) => o.status === "pending_confirmation").map(fromApi));
       setReadyToServe(
-        orders.filter((o) => o.status === "ready").map((o) => ({ order_id: o.id, table_label: o.table_label }))
+        orders
+          .filter((o) => o.status === "ready")
+          .map((o) => ({ order_id: o.id, table_id: o.table_id, table_label: o.table_label, ready_at: o.ready_at ?? null }))
+      );
+      setEnCuisine(
+        orders
+          .filter((o) => ["confirmed", "sent_to_kitchen", "in_preparation"].includes(o.status))
+          .map((o) => ({ order_id: o.id, table_id: o.table_id }))
       );
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -98,6 +119,7 @@ export default function StaffPage() {
       setCashRequests(
         orders.map((o) => ({
           order_id: o.id,
+          table_id: o.table_id,
           table_label: o.table_label,
           amount: o.total_amount,
           taken_by_staff_id: o.taken_by_staff_id,
@@ -111,6 +133,16 @@ export default function StaffPage() {
       }
     } catch (e) {
       setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
+  const loadPlan = useCallback(async () => {
+    if (!restaurantId) return;
+    // Best-effort : une salle non dessinée ne doit pas empêcher le service.
+    try {
+      setPlan(await api.getPlan(restaurantId));
+    } catch {
+      setPlan([]);
     }
   }, [restaurantId]);
 
@@ -128,7 +160,7 @@ export default function StaffPage() {
     if (!restaurantId) return;
     try {
       const calls = await api.listPendingWaiterCalls(restaurantId);
-      setWaiterCalls(calls.map((c) => ({ call_id: c.id, table_label: c.table_label })));
+      setWaiterCalls(calls.map((c) => ({ call_id: c.id, table_id: c.table_id, table_label: c.table_label, created_at: c.created_at })));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -142,8 +174,9 @@ export default function StaffPage() {
       loadCashRequests();
       loadWaiterCalls();
       loadMyShift();
+      loadPlan();
     }
-  }, [restaurantId, loadActiveOrders, loadCashRequests, loadWaiterCalls, loadMyShift]);
+  }, [restaurantId, loadActiveOrders, loadCashRequests, loadWaiterCalls, loadMyShift, loadPlan]);
 
   const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
@@ -154,12 +187,21 @@ export default function StaffPage() {
               ...prev,
               {
                 order_id: msg.order_id,
+                table_id: msg.table_id,
                 table_label: msg.table_label,
                 taken_by_staff_id: null,
                 taken_by_staff_name: null,
+                created_at: msg.created_at ?? null,
                 scheduled_for: msg.scheduled_for ?? null,
               },
             ]
+      );
+    }
+    if (msg.event === "order.sent_to_kitchen") {
+      setEnCuisine((prev) =>
+        prev.some((o) => o.order_id === msg.order_id)
+          ? prev
+          : [...prev, { order_id: msg.order_id, table_id: msg.table_id }]
       );
     }
     if (msg.event === "order.claimed") {
@@ -173,8 +215,11 @@ export default function StaffPage() {
     }
     if (msg.event === "order.ready") {
       setReadyToServe((prev) =>
-        prev.some((o) => o.order_id === msg.order_id) ? prev : [...prev, { order_id: msg.order_id, table_label: msg.table_label }]
+        prev.some((o) => o.order_id === msg.order_id) ? prev : [...prev, { order_id: msg.order_id, table_id: msg.table_id, table_label: msg.table_label, ready_at: msg.ready_at ?? null }]
       );
+      // La commande quitte la cuisine : sinon la table resterait « en cuisine »
+      // sur le plan alors que le plat attend au passe.
+      setEnCuisine((prev) => prev.filter((o) => o.order_id !== msg.order_id));
     }
     if (msg.event === "order.cash_requested") {
       setCashRequests((prev) =>
@@ -184,6 +229,7 @@ export default function StaffPage() {
               ...prev,
               {
                 order_id: msg.order_id,
+                table_id: msg.table_id,
                 table_label: msg.table_label,
                 amount: msg.amount,
                 taken_by_staff_id: msg.taken_by_staff_id,
@@ -195,7 +241,7 @@ export default function StaffPage() {
     }
     if (msg.event === "waiter_call.created") {
       setWaiterCalls((prev) =>
-        prev.some((c) => c.call_id === msg.call_id) ? prev : [...prev, { call_id: msg.call_id, table_label: msg.table_label }]
+        prev.some((c) => c.call_id === msg.call_id) ? prev : [...prev, { call_id: msg.call_id, table_id: msg.table_id, table_label: msg.table_label, created_at: msg.created_at ?? null }]
       );
     }
     if (msg.event === "waiter_call.resolved") {
@@ -224,6 +270,28 @@ export default function StaffPage() {
       loadMyShift();
     }
   }, [status, loadActiveOrders, loadCashRequests, loadWaiterCalls, loadMyShift]);
+
+  const etatsDesTables = useMemo(
+    () =>
+      construireEtats({
+        aPrendre: pending.map((o) => ({
+          table_id: o.table_id,
+          depuis: o.created_at,
+          parQui: o.taken_by_staff_name,
+          aMoi: o.taken_by_staff_id === staff?.id,
+        })),
+        aServir: readyToServe.map((o) => ({ table_id: o.table_id, depuis: o.ready_at })),
+        additions: cashRequests.map((o) => ({
+          table_id: o.table_id,
+          aMoi: o.taken_by_staff_id === staff?.id,
+        })),
+        appels: waiterCalls.map((c) => ({ table_id: c.table_id, depuis: c.created_at })),
+        enCuisine,
+      }),
+    [pending, readyToServe, cashRequests, waiterCalls, enCuisine, staff?.id]
+  );
+
+  const salleDessinee = plan.some((t) => t.pos_x !== null && t.pos_y !== null);
 
   async function claim(orderId: number) {
     setError(null);
@@ -399,6 +467,34 @@ export default function StaffPage() {
       )}
 
       <MaSoiree shift={myShift} />
+
+      {salleDessinee && (
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold">Ma salle</h2>
+            <button
+              onClick={() => setVuePlan((v) => !v)}
+              className="text-sm underline text-neutral-500"
+            >
+              {vuePlan ? "Voir la liste" : "Voir le plan"}
+            </button>
+          </div>
+          {vuePlan && (
+            <>
+              <PlanDeSalle
+                tables={plan}
+                etats={etatsDesTables}
+                onTableActivee={(t) => setTableOuverte(t.id)}
+                tableSelectionnee={tableOuverte}
+              />
+              <p className="text-xs text-neutral-500 mt-2">
+                L&apos;anneau se referme au bout de dix minutes : c&apos;est le moment où la
+                commande est comptée perdue.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {waiterCalls.length > 0 && (
         <div className="mb-4">

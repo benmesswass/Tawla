@@ -102,3 +102,166 @@
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Plan de salle (Phase 18)
+   Le plan se lit à trois mètres, sur un téléphone tenu à la main pendant le
+   service. D'où : peu de couleurs, des contrastes francs, aucun clignotement.
+   ========================================================================== */
+
+.plan-surface {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  touch-action: none; /* le doigt déplace une table, il ne fait pas défiler */
+  /* Un sol, pas une carte : une trame très basse qui donne l'échelle sans
+     jamais concurrencer les tables. */
+  background-color: var(--semoule-raised);
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(214, 64, 30, 0.05), transparent 60%),
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+  background-position: 0 0, -1px -1px, -1px -1px;
+}
+.plan-surface[data-editable] { cursor: grab; }
+
+.plan-zone {
+  position: absolute;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+.plan-zone-nom {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.plan-emplacement {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+/* Sur un téléphone le plan garde les proportions de la vraie salle (les
+   positions sont en pourcentage) : ce sont les tables qu'on réduit, sinon
+   elles couvrent la moitié de la pièce. */
+@media (max-width: 520px) {
+  .plan-emplacement { transform: translate(-50%, -50%) scale(0.78); }
+}
+
+.plan-vide {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 32px;
+  margin: 0;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+/* --- Une table ---------------------------------------------------------- */
+
+.piece {
+  position: relative;
+  display: grid;
+  place-content: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--encre);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.piece:hover { transform: scale(1.04); }
+.piece:active { transform: scale(0.97); }
+.piece:focus-visible { outline: 2px solid var(--harissa); outline-offset: 6px; border-radius: 8px; }
+.plan-surface[data-editable] .piece { cursor: grab; }
+.piece[data-deplacement] { transform: scale(1.08); cursor: grabbing; }
+
+.anneau { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.anneau-fond { fill: var(--semoule); stroke: var(--line); stroke-width: 2; }
+.anneau-jauge {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* Le décompte part du haut de la table et tourne dans le sens horaire. */
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.6s linear;
+}
+
+.piece[data-tone="cuisine"] .anneau-fond { fill: #e8eef1; stroke: #b9cbd4; }
+.piece[data-tone="appelle"] .anneau-fond { fill: var(--harissa); stroke: var(--harissa-dark); }
+.piece[data-tone="appelle"] { color: #ffe9d8; }
+.piece[data-tone="appelle"] .etiquette,
+.piece[data-tone="appelle"] .minutes { color: #fff; }
+
+.piece[data-selectionnee] .anneau-fond { stroke: var(--encre); stroke-width: 3; }
+
+.etiquette {
+  position: relative;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  /* Largeur fixe et non `max-width` : en grille, une largeur automatique
+     réduit la colonne à la lettre la plus large et « T7 » se couperait en
+     « T » / « 7 ». */
+  width: 86%;
+  margin: 0 auto;
+  text-align: center;
+  /* Deux lignes plutôt qu'une troncature : « Terrasse 2 » doit se lire en
+     entier, sinon le plan ne dit plus de quelle table il parle. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: break-word;
+}
+.minutes {
+  position: relative;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  line-height: 1;
+}
+/* La table prise par le serveur connecté : un repère discret, jamais un
+   classement — le rapport nominatif reste un document de direction. */
+.mienne {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--encre);
+  opacity: 0.5;
+}
+.piece[data-tone="appelle"] .mienne { background: #fff; opacity: 0.85; }
+
+/* Une seule table respire, la plus urgente. Trois en feraient un sapin. */
+@keyframes plan-respire {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 64, 30, 0.45); }
+  50% { box-shadow: 0 0 0 12px rgba(214, 64, 30, 0); }
+}
+.piece[data-urgente] {
+  border-radius: 999px;
+  animation: plan-respire 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .piece[data-urgente] { animation: none; }
+  .piece, .anneau-jauge { transition: none; }
+}
