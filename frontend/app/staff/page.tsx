@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { lalezar } from "@/lib/fonts";
-import { api, staffWsUrl, LoyaltyMember, Order } from "@/lib/api";
+import { api, staffWsUrl, LoyaltyMember, MyShift, Order } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
@@ -12,6 +12,7 @@ import ConnectionBadge from "@/components/ConnectionBadge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
+import MaSoiree from "@/components/MaSoiree";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 
@@ -59,6 +60,7 @@ export default function StaffPage() {
   const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [myShift, setMyShift] = useState<MyShift | null>(null);
   const [loyaltyByPhone, setLoyaltyByPhone] = useState<Record<string, LoyaltyMember>>({});
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
@@ -112,6 +114,16 @@ export default function StaffPage() {
     }
   }, [restaurantId]);
 
+  const loadMyShift = useCallback(async () => {
+    // Best-effort : ses chiffres personnels ne doivent jamais empêcher l'écran
+    // de service de s'afficher.
+    try {
+      setMyShift(await api.getMyShift());
+    } catch {
+      setMyShift(null);
+    }
+  }, []);
+
   const loadWaiterCalls = useCallback(async () => {
     if (!restaurantId) return;
     try {
@@ -129,8 +141,9 @@ export default function StaffPage() {
       loadActiveOrders();
       loadCashRequests();
       loadWaiterCalls();
+      loadMyShift();
     }
-  }, [restaurantId, loadActiveOrders, loadCashRequests, loadWaiterCalls]);
+  }, [restaurantId, loadActiveOrders, loadCashRequests, loadWaiterCalls, loadMyShift]);
 
   const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
@@ -208,8 +221,9 @@ export default function StaffPage() {
       loadActiveOrders();
       loadCashRequests();
       loadWaiterCalls();
+      loadMyShift();
     }
-  }, [status, loadActiveOrders, loadCashRequests, loadWaiterCalls]);
+  }, [status, loadActiveOrders, loadCashRequests, loadWaiterCalls, loadMyShift]);
 
   async function claim(orderId: number) {
     setError(null);
@@ -222,6 +236,10 @@ export default function StaffPage() {
             : o
         )
       );
+      // C'est la prise en charge qui compte dans « ma soirée », pas l'envoi en
+      // cuisine : sans ce rafraîchissement, son compteur reste à zéro alors
+      // qu'il vient de prendre la table.
+      loadMyShift();
     } catch (e) {
       setError(toFrenchMessage(e));
       loadActiveOrders();
@@ -235,6 +253,7 @@ export default function StaffPage() {
       await api.confirmOrder(orderId);
       await api.sendToKitchen(orderId);
       setPending((prev) => prev.filter((o) => o.order_id !== orderId));
+      loadMyShift();
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -245,6 +264,7 @@ export default function StaffPage() {
     try {
       await api.markServed(orderId);
       setReadyToServe((prev) => prev.filter((o) => o.order_id !== orderId));
+      loadMyShift();
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -377,6 +397,8 @@ export default function StaffPage() {
           </button>
         </Card>
       )}
+
+      <MaSoiree shift={myShift} />
 
       {waiterCalls.length > 0 && (
         <div className="mb-4">

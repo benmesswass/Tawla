@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
 import {
   api,
+  DashboardStats,
   MenuCsvImportResult,
   MenuItem,
   Restaurant,
@@ -25,6 +26,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons";
 import { MENU_CATEGORIES } from "@/lib/menuCategories";
+import RecetteDuJour from "@/components/RecetteDuJour";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -133,6 +135,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [dayStats, setDayStats] = useState<DashboardStats | null>(null);
   const [ramadanEnabled, setRamadanEnabled] = useState(false);
   const [iftarInput, setIftarInput] = useState("");
   const [savingRamadan, setSavingRamadan] = useState(false);
@@ -169,13 +172,17 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const [menu, rest, tableList, teamList, suggested] = await Promise.all([
+      const [menu, rest, tableList, teamList, suggested, dayStats] = await Promise.all([
         api.getMenu(restaurantId),
         api.getRestaurant(restaurantId),
         api.listTables(restaurantId),
         api.listStaff(restaurantId),
         api.getMenuSuggestions(restaurantId),
+        // Best-effort : si les chiffres du jour échouent, le manager doit
+        // quand même pouvoir gérer sa carte et ses tables.
+        api.getDashboardStats(restaurantId).catch(() => null),
       ]);
+      setDayStats(dayStats);
       setItems(menu);
       setDrafts(Object.fromEntries(menu.map((m) => [m.id, itemToDraft(m)])));
       setRestaurant(rest);
@@ -537,6 +544,8 @@ export default function DashboardPage() {
       <p className="text-sm text-neutral-500 mb-4">
         Modifier un article, basculer une rupture de stock, ou en ajouter un nouveau — sans passer par Swagger.
       </p>
+
+      <RecetteDuJour stats={dayStats} />
 
       {error && (
         <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">

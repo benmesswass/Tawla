@@ -38,7 +38,7 @@ clôture de chaque phase.
 | Accès au marché & vente | 20 % | 2,0 | 7,5 | 20 entretiens, 3 pilotes actifs, 2 clients payants | 13 |
 | Prêt à vendre (installable, sûr) | 15 % | 8,5 | 9,0 | ~~Comptes staff~~, ~~surface publique fermée~~, ~~kit d'installation~~, ~~conformité 2004-63~~, reste le déploiement avec sauvegardes | 12, 13.2, 16 |
 | Besoin marché prouvé | 20 % | 7,0 | 8,5 | Les 3 métriques mesurées avant/après chez un pilote | 13.3 |
-| Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements | 14.3 |
+| Viabilité économique | 20 % | 7,0 | 8,0 | Un prix réellement payé par deux établissements, et un outil qu'on rouvre tous les soirs | 14.3, 17 |
 | Différenciation sur une niche | 10 % | 6,5 | 7,5 | ~~Vente incitative~~, ~~positionnement service~~, ~~angle primes~~ — reste un chiffre venu d'un vrai pilote | 14 |
 | Exécution technique | 15 % | 9,0 | 9,0 | ~~Tests de sécurité dédiés~~, ~~tenue en service réel~~ (atteint) | 12.2, 15 |
 | **Note pondérée** | **100 %** | **6,5** | **8,2** | | |
@@ -87,8 +87,9 @@ passe par la porte d'un restaurant.
 ## Où en est la roadmap, et ce qui reste
 
 **Toutes les tâches réalisables sans sortir de la machine sont faites** (phases
-12.1, 12.2, 12.3-code, 13.2, 13.3, 14.1, 14.2, 15, 16). Ce qui reste tient en
-trois blocs, dans cet ordre — et aucun ne se code :
+12.1, 12.2, 12.3-code, 13.2, 13.3, 14.1, 14.2, 15, 16, 17.1, 17.3). Ce qui reste
+tient en trois blocs, dans cet ordre — et aucun ne se code (17.2 attend le
+relevé d'un vrai établissement, 17.4 le prix tranché) :
 
 1. **Mettre en ligne** (12.3) — hébergement, domaine, clés, **sauvegardes**,
    moniteur branché sur `/health`. Les sauvegardes sont bloquantes avant la
@@ -268,6 +269,72 @@ impose une déclaration préalable auprès de l'INPDP.
 - [x] Politique de confidentialité, page publique + lien depuis l'écran de saisie du numéro, fr et ar (PR #40) — `/confidentialite`, dans la langue déjà choisie sur le menu ; le texte ne décrit que ce que le code fait, et rien d'autre
 - [x] Consentement explicite à la saisie du téléphone : dire à quoi il sert (fidélité de cet établissement uniquement) et qu'il n'est jamais partagé (PR #40) — affiché **au-dessus** du champ, pas derrière un lien que personne n'ouvre
 - [x] Rétention : purger `Order.push_subscription` une fois la commande servie, et les `LoyaltyMember` inactifs au-delà de 24 mois (tâche de nettoyage à lancer à la main au départ, pas d'ordonnanceur) (PR #40) — l'abonnement push est effacé sur tout statut terminal (servi *et* annulé) ; `scripts/purge_donnees_personnelles.py` simule par défaut et n'efface qu'avec `--appliquer`
+
+---
+
+## Phase 17 — Faire adopter l'outil
+
+Issue de l'audit du 2026-08-14 ([`PREMIERES_VENTES.md`](./PREMIERES_VENTES.md)).
+Les phases 12 à 16 ont rendu Tawla **vendable**. Celle-ci le rend **utilisé** —
+ce n'est pas la même chose : un outil installé qu'on n'ouvre pas est un
+abonnement qu'on résilie au troisième mois.
+
+Le principe de cette phase : **chaque argument de vente doit exister comme un
+écran**, pas comme une phrase. Un argument qu'on ne peut pas montrer est un
+argument qu'on devra répéter à chaque rendez-vous, puis défendre à chaque
+échéance de facture.
+
+### Traduction des dix recommandations en code
+
+Le tableau dit, pour chaque recommandation commerciale, ce que le code doit
+faire — ou pourquoi il n'a rien à faire. **Une recommandation sans solution
+technique n'est pas un manque : c'est un acte de vente, et le noter évite de
+construire une fonctionnalité pour se donner l'impression d'avancer.**
+
+| # | Recommandation | Solution technique |
+|---|---|---|
+| 1 | Vendre la commande perdue | **17.1** — commandes perdues du jour en tête du tableau de bord, à côté du chiffre encaissé |
+| 2 | Choisir le pilote pour son poids social | *Aucune. Acte de vente pur.* Ne rien construire |
+| 3 | Arriver avec sa carte chargée | *Déjà livré* — `setup_restaurant.py` + import CSV tolérant (PR #37) |
+| 4 | Vendre un audit gratuit de quatre soirs | **17.2** — saisie du relevé « avant Tawla » et affichage en face des chiffres mesurés |
+| 5 | Convaincre le serveur avant le patron | **17.3** — encart « ma soirée » sur l'écran serveur : ses propres chiffres, sur son écran, jamais un classement public |
+| 6 | Le prix ne bouge jamais | **17.4** — date de fin de pilote affichée au manager (différé : demande le prix tranché, 14.3 🧑) |
+| 7 | Remonter le calendrier depuis Ramadan | *Déjà livré* — mode ramadan, heure d'iftar, pré-commande (phases 0-11) |
+| 8 | Disqualifier durement à la porte | *Aucune.* Le réseau du restaurant ne se corrige pas en code, il se refuse en rendez-vous |
+| 9 | Accord écrit par pilote | *Aucune.* Document papier, hors du dépôt |
+| 10 | Montrer son chiffre du jour | **17.1** — c'est la même tâche que la 1 |
+
+**17.1 — Le premier écran répond à la première question** (le patron doit
+apprendre ses commandes perdues *en passant*, pendant qu'il regarde sa recette)
+
+Les définitions de « commande perdue » et de « recette » sont extraites dans
+`stats/service.py::_lost_orders` et `::_billable_orders`, partagées par le
+tableau de bord et la page de preuve. Les deux écrans montrent le même jour au
+même homme : s'ils divergeaient d'une seule commande, il cesserait de croire
+les deux — et c'est sur ce chiffre que repose l'argument de vente.
+
+- [x] `GET /api/v1/stats/dashboard/{restaurant_id}` renvoie `revenue_today` et `lost_orders_today` (PR #47) — la donnée existe déjà (`_period_proof`), elle n'est simplement jamais servie comme un total du jour
+- [x] Les deux chiffres en tête de `/dashboard`, avant tout le reste, en gros (PR #47). La recette d'abord : c'est elle qu'il vient chercher tous les soirs, et c'est cette habitude qui empêche la résiliation
+- [x] Les commandes perdues juste à côté, avec leur définition en clair (PR #47) (annulées + jamais prises en charge après 10 min) — un chiffre dont on ne comprend pas la définition ne convainc personne
+
+**17.2 — L'audit avant installation devient un écran** (sans relevé « avant »,
+la preuve d'après ne vaut rien, et un tableur ne se montre pas en rendez-vous)
+
+- [ ] `Restaurant.baseline_*` : commandes perdues par jour et panier moyen relevés **à la main avant** l'installation, saisis par le manager (ou par Wassim à l'installation), + migration
+- [ ] Saisie depuis le dashboard, avec la date du relevé — et rien d'affiché tant que ce n'est pas saisi
+- [ ] La page de preuve affiche « avant Tawla » en face de « mesuré » quand le relevé existe. C'est **la** capture d'écran qui vend le passage au payant
+- [ ] Ne jamais inventer ni pré-remplir ces valeurs : un chiffre « avant » inventé rend toute la démonstration mensongère
+
+**17.3 — Le serveur y trouve son compte** (premier risque de churn : l'équipe
+contourne l'outil, et le patron résilie sans jamais dire pourquoi)
+
+- [x] `GET /api/v1/stats/ma-soiree` — les chiffres du **staff connecté** (PR #47) pour aujourd'hui : commandes prises, montant encaissé, délai moyen de prise en charge
+- [x] Encart en tête de l'écran serveur. Ses chiffres à lui, sur son écran à lui (PR #47) — rafraîchi à la **prise en charge**, pas à l'envoi en cuisine : c'est là que son compteur bouge
+- [x] **Jamais de comparaison avec les collègues, jamais de classement** (PR #47) — l'API elle-même n'envoie aucun nom d'autrui, donc rien ne peut fuiter dans une évolution future de cet écran. Le rapport d'équipe reste un document de direction (14.2) ; le jour où un serveur se découvre classé publiquement, l'équipe est perdue
+
+**17.4 — Fin de pilote visible** 🧑 (différé : demande le prix tranché en 14.3)
+
+- [ ] `Restaurant.pilot_ends_on` + bandeau « pilote gratuit jusqu'au JJ/MM » sur le dashboard. Rend l'échéance explicite au lieu d'une conversation gênante à avoir
 
 ---
 

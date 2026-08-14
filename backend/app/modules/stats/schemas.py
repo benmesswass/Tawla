@@ -32,6 +32,12 @@ class HourlyCount(BaseModel):
 
 class DashboardStats(BaseModel):
     date: date_type
+    # Les deux chiffres de tête (Phase 17.1). La recette est ce que le patron
+    # vient chercher tous les soirs ; les commandes perdues sont posées juste à
+    # côté pour qu'il les apprenne en passant, sans avoir à ouvrir une autre
+    # page. Mêmes définitions que `PeriodProof`, par construction.
+    revenue_today: float
+    lost_orders_today: int
     active_orders_count: int
     timing: TimingStats
     staff_performance: list[StaffPerformance]
@@ -118,3 +124,21 @@ class ProofStats(BaseModel):
 
     current: PeriodProof
     previous: PeriodProof
+
+
+class MyShift(BaseModel):
+    """
+    Ce qu'un serveur voit de sa propre soirée (Phase 17.3).
+
+    Ne porte **que** ses chiffres : aucun nom de collègue, aucun classement,
+    aucun total d'équipe. Ce qui n'est pas envoyé ne peut pas fuiter dans une
+    future interface — et un serveur qui se découvre comparé publiquement à ses
+    collègues contourne l'outil dès le service suivant.
+    """
+
+    date: date_type
+    orders_taken: int
+    total_amount_handled: float
+    # `None` = aucune commande prise, ce qui n'est pas la même chose que zéro
+    # seconde d'attente.
+    avg_seconds_to_claim: float | None
