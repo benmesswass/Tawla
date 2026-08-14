@@ -9,6 +9,8 @@ autonomie.
 Historique des phases 0 à 11 : [`ROADMAP_ARCHIVE.md`](./ROADMAP_ARCHIVE.md).
 Revue d'investissement qui fonde cette roadmap :
 [`REVUE_INVESTISSEURS.md`](./REVUE_INVESTISSEURS.md).
+Audit fonctionnel et business orienté vente, et les dix recommandations pour
+les premiers clients : [`PREMIERES_VENTES.md`](./PREMIERES_VENTES.md).
 
 ## Objectif
 
@@ -224,6 +226,12 @@ chiffre défendable en rendez-vous : « +X % de panier moyen »)
 - [x] Page publique d'accueil — bénéfice, service inclus, contact. **Deux blocs volontairement vides** : les résultats de pilotes (`lib/offer.ts::PILOT_RESULTS`) ne s'affichent que remplis avec des chiffres réellement relevés chez un établissement qui a donné son accord pour être cité, et le prix (`PRICE_MONTHLY_DT`) reste `null` tant que 14.3 n'est pas tranchée — la page affiche alors « tarif communiqué au premier rendez-vous » plutôt qu'un montant que personne n'a arrêté (PR #39)
 - [x] Rapport hebdomadaire par serveur, exportable — le manager s'en sert pour ses primes de rendement. C'est l'angle que les trois concurrents ne mettent pas en avant, et il est déjà à 80 % dans `stats/service.py` (PR #39)
 - [x] Ne **pas** afficher les statistiques nominatives sur les écrans partagés de salle : le rapport est un document de direction, pas un classement public. Vérifier `staff/page.tsx` et `kitchen/page.tsx` sur ce point (PR #39)
+
+**14.4 — Rétention** (issu de l'audit fonctionnel du 2026-08-14, cf.
+[`PREMIERES_VENTES.md`](./PREMIERES_VENTES.md))
+
+- [ ] Afficher le **chiffre encaissé du jour** en tête du tableau de bord manager. La donnée existe déjà (`orders_count` × `avg_basket_amount`), elle n'est jamais montrée comme un total. C'est le seul chiffre qu'un restaurateur cherche chaque soir : sans lui le tableau de bord est une curiosité, avec lui c'est une habitude quotidienne — et une habitude quotidienne est ce qui empêche une résiliation au troisième mois. À faire **avant** le premier pilote
+- [ ] Addition au niveau de la **table** et non de la commande — une table qui commande en deux temps (boissons puis plats) produit aujourd'hui deux additions et deux cartes sur l'écran serveur. **Ne pas construire avant les entretiens de 13.1** : s'ils ne le font pas remonter spontanément, le construire serait deviner
 
 **14.3 — Un seul prix** (remplace la décision « trois paliers » de l'ancienne
 Phase 11, prise avant tout contact client)
