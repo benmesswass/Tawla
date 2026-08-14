@@ -168,6 +168,10 @@ export type HourlyCount = { hour: number; count: number };
 
 export type DashboardStats = {
   date: string;
+  /** Les deux chiffres de tête (Phase 17.1) : ce que le patron vient chercher
+   *  chaque soir, et celui qui justifie l'abonnement, posé juste à côté. */
+  revenue_today: number;
+  lost_orders_today: number;
   active_orders_count: number;
   timing: TimingStats;
   staff_performance: StaffPerformance[];
@@ -208,6 +212,15 @@ export type StaffPeriodReport = {
   orders_taken: number;
   avg_seconds_to_claim: number | null;
   total_amount_handled: number;
+};
+
+/** Ce qu'un membre d'équipe voit de sa propre soirée (Phase 17.3) : ses
+ *  chiffres seuls, aucun collègue, aucun classement. */
+export type MyShift = {
+  date: string;
+  orders_taken: number;
+  total_amount_handled: number;
+  avg_seconds_to_claim: number | null;
 };
 
 export type TeamReport = {
@@ -376,6 +389,7 @@ export const api = {
     request<Order>(`/api/v1/orders/${orderId}/start-preparation`, { method: "POST" }),
   markReady: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/mark-ready`, { method: "POST" }),
   markServed: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/mark-served`, { method: "POST" }),
+  getMyShift: () => request<MyShift>("/api/v1/stats/ma-soiree"),
   getDashboardStats: (restaurantId: number, date?: string) =>
     request<DashboardStats>(
       `/api/v1/stats/dashboard/${restaurantId}${date ? `?date=${date}` : ""}`

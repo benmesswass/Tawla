@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.modules.staff.dependencies import require_role
+from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.stats import schemas, service
 
@@ -13,6 +13,20 @@ router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
 _KITCHEN_OR_MANAGER = require_role(StaffRole.KITCHEN, StaffRole.MANAGER)
+
+
+# Déclarée avant les routes à segment variable : « ma-soiree » n'est pas un
+# identifiant, et n'a aucun `restaurant_id` dans son chemin — le membre
+# d'équipe est identifié par son seul JWT, donc rien à deviner.
+@router.get("/ma-soiree", response_model=schemas.MyShift)
+async def my_shift(
+    date: date_type | None = None,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(get_current_staff),
+):
+    """Sa soirée à lui. Ouverte à tous les rôles : le poste chaud prend rarement
+    des commandes, l'écran doit répondre zéro plutôt que refuser l'accès."""
+    return await service.get_my_shift(db, staff, date or datetime.now(timezone.utc).date())
 
 
 @router.get("/dashboard/{restaurant_id}", response_model=schemas.DashboardStats)

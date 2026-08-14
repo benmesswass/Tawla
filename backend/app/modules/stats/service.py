@@ -17,6 +17,31 @@ from app.modules.stats import schemas
 TUNISIA_UTC_OFFSET_HOURS = 1
 
 
+def _lost_orders(orders: list[Order], now: datetime) -> list[Order]:
+    """
+    Définition unique de « commande perdue » : annulée, ou jamais prise en
+    charge au-delà du seuil d'abandon.
+
+    Partagée par le tableau de bord et la page de preuve. Les deux écrans
+    montrent le même jour au même patron : s'ils divergeaient d'une seule
+    commande, il cesserait de croire les deux — et c'est sur ce chiffre que
+    repose l'argument de vente.
+    """
+    abandoned_before = now - ABANDONED_PENDING_AFTER
+    return [
+        o
+        for o in orders
+        if o.status == OrderStatus.CANCELLED
+        or (o.status == OrderStatus.PENDING_CONFIRMATION and as_utc(o.created_at) < abandoned_before)
+    ]
+
+
+def _billable_orders(orders: list[Order]) -> list[Order]:
+    """Commandes qui comptent dans la recette : tout sauf les annulées. Même
+    ensemble que celui dont la page de preuve tire le panier moyen."""
+    return [o for o in orders if o.status != OrderStatus.CANCELLED]
+
+
 def _average(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
 
@@ -85,8 +110,17 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
         db.query(Order).filter(Order.restaurant_id == restaurant_id, Order.status.in_(ACTIVE_STATUSES)).count()
     )
 
+    # Les deux chiffres que le patron vient chercher (Phase 17.1). Calculés
+    # avec les mêmes règles que la page de preuve : les deux écrans parlent du
+    # même jour au même homme, ils doivent dire la même chose.
+    now = datetime.now(timezone.utc)
+    revenue_today = sum(o.total_amount for o in _billable_orders(orders_today))
+    lost_orders_today = len(_lost_orders(orders_today, now))
+
     return schemas.DashboardStats(
         date=day,
+        revenue_today=revenue_today,
+        lost_orders_today=lost_orders_today,
         active_orders_count=active_orders_count,
         timing=timing,
         staff_performance=staff_performance,
@@ -120,18 +154,14 @@ def _period_proof(
         .all()
     )
 
-    abandoned_before = now - ABANDONED_PENDING_AFTER
-    cancelled = [o for o in orders if o.status == OrderStatus.CANCELLED]
-    abandoned = [
-        o
-        for o in orders
-        if o.status == OrderStatus.PENDING_CONFIRMATION and as_utc(o.created_at) < abandoned_before
-    ]
+    lost = _lost_orders(orders, now)
+    cancelled = [o for o in lost if o.status == OrderStatus.CANCELLED]
+    abandoned = [o for o in lost if o.status != OrderStatus.CANCELLED]
 
     order_to_kitchen = [
         (o.sent_to_kitchen_at - o.created_at).total_seconds() for o in orders if o.sent_to_kitchen_at
     ]
-    paid_orders = [o for o in orders if o.status != OrderStatus.CANCELLED]
+    paid_orders = _billable_orders(orders)
     baskets = [o.total_amount for o in paid_orders]
 
     # Une commande « avec suggestion » est une commande où le client a accepté
@@ -146,7 +176,7 @@ def _period_proof(
         start=start,
         end=end,
         orders_count=len(orders),
-        lost_orders_count=len(cancelled) + len(abandoned),
+        lost_orders_count=len(lost),
         cancelled_count=len(cancelled),
         abandoned_count=len(abandoned),
         avg_order_to_kitchen_seconds=_average(order_to_kitchen),
@@ -252,3 +282,37 @@ async def get_kitchen_today_count(db: Session, restaurant_id: int, day: date_typ
     )
 
     return schemas.KitchenTodayCount(date=day, count=count)
+
+
+async def get_my_shift(db: Session, staff: Staff, day: date_type) -> schemas.MyShift:
+    """
+    La soirée du membre d'équipe connecté (Phase 17.3).
+
+    Le staff vient du JWT, jamais de l'URL : il n'y a donc aucun identifiant à
+    deviner, et personne ne peut demander la soirée d'un autre.
+    """
+    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
+
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(
+            Order.restaurant_id == staff.restaurant_id,
+            Order.taken_by_staff_id == staff.id,
+            Order.created_at >= day_start,
+            Order.created_at < day_end,
+            Order.status != OrderStatus.CANCELLED,
+        )
+        .all()
+    )
+
+    delays = [
+        (as_utc(o.taken_at) - as_utc(o.created_at)).total_seconds() for o in orders if o.taken_at
+    ]
+    return schemas.MyShift(
+        date=day,
+        orders_taken=len(orders),
+        total_amount_handled=sum(o.total_amount for o in orders),
+        avg_seconds_to_claim=_average(delays),
+    )
