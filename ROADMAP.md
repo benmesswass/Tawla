@@ -313,9 +313,9 @@ tableau de bord et la page de preuve. Les deux écrans montrent le même jour au
 même homme : s'ils divergeaient d'une seule commande, il cesserait de croire
 les deux — et c'est sur ce chiffre que repose l'argument de vente.
 
-- [x] `GET /api/v1/stats/dashboard/{restaurant_id}` renvoie `revenue_today` et `lost_orders_today` (PR #47) — la donnée existe déjà (`_period_proof`), elle n'est simplement jamais servie comme un total du jour
-- [x] Les deux chiffres en tête de `/dashboard`, avant tout le reste, en gros (PR #47). La recette d'abord : c'est elle qu'il vient chercher tous les soirs, et c'est cette habitude qui empêche la résiliation
-- [x] Les commandes perdues juste à côté, avec leur définition en clair (PR #47) (annulées + jamais prises en charge après 10 min) — un chiffre dont on ne comprend pas la définition ne convainc personne
+- [x] `GET /api/v1/stats/dashboard/{restaurant_id}` renvoie `revenue_today` et `lost_orders_today` (PR #46) — la donnée existe déjà (`_period_proof`), elle n'est simplement jamais servie comme un total du jour
+- [x] Les deux chiffres en tête de `/dashboard`, avant tout le reste, en gros (PR #46). La recette d'abord : c'est elle qu'il vient chercher tous les soirs, et c'est cette habitude qui empêche la résiliation
+- [x] Les commandes perdues juste à côté, avec leur définition en clair (PR #46) (annulées + jamais prises en charge après 10 min) — un chiffre dont on ne comprend pas la définition ne convainc personne
 
 **17.2 — L'audit avant installation devient un écran** (sans relevé « avant »,
 la preuve d'après ne vaut rien, et un tableur ne se montre pas en rendez-vous)
@@ -328,9 +328,9 @@ la preuve d'après ne vaut rien, et un tableur ne se montre pas en rendez-vous)
 **17.3 — Le serveur y trouve son compte** (premier risque de churn : l'équipe
 contourne l'outil, et le patron résilie sans jamais dire pourquoi)
 
-- [x] `GET /api/v1/stats/ma-soiree` — les chiffres du **staff connecté** (PR #47) pour aujourd'hui : commandes prises, montant encaissé, délai moyen de prise en charge
-- [x] Encart en tête de l'écran serveur. Ses chiffres à lui, sur son écran à lui (PR #47) — rafraîchi à la **prise en charge**, pas à l'envoi en cuisine : c'est là que son compteur bouge
-- [x] **Jamais de comparaison avec les collègues, jamais de classement** (PR #47) — l'API elle-même n'envoie aucun nom d'autrui, donc rien ne peut fuiter dans une évolution future de cet écran. Le rapport d'équipe reste un document de direction (14.2) ; le jour où un serveur se découvre classé publiquement, l'équipe est perdue
+- [x] `GET /api/v1/stats/ma-soiree` — les chiffres du **staff connecté** (PR #46) pour aujourd'hui : commandes prises, montant encaissé, délai moyen de prise en charge
+- [x] Encart en tête de l'écran serveur. Ses chiffres à lui, sur son écran à lui (PR #46) — rafraîchi à la **prise en charge**, pas à l'envoi en cuisine : c'est là que son compteur bouge
+- [x] **Jamais de comparaison avec les collègues, jamais de classement** (PR #46) — l'API elle-même n'envoie aucun nom d'autrui, donc rien ne peut fuiter dans une évolution future de cet écran. Le rapport d'équipe reste un document de direction (14.2) ; le jour où un serveur se découvre classé publiquement, l'équipe est perdue
 
 **17.4 — Fin de pilote visible** 🧑 (différé : demande le prix tranché en 14.3)
 
