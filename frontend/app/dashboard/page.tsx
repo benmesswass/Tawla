@@ -988,8 +988,9 @@ export default function DashboardPage() {
                 setSavingPlan(true);
                 setError(null);
                 try {
+                  // Pas de message de succès : l'éditeur enregistre tout seul,
+                  // un bandeau vert à chaque table déplacée serait du bruit.
                   setTables(await api.savePlan(restaurantId, placements));
-                  setMessage("Plan de salle enregistré.");
                 } catch (e) {
                   setError(toFrenchMessage(e));
                 } finally {

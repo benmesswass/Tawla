@@ -140,6 +140,34 @@ def test_the_plan_comes_back_with_the_tables(client, salle):
     assert non_posee["pos_x"] is None
 
 
+def test_the_number_of_covers_is_kept(client, db_session, salle):
+    """Le manager règle des couverts, pas des formes : c'est le nombre de
+    couverts qui dessine les chaises autour de la table côté service."""
+    restaurant, tables = salle
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+
+    _plan(client, restaurant, manager, [
+        {"table_id": tables[0].id, "pos_x": 20.0, "pos_y": 20.0, "shape": "rect", "seats": 8},
+        {"table_id": tables[1].id, "pos_x": 60.0, "pos_y": 20.0},
+    ])
+
+    db_session.expire_all()
+    assert db_session.get(Table, tables[0].id).seats == 8
+    # Sans précision, une table est une table de quatre — jamais zéro couvert.
+    assert db_session.get(Table, tables[1].id).seats == 4
+
+
+def test_an_impossible_number_of_covers_is_refused(client, salle):
+    restaurant, tables = salle
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+
+    for couverts in (0, 40):
+        response = _plan(client, restaurant, manager, [
+            {"table_id": tables[0].id, "pos_x": 20.0, "pos_y": 20.0, "seats": couverts},
+        ])
+        assert response.status_code == 422, couverts
+
+
 def test_moving_a_table_replaces_its_position(client, db_session, salle):
     restaurant, tables = salle
     manager = create_staff(restaurant.id, StaffRole.MANAGER)

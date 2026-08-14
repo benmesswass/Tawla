@@ -105,45 +105,53 @@
 
 /* ==========================================================================
    Plan de salle (Phase 18)
-   Le plan se lit à trois mètres, sur un téléphone tenu à la main pendant le
-   service. D'où : peu de couleurs, des contrastes francs, aucun clignotement.
+   Contraste inversé volontairement : sol sombre, plateaux clairs. C'est ce qui
+   fait qu'une table qui attend est la seule chose colorée de l'écran, y compris
+   dans une salle peu éclairée. Le plan se lit à trois mètres, sur un téléphone
+   tenu à la main pendant le service.
    ========================================================================== */
 
 .plan-surface {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
-  border-radius: 18px;
-  border: 1px solid var(--line);
+  border-radius: 16px;
   overflow: hidden;
   touch-action: none; /* le doigt déplace une table, il ne fait pas défiler */
-  /* Un sol, pas une carte : une trame très basse qui donne l'échelle sans
-     jamais concurrencer les tables. */
-  background-color: var(--semoule-raised);
-  background-image:
-    radial-gradient(circle at 50% 0%, rgba(214, 64, 30, 0.05), transparent 60%),
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 100% 100%, 40px 40px, 40px 40px;
-  background-position: 0 0, -1px -1px, -1px -1px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #3a2b1f 0%, #241a13 70%);
+  border: 1px solid rgba(0, 0, 0, .35);
+  box-shadow: inset 0 1px 0 rgba(246, 239, 221, .06);
 }
 .plan-surface[data-editable] { cursor: grab; }
+/* La grille n'existe qu'en aménagement, et seulement comme points d'accroche :
+   en service, le sol est nu pour que rien ne concurrence les tables. */
+.plan-surface[data-editable]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(246, 239, 221, .13) 1.4px, transparent 1.4px);
+  background-size: 8% 10.666%;
+  background-position: 0 0;
+  pointer-events: none;
+}
 
+/* Une zone est un sol à peine plus clair, jamais un rectangle en pointillés —
+   qui se lisait comme une sélection. */
 .plan-zone {
   position: absolute;
-  border: 1px dashed var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.35);
+  border-radius: 18px;
+  background: rgba(246, 239, 221, .05);
   pointer-events: none;
 }
 .plan-zone-nom {
   position: absolute;
-  top: 8px;
+  top: 7px;
   left: 12px;
   font-size: 10px;
-  letter-spacing: 0.14em;
+  letter-spacing: .16em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: rgba(246, 239, 221, .42);
 }
 
 .plan-emplacement {
@@ -151,11 +159,12 @@
   transform: translate(-50%, -50%);
   touch-action: none;
 }
-/* Sur un téléphone le plan garde les proportions de la vraie salle (les
-   positions sont en pourcentage) : ce sont les tables qu'on réduit, sinon
-   elles couvrent la moitié de la pièce. */
+/* Sur un téléphone, réduire les tables a une limite : sous ~0,7 l'étiquette
+   n'est plus lisible à bout de bras. On rend donc la salle plus carrée pour
+   récupérer de la place en hauteur, au lieu de rapetisser encore. */
 @media (max-width: 520px) {
-  .plan-emplacement { transform: translate(-50%, -50%) scale(0.78); }
+  .plan-emplacement { transform: translate(-50%, -50%) scale(0.72); }
+  .plan-surface { aspect-ratio: 1 / 1; }
 }
 
 .plan-vide {
@@ -166,7 +175,7 @@
   padding: 0 32px;
   margin: 0;
   text-align: center;
-  color: var(--ink-soft);
+  color: rgba(246, 239, 221, .5);
   font-size: 14px;
 }
 
@@ -175,52 +184,57 @@
 .piece {
   position: relative;
   display: grid;
-  place-content: center;
-  gap: 2px;
+  place-items: center;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--encre);
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: transform .14s ease;
 }
-.piece:hover { transform: scale(1.04); }
-.piece:active { transform: scale(0.97); }
-.piece:focus-visible { outline: 2px solid var(--harissa); outline-offset: 6px; border-radius: 8px; }
+.piece:hover { transform: scale(1.05); }
+.piece:active { transform: scale(.97); }
+.piece:focus-visible { outline: 2px solid #ff8a5c; outline-offset: 4px; border-radius: 10px; }
 .plan-surface[data-editable] .piece { cursor: grab; }
 .piece[data-deplacement] { transform: scale(1.08); cursor: grabbing; }
 
-.anneau { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.anneau-fond { fill: var(--semoule); stroke: var(--line); stroke-width: 2; }
-.anneau-jauge {
+.dessin { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.chaise { fill: rgba(246, 239, 221, .30); }
+.plateau {
+  fill: #efe4ce;
+  stroke: rgba(36, 24, 17, .22);
+  stroke-width: 1.5;
+}
+.jauge {
   fill: none;
-  stroke: currentColor;
-  stroke-width: 3;
+  stroke: #ff8a5c;
+  stroke-width: 4;
   stroke-linecap: round;
   /* Le décompte part du haut de la table et tourne dans le sens horaire. */
   transform: rotate(-90deg);
   transform-origin: center;
-  transition: stroke-dashoffset 0.6s linear;
+  transition: stroke-dashoffset .6s linear;
 }
 
-.piece[data-tone="cuisine"] .anneau-fond { fill: #e8eef1; stroke: #b9cbd4; }
-.piece[data-tone="appelle"] .anneau-fond { fill: var(--harissa); stroke: var(--harissa-dark); }
-.piece[data-tone="appelle"] { color: #ffe9d8; }
-.piece[data-tone="appelle"] .etiquette,
-.piece[data-tone="appelle"] .minutes { color: #fff; }
+.piece[data-tone="cuisine"] .plateau { fill: #cdc2ae; stroke: #8fb0c4; stroke-width: 2.5; }
+.piece[data-tone="appelle"] .plateau { fill: #d6401e; stroke: #b8341a; }
+.piece[data-tone="appelle"] .chaise { fill: rgba(255, 180, 150, .45); }
 
-.piece[data-selectionnee] .anneau-fond { stroke: var(--encre); stroke-width: 3; }
+.piece[data-selectionnee] .plateau { stroke: #ff8a5c; stroke-width: 3; }
 
-.etiquette {
+.contenu {
   position: relative;
-  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  max-width: 78%;
+  pointer-events: none;
+}
+.etiquette {
+  font-size: 11.5px;
   font-weight: 600;
   line-height: 1.15;
-  /* Largeur fixe et non `max-width` : en grille, une largeur automatique
-     réduit la colonne à la lettre la plus large et « T7 » se couperait en
-     « T » / « 7 ». */
-  width: 86%;
-  margin: 0 auto;
+  color: #241811;
   text-align: center;
   /* Deux lignes plutôt qu'une troncature : « Terrasse 2 » doit se lire en
      entier, sinon le plan ne dit plus de quelle table il parle. */
@@ -231,37 +245,78 @@
   overflow-wrap: break-word;
 }
 .minutes {
-  position: relative;
-  font-size: 10px;
+  font-size: 9.5px;
   font-variant-numeric: tabular-nums;
-  color: var(--ink-soft);
+  color: rgba(36, 24, 17, .62);
   line-height: 1;
+  white-space: nowrap;
 }
+.piece[data-tone="appelle"] .etiquette { color: #fff; }
+.piece[data-tone="appelle"] .minutes { color: rgba(255, 255, 255, .88); }
+
 /* La table prise par le serveur connecté : un repère discret, jamais un
    classement — le rapport nominatif reste un document de direction. */
 .mienne {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 22%;
+  right: 22%;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--encre);
-  opacity: 0.5;
+  background: rgba(36, 24, 17, .45);
 }
-.piece[data-tone="appelle"] .mienne { background: #fff; opacity: 0.85; }
+.piece[data-tone="appelle"] .mienne { background: rgba(255, 255, 255, .85); }
 
 /* Une seule table respire, la plus urgente. Trois en feraient un sapin. */
 @keyframes plan-respire {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 64, 30, 0.45); }
-  50% { box-shadow: 0 0 0 12px rgba(214, 64, 30, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 92, .45); }
+  50% { box-shadow: 0 0 0 14px rgba(255, 138, 92, 0); }
 }
 .piece[data-urgente] {
   border-radius: 999px;
-  animation: plan-respire 2.4s ease-out infinite;
+  animation: plan-respire 2.6s ease-out infinite;
 }
+
+/* --- Agir depuis la table ------------------------------------------------ */
+/* Le serveur ne doit pas redescendre dans une liste pour faire ce que le plan
+   vient de lui signaler. */
+/* Le panneau d'action est posé sous la salle, pas dessus : en surimpression il
+   masquait la table dont il parle, et sur un téléphone la moitié du plan. */
+.plan-action {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  background: rgba(20, 13, 9, .94);
+  border: 1px solid rgba(246, 239, 221, .18);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #f3ead8;
+}
+.plan-action .quoi { font-size: 13px; line-height: 1.3; }
+.plan-action .quoi b { display: block; font-size: 14px; }
+.plan-action .boutons { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-action button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 0;
+  background: #d6401e;
+  color: #fff;
+  cursor: pointer;
+}
+.plan-action button.secondaire {
+  background: transparent;
+  border: 1px solid rgba(246, 239, 221, .28);
+  color: #f3ead8;
+  font-weight: 500;
+}
+.plan-action button:focus-visible { outline: 2px solid #ff8a5c; outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .piece[data-urgente] { animation: none; }
-  .piece, .anneau-jauge { transition: none; }
+  .piece, .jauge { transition: none; }
 }

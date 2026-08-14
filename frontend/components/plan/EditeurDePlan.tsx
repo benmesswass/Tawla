@@ -1,26 +1,45 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PlanTable, TableShape } from "@/lib/api";
 import PlanDeSalle from "./PlanDeSalle";
-import Button from "@/components/ui/Button";
 
 /**
  * Le manager dessine sa salle (Phase 18).
  *
- * Une table nouvellement créée n'apparaît pas sur le plan : elle attend dans
- * la réserve, en dessous. Les poser d'office empilerait toute la salle dans un
- * coin, et le manager devrait défaire avant de faire.
+ * Deux partis pris, tirés du seul critère qui compte ici — un restaurateur
+ * doit pouvoir poser sa salle sans qu'on lui explique :
  *
- * Rien n'est enregistré tant qu'il n'a pas validé : déplacer six tables est
- * une seule intention, pas six.
+ * 1. **Rien à enregistrer.** Le plan se sauvegarde tout seul une seconde après
+ *    le dernier geste. Un bouton « Enregistrer » ne sert qu'à donner au manager
+ *    l'occasion de perdre son travail en fermant l'onglet.
+ * 2. **On règle des couverts, pas des formes.** Personne ne se dit « ma table
+ *    est rectangulaire » ; il se dit « c'est une table de six ». La forme suit
+ *    le nombre de couverts, et reste rattrapable pour les cas particuliers.
+ *
+ * Une table nouvellement créée n'apparaît pas d'office sur le plan : elle
+ * attend dans la réserve, en dessous. Les poser toutes empilerait la salle
+ * dans un coin, et le manager devrait défaire avant de faire.
  */
+
+const COUVERTS = [2, 4, 6, 8];
 
 const FORMES: { valeur: TableShape; nom: string }[] = [
   { valeur: "round", nom: "Ronde" },
   { valeur: "square", nom: "Carrée" },
-  { valeur: "rect", nom: "Rectangulaire" },
+  { valeur: "rect", nom: "Longue" },
 ];
+
+/** Temps de calme après le dernier geste avant d'écrire. */
+const DELAI_ENREGISTREMENT = 1000;
+
+export type Placement = {
+  table_id: number;
+  pos_x: number;
+  pos_y: number;
+  shape: TableShape;
+  seats: number;
+};
 
 export default function EditeurDePlan({
   tables,
@@ -28,9 +47,7 @@ export default function EditeurDePlan({
   enregistrement = false,
 }: {
   tables: PlanTable[];
-  onEnregistrer: (
-    placements: { table_id: number; pos_x: number; pos_y: number; shape: TableShape }[]
-  ) => Promise<void> | void;
+  onEnregistrer: (placements: Placement[]) => Promise<void> | void;
   enregistrement?: boolean;
 }) {
   const [brouillon, setBrouillon] = useState<PlanTable[]>(tables);
@@ -49,10 +66,30 @@ export default function EditeurDePlan({
   const enReserve = useMemo(() => brouillon.filter((t) => t.pos_x === null), [brouillon]);
   const tableSelectionnee = brouillon.find((t) => t.id === selectionnee) ?? null;
 
+  // Enregistrement automatique. La référence évite de relancer le compte à
+  // rebours quand seule l'identité de la fonction parente change.
+  const enregistrerRef = useRef(onEnregistrer);
+  enregistrerRef.current = onEnregistrer;
+
+  useEffect(() => {
+    if (!modifie) return;
+    const t = setTimeout(async () => {
+      await enregistrerRef.current(
+        posees.map((t) => ({
+          table_id: t.id,
+          pos_x: t.pos_x as number,
+          pos_y: t.pos_y as number,
+          shape: t.shape,
+          seats: t.seats,
+        }))
+      );
+      setModifie(false);
+    }, DELAI_ENREGISTREMENT);
+    return () => clearTimeout(t);
+  }, [modifie, posees]);
+
   function deplacer(tableId: number, x: number, y: number) {
-    setBrouillon((prev) =>
-      prev.map((t) => (t.id === tableId ? { ...t, pos_x: x, pos_y: y } : t))
-    );
+    setBrouillon((prev) => prev.map((t) => (t.id === tableId ? { ...t, pos_x: x, pos_y: y } : t)));
     setModifie(true);
   }
 
@@ -63,7 +100,7 @@ export default function EditeurDePlan({
     setBrouillon((prev) =>
       prev.map((t) =>
         t.id === tableId
-          ? { ...t, pos_x: 40 + ((rang * 13) % 30), pos_y: 35 + ((rang * 17) % 30) }
+          ? { ...t, pos_x: 40 + ((rang * 12) % 24), pos_y: 36 + ((rang * 16) % 28) }
           : t
       )
     );
@@ -79,23 +116,34 @@ export default function EditeurDePlan({
     setModifie(true);
   }
 
+  function changerCouverts(n: number) {
+    if (selectionnee === null) return;
+    setBrouillon((prev) =>
+      prev.map((t) =>
+        t.id === selectionnee
+          ? // Au-delà de quatre couverts, une table ronde n'existe presque plus
+            // en salle : on bascule sur la table longue, que le manager peut
+            // toujours corriger juste en dessous.
+            { ...t, seats: n, shape: n >= 6 ? "rect" : t.shape }
+          : t
+      )
+    );
+    setModifie(true);
+  }
+
   function changerForme(forme: TableShape) {
     if (selectionnee === null) return;
     setBrouillon((prev) => prev.map((t) => (t.id === selectionnee ? { ...t, shape: forme } : t)));
     setModifie(true);
   }
 
-  async function enregistrer() {
-    await onEnregistrer(
-      posees.map((t) => ({
-        table_id: t.id,
-        pos_x: t.pos_x as number,
-        pos_y: t.pos_y as number,
-        shape: t.shape,
-      }))
-    );
-    setModifie(false);
-  }
+  const etatEnregistrement = enregistrement
+    ? "Enregistrement…"
+    : modifie
+      ? "Modifications en cours…"
+      : posees.length > 0
+        ? "Enregistré"
+        : "";
 
   return (
     <div className="flex flex-col gap-4">
@@ -107,18 +155,35 @@ export default function EditeurDePlan({
         tableSelectionnee={selectionnee}
       />
 
-      {tableSelectionnee && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-medium">{tableSelectionnee.label}</span>
+      {tableSelectionnee ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3 text-sm">
+          <span className="font-medium mr-1">{tableSelectionnee.label}</span>
+          <span className="text-neutral-500">couverts</span>
+          {COUVERTS.map((n) => (
+            <button
+              key={n}
+              onClick={() => changerCouverts(n)}
+              className={`h-9 w-9 rounded-lg border ${
+                tableSelectionnee.seats === n
+                  ? "border-[var(--harissa)] text-[var(--harissa)] font-semibold"
+                  : "border-[var(--line)] text-neutral-600"
+              }`}
+              aria-pressed={tableSelectionnee.seats === n}
+            >
+              {n}
+            </button>
+          ))}
+          <span className="mx-1 h-5 w-px bg-[var(--line)]" aria-hidden="true" />
           {FORMES.map((f) => (
             <button
               key={f.valeur}
               onClick={() => changerForme(f.valeur)}
-              className={`rounded-lg border px-3 py-1 ${
+              className={`rounded-lg border px-3 py-1.5 ${
                 tableSelectionnee.shape === f.valeur
                   ? "border-[var(--harissa)] text-[var(--harissa)]"
                   : "border-[var(--line)] text-neutral-600"
               }`}
+              aria-pressed={tableSelectionnee.shape === f.valeur}
             >
               {f.nom}
             </button>
@@ -130,6 +195,12 @@ export default function EditeurDePlan({
             Retirer du plan
           </button>
         </div>
+      ) : (
+        posees.length > 0 && (
+          <p className="text-sm text-neutral-500">
+            Touchez une table du plan pour changer son nombre de couverts ou sa forme.
+          </p>
+        )
       )}
 
       {enReserve.length > 0 && (
@@ -152,12 +223,11 @@ export default function EditeurDePlan({
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <Button onClick={enregistrer} disabled={!modifie || enregistrement}>
-          {enregistrement ? "Enregistrement..." : "Enregistrer le plan"}
-        </Button>
-        {modifie && <span className="text-sm text-neutral-500">Modifications non enregistrées</span>}
-      </div>
+      {etatEnregistrement && (
+        <p className="text-sm text-neutral-500" aria-live="polite">
+          {etatEnregistrement}
+        </p>
+      )}
     </div>
   );
 }

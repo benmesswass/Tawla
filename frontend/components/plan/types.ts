@@ -11,6 +11,7 @@ export type PlanTable = {
   pos_x: number | null;
   pos_y: number | null;
   shape: TableShape;
+  seats: number;
 };
 
 /**

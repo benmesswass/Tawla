@@ -21,6 +21,7 @@ class TableOut(BaseModel):
     pos_x: float | None
     pos_y: float | None
     shape: TableShape
+    seats: int
 
 
 class TableAssignStaff(BaseModel):
@@ -48,6 +49,7 @@ class TablePlanOut(BaseModel):
     pos_x: float | None
     pos_y: float | None
     shape: TableShape
+    seats: int
 
 
 class TablePlacement(BaseModel):
@@ -58,6 +60,9 @@ class TablePlacement(BaseModel):
     pos_x: float = Field(ge=0, le=100)
     pos_y: float = Field(ge=0, le=100)
     shape: TableShape = TableShape.ROUND
+    # Borné : deux couverts au minimum, huit au-delà desquels on dessine une
+    # banquette de mariage, pas une table de restaurant.
+    seats: int = Field(default=4, ge=1, le=12)
 
 
 class PlanUpdate(BaseModel):
