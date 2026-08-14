@@ -26,6 +26,7 @@ export type Table = {
   pos_x: number | null;
   pos_y: number | null;
   shape: "round" | "square" | "rect";
+  seats: number;
 };
 
 /**
@@ -239,6 +240,7 @@ export type PlanTable = {
   pos_x: number | null;
   pos_y: number | null;
   shape: TableShape;
+  seats: number;
 };
 
 export type TeamReport = {
@@ -411,7 +413,7 @@ export const api = {
   getPlan: (restaurantId: number) => request<PlanTable[]>(`/api/v1/tables/plan/${restaurantId}`),
   savePlan: (
     restaurantId: number,
-    placements: { table_id: number; pos_x: number; pos_y: number; shape: TableShape }[]
+    placements: { table_id: number; pos_x: number; pos_y: number; shape: TableShape; seats: number }[]
   ) =>
     request<Table[]>(`/api/v1/tables/plan/${restaurantId}`, {
       method: "PUT",

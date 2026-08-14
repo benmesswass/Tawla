@@ -357,6 +357,9 @@ une table est occupée ou ne l'est pas.
 - [x] Vue serveur en direct, alimentée par les **mêmes listes** que celles affichées dessous : deux sources finiraient par se contredire, et un plan qui ment est pire qu'aucun plan (PR #48)
 - [x] L'anneau autour d'une table est un **compte à rebours avant perte** : il se referme exactement à `ABANDONED_PENDING_AFTER`, le seuil dont la page de preuve tire l'argent perdu (PR #48)
 - [x] Pas de clignotement — ignoré au bout de dix minutes ou insupportable. Seule la table la plus urgente respire, et rien ne bouge sous `prefers-reduced-motion` (PR #48)
+- [x] **18.1 — Agir depuis le plan** : toucher une table propose l'action qu'elle attend (prendre, envoyer en cuisine, servir, encaisser, répondre à un appel). Sans ça le plan ne faisait que signaler, et le serveur redescendait dans la liste pour agir — le plan n'était qu'une décoration posée sur une liste (PR #49)
+- [x] **18.2 — L'éditeur n'a plus de bouton** : le plan s'enregistre seul une seconde après le dernier geste. Un bouton « Enregistrer » n'offre au manager que l'occasion de perdre son travail (PR #49)
+- [x] **18.3 — Régler des couverts, pas des formes** : personne ne se dit « ma table est rectangulaire », il se dit « c'est une table de six ». `Table.seats` + migration, les chaises dessinées autour du plateau, la forme suit le nombre de couverts et reste rattrapable (PR #49)
 - [ ] **Borner les commandes actives dans le temps** — le plan a rendu le défaut visible : deux tables restaient rouges avec « +1 h » pour des commandes abandonnées la veille. Arbitrage produit à trancher avec Wassim (masquer au-delà de N heures ? un bouton « classer sans suite » pour le serveur ?)
 - [ ] Confronter le plan aux entretiens de 13.1 : les zones suffisaient-elles, ou le plan dessiné change-t-il vraiment la conversation ?
 

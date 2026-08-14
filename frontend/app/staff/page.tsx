@@ -14,6 +14,8 @@ import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import MaSoiree from "@/components/MaSoiree";
 import PlanDeSalle from "@/components/plan/PlanDeSalle";
+import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
+import { ETAT_LIBRE } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
@@ -292,6 +294,28 @@ export default function StaffPage() {
   );
 
   const salleDessinee = plan.some((t) => t.pos_x !== null && t.pos_y !== null);
+  const tableActive = tableOuverte === null ? null : plan.find((t) => t.id === tableOuverte) ?? null;
+
+  /**
+   * Ce que le serveur peut faire pour la table qu'il vient de toucher.
+   *
+   * Sans ça le plan ne fait que signaler : il faut redescendre dans la liste et
+   * retrouver la bonne carte. Toutes les actions sont les mêmes qu'en bas de
+   * page — c'est le même appel API, pas un chemin parallèle.
+   */
+  function actionsPourTable(tableId: number): ActionsTable {
+    const appel = waiterCalls.find((c) => c.table_id === tableId);
+    const aPrendre = pending.find((o) => o.table_id === tableId);
+    const aServir = readyToServe.find((o) => o.table_id === tableId);
+    const addition = cashRequests.find((o) => o.table_id === tableId);
+    return {
+      resoudreAppel: appel ? () => resolveWaiterCall(appel.call_id) : undefined,
+      prendreEnCharge: aPrendre ? () => claim(aPrendre.order_id) : undefined,
+      envoyerEnCuisine: aPrendre ? () => confirmAndSend(aPrendre.order_id) : undefined,
+      servir: aServir ? () => markServed(aServir.order_id) : undefined,
+      encaisser: addition ? () => confirmCash(addition.order_id) : undefined,
+    };
+  }
 
   async function claim(orderId: number) {
     setError(null);
@@ -484,12 +508,22 @@ export default function StaffPage() {
               <PlanDeSalle
                 tables={plan}
                 etats={etatsDesTables}
-                onTableActivee={(t) => setTableOuverte(t.id)}
+                onTableActivee={(t) => setTableOuverte((ouverte) => (ouverte === t.id ? null : t.id))}
                 tableSelectionnee={tableOuverte}
+                action={
+                  tableActive && (
+                    <ActionTable
+                      table={tableActive}
+                      etat={etatsDesTables[tableActive.id] ?? ETAT_LIBRE}
+                      actions={actionsPourTable(tableActive.id)}
+                      onFermer={() => setTableOuverte(null)}
+                    />
+                  )
+                }
               />
               <p className="text-xs text-neutral-500 mt-2">
-                L&apos;anneau se referme au bout de dix minutes : c&apos;est le moment où la
-                commande est comptée perdue.
+                Touchez une table pour agir dessus. L&apos;anneau se referme au bout de dix
+                minutes : c&apos;est le moment où la commande est comptée perdue.
               </p>
             </>
           )}

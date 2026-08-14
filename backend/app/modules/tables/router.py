@@ -131,6 +131,7 @@ def save_plan(
         table.pos_x = placement.pos_x
         table.pos_y = placement.pos_y
         table.shape = placement.shape
+        table.seats = placement.seats
     db.commit()
 
     return (

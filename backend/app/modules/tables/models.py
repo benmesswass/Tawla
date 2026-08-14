@@ -49,3 +49,7 @@ class Table(Base):
     pos_x: Mapped[float | None] = mapped_column(Float, nullable=True)
     pos_y: Mapped[float | None] = mapped_column(Float, nullable=True)
     shape: Mapped[TableShape] = mapped_column(Enum(TableShape), default=TableShape.ROUND)
+    # Nombre de couverts. C'est le réglage principal du plan : un restaurateur
+    # pense « une table de 4 », pas « un carré ». La forme reste un détail
+    # secondaire, et le nombre de chaises dessinées en découle.
+    seats: Mapped[int] = mapped_column(Integer, default=4)

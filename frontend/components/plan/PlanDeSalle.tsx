@@ -27,6 +27,12 @@ type Props = {
   /** Mode éditeur : les tables se déplacent à la souris ou au doigt. */
   editable?: boolean;
   onDeplacer?: (tableId: number, x: number, y: number) => void;
+  /**
+   * Panneau d'action pour la table sélectionnée. Rendu **sous** la salle et
+   * non par-dessus : posé en surimpression, il recouvrait justement la table
+   * dont il parle — et sur un téléphone, la moitié de la salle avec.
+   */
+  action?: React.ReactNode;
 };
 
 function zonesDessinees(tables: PlanTable[]) {
@@ -57,6 +63,7 @@ export default function PlanDeSalle({
   tableSelectionnee = null,
   editable = false,
   onDeplacer,
+  action,
 }: Props) {
   const surface = useRef<HTMLDivElement>(null);
   const [attrapee, setAttrapee] = useState<number | null>(null);
@@ -96,73 +103,83 @@ export default function PlanDeSalle({
   function positionDepuisEvenement(e: React.PointerEvent) {
     const boite = surface.current?.getBoundingClientRect();
     if (!boite) return null;
-    // Bornée : une table ne doit pas pouvoir être lâchée hors du plan.
+    // Bornée à 4 % des murs : au ras du bord, une table déborde du cadre et se
+    // fait rogner — surtout sur un téléphone, où la salle est plus étroite que
+    // les tables ne sont petites.
+    // Aimantation sur une grille de 4 % : la salle reste droite sans que le
+    // manager ait à viser, et deux tables alignées le restent.
+    const pas = 4;
+    const aimante = (v: number) => Math.round(Math.min(96, Math.max(4, v)) / pas) * pas;
     return {
-      x: Math.min(100, Math.max(0, ((e.clientX - boite.left) / boite.width) * 100)),
-      y: Math.min(100, Math.max(0, ((e.clientY - boite.top) / boite.height) * 100)),
+      x: aimante(((e.clientX - boite.left) / boite.width) * 100),
+      y: aimante(((e.clientY - boite.top) / boite.height) * 100),
     };
   }
 
   return (
-    <div className="plan-surface" ref={surface} data-editable={editable ? "" : undefined}>
-      {zones.map((z) => (
-        <div
-          key={z.nom}
-          className="plan-zone"
-          style={{
-            left: `${z.gauche}%`,
-            top: `${z.haut}%`,
-            width: `${z.droite - z.gauche}%`,
-            height: `${z.bas - z.haut}%`,
-          }}
-        >
-          <span className="plan-zone-nom">{z.nom}</span>
-        </div>
-      ))}
+    <div className="plan-cadre">
+      <div className="plan-surface" ref={surface} data-editable={editable ? "" : undefined}>
+        {zones.map((z) => (
+          <div
+            key={z.nom}
+            className="plan-zone"
+            style={{
+              left: `${z.gauche}%`,
+              top: `${z.haut}%`,
+              width: `${z.droite - z.gauche}%`,
+              height: `${z.bas - z.haut}%`,
+            }}
+          >
+            <span className="plan-zone-nom">{z.nom}</span>
+          </div>
+        ))}
 
-      {posees.map((table) => (
-        <div
-          key={table.id}
-          className="plan-emplacement"
-          style={{ left: `${table.pos_x}%`, top: `${table.pos_y}%` }}
-          onPointerDown={
-            editable
-              ? (e) => {
-                  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-                  setAttrapee(table.id);
-                }
-              : undefined
-          }
-          onPointerMove={
-            editable && attrapee === table.id
-              ? (e) => {
-                  const p = positionDepuisEvenement(e);
-                  if (p) onDeplacer?.(table.id, p.x, p.y);
-                }
-              : undefined
-          }
-          onPointerUp={editable ? () => setAttrapee(null) : undefined}
-          onPointerCancel={editable ? () => setAttrapee(null) : undefined}
-        >
-          <PieceTable
-            table={table}
-            etat={etats[table.id] ?? ETAT_LIBRE}
-            maintenant={maintenant}
-            laPlusUrgente={table.id === laPlusUrgente}
-            selectionnee={table.id === tableSelectionnee}
-            enDeplacement={attrapee === table.id}
-            onActiver={editable ? undefined : () => onTableActivee?.(table)}
-          />
-        </div>
-      ))}
+        {posees.map((table) => (
+          <div
+            key={table.id}
+            className="plan-emplacement"
+            style={{ left: `${table.pos_x}%`, top: `${table.pos_y}%` }}
+            onPointerDown={
+              editable
+                ? (e) => {
+                    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+                    setAttrapee(table.id);
+                  }
+                : undefined
+            }
+            onPointerMove={
+              editable && attrapee === table.id
+                ? (e) => {
+                    const p = positionDepuisEvenement(e);
+                    if (p) onDeplacer?.(table.id, p.x, p.y);
+                  }
+                : undefined
+            }
+            onPointerUp={editable ? () => setAttrapee(null) : undefined}
+            onPointerCancel={editable ? () => setAttrapee(null) : undefined}
+          >
+            <PieceTable
+              table={table}
+              etat={etats[table.id] ?? ETAT_LIBRE}
+              maintenant={maintenant}
+              laPlusUrgente={table.id === laPlusUrgente}
+              selectionnee={table.id === tableSelectionnee}
+              enDeplacement={attrapee === table.id}
+              onActiver={() => onTableActivee?.(table)}
+            />
+          </div>
+        ))}
 
-      {posees.length === 0 && (
-        <p className="plan-vide">
-          {editable
-            ? "Faites glisser vos tables depuis la liste ci-dessous pour dessiner votre salle."
-            : "Votre salle n'est pas encore dessinée."}
-        </p>
-      )}
+        {posees.length === 0 && (
+          <p className="plan-vide">
+            {editable
+              ? "Faites glisser vos tables depuis la liste ci-dessous pour dessiner votre salle."
+              : "Votre salle n'est pas encore dessinée."}
+          </p>
+        )}
+      </div>
+
+      {action}
     </div>
   );
 }
