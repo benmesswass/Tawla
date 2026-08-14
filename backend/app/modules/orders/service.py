@@ -220,7 +220,8 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             "event": "order.pending_confirmation",
             "order_id": order.id,
             "table_id": order.table_id,
-                "table_label": order.table_label,
+            "table_label": order.table_label,
+            "created_at": order.created_at.isoformat(),
             "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
         },
     )
@@ -367,6 +368,7 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
             message={
                 "event": "order.ready", "order_id": order.id,
                 "table_id": order.table_id, "table_label": order.table_label,
+                "ready_at": order.ready_at.isoformat() if order.ready_at else None,
             },
         )
         # Le WebSocket ci-dessus ne réveille que l'onglet resté ouvert au

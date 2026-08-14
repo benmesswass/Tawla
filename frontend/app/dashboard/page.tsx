@@ -27,6 +27,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons";
 import { MENU_CATEGORIES } from "@/lib/menuCategories";
 import RecetteDuJour from "@/components/RecetteDuJour";
+import EditeurDePlan from "@/components/plan/EditeurDePlan";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -136,6 +137,7 @@ export default function DashboardPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [dayStats, setDayStats] = useState<DashboardStats | null>(null);
+  const [savingPlan, setSavingPlan] = useState(false);
   const [ramadanEnabled, setRamadanEnabled] = useState(false);
   const [iftarInput, setIftarInput] = useState("");
   const [savingRamadan, setSavingRamadan] = useState(false);
@@ -971,6 +973,33 @@ export default function DashboardPage() {
             ))}
           </datalist>
 
+          <h2 className="text-lg font-semibold mb-1">Le plan de votre salle</h2>
+          <p className="text-sm text-neutral-500 mb-3">
+            Posez vos tables comme elles sont chez vous. Vos serveurs verront cette salle en
+            direct : une table qui vous attend s&apos;y allume, et l&apos;anneau qui l&apos;entoure
+            se referme au bout de dix minutes — le moment où la commande est comptée perdue.
+          </p>
+          <div className="mb-8">
+            <EditeurDePlan
+              tables={tables}
+              enregistrement={savingPlan}
+              onEnregistrer={async (placements) => {
+                if (!restaurantId) return;
+                setSavingPlan(true);
+                setError(null);
+                try {
+                  setTables(await api.savePlan(restaurantId, placements));
+                  setMessage("Plan de salle enregistré.");
+                } catch (e) {
+                  setError(toFrenchMessage(e));
+                } finally {
+                  setSavingPlan(false);
+                }
+              }}
+            />
+          </div>
+
+          <h2 className="text-lg font-semibold mb-1">Vos tables</h2>
           <p className="text-sm text-neutral-500 mb-3">
             Groupez vos tables par zone (intérieur, terrasse, plage...) si votre établissement en a plusieurs —
             laissez vide sinon.

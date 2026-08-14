@@ -23,6 +23,9 @@ export type Table = {
   qr_token: string;
   assigned_staff_id: number | null;
   zone: string | null;
+  pos_x: number | null;
+  pos_y: number | null;
+  shape: "round" | "square" | "rect";
 };
 
 /**
@@ -101,8 +104,10 @@ export type Order = {
   status: OrderStatus;
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
+  created_at: string;
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
+  ready_at: string | null;
   // Présent uniquement sur les réponses servies au staff (routes sous JWT) :
   // la vue client ne porte plus de donnée personnelle depuis la Phase 12.2.
   loyalty_phone?: string | null;
@@ -221,6 +226,19 @@ export type MyShift = {
   orders_taken: number;
   total_amount_handled: number;
   avg_seconds_to_claim: number | null;
+};
+
+export type TableShape = "round" | "square" | "rect";
+
+/** Vue plan d'une table — sans `qr_token` : il n'a rien à faire sur un écran
+ *  de service (Phase 18). */
+export type PlanTable = {
+  id: number;
+  label: string;
+  zone: string | null;
+  pos_x: number | null;
+  pos_y: number | null;
+  shape: TableShape;
 };
 
 export type TeamReport = {
@@ -390,6 +408,15 @@ export const api = {
   markReady: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/mark-ready`, { method: "POST" }),
   markServed: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/mark-served`, { method: "POST" }),
   getMyShift: () => request<MyShift>("/api/v1/stats/ma-soiree"),
+  getPlan: (restaurantId: number) => request<PlanTable[]>(`/api/v1/tables/plan/${restaurantId}`),
+  savePlan: (
+    restaurantId: number,
+    placements: { table_id: number; pos_x: number; pos_y: number; shape: TableShape }[]
+  ) =>
+    request<Table[]>(`/api/v1/tables/plan/${restaurantId}`, {
+      method: "PUT",
+      body: JSON.stringify({ placements }),
+    }),
   getDashboardStats: (restaurantId: number, date?: string) =>
     request<DashboardStats>(
       `/api/v1/stats/dashboard/${restaurantId}${date ? `?date=${date}` : ""}`

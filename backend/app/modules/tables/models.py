@@ -1,9 +1,22 @@
 import secrets
 
-from sqlalchemy import ForeignKey, Integer, String
+import enum
+
+from sqlalchemy import Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+
+
+class TableShape(str, enum.Enum):
+    """
+    Forme dessinée sur le plan de salle. Trois suffisent à rendre une salle
+    reconnaissable ; au-delà on dessine un logiciel d'architecture, pas un
+    outil de service.
+    """
+    ROUND = "round"
+    SQUARE = "square"
+    RECT = "rect"
 
 
 def generate_table_token() -> str:
@@ -28,3 +41,11 @@ class Table(Base):
     # comme MenuItem.category, pas un enum figé : tous les établissements
     # n'ont pas les mêmes zones (un café sans terrasse n'a besoin d'aucune).
     zone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # Position sur le plan de salle, en pourcentage de la surface (0-100) —
+    # jamais en pixels : le plan se regarde sur un téléphone de 360 px comme
+    # sur l'écran du bureau, et une position en pixels ne survivrait pas au
+    # changement d'écran. `None` = table pas encore posée sur le plan.
+    pos_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pos_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    shape: Mapped[TableShape] = mapped_column(Enum(TableShape), default=TableShape.ROUND)
