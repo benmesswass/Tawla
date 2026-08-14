@@ -359,6 +359,20 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
             },
         )
 
+    # Les serveurs aussi doivent savoir que la table est passée en cuisine :
+    # sans ça, leur plan de salle la montre libre alors qu'elle est occupée, et
+    # ils ne le découvrent qu'au prochain rechargement de page.
+    if new_status == OrderStatus.SENT_TO_KITCHEN:
+        await manager.broadcast(
+            order.restaurant_id, channel="staff",
+            message={
+                "event": "order.sent_to_kitchen",
+                "order_id": order.id,
+                "table_id": order.table_id,
+                "table_label": order.table_label,
+            },
+        )
+
     # Le plat est prêt : le serveur doit venir le chercher et le servir.
     # Sans ce broadcast, "ready" n'a jamais eu de porte de sortie dans l'UI
     # (audit QA — statut "served" mort).
