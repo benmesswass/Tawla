@@ -183,3 +183,33 @@ def test_the_plan_of_another_room_is_refused(client, salle):
     assert client.get(
         f"/api/v1/tables/plan/{restaurant.id}", headers=auth_headers(intrus)
     ).status_code == 403
+
+
+def test_the_waiters_learn_that_a_table_went_to_the_kitchen(client, db_session, salle):
+    """
+    Sans cette diffusion, le plan d'un serveur montre la table libre alors
+    qu'elle est occupée — et il ne le découvre qu'au prochain rechargement.
+    L'événement n'était diffusé qu'au canal cuisine.
+    """
+    from app.modules.menu.models import MenuItem
+
+    restaurant, tables = salle
+    waiter = create_staff(restaurant.id, StaffRole.WAITER)
+    item = MenuItem(restaurant_id=restaurant.id, name="Couscous", price=20.0, category="Plats")
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    order = client.post("/api/v1/orders", json={
+        "qr_token": tables[0].qr_token,
+        "items": [{"menu_item_id": item.id, "quantity": 1}],
+    }).json()
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(waiter))
+
+    token = auth_headers(waiter)["Authorization"].split()[1]
+    with client.websocket_connect(f"/ws/staff/{restaurant.id}?token={token}") as ws:
+        client.post(f"/api/v1/orders/{order['id']}/send-to-kitchen", headers=auth_headers(waiter))
+        message = ws.receive_json()
+
+    assert message["event"] == "order.sent_to_kitchen"
+    assert message["table_id"] == tables[0].id
