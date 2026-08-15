@@ -1,6 +1,6 @@
 import uuid
 
-from app.modules.loyalty.models import LOYALTY_REWARD_THRESHOLD
+from app.modules.loyalty.models import LOYALTY_REWARD_THRESHOLD, LoyaltyMember
 from app.modules.staff.models import StaffRole
 from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
 
@@ -20,25 +20,79 @@ def _setup_restaurant(client):
     return restaurant, table, item, manager_headers
 
 
+def _place_order(client, table, item, phone, birth_date=None):
+    """La commande est le seul chemin qui crée une fiche fidélité : le client y
+    donne son propre numéro, sur sa propre table (Phase 19.1)."""
+    payload = {
+        "qr_token": table["qr_token"],
+        "items": [{"menu_item_id": item["id"], "quantity": 1}],
+        "loyalty_phone": phone,
+    }
+    if birth_date:
+        payload["loyalty_birth_date"] = birth_date
+    return client.post("/api/v1/orders", json=payload).json()
+
+
 def _order_and_pay_by_card(client, restaurant, table, item, phone):
-    order = client.post(
-        "/api/v1/orders",
-        json={
-            "qr_token": table["qr_token"],
-            "items": [{"menu_item_id": item["id"], "quantity": 1}],
-            "loyalty_phone": phone,
-        },
-    ).json()
+    order = _place_order(client, table, item, phone)
     return client.post(
         f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
     ).json()
 
 
-def test_lookup_creates_a_new_member(client):
-    restaurant, _table, _item, _headers = _setup_restaurant(client)
-    res = client.post(
-        "/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": "20123456"}
+def _lookup(client, table, phone):
+    return client.post(
+        "/api/v1/loyalty/lookup", json={"qr_token": table["qr_token"], "phone_number": phone}
     )
+
+
+def test_lookup_fidelite_ne_cree_jamais_de_fiche(client, db_session):
+    """
+    Défaut T1 : cette route publique créait une fiche pour tout numéro qu'on
+    lui soumettait. Enregistrer le numéro d'un tiers qui n'a rien commandé n'a
+    aucune finalité au sens de la loi 2004-63 — et la promesse affichée au
+    client dit que son numéro ne sert qu'à la fidélité de cet établissement.
+    """
+    _restaurant, table, _item, _headers = _setup_restaurant(client)
+
+    res = _lookup(client, table, "20123456")
+
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "LOYALTY_MEMBER_NOT_FOUND"
+    assert db_session.query(LoyaltyMember).count() == 0
+
+
+def test_lookup_fidelite_refuse_sans_qr_token(client):
+    """
+    Sans le token de la table, la réponse doit être la même pour un numéro
+    client et pour un numéro inconnu : toute différence transforme la route en
+    test d'appartenance, exactement ce que la Phase 19.1 ferme.
+    """
+    _restaurant, table, item, _headers = _setup_restaurant(client)
+    connu = "20123456"
+    _place_order(client, table, item, connu)
+
+    sans_token_connu = client.post("/api/v1/loyalty/lookup", json={"phone_number": connu})
+    sans_token_inconnu = client.post("/api/v1/loyalty/lookup", json={"phone_number": "20999000"})
+    assert sans_token_connu.status_code == sans_token_inconnu.status_code == 422
+
+    faux_token_connu = client.post(
+        "/api/v1/loyalty/lookup", json={"qr_token": "token-invente", "phone_number": connu}
+    )
+    faux_token_inconnu = client.post(
+        "/api/v1/loyalty/lookup", json={"qr_token": "token-invente", "phone_number": "20999000"}
+    )
+    assert faux_token_connu.status_code == faux_token_inconnu.status_code == 404
+    assert faux_token_connu.json() == faux_token_inconnu.json()
+
+
+def test_lookup_retrouve_la_fiche_creee_par_la_commande(client):
+    _restaurant, table, item, _headers = _setup_restaurant(client)
+    phone = "20123456"
+    _place_order(client, table, item, phone)
+
+    res = _lookup(client, table, phone)
+
     assert res.status_code == 200
     body = res.json()
     assert body["order_count"] == 0
@@ -46,32 +100,14 @@ def test_lookup_creates_a_new_member(client):
     assert body["orders_until_reward"] == LOYALTY_REWARD_THRESHOLD
 
 
-def test_lookup_is_idempotent_for_the_same_phone(client):
-    restaurant, _table, _item, _headers = _setup_restaurant(client)
-    payload = {"restaurant_id": restaurant.id, "phone_number": "20123456"}
-    first = client.post("/api/v1/loyalty/lookup", json=payload).json()
-    second = client.post("/api/v1/loyalty/lookup", json=payload).json()
-    assert first["id"] == second["id"]
-
-
 def test_order_count_only_increments_on_confirmed_payment(client):
     """Une commande jamais payée ne doit jamais faire gagner de point."""
-    restaurant, table, item, _headers = _setup_restaurant(client)
+    _restaurant, table, item, _headers = _setup_restaurant(client)
     phone = "20123456"
 
-    client.post(
-        "/api/v1/orders",
-        json={
-            "qr_token": table["qr_token"],
-            "items": [{"menu_item_id": item["id"], "quantity": 1}],
-            "loyalty_phone": phone,
-        },
-    )
+    _place_order(client, table, item, phone)
 
-    status = client.post(
-        "/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": phone}
-    ).json()
-    assert status["order_count"] == 0
+    assert _lookup(client, table, phone).json()["order_count"] == 0
 
 
 def test_order_count_increments_on_card_payment(client):
@@ -81,36 +117,20 @@ def test_order_count_increments_on_card_payment(client):
     order = _order_and_pay_by_card(client, restaurant, table, item, phone)
     assert order["payment_status"] == "paid"
 
-    status = client.post(
-        "/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": phone}
-    ).json()
-    assert status["order_count"] == 1
+    assert _lookup(client, table, phone).json()["order_count"] == 1
 
 
 def test_order_count_increments_on_confirmed_cash_payment(client):
-    restaurant, table, item, manager_headers = _setup_restaurant(client)
+    _restaurant, table, item, manager_headers = _setup_restaurant(client)
     phone = "20654321"
 
-    order = client.post(
-        "/api/v1/orders",
-        json={
-            "qr_token": table["qr_token"],
-            "items": [{"menu_item_id": item["id"], "quantity": 1}],
-            "loyalty_phone": phone,
-        },
-    ).json()
+    order = _place_order(client, table, item, phone)
     client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
     # Une demande cash seule (pas encore encaissée) ne doit rien faire gagner.
-    status_before = client.post(
-        "/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": phone}
-    ).json()
-    assert status_before["order_count"] == 0
+    assert _lookup(client, table, phone).json()["order_count"] == 0
 
     client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=manager_headers)
-    status_after = client.post(
-        "/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": phone}
-    ).json()
-    assert status_after["order_count"] == 1
+    assert _lookup(client, table, phone).json()["order_count"] == 1
 
 
 def test_reward_becomes_available_at_threshold(client):
@@ -120,9 +140,7 @@ def test_reward_becomes_available_at_threshold(client):
     for _ in range(LOYALTY_REWARD_THRESHOLD):
         order = _order_and_pay_by_card(client, restaurant, table, item, phone)
 
-    status = client.post(
-        "/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": phone}
-    ).json()
+    status = _lookup(client, table, phone).json()
     assert status["order_count"] == LOYALTY_REWARD_THRESHOLD
     assert status["reward_available"] is True
     assert status["orders_until_reward"] == 0
@@ -148,10 +166,10 @@ def test_staff_can_redeem_reward(client):
 
 
 def test_cannot_redeem_when_no_reward_available(client):
-    restaurant, _table, _item, manager_headers = _setup_restaurant(client)
-    member = client.post(
-        "/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": "20999888"}
-    ).json()
+    _restaurant, table, item, manager_headers = _setup_restaurant(client)
+    phone = "20999888"
+    _place_order(client, table, item, phone)
+    member = _lookup(client, table, phone).json()
 
     res = client.post(f"/api/v1/loyalty/{member['id']}/redeem", headers=manager_headers)
     assert res.status_code == 409
@@ -159,8 +177,8 @@ def test_cannot_redeem_when_no_reward_available(client):
 
 
 def test_staff_member_lookup_requires_role(client):
-    restaurant, _table, _item, _manager_headers = _setup_restaurant(client)
-    client.post("/api/v1/loyalty/lookup", json={"restaurant_id": restaurant.id, "phone_number": "20999888"})
+    restaurant, table, item, _manager_headers = _setup_restaurant(client)
+    _place_order(client, table, item, "20999888")
 
     kitchen_headers = auth_headers(create_staff(restaurant.id, role=StaffRole.KITCHEN))
     res = client.get(
@@ -172,11 +190,11 @@ def test_staff_member_lookup_requires_role(client):
 
 
 def test_loyalty_is_isolated_per_restaurant(client):
-    restaurant_a, _table_a, _item_a, headers_a = _setup_restaurant(client)
+    _restaurant_a, table_a, item_a, headers_a = _setup_restaurant(client)
     restaurant_b, _table_b, _item_b, _headers_b = _setup_restaurant(client)
     phone = "20111222"
 
-    client.post("/api/v1/loyalty/lookup", json={"restaurant_id": restaurant_a.id, "phone_number": phone})
+    _place_order(client, table_a, item_a, phone)
 
     res = client.get(
         f"/api/v1/loyalty/by-restaurant/{restaurant_b.id}/member",
@@ -189,23 +207,18 @@ def test_loyalty_is_isolated_per_restaurant(client):
 def test_birthday_flag_reflects_todays_date(client):
     import datetime
 
-    restaurant, _table, _item, _headers = _setup_restaurant(client)
-    today = datetime.date.today()
-    body = client.post(
-        "/api/v1/loyalty/lookup",
-        json={
-            "restaurant_id": restaurant.id,
-            "phone_number": "20333444",
-            "birth_date": today.isoformat(),
-        },
-    ).json()
-    assert body["is_birthday_today"] is True
+    _restaurant, table, item, _headers = _setup_restaurant(client)
+    phone = "20333444"
+    # La date de naissance se donne avec sa propre commande depuis la Phase
+    # 19.1 : la route de consultation ne peut plus rien écrire.
+    _place_order(client, table, item, phone, birth_date=datetime.date.today().isoformat())
+
+    assert _lookup(client, table, phone).json()["is_birthday_today"] is True
 
 
 def test_no_birthday_flag_when_date_not_today(client):
-    restaurant, _table, _item, _headers = _setup_restaurant(client)
-    body = client.post(
-        "/api/v1/loyalty/lookup",
-        json={"restaurant_id": restaurant.id, "phone_number": "20333444", "birth_date": "2000-01-01"},
-    ).json()
-    assert body["is_birthday_today"] is False
+    _restaurant, table, item, _headers = _setup_restaurant(client)
+    phone = "20333444"
+    _place_order(client, table, item, phone, birth_date="2000-01-01")
+
+    assert _lookup(client, table, phone).json()["is_birthday_today"] is False

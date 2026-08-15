@@ -396,6 +396,11 @@ export const api = {
     }[];
     scheduled_for?: string | null;
     loyalty_phone?: string | null;
+    loyalty_birth_date?: string | null;
+    // Identifiant du panier, fabriqué au moment où le client le compose : c'est
+    // lui qui fait qu'un renvoi (double clic, file hors ligne rejouée) retombe
+    // sur la même commande au lieu d'en faire préparer une seconde.
+    client_order_id?: string | null;
   }) => request<OrderCreated>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),
   getOrder: (orderId: number, orderToken: string) =>
     request<Order>(`/api/v1/orders/${orderId}`, { headers: orderHeaders(orderToken) }),
@@ -480,10 +485,13 @@ export const api = {
     request<WaiterCall[]>(`/api/v1/waiter-calls/by-restaurant/${restaurantId}/pending`),
   resolveWaiterCall: (callId: number) =>
     request<WaiterCall>(`/api/v1/waiter-calls/${callId}/resolve`, { method: "POST" }),
-  lookupLoyalty: (restaurantId: number, phoneNumber: string, birthDate?: string | null) =>
+  // Lecture seule et liée à la table scannée depuis la Phase 19.1 : la route
+  // ne crée plus de fiche et répond 404 sur un numéro inconnu (première
+  // visite). La date de naissance, elle, part avec la commande.
+  lookupLoyalty: (qrToken: string, phoneNumber: string) =>
     request<LoyaltyMember>("/api/v1/loyalty/lookup", {
       method: "POST",
-      body: JSON.stringify({ restaurant_id: restaurantId, phone_number: phoneNumber, birth_date: birthDate }),
+      body: JSON.stringify({ qr_token: qrToken, phone_number: phoneNumber }),
     }),
   getLoyaltyMemberForStaff: (restaurantId: number, phoneNumber: string) =>
     request<LoyaltyMember>(

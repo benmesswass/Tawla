@@ -3,16 +3,16 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.dates import service_day_start
 from app.core.logging import get_logger, log_event
 from app.core.push import send_push_notification
-from app.modules.loyalty import schemas as loyalty_schemas
 from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
 from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import Staff
-from app.modules.tables.models import Table
+from app.modules.tables import service as tables_service
 
 logger = get_logger("orders")
 
@@ -73,7 +73,14 @@ async def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
         # (le libellé affiché au serveur), et cet écran se recharge en plein
         # service — une requête par commande n'y a pas sa place.
         .options(selectinload(Order.table))
-        .filter(Order.restaurant_id == restaurant_id, Order.status.in_(ACTIVE_STATUSES))
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.status.in_(ACTIVE_STATUSES),
+            # Borne filtrée ici et non dans le composant : l'écran serveur, le
+            # plan de salle et la cuisine lisent tous cette liste, et trois
+            # filtres séparés finiraient par se contredire (Phase 19.5).
+            Order.created_at >= service_day_start(),
+        )
         .order_by(Order.created_at)
         .all()
     )
@@ -141,12 +148,26 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # La table est retrouvée par son token de QR code, et le restaurant en est
     # déduit : aucun identifiant numérique n'est accepté du client, donc rien
     # n'est devinable (Phase 12.2).
-    table = db.query(Table).filter(Table.qr_token == payload.qr_token).first()
-    if not table:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "INVALID_TABLE_CODE", "message": "invalid table code"},
+    table = tables_service.get_table_by_qr_token(db, payload.qr_token)
+
+    # Rejeu du même panier : on rend la commande d'origine, avec son
+    # `public_token` — le téléphone du client doit retomber sur SA commande,
+    # pas sur une qu'il ne pourrait plus suivre. Retour avant toute écriture,
+    # donc sans second broadcast : sinon la commande réapparaît sur l'écran
+    # serveur alors qu'elle est déjà prise en charge.
+    if payload.client_order_id:
+        replayed = (
+            db.query(Order)
+            .filter(Order.table_id == table.id, Order.client_order_id == payload.client_order_id)
+            .first()
         )
+        if replayed:
+            log_event(
+                logger, "order.create_replayed",
+                restaurant_id=replayed.restaurant_id, order_id=replayed.id, table_id=replayed.table_id,
+            )
+            return replayed
+
     if not payload.items:
         raise HTTPException(
             status_code=422,
@@ -159,6 +180,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
         table_id=table.id,
         scheduled_for=payload.scheduled_for,
         loyalty_phone=payload.loyalty_phone,
+        client_order_id=payload.client_order_id,
     )
 
     for line in payload.items:
@@ -204,8 +226,8 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # numéro (même s'il n'est jamais passé par une vérification de statut
     # séparée) — le compteur, lui, n'avance qu'au paiement confirmé.
     if order.loyalty_phone:
-        loyalty_service.lookup_or_create(
-            db, loyalty_schemas.LoyaltyLookup(restaurant_id=order.restaurant_id, phone_number=order.loyalty_phone)
+        loyalty_service.get_or_create_member(
+            db, order.restaurant_id, order.loyalty_phone, payload.loyalty_birth_date
         )
 
     log_event(

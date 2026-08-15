@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import rate_limit
 from app.modules.orders import schemas, service
 from app.modules.orders.dependencies import get_order_by_token
 from app.modules.orders.models import Order, OrderStatus
@@ -14,7 +15,9 @@ _WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 _KITCHEN_OR_MANAGER = require_role(StaffRole.KITCHEN, StaffRole.MANAGER)
 
 
-@router.post("", response_model=schemas.OrderCreatedOut, status_code=201)
+@router.post(
+    "", response_model=schemas.OrderCreatedOut, status_code=201, dependencies=[Depends(rate_limit)]
+)
 async def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
     """
     Appelé par le client après validation du panier — sans compte, mais avec le

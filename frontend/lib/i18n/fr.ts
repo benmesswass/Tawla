@@ -85,6 +85,7 @@ export const fr = {
   loyaltyPrivacyLink: "Politique de confidentialité",
   loyaltyProgress: (count: number, remaining: number) =>
     `Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
+  loyaltyFirstVisit: "Première visite — votre carte démarre avec cette commande.",
   loyaltyRewardAvailable: "🎉 Récompense disponible ! Montrez cet écran à votre serveur.",
   loyaltyBirthdayBanner: "Bon anniversaire ! Demandez votre réduction spéciale au serveur.",
 

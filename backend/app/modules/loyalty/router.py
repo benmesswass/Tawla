@@ -17,12 +17,14 @@ def lookup_loyalty(payload: schemas.LoyaltyLookup, db: Session = Depends(get_db)
     """
     Public — appelé par le client quand il saisit son numéro au moment de
     commander. Reste public par nécessité (le client n'a pas de compte), mais
-    limité en débit et sans date de naissance en sortie : sans ces deux
-    garde-fous, l'endpoint permettait de balayer des numéros de téléphone pour
-    savoir lesquels sont clients d'un établissement donné, et de récupérer leur
-    date de naissance (constat 4 de la revue du 2026-08-13).
+    **en lecture seule** et lié au `qr_token` de sa table depuis la Phase 19.1 :
+    il ne crée plus de fiche, et répond 404 sur un numéro inconnu.
+
+    Avant, un `restaurant_id` incrémental suffisait à balayer des numéros de
+    téléphone d'établissement en établissement, et chaque essai enregistrait
+    durablement le numéro d'un tiers.
     """
-    return service.lookup_or_create(db, payload)
+    return service.lookup_for_client(db, payload)
 
 
 @router.get("/by-restaurant/{restaurant_id}/member", response_model=schemas.LoyaltyMemberOut)

@@ -81,6 +81,7 @@ export const ar = {
     "رقمك يخدم كان لبطاقة الولاء تاع هذا المطعم. عمرو ما يتشارك، عمرو ما يتستعمل باش يعيطولك، ويتمسح بعد 24 شهر بلا طلبية.",
   loyaltyPrivacyLink: "سياسة الخصوصية",
   loyaltyProgress: (count, remaining) => `عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
+  loyaltyFirstVisit: "أول مرة — بطاقتك تبدا مع هذي الطلبية.",
   loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",
   loyaltyBirthdayBanner: "عيد ميلاد سعيد! اطلب التخفيض الخاص من الجرسون.",
 

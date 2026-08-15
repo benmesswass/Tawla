@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
-from app.modules.tables import schemas
+from app.modules.tables import schemas, service
 from app.modules.tables.models import Table
 
 router = APIRouter(prefix="/api/v1/tables", tags=["tables"])
@@ -52,10 +52,7 @@ def get_table_by_token(qr_token: str, db: Session = Depends(get_db)):
     Endpoint appelé quand le client scanne le QR code — public, pas d'auth.
     Le token est opaque : impossible de deviner une autre table.
     """
-    table = db.query(Table).filter(Table.qr_token == qr_token).first()
-    if not table:
-        raise HTTPException(status_code=404, detail={"code": "INVALID_TABLE_CODE", "message": "invalid table code"})
-    return table
+    return service.get_table_by_qr_token(db, qr_token)
 
 
 @router.post("/{table_id}/assign-staff", response_model=schemas.TableOut)

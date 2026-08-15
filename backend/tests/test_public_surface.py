@@ -185,13 +185,18 @@ def test_menu_item_of_another_restaurant_is_refused(client, db_session):
 
 
 def test_public_loyalty_lookup_never_exposes_the_birth_date(client, db_session):
-    restaurant, _, _ = _setup(client, db_session)
-
-    response = client.post("/api/v1/loyalty/lookup", json={
-        "restaurant_id": restaurant.id,
-        "phone_number": "+21698123456",
-        "birth_date": "1990-05-14",
+    _restaurant, table, item = _setup(client, db_session)
+    phone = "+21698123456"
+    client.post("/api/v1/orders", json={
+        "qr_token": table.qr_token,
+        "loyalty_phone": phone,
+        "loyalty_birth_date": "1990-05-14",
+        "items": [{"menu_item_id": item.id, "quantity": 1}],
     })
+
+    response = client.post(
+        "/api/v1/loyalty/lookup", json={"qr_token": table.qr_token, "phone_number": phone}
+    )
     assert response.status_code == 200
     assert "birth_date" not in response.json()
     # Le bandeau anniversaire reste calculé côté serveur.

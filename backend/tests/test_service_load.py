@@ -11,6 +11,7 @@ import time
 
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
+from app.core.config import settings
 from app.modules.menu.models import MenuItem
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table
@@ -24,7 +25,13 @@ MAX_SECONDS_PER_ORDER = 0.25
 MAX_SECONDS_PER_SCREEN_LOAD = 3.0
 
 
-def test_a_full_service_does_not_lose_orders_or_degenerate(client, db_session):
+def test_a_full_service_does_not_lose_orders_or_degenerate(client, db_session, monkeypatch):
+    # Un service réel, ce sont 200 téléphones différents, pas un seul client
+    # qui commande 200 fois : chaque commande porte donc son IP, comme derrière
+    # le proxy de l'hébergeur en production (Phase 19.3). Sans ça, le test
+    # mesurerait le limiteur de débit au lieu de la tenue en charge.
+    monkeypatch.setattr(settings, "forwarded_allow_ips", "testclient")
+
     restaurant = create_restaurant(name="Chez Slah", slug="charge-service")
     tables = [Table(restaurant_id=restaurant.id, label=f"Table {i}") for i in range(1, TABLES + 1)]
     items = [
@@ -45,10 +52,14 @@ def test_a_full_service_does_not_lose_orders_or_degenerate(client, db_session):
     for index in range(ORDERS):
         table = tables[index % TABLES]
         item = items[index % len(items)]
-        response = client.post("/api/v1/orders", json={
-            "qr_token": table.qr_token,
-            "items": [{"menu_item_id": item.id, "quantity": 1 + index % 3}],
-        })
+        response = client.post(
+            "/api/v1/orders",
+            json={
+                "qr_token": table.qr_token,
+                "items": [{"menu_item_id": item.id, "quantity": 1 + index % 3}],
+            },
+            headers={"X-Forwarded-For": f"41.226.{index // 256}.{index % 256}"},
+        )
         assert response.status_code == 201, response.text
         body = response.json()
         tokens.append((body["id"], body["public_token"]))

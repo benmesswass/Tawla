@@ -427,14 +427,14 @@ export default function StaffPage() {
       .map(
         (o) => `
       <div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px dashed #000;">
-        <strong>${o.table_label} — Commande #${o.order_id}</strong>
+        <strong>${escapeHtml(o.table_label)} — Commande #${o.order_id}</strong>
         ${o.taken_by_staff_name ? `<div>Pris en charge par ${escapeHtml(o.taken_by_staff_name)}</div>` : ""}
       </div>`
       )
       .join("");
     const cash = cashRequests
       .map(
-        (c) => `<div>${c.table_label} — addition ${c.amount.toFixed(2)} DT (espèces)</div>`
+        (c) => `<div>${escapeHtml(c.table_label)} — addition ${c.amount.toFixed(2)} DT (espèces)</div>`
       )
       .join("");
     win.document.write(

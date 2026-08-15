@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
-from app.modules.tables.models import Table
+from app.modules.tables import service as tables_service
 from app.modules.tenants import schemas
 from app.modules.tenants.models import Restaurant
 
@@ -33,11 +33,7 @@ def get_restaurant_by_qr_token(qr_token: str, db: Session = Depends(get_db)):
     incrémentale : parcourir 1, 2, 3… donnait la liste des établissements
     clients de Tawla et leur formule d'abonnement.
     """
-    table = db.query(Table).filter(Table.qr_token == qr_token).first()
-    if not table:
-        raise HTTPException(
-            status_code=404, detail={"code": "INVALID_TABLE_CODE", "message": "invalid table code"}
-        )
+    table = tables_service.get_table_by_qr_token(db, qr_token)
     return db.get(Restaurant, table.restaurant_id)
 
 

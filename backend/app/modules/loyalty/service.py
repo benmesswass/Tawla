@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -7,6 +7,7 @@ from app.core.dates import as_utc
 from app.core.logging import get_logger, log_event
 from app.modules.loyalty import schemas
 from app.modules.loyalty.models import LOYALTY_REWARD_THRESHOLD, LoyaltyMember
+from app.modules.tables import service as tables_service
 
 logger = get_logger("loyalty")
 
@@ -26,28 +27,50 @@ def _get_member(db: Session, restaurant_id: int, phone_number: str) -> LoyaltyMe
     )
 
 
-def lookup_or_create(db: Session, payload: schemas.LoyaltyLookup) -> LoyaltyMember:
+def get_or_create_member(
+    db: Session, restaurant_id: int, phone_number: str, birth_date: date | None = None
+) -> LoyaltyMember:
     """
-    Appelé par le client au moment de commander (numéro facultatif) — crée
-    la fiche fidélité si c'est sa première visite, ou la retrouve sinon.
-    Ne fait jamais avancer le compteur : ça arrive uniquement au paiement
-    confirmé (voir record_completed_order), jamais à la simple saisie.
+    Seul chemin de création d'une fiche, et il part d'une commande réelle : le
+    client donne son propre numéro, sur la table qu'il vient de scanner.
+
+    Volontairement **pas** exposé en route publique (Phase 19.1) — appelé
+    uniquement depuis `orders/service.py::create_order`. Ne fait jamais avancer
+    le compteur : ça arrive au paiement confirmé (voir record_completed_order),
+    jamais à la simple saisie.
     """
-    member = _get_member(db, payload.restaurant_id, payload.phone_number)
+    member = _get_member(db, restaurant_id, phone_number)
     if member:
-        if payload.birth_date and not member.birth_date:
-            member.birth_date = payload.birth_date
+        if birth_date and not member.birth_date:
+            member.birth_date = birth_date
             db.commit()
             db.refresh(member)
         return member
 
-    member = LoyaltyMember(
-        restaurant_id=payload.restaurant_id, phone_number=payload.phone_number, birth_date=payload.birth_date
-    )
+    member = LoyaltyMember(restaurant_id=restaurant_id, phone_number=phone_number, birth_date=birth_date)
     db.add(member)
     db.commit()
     db.refresh(member)
     log_event(logger, "loyalty.member_created", restaurant_id=member.restaurant_id, member_id=member.id)
+    return member
+
+
+def lookup_for_client(db: Session, payload: schemas.LoyaltyLookup) -> LoyaltyMember:
+    """
+    Consultation par le client attablé, en lecture seule (Phase 19.1). Le
+    restaurant vient du `qr_token`, jamais d'un identifiant fourni.
+
+    Résidu assumé et documenté : avec le token de la table en main, on peut
+    encore savoir si un numéro est connu de **ce** restaurant. C'est le même
+    niveau d'accès que passer commande, et le prix d'une carte de fidélité
+    sans compte.
+    """
+    table = tables_service.get_table_by_qr_token(db, payload.qr_token)
+    member = _get_member(db, table.restaurant_id, payload.phone_number)
+    if not member:
+        raise HTTPException(
+            status_code=404, detail={"code": "LOYALTY_MEMBER_NOT_FOUND", "message": "loyalty member not found"}
+        )
     return member
 
 
