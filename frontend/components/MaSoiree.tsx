@@ -1,4 +1,5 @@
 import { MyShift } from "@/lib/api";
+import { duree } from "@/lib/duree";
 
 /**
  * Les chiffres du serveur, sur l'écran du serveur (Phase 17.3).
@@ -16,8 +17,9 @@ import { MyShift } from "@/lib/api";
 export default function MaSoiree({ shift }: { shift: MyShift | null }) {
   if (!shift) return null;
 
-  const minutes =
-    shift.avg_seconds_to_claim === null ? null : Math.round(shift.avg_seconds_to_claim / 6) / 10;
+  // « 1min42 » et pas « 1,7 min » : le serveur ne convertit pas des dixièmes de
+  // minute en tête, il lit un temps.
+  const delai = shift.avg_seconds_to_claim === null ? null : duree(shift.avg_seconds_to_claim);
 
   return (
     <div className="mb-4 rounded-xl border border-[var(--line)] bg-white px-4 py-3">
@@ -35,9 +37,9 @@ export default function MaSoiree({ shift }: { shift: MyShift | null }) {
           </p>
           <p className="text-xs text-[var(--ink-soft)] mt-1">servis</p>
         </div>
-        {minutes !== null && (
+        {delai !== null && (
           <div>
-            <p className="text-2xl font-semibold tabular-nums leading-none">{minutes} min</p>
+            <p className="text-2xl font-semibold tabular-nums leading-none">{delai}</p>
             <p className="text-xs text-[var(--ink-soft)] mt-1">pour prendre une table</p>
           </div>
         )}

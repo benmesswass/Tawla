@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
 import { api, staffWsUrl, ApiError, Order, Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
+import { duree } from "@/lib/duree";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -27,13 +28,9 @@ type KitchenOrder = {
 // Au-delà de ce seuil, l'attente cuisine passe en alerte visuelle (harissa).
 const ELAPSED_ALERT_MINUTES = 10;
 
-function elapsedMinutes(iso: string | null, now: number): number | null {
+function elapsedSeconds(iso: string | null, now: number): number | null {
   if (!iso) return null;
-  return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
-}
-
-function formatElapsed(minutes: number): string {
-  return minutes < 1 ? "à l'instant" : `il y a ${minutes} min`;
+  return Math.max(0, (now - new Date(iso).getTime()) / 1000);
 }
 
 function escapeHtml(value: string): string {
@@ -305,12 +302,12 @@ export default function KitchenPage() {
               <span className="text-neutral-500 text-sm">#{o.order_id}</span>
             </div>
             {(() => {
-              const mins = elapsedMinutes(o.sent_to_kitchen_at, now);
-              if (mins === null) return null;
-              const late = mins >= ELAPSED_ALERT_MINUTES;
+              const secondes = elapsedSeconds(o.sent_to_kitchen_at, now);
+              if (secondes === null) return null;
+              const late = secondes >= ELAPSED_ALERT_MINUTES * 60;
               return (
                 <Badge tone={late ? "danger" : "neutral"} dark className="mb-2">
-                  {formatElapsed(mins)}
+                  il y a {duree(secondes)}
                 </Badge>
               );
             })()}

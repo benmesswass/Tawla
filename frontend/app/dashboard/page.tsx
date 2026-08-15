@@ -976,8 +976,8 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold mb-1">Le plan de votre salle</h2>
           <p className="text-sm text-neutral-500 mb-3">
             Posez vos tables comme elles sont chez vous. Vos serveurs verront cette salle en
-            direct : une table qui vous attend s&apos;y allume, et l&apos;anneau qui l&apos;entoure
-            se referme au bout de dix minutes — le moment où la commande est comptée perdue.
+            direct : une table qui attend s&apos;y allume, avec le temps qu&apos;elle attend et
+            son rang d&apos;arrivée quand plusieurs commandent en même temps.
           </p>
           <div className="mb-8">
             <EditeurDePlan

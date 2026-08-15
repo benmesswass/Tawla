@@ -36,8 +36,8 @@ export function construireEtats(source: SourceEtats): Record<number, EtatTable> 
     poser(o.table_id, { urgence: "en_cuisine", depuis: null, parQui: null, aMoi: false });
   }
   // Une addition demandée n'a pas d'horodatage en base : on n'invente pas de
-  // compteur. La table vire au rouge, sans anneau — mieux vaut pas de chiffre
-  // qu'un chiffre faux.
+  // compteur. La table vire au rouge, sans durée affichée — mieux vaut pas de
+  // chiffre qu'un chiffre faux.
   for (const o of source.additions) {
     poser(o.table_id, { urgence: "addition", depuis: null, parQui: null, aMoi: o.aMoi });
   }

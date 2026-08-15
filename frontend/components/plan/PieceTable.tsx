@@ -1,6 +1,6 @@
 "use client";
 
-import { EtatTable, LIBELLE_URGENCE, PlanTable, demandeUnServeur, pression, secondesDepuis } from "./types";
+import { EtatTable, LIBELLE_URGENCE, PlanTable, demandeUnServeur, libelleAttente, secondesDepuis } from "./types";
 
 /**
  * Une table dessinée sur le plan.
@@ -14,9 +14,11 @@ import { EtatTable, LIBELLE_URGENCE, PlanTable, demandeUnServeur, pression, seco
  *
  * 1. **La couleur dit s'il faut y aller.** Clair = rien à faire ; terne avec un
  *    liseré froid = en cuisine, pas pour lui ; harissa = on l'attend.
- * 2. **L'anneau dit depuis combien de temps**, et il se referme exactement quand
- *    la commande devient « perdue » au sens de la page de preuve. C'est un
- *    compte à rebours avant perte d'argent, pas un ornement.
+ * 2. **Le chiffre dit dans quel ordre.** Quand plusieurs tables commandent en
+ *    même temps — le cas normal d'un service — chacune porte son rang d'arrivée,
+ *    et le temps affiché monte sans jamais s'arrêter. Le serveur n'a pas à
+ *    arbitrer entre six tables rouges qui se valent : la 1 attend depuis le plus
+ *    longtemps, c'est elle d'abord.
  * 3. **Les chaises disent le nombre de couverts** — et c'est ce qui fait lire un
  *    meuble plutôt qu'une pastille.
  *
@@ -72,6 +74,7 @@ export default function PieceTable({
   table,
   etat,
   maintenant,
+  rang = null,
   laPlusUrgente = false,
   selectionnee = false,
   onActiver,
@@ -80,27 +83,21 @@ export default function PieceTable({
   table: PlanTable;
   etat: EtatTable;
   maintenant: number;
+  /** Rang d'arrivée parmi les tables qui attendent d'être prises en charge. */
+  rang?: number | null;
   laPlusUrgente?: boolean;
   selectionnee?: boolean;
   onActiver?: () => void;
   enDeplacement?: boolean;
 }) {
-  const { w, h, r } = TAILLE[table.shape];
+  const { w, h } = TAILLE[table.shape];
   const appelle = demandeUnServeur(etat.urgence);
-  const p = pression(etat, maintenant);
-  const minutes = Math.floor(secondesDepuis(etat.depuis, maintenant) / 60);
-  // Au-delà d'une heure le chiffre exact n'apprend plus rien, et un « 1946 min »
-  // sur une table décrédibilise tout l'écran.
-  const attente = minutes >= 60 ? "+1 h" : `${minutes} min`;
+  const attente = libelleAttente(secondesDepuis(etat.depuis, maintenant));
 
-  // Marge autour du plateau : les chaises et l'anneau vivent là.
+  // Marge autour du plateau : les chaises et la pastille de rang vivent là.
   const m = CHAISE.ecart + CHAISE.e + 4;
   const W = w + m * 2;
   const H = h + m * 2;
-
-  // L'anneau trace le tour du plateau, à l'extérieur : un décompte, pas un contour.
-  const rr = r + 7;
-  const perimetre = 2 * (w + 14 - 2 * rr) + 2 * (h + 14 - 2 * rr) + 2 * Math.PI * rr;
 
   const tone = appelle ? "appelle" : etat.urgence === "en_cuisine" ? "cuisine" : "libre";
 
@@ -109,6 +106,7 @@ export default function PieceTable({
       type="button"
       onClick={onActiver}
       data-tone={tone}
+      data-forme={table.shape}
       data-urgente={laPlusUrgente ? "" : undefined}
       data-selectionnee={selectionnee ? "" : undefined}
       data-deplacement={enDeplacement ? "" : undefined}
@@ -116,7 +114,8 @@ export default function PieceTable({
       style={{ width: W, height: H }}
       aria-label={
         appelle
-          ? `${table.label}, ${table.seats} couverts — ${LIBELLE_URGENCE[etat.urgence]} depuis ${attente}`
+          ? `${table.label}, ${table.seats} couverts — ${LIBELLE_URGENCE[etat.urgence]} ${attente}` +
+            (rang ? `, ${rang}${rang === 1 ? "re" : "e"} à avoir commandé` : "")
           : `${table.label}, ${table.seats} couverts — ${LIBELLE_URGENCE[etat.urgence] || "rien à faire"}`
       }
     >
@@ -134,26 +133,22 @@ export default function PieceTable({
           />
         ))}
 
-        <rect className="plateau" x={-w / 2} y={-h / 2} width={w} height={h} rx={r} />
-
-        {appelle && (
-          <rect
-            className="jauge"
-            x={-w / 2 - 7}
-            y={-h / 2 - 7}
-            width={w + 14}
-            height={h + 14}
-            rx={rr}
-            style={{ strokeDasharray: perimetre, strokeDashoffset: perimetre * (1 - p) }}
-          />
-        )}
+        <rect className="plateau" x={-w / 2} y={-h / 2} width={w} height={h} rx={TAILLE[table.shape].r} />
       </svg>
 
       <span className="contenu">
         <span className="etiquette">{table.label}</span>
-        {appelle && <span className="minutes">{minutes >= 1 ? attente : "à l'instant"}</span>}
+        {appelle && <span className="minutes">{attente}</span>}
         {!appelle && etat.urgence === "en_cuisine" && <span className="minutes">en cuisine</span>}
       </span>
+
+      {/* Le rang d'arrivée, posé sur le coin de la table : 1 a commandé en
+          premier. C'est le seul chiffre qui décide de quelque chose. */}
+      {rang !== null && (
+        <span className="rang" data-premier={rang === 1 ? "" : undefined} aria-hidden="true">
+          {rang}
+        </span>
+      )}
       {etat.aMoi && <span className="mienne" aria-hidden="true" />}
     </button>
   );
