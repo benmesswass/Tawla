@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
 import { api, DashboardStats, Order, OrderStatus } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
+import { duree } from "@/lib/duree";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 import Skeleton from "@/components/ui/Skeleton";
@@ -32,13 +33,7 @@ const ACTIVE_STATUS_ORDER: OrderStatus[] = [
   "ready",
 ];
 
-function formatDuration(seconds: number | null): string {
-  if (seconds === null) return "—";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 1) return `${Math.round(seconds)} s`;
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
-}
+const formatDuration = duree;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);

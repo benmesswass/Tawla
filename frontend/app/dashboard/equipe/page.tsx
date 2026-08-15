@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
 import { api, StaffRole, TeamReport } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
+import { duree } from "@/lib/duree";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 import Skeleton from "@/components/ui/Skeleton";
@@ -38,13 +39,7 @@ function isoDaysAgo(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function formatDelay(seconds: number | null): string {
-  if (seconds === null) return "—";
-  if (seconds < 60) return `${Math.round(seconds)} s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = Math.round(seconds % 60);
-  return rest ? `${minutes} min ${rest} s` : `${minutes} min`;
-}
+const formatDelay = duree;
 
 function csvEscape(value: string | number): string {
   const s = String(value);

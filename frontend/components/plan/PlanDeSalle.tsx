@@ -76,11 +76,12 @@ export default function PlanDeSalle({
   const surface = useRef<HTMLDivElement>(null);
   const [attrapee, setAttrapee] = useState<number | null>(null);
 
-  // Le compte à rebours des anneaux avance tout seul : sans ce battement, une
-  // table qui attend depuis huit minutes en afficherait toujours deux.
+  // Les compteurs avancent tout seuls : sans ce battement, une table qui attend
+  // depuis huit minutes en afficherait toujours deux. À la seconde, puisque
+  // c'est à la seconde que le temps s'affiche.
   const [maintenant, setMaintenant] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setMaintenant(Date.now()), 5000);
+    const t = setInterval(() => setMaintenant(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 

@@ -48,7 +48,7 @@ export default function ActionTable({
   // cinq minutes lui mentirait.
   const [maintenant, setMaintenant] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setMaintenant(Date.now()), 5000);
+    const t = setInterval(() => setMaintenant(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -77,12 +77,9 @@ export default function ActionTable({
 
   // « depuis 4 min » plutôt qu'une heure d'horloge : le serveur veut une durée,
   // pas à faire la soustraction lui-même.
-  const attendDepuis = secondesDepuis(etat.depuis, maintenant);
   const depuis =
     demandeUnServeur(etat.urgence) && etat.depuis
-      ? attendDepuis < 60
-        ? " · à l'instant"
-        : ` depuis ${libelleAttente(attendDepuis)}`
+      ? ` depuis ${libelleAttente(secondesDepuis(etat.depuis, maintenant))}`
       : "";
   const ordre = rang ? ` · ${rang}${rang === 1 ? "re" : "e"} à avoir commandé` : "";
 

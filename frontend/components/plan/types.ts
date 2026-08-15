@@ -2,6 +2,8 @@
  * Plan de salle — vocabulaire partagé entre la vue de service et l'éditeur.
  */
 
+import { duree } from "@/lib/duree";
+
 export type TableShape = "round" | "square" | "rect";
 
 export type PlanTable = {
@@ -61,13 +63,12 @@ export function secondesDepuis(iso: string | null, maintenant: number): number {
  * chronomètre, elle fonctionne dans l'ordre. Le serveur a besoin de savoir
  * laquelle attend depuis le plus longtemps, pas si une limite est franchie —
  * une limite ne lui apprend rien qu'il puisse faire.
+ *
+ * Les secondes comptent ici : deux tables qui affichent « 3 min » ne se
+ * départagent pas, « 3min12 » et « 3min48 » si.
  */
 export function libelleAttente(secondes: number): string {
-  const minutes = Math.floor(secondes / 60);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `${minutes} min`;
-  const heures = Math.floor(minutes / 60);
-  return `${heures} h ${String(minutes % 60).padStart(2, "0")}`;
+  return duree(secondes);
 }
 
 /**
