@@ -20,7 +20,8 @@ export default function RecetteDuJour({ stats }: { stats: DashboardStats | null 
           {stats ? `${stats.revenue_today.toFixed(2)} DT` : "—"}
         </p>
         <p className="text-xs text-white/70 mt-1">
-          Total des commandes passées aujourd&apos;hui, hors annulées.
+          Commandes réellement réglées aujourd&apos;hui : paiement carte abouti, ou espèces confirmées par le
+          serveur. Une commande servie mais pas encore payée n&apos;y entre pas.
         </p>
       </div>
 
@@ -32,7 +33,8 @@ export default function RecetteDuJour({ stats }: { stats: DashboardStats | null 
         {/* La définition est écrite ici, pas dans une aide : un chiffre dont on
             ne comprend pas la définition ne convainc personne. */}
         <p className="text-xs text-[var(--ink-soft)] mt-1">
-          Annulées, ou jamais prises en charge après 10 minutes.
+          Annulées, ou restées plus de 10 minutes entre la validation du panier et la prise en charge par un
+          serveur.
         </p>
       </div>
     </div>

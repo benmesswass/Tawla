@@ -356,9 +356,11 @@ export default function ProofPage() {
               {formatDate(proof.previous.end)}.
             </p>
             <p className="mt-2">
-              Une commande est comptée perdue si elle a été annulée, ou si elle est restée plus de 10 minutes sans
-              qu&apos;un serveur la prenne en charge. Ce seuil est une proposition à ajuster avec vous après un
-              premier service.
+              Une commande est comptée perdue dans deux cas : elle a été annulée, ou bien plus de 10 minutes se
+              sont écoulées <strong className="text-[var(--encre)]">entre le moment où le client a validé son
+              panier et celui où un serveur l&apos;a prise en charge</strong> — autrement dit, personne n&apos;a
+              réagi. Le temps de cuisine et le temps de service n&apos;entrent pas dans ce calcul. Ces 10 minutes
+              sont une proposition à ajuster avec vous après un premier service.
             </p>
           </Card>
         </>

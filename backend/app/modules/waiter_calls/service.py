@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.dates import service_day_start
 from app.core.logging import get_logger, log_event
-from app.modules.notifications.manager import manager
+from app.modules.notifications.manager import manager, table_channel
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
 from app.modules.waiter_calls import schemas
@@ -75,6 +75,13 @@ async def resolve_call(db: Session, call_id: int, staff: Staff) -> WaiterCall:
 
     await manager.broadcast(
         call.restaurant_id, channel="staff",
+        message={"event": "waiter_call.resolved", "call_id": call.id},
+    )
+    # Le client aussi doit l'apprendre : sans ça son bouton « Appeler le
+    # serveur » restait grisé jusqu'à ce qu'il pense à recharger sa page —
+    # alors qu'un serveur venait précisément de répondre à son appel.
+    await manager.broadcast(
+        call.restaurant_id, channel=table_channel(call.table_id),
         message={"event": "waiter_call.resolved", "call_id": call.id},
     )
     return call

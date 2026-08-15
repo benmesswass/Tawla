@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.modules.menu.models import MenuItem
-from app.modules.orders.models import Order, OrderItem, OrderStatus
+from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentStatus
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table
 
@@ -155,11 +155,14 @@ def test_suggestions_are_scoped_to_the_restaurant(client, db_session):
 # --- Mesure de l'effet -----------------------------------------------------
 
 
-def _order(db_session, restaurant, table, lines, *, days_ago: float = 1):
+def _order(db_session, restaurant, table, lines, *, days_ago: float = 1, payment_status=PaymentStatus.PAID):
+    # Réglée par défaut : la mesure de la vente incitative se fait sur les
+    # paniers réellement encaissés, comme la recette du tableau de bord.
     order = Order(
         restaurant_id=restaurant.id,
         table_id=table.id,
         status=OrderStatus.SERVED,
+        payment_status=payment_status,
         created_at=datetime.now(timezone.utc) - timedelta(days=days_ago),
     )
     for item, quantity, from_suggestion in lines:

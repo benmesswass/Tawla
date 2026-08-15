@@ -1,5 +1,8 @@
 import uuid
 
+import pytest
+from starlette.websockets import WebSocketDisconnect
+
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 
@@ -79,3 +82,39 @@ def test_pending_calls_isolated_per_restaurant(client):
 
     res = client.get(f"/api/v1/waiter-calls/by-restaurant/{restaurant_b.id}/pending", headers=headers_a)
     assert res.status_code == 403
+
+
+def test_le_client_apprend_en_direct_que_son_appel_est_resolu(client):
+    """
+    Retour du premier service : le serveur cliquait sur « résolu », mais le
+    bouton « Appeler le serveur » restait grisé chez le client jusqu'à ce
+    qu'il pense à recharger sa page.
+    """
+    restaurant, table, headers = _setup_restaurant_with_table(client)
+    call = client.post("/api/v1/waiter-calls", json={"qr_token": table["qr_token"]}).json()
+
+    with client.websocket_connect(f"/ws/table/{restaurant.id}/{table['qr_token']}") as ws:
+        client.post(f"/api/v1/waiter-calls/{call['id']}/resolve", headers=headers)
+        message = ws.receive_json()
+
+    assert message == {"event": "waiter_call.resolved", "call_id": call["id"]}
+
+
+def test_le_canal_dune_table_refuse_un_token_inconnu(client):
+    """Même règle que les routes HTTP du parcours client : sans le token de la
+    table, pas de canal — sinon un identifiant de restaurant suffirait à suivre
+    l'activité de ses tables."""
+    restaurant, _table, _headers = _setup_restaurant_with_table(client)
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/table/{restaurant.id}/token-invente") as ws:
+            ws.receive_json()
+
+
+def test_le_canal_dune_table_refuse_le_token_dun_autre_restaurant(client):
+    _restaurant_a, table_a, _headers_a = _setup_restaurant_with_table(client)
+    restaurant_b, _table_b, _headers_b = _setup_restaurant_with_table(client)
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/table/{restaurant_b.id}/{table_a['qr_token']}") as ws:
+            ws.receive_json()

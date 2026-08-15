@@ -1,6 +1,18 @@
 import { clearToken, getToken } from "@/lib/auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/**
+ * En production, l'URL de l'API est fournie explicitement (`NEXT_PUBLIC_API_URL`).
+ *
+ * Sans elle — donc en développement — on suit l'hôte qui a servi la page plutôt
+ * que d'écrire « localhost » en dur : un téléphone qui scanne le QR charge la
+ * page depuis l'adresse du Mac sur le réseau local, et « localhost » y désigne
+ * le téléphone lui-même. C'est ce qui faisait échouer tous les appels dès qu'on
+ * quittait la machine de développement, et ça évite de recoder une adresse IP à
+ * chaque changement de réseau.
+ */
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:8000` : "http://localhost:8000");
 
 export type MenuItem = {
   id: number;
