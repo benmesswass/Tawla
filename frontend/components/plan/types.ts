@@ -49,24 +49,47 @@ export type EtatTable = {
 
 export const ETAT_LIBRE: EtatTable = { urgence: "libre", depuis: null, parQui: null, aMoi: false };
 
-/**
- * Une commande non prise en charge est comptée **perdue** au bout de dix
- * minutes (`ABANDONED_PENDING_AFTER` côté backend, et c'est ce seuil que la
- * page de preuve utilise pour chiffrer l'argent perdu).
- *
- * L'anneau qui entoure une table se referme donc exactement au moment où la
- * commande bascule dans ce compteur : ce n'est pas une décoration, c'est le
- * compte à rebours avant que le patron perde de l'argent.
- */
-export const SECONDES_AVANT_PERTE = 600;
-
 export function secondesDepuis(iso: string | null, maintenant: number): number {
   if (!iso) return 0;
   return Math.max(0, (maintenant - new Date(iso).getTime()) / 1000);
 }
 
-/** 0 → rien ne presse, 1 → la commande vient de basculer en « perdue ». */
-export function pression(etat: EtatTable, maintenant: number): number {
-  if (!demandeUnServeur(etat.urgence)) return 0;
-  return Math.min(1, secondesDepuis(etat.depuis, maintenant) / SECONDES_AVANT_PERTE);
+/**
+ * Le temps d'attente d'une table, qui **monte** et ne s'arrête pas.
+ *
+ * Pas de seuil, pas de jauge qui se remplit : une salle ne fonctionne pas au
+ * chronomètre, elle fonctionne dans l'ordre. Le serveur a besoin de savoir
+ * laquelle attend depuis le plus longtemps, pas si une limite est franchie —
+ * une limite ne lui apprend rien qu'il puisse faire.
+ */
+export function libelleAttente(secondes: number): string {
+  const minutes = Math.floor(secondes / 60);
+  if (minutes < 1) return "à l'instant";
+  if (minutes < 60) return `${minutes} min`;
+  const heures = Math.floor(minutes / 60);
+  return `${heures} h ${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/**
+ * L'ordre d'arrivée des commandes qui attendent d'être prises en charge.
+ *
+ * Plusieurs tables commandent en même temps — c'est le cas normal d'un service,
+ * pas l'exception. Chacune porte donc son rang : 1 est celle qui a commandé en
+ * premier, et c'est elle qu'on sert d'abord. Sans ce chiffre, six tables rouges
+ * se valent, et le serveur choisit celle qu'il voit plutôt que celle qui
+ * attend.
+ *
+ * Seules les tables en attente de validation sont classées : « prête à servir »
+ * ou « addition » ne se font pas la course entre elles.
+ */
+export function ordreDArrivee(etats: Record<number, EtatTable>): Record<number, number> {
+  const enAttente = Object.entries(etats)
+    .filter(([, e]) => e.urgence === "a_prendre" && e.depuis)
+    .sort((a, b) => new Date(a[1].depuis as string).getTime() - new Date(b[1].depuis as string).getTime());
+
+  const rangs: Record<number, number> = {};
+  enAttente.forEach(([id], i) => {
+    rangs[Number(id)] = i + 1;
+  });
+  return rangs;
 }

@@ -15,7 +15,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import MaSoiree from "@/components/MaSoiree";
 import PlanDeSalle from "@/components/plan/PlanDeSalle";
 import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
-import { ETAT_LIBRE } from "@/components/plan/types";
+import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
@@ -295,6 +295,9 @@ export default function StaffPage() {
 
   const salleDessinee = plan.some((t) => t.pos_x !== null && t.pos_y !== null);
   const tableActive = tableOuverte === null ? null : plan.find((t) => t.id === tableOuverte) ?? null;
+  // Le même classement que celui affiché sur le plan : le panneau d'action doit
+  // dire la même chose que la table qu'on vient de toucher.
+  const rangs = useMemo(() => ordreDArrivee(etatsDesTables), [etatsDesTables]);
 
   /**
    * Ce que le serveur peut faire pour la table qu'il vient de toucher.
@@ -515,6 +518,7 @@ export default function StaffPage() {
                     <ActionTable
                       table={tableActive}
                       etat={etatsDesTables[tableActive.id] ?? ETAT_LIBRE}
+                      rang={rangs[tableActive.id] ?? null}
                       actions={actionsPourTable(tableActive.id)}
                       onFermer={() => setTableOuverte(null)}
                     />
@@ -522,8 +526,9 @@ export default function StaffPage() {
                 }
               />
               <p className="text-xs text-neutral-500 mt-2">
-                Touchez une table pour agir dessus. L&apos;anneau se referme au bout de dix
-                minutes : c&apos;est le moment où la commande est comptée perdue.
+                Touchez une table pour agir dessus. Quand plusieurs tables commandent en même
+                temps, le chiffre posé dessus donne l&apos;ordre d&apos;arrivée : la 1 attend
+                depuis le plus longtemps.
               </p>
             </>
           )}

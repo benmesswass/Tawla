@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import PieceTable from "./PieceTable";
-import { ETAT_LIBRE, EtatTable, PlanTable, URGENCES, demandeUnServeur, pression } from "./types";
+import {
+  ETAT_LIBRE,
+  EtatTable,
+  PlanTable,
+  URGENCES,
+  demandeUnServeur,
+  ordreDArrivee,
+  secondesDepuis,
+} from "./types";
 
 /**
  * Le plan de salle.
@@ -82,18 +90,22 @@ export default function PlanDeSalle({
   );
   const zones = useMemo(() => zonesDessinees(posees), [posees]);
 
+  // L'ordre d'arrivée des commandes en attente de validation : c'est lui qui
+  // dit au serveur par quelle table commencer quand plusieurs l'appellent.
+  const rangs = useMemo(() => ordreDArrivee(etats), [etats]);
+
   // Une seule table respire : celle qui attend depuis le plus longtemps. En
-  // faire respirer trois transformerait la salle en sapin de Noël.
+  // faire respirer trois transformerait la salle en sapin de Noël. À attente
+  // égale, l'état le plus urgent l'emporte (un appel passe devant une addition).
   const laPlusUrgente = useMemo(() => {
     let gagnante: number | null = null;
-    let record = 0;
+    let record = -1;
     for (const t of posees) {
       const etat = etats[t.id] ?? ETAT_LIBRE;
       if (!demandeUnServeur(etat.urgence)) continue;
-      const p = pression(etat, maintenant);
-      const rang = URGENCES.indexOf(etat.urgence) / 100;
-      if (p + rang > record) {
-        record = p + rang;
+      const score = secondesDepuis(etat.depuis, maintenant) + URGENCES.indexOf(etat.urgence);
+      if (score > record) {
+        record = score;
         gagnante = t.id;
       }
     }
@@ -162,6 +174,7 @@ export default function PlanDeSalle({
               table={table}
               etat={etats[table.id] ?? ETAT_LIBRE}
               maintenant={maintenant}
+              rang={rangs[table.id] ?? null}
               laPlusUrgente={table.id === laPlusUrgente}
               selectionnee={table.id === tableSelectionnee}
               enDeplacement={attrapee === table.id}

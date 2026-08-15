@@ -204,15 +204,36 @@
   stroke: rgba(36, 24, 17, .22);
   stroke-width: 1.5;
 }
-.jauge {
-  fill: none;
-  stroke: #ff8a5c;
-  stroke-width: 4;
-  stroke-linecap: round;
-  /* Le décompte part du haut de la table et tourne dans le sens horaire. */
-  transform: rotate(-90deg);
-  transform-origin: center;
-  transition: stroke-dashoffset .6s linear;
+/* Le rang d'arrivée. Posé sur le coin haut-gauche du plateau, là où l'œil
+   arrive : quand six tables rouges se valent, c'est ce chiffre qui tranche. */
+.rang {
+  position: absolute;
+  top: 12%;
+  left: 12%;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  background: rgba(36, 24, 17, .55);
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, .35);
+  pointer-events: none;
+}
+/* Une table ronde n'a pas de coin : la pastille y flotterait à côté du plateau
+   si on la posait au même endroit que sur une table droite. */
+.piece[data-forme="round"] .rang { top: 19%; left: 19%; }
+/* La première a commandé avant les autres : c'est la seule qu'on n'a pas à
+   comparer, elle se lit en blanc plein. */
+.rang[data-premier] {
+  background: #fff;
+  color: #b8341a;
+  border-color: #fff;
 }
 
 .piece[data-tone="cuisine"] .plateau { fill: #cdc2ae; stroke: #8fb0c4; stroke-width: 2.5; }
@@ -318,5 +339,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .piece[data-urgente] { animation: none; }
-  .piece, .jauge { transition: none; }
+  .piece { transition: none; }
 }
