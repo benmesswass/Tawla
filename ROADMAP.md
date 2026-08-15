@@ -101,12 +101,12 @@ comme livré.
 **19.1 — T1 : fermer `POST /loyalty/lookup`** (dernière route publique qui
 accepte un `restaurant_id` incrémental et qui **écrit** en base)
 
-- [ ] `LoyaltyLookup` prend le `qr_token` de la table au lieu de `restaurant_id` — le restaurant en est déduit, exactement comme `OrderCreate` depuis la Phase 12.2
-- [ ] La route ne crée plus la fiche : `404 LOYALTY_MEMBER_NOT_FOUND` si elle n'existe pas. `create_order` la crée déjà au bon moment, et une route publique qui écrit des numéros de téléphone de tiers n'a aucune finalité au sens de la loi 2004-63
-- [ ] Côté client : afficher « première visite » sur ce 404 au lieu de lire `order_count: 0` — le comportement visible ne change pas pour le client attablé
-- [ ] Test `test_lookup_fidelite_refuse_sans_qr_token` : sans le token de la table, la réponse est identique pour un numéro client et un numéro inconnu
-- [ ] Test `test_lookup_fidelite_ne_cree_jamais_de_fiche` : aucune ligne `LoyaltyMember` créée par cette route, quel que soit le numéro
-- [ ] Relire `frontend/lib/i18n/privacy.ts` (fr **et** ar) : le texte promet que le numéro n'est jamais partagé — il doit redevenir vrai, et le rester
+- [x] `LoyaltyLookup` prend le `qr_token` de la table au lieu de `restaurant_id` — le restaurant en est déduit, exactement comme `OrderCreate` depuis la Phase 12.2 (PR #51)
+- [x] La route ne crée plus la fiche : `404 LOYALTY_MEMBER_NOT_FOUND` si elle n'existe pas. `create_order` la crée déjà au bon moment, et une route publique qui écrit des numéros de téléphone de tiers n'a aucune finalité au sens de la loi 2004-63 (PR #51) — conséquence non prévue ici : la date de naissance perdait son unique chemin de saisie, elle voyage donc avec la commande (`OrderCreate.loyalty_birth_date`), là où le client la donne pour lui-même
+- [x] Côté client : afficher « première visite » sur ce 404 au lieu de lire `order_count: 0` — le comportement visible ne change pas pour le client attablé (PR #51)
+- [x] Test `test_lookup_fidelite_refuse_sans_qr_token` : sans le token de la table, la réponse est identique pour un numéro client et un numéro inconnu (PR #51)
+- [x] Test `test_lookup_fidelite_ne_cree_jamais_de_fiche` : aucune ligne `LoyaltyMember` créée par cette route, quel que soit le numéro (PR #51)
+- [x] Relire `frontend/lib/i18n/privacy.ts` (fr **et** ar) : le texte promet que le numéro n'est jamais partagé — il doit redevenir vrai, et le rester (PR #51) — relu, aucun mot à changer : « uniquement si vous l'entrez vous-même » était faux sous l'ancienne route, le correctif suffit à le rendre vrai
 
 **Résidu assumé** : avec le `qr_token` en main, un client attablé peut vérifier
 si un numéro est connu de **ce** restaurant. C'est le même niveau d'accès que
@@ -116,35 +116,35 @@ noter tel quel dans la PR.
 **19.2 — T2 : rendre la création de commande idempotente** (aujourd'hui, une
 réponse perdue en plein service produit deux commandes et deux préparations)
 
-- [ ] `Order.client_order_id` (`String(64)`, unique, indexé, nullable) + migration Alembic + `model_registry.py`
-- [ ] `OrderCreate.client_order_id` : identifiant généré par le navigateur **au moment où le panier est composé**, et conservé tel quel dans la charge utile mise en file hors ligne — un identifiant régénéré au rejeu ne servirait à rien
-- [ ] `create_order` renvoie la commande existante au lieu d'en créer une seconde, avec son `public_token` d'origine : le téléphone du client doit retomber sur **sa** commande, pas sur une commande qu'il ne pourra plus suivre
-- [ ] Aucun second broadcast WebSocket sur un rejeu — sinon la commande réapparaît sur l'écran serveur alors qu'elle est déjà prise en charge
-- [ ] Test `test_deux_envois_du_meme_panier_ne_font_quune_commande` : deux `POST /orders` identiques → une commande, un événement, le même `public_token`
-- [ ] Test : deux paniers différents avec deux identifiants différents restent deux commandes (le filet ne doit pas avaler une vraie deuxième tournée)
+- [x] `Order.client_order_id` (`String(64)`, unique, indexé, nullable) + migration Alembic + `model_registry.py` (PR #51) — unicité portée sur `(table_id, client_order_id)` et non sur la seule colonne : l'identifiant vient du navigateur, donc un `client_order_id: "1"` global aurait rendu la commande — et le `public_token` — d'un inconnu. `model_registry.py` inchangé, `Order` y était déjà
+- [x] `OrderCreate.client_order_id` : identifiant généré par le navigateur **au moment où le panier est composé**, et conservé tel quel dans la charge utile mise en file hors ligne — un identifiant régénéré au rejeu ne servirait à rien (PR #51)
+- [x] `create_order` renvoie la commande existante au lieu d'en créer une seconde, avec son `public_token` d'origine : le téléphone du client doit retomber sur **sa** commande, pas sur une commande qu'il ne pourra plus suivre (PR #51)
+- [x] Aucun second broadcast WebSocket sur un rejeu — sinon la commande réapparaît sur l'écran serveur alors qu'elle est déjà prise en charge (PR #51)
+- [x] Test `test_deux_envois_du_meme_panier_ne_font_quune_commande` : deux `POST /orders` identiques → une commande, un événement, le même `public_token` (PR #51)
+- [x] Test : deux paniers différents avec deux identifiants différents restent deux commandes (le filet ne doit pas avaler une vraie deuxième tournée) (PR #51)
 
 **19.3 — T3 : le limiteur de débit derrière le proxy de l'hébergeur**
 (aujourd'hui `request.client.host` : en production, tout le parc partage un seul
 compteur de 20 requêtes par minute)
 
-- [ ] Clé du limiteur sur l'IP réelle du client, pas sur le pair TCP — en ne faisant confiance à `X-Forwarded-For` que depuis le proxy déclaré, jamais depuis n'importe qui
-- [ ] `FORWARDED_ALLOW_IPS` documenté dans `backend/.env.example` avec la raison, et renseigné au déploiement (Phase 20)
-- [ ] Test : deux requêtes portant des `X-Forwarded-For` différents ne partagent pas le compteur ; un en-tête envoyé par un client non fiable est ignoré
-- [ ] Vérifier sur staging derrière le vrai proxy avant la bascule 🧑 — c'est le seul des trois défauts qui ne se constate qu'en production
+- [x] Clé du limiteur sur l'IP réelle du client, pas sur le pair TCP — en ne faisant confiance à `X-Forwarded-For` que depuis le proxy déclaré, jamais depuis n'importe qui (PR #51) — c'est la **dernière** valeur de la liste qui fait foi, la première étant forgeable par le client
+- [x] `FORWARDED_ALLOW_IPS` documenté dans `backend/.env.example` avec la raison, et renseigné au déploiement (Phase 20) (PR #51)
+- [x] Test : deux requêtes portant des `X-Forwarded-For` différents ne partagent pas le compteur ; un en-tête envoyé par un client non fiable est ignoré (PR #51)
+- [ ] Vérifier sur staging derrière le vrai proxy avant la bascule 🧑 — c'est le seul des trois défauts qui ne se constate qu'en production. **À vérifier aussi** : les opérateurs mobiles tunisiens partagent une poignée d'IP publiques entre beaucoup d'abonnés (CGNAT), donc le plafond de 20 req/min sur `POST /orders` pourrait refuser des commandes légitimes à l'iftar
 
 **19.4 — Les trois défauts mineurs, dans la même passe** (aucun ne mérite une
 PR à lui seul)
 
-- [ ] `POST /orders` passe sous `rate_limit`, comme `POST /waiter-calls` : même niveau d'accès, même nuisance possible, sauf que celle-ci mobilise la cuisine
-- [ ] `table_label` échappé dans les deux fenêtres d'impression (`app/staff/page.tsx`, `app/kitchen/page.tsx`) — les notes du client et le nom du serveur le sont déjà, dans la même fonction
-- [ ] `<html lang>` suit la langue choisie par le client : le parcours bascule en arabe, l'attribut reste `fr`, et un lecteur d'écran prononce l'arabe avec les règles du français
+- [x] `POST /orders` passe sous `rate_limit`, comme `POST /waiter-calls` : même niveau d'accès, même nuisance possible, sauf que celle-ci mobilise la cuisine (PR #51)
+- [x] `table_label` échappé dans les deux fenêtres d'impression (`app/staff/page.tsx`, `app/kitchen/page.tsx`) — les notes du client et le nom du serveur le sont déjà, dans la même fonction (PR #51) — trois occurrences en fait, la demande de paiement cash de l'écran serveur en portait une troisième
+- [x] `<html lang>` suit la langue choisie par le client : le parcours bascule en arabe, l'attribut reste `fr`, et un lecteur d'écran prononce l'arabe avec les règles du français (PR #51)
 
 **19.5 — Borner les commandes actives dans le temps** (défaut rendu visible par
 le plan de salle : des tables restaient rouges le lendemain, avec « +1 h »)
 
-- [ ] Les écrans de service ne montrent que les commandes du service en cours — filtrage dans `list_active_orders` et `list_pending_calls`, pas dans le composant : deux écrans qui filtrent différemment finiraient par se contredire
-- [ ] **Ne pas** changer le statut de ces commandes : elles restent « perdues » pour `stats/service.py::_lost_orders`, et c'est ce chiffre qui porte l'argument de vente. On cesse de les afficher, on ne les efface pas
-- [ ] Seuil à proposer et à confronter au premier pilote (comme `ABANDONED_PENDING_AFTER`), documenté au même endroit
+- [x] Les écrans de service ne montrent que les commandes du service en cours — filtrage dans `list_active_orders` et `list_pending_calls`, pas dans le composant : deux écrans qui filtrent différemment finiraient par se contredire (PR #51)
+- [x] **Ne pas** changer le statut de ces commandes : elles restent « perdues » pour `stats/service.py::_lost_orders`, et c'est ce chiffre qui porte l'argument de vente. On cesse de les afficher, on ne les efface pas (PR #51)
+- [x] Seuil à proposer et à confronter au premier pilote (comme `ABANDONED_PENDING_AFTER`), documenté au même endroit (PR #51) — 5 h du matin, heure de Tunis, dans `app/core/dates.py` : assez tard pour ne jamais couper un service de nuit. Reste hors périmètre : `active_orders_count` du tableau de bord manager n'est pas borné, il peut afficher un nombre que l'écran serveur ne montre plus
 
 ---
 
