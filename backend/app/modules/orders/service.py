@@ -214,6 +214,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 quantity=line.quantity,
                 notes=line.notes,
                 is_shared=line.is_shared,
+                shared_with=",".join(str(p) for p in line.shared_with) or None,
                 from_suggestion=line.from_suggestion,
             )
         )
@@ -337,6 +338,8 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
             newly_assigned = True
     if new_status == OrderStatus.SENT_TO_KITCHEN:
         order.sent_to_kitchen_at = now
+    if new_status == OrderStatus.IN_PREPARATION:
+        order.preparation_started_at = now
     if new_status == OrderStatus.READY:
         order.ready_at = now
     if new_status == OrderStatus.SERVED:

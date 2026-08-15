@@ -19,6 +19,7 @@ import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
+import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
 import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon, ShareIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
@@ -35,6 +36,10 @@ type CartLine = {
   quantity: number;
   note: string;
   shared: boolean;
+  // Numéros de places qui se partagent ce plat. Vide = toute la table. Saisi
+  // ici plutôt qu'au moment de payer : le client vient de composer sa
+  // commande, il sait qui prend quoi — dix minutes plus tard, il ne sait plus.
+  sharedWith: number[];
   // Ajoutée depuis une proposition « avec ce plat » plutôt que depuis la carte.
   // Sert uniquement à mesurer l'effet de la vente incitative (Phase 14.1).
   fromSuggestion: boolean;
@@ -133,9 +138,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, CartLine>>({});
   const [cartOrderId, setCartOrderId] = useState<string | null>(null);
+  // Nombre de personnes à table, demandé seulement quand un plat est marqué
+  // « à partager » — jamais à l'ouverture du menu, où la question n'a pas
+  // encore de raison d'être posée.
+  const [convives, setConvives] = useState(2);
   // Toutes les commandes encore ouvertes de cette table — celle qu'on suit à
   // l'écran, et celles qu'on a quittées sans les régler.
   const [openOrders, setOpenOrders] = useState<{ order: Order; token: string }[]>([]);
+  // Horloge partagée de l'écran de suivi : une seule source pour tous les
+  // compteurs affichés.
+  const maintenant = useHorloge();
   const [suggestions, setSuggestions] = useState<Record<string, number[]>>({});
   // Plat dont on propose les accompagnements juste après l'ajout au panier.
   // Un seul à la fois : empiler les propositions transformerait la page en
@@ -531,6 +543,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           quantity: (existing?.quantity ?? 0) + 1,
           note: existing?.note ?? "",
           shared: existing?.shared ?? false,
+          sharedWith: existing?.sharedWith ?? [],
           // Une ligne déjà au panier garde son origine : si le client a d'abord
           // pris le plat depuis la carte, en reprendre un depuis une suggestion
           // n'en fait pas une vente incitative.
@@ -568,7 +581,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   function setShared(itemId: number, shared: boolean) {
-    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], shared } } : prev));
+    setCart((prev) =>
+      prev[itemId]
+        ? { ...prev, [itemId]: { ...prev[itemId], shared, sharedWith: shared ? prev[itemId].sharedWith : [] } }
+        : prev
+    );
+  }
+
+  function toggleConvive(itemId: number, place: number) {
+    setCart((prev) => {
+      const ligne = prev[itemId];
+      if (!ligne) return prev;
+      const sharedWith = ligne.sharedWith.includes(place)
+        ? ligne.sharedWith.filter((p) => p !== place)
+        : [...ligne.sharedWith, place].sort((a, b) => a - b);
+      return { ...prev, [itemId]: { ...ligne, sharedWith } };
+    });
   }
 
   const cartLines = Object.values(cart);
@@ -585,6 +613,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         quantity: l.quantity,
         notes: l.note || null,
         is_shared: l.shared,
+        shared_with: l.shared ? l.sharedWith : [],
         from_suggestion: l.fromSuggestion,
       })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
@@ -668,7 +697,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     try {
       const blob = await generateShareCardBlob({
         restaurantName: restaurant.name,
-        items: trackedOrder.items.map((it) => ({ name: it.menu_item_name, quantity: it.quantity })),
+        items: trackedOrder.items.map((it) => ({
+          name: it.menu_item_name,
+          quantity: it.quantity,
+          unitPrice: it.unit_price,
+          lineTotal: it.unit_price * it.quantity,
+        })),
+        total: trackedOrder.total_amount,
+        tip: trackedOrder.tip_amount,
+        tableLabel: trackedOrder.table_label,
+        orderId: trackedOrder.id,
         locale: locale === "ar" ? "ar" : "fr",
       });
       if (!blob) return;
@@ -751,6 +789,20 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {cancelled ? t.orderCancelledTitle : t.orderSentTitle}
         </h1>
         <p className="mt-2 text-neutral-600 text-center">{t.orderSubtitle(table.label, trackedOrder.id)}</p>
+
+        {/* Le client voyait « Envoyé » sans savoir depuis combien de temps.
+            Une attente qu'on peut lire se supporte ; une attente muette fait
+            lever la tête pour chercher un serveur. */}
+        {!cancelled &&
+          (() => {
+            const secondes = elapsedSeconds(trackedOrder.created_at, maintenant);
+            if (secondes === null) return null;
+            return (
+              <p className="mt-1 text-sm text-center text-[var(--ink-soft)] tabular-nums">
+                {t.orderElapsed(duree(secondes))}
+              </p>
+            );
+          })()}
 
         <div className="mt-4 text-center">
           <button
@@ -1124,6 +1176,34 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <UtensilsIcon className="w-4 h-4 shrink-0" />
               {t.sharedCheckboxLabel}
             </label>
+            {cart[item.id].shared && (
+              <div className="mt-2">
+                <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
+                    const choisi = cart[item.id].sharedWith.includes(place);
+                    return (
+                      <button
+                        key={place}
+                        type="button"
+                        onClick={() => toggleConvive(item.id, place)}
+                        aria-pressed={choisi}
+                        className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                          choisi
+                            ? "bg-[var(--harissa)] text-white border-[var(--harissa)]"
+                            : "border-[var(--line)] bg-white text-[var(--encre)]"
+                        }`}
+                      >
+                        {t.personLabel(place)}
+                      </button>
+                    );
+                  })}
+                </div>
+                {cart[item.id].sharedWith.length === 0 && (
+                  <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1324,6 +1404,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         {cartLines.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
             <div className="max-w-md mx-auto">
+              {/* Posé seulement quand un plat est à partager : sinon c'est une
+                  question de plus entre le client et sa commande. */}
+              {cartLines.some((l) => l.shared) && (
+                <label className="flex items-center gap-2 text-sm text-[var(--ink-soft)] mb-3">
+                  {t.dinersLabel}
+                  <input
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={convives}
+                    onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
+                    className="w-16 border border-[var(--line)] rounded px-2 py-1"
+                  />
+                </label>
+              )}
               {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
                 <label className="flex items-center gap-2 text-sm text-indigo-900 mb-3">
                   <input

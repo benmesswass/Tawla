@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
 import { api, staffWsUrl, ApiError, Order, Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
-import { duree } from "@/lib/duree";
+import { duree, elapsedSeconds } from "@/lib/duree";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -23,15 +23,13 @@ type KitchenOrder = {
   items: { name: string; quantity: number; notes: string | null; is_shared: boolean }[];
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
+  preparation_started_at: string | null;
+  // « à préparer » tant que personne ne s'en est saisi, « en cours » ensuite.
+  en_cours: boolean;
 };
 
 // Au-delà de ce seuil, l'attente cuisine passe en alerte visuelle (harissa).
 const ELAPSED_ALERT_MINUTES = 10;
-
-function elapsedSeconds(iso: string | null, now: number): number | null {
-  if (!iso) return null;
-  return Math.max(0, (now - new Date(iso).getTime()) / 1000);
-}
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
@@ -49,6 +47,8 @@ function orderFromApi(o: Order): KitchenOrder {
     })),
     scheduled_for: o.scheduled_for,
     sent_to_kitchen_at: o.sent_to_kitchen_at,
+    preparation_started_at: o.preparation_started_at,
+    en_cours: o.status === "in_preparation",
   };
 }
 
@@ -159,6 +159,8 @@ export default function KitchenPage() {
                 items: msg.items,
                 scheduled_for: msg.scheduled_for ?? null,
                 sent_to_kitchen_at: msg.sent_to_kitchen_at ?? null,
+                preparation_started_at: null,
+                en_cours: false,
               },
             ]
       );
@@ -184,19 +186,34 @@ export default function KitchenPage() {
     }
   }, [status, loadActiveOrders, loadTodayCount]);
 
-  async function markDone(orderId: number) {
+  // Les deux étapes étaient enchaînées derrière un seul bouton « Prêt » :
+  // « en préparation » n'existait donc que le temps d'un appel réseau, et la
+  // cuisine ne pouvait pas dire ce qu'elle avait déjà commencé. Les séparer,
+  // c'est ce qui donne les deux colonnes — et un vrai temps de préparation.
+  async function commencerPreparation(orderId: number) {
     setError(null);
     try {
       await api.startPreparation(orderId);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.order_id === orderId
+            ? { ...o, en_cours: true, preparation_started_at: new Date().toISOString() }
+            : o
+        )
+      );
     } catch (e) {
-      // Une commande déjà en préparation (ex: reconnexion après un clic
-      // parti au moment de la coupure) n'est pas une vraie erreur ; toute
-      // autre erreur doit interrompre le passage à "prêt".
-      if (!(e instanceof ApiError && e.code === "INVALID_TRANSITION")) {
-        setError(toFrenchMessage(e));
+      // Déjà en préparation (ex: clic parti au moment d'une coupure, ou deux
+      // écrans cuisine) : l'état visé est atteint, ce n'est pas une erreur.
+      if (e instanceof ApiError && e.code === "INVALID_TRANSITION") {
+        setOrders((prev) => prev.map((o) => (o.order_id === orderId ? { ...o, en_cours: true } : o)));
         return;
       }
+      setError(toFrenchMessage(e));
     }
+  }
+
+  async function markDone(orderId: number) {
+    setError(null);
     try {
       await api.markReady(orderId);
       setOrders((prev) => prev.filter((o) => o.order_id !== orderId));
@@ -294,50 +311,84 @@ export default function KitchenPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-        {orders.map((o) => (
-          <Card key={o.order_id} dark padding="md" className="text-white">
-            <div className="flex justify-between items-baseline mb-1">
-              <span className="text-xl font-bold">{o.table_label}</span>
-              <span className="text-neutral-500 text-sm">#{o.order_id}</span>
-            </div>
-            {(() => {
-              const secondes = elapsedSeconds(o.sent_to_kitchen_at, now);
-              if (secondes === null) return null;
-              const late = secondes >= ELAPSED_ALERT_MINUTES * 60;
-              return (
-                <Badge tone={late ? "danger" : "neutral"} dark className="mb-2">
-                  il y a {duree(secondes)}
-                </Badge>
-              );
-            })()}
-            {o.scheduled_for && (
-              <div className="text-xs text-indigo-300 mb-2 flex items-center gap-1">
-                <MoonIcon className="w-3.5 h-3.5 shrink-0" />
-                Iftar {formatTime(o.scheduled_for)}
+      {/* Deux colonnes : ce qui attend, ce qui est en train de cuire. Une seule
+          liste mélangeait les deux, et le cuisinier ne pouvait pas dire d'un
+          regard ce qu'il avait déjà lancé. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+        {(
+          [
+            { titre: "À préparer", cours: false },
+            { titre: "En préparation", cours: true },
+          ] as const
+        ).map(({ titre, cours }) => {
+          const colonne = orders.filter((o) => o.en_cours === cours);
+          return (
+            <section key={titre}>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-400 mb-2">
+                {titre} ({colonne.length})
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
+                {colonne.map((o) => {
+                  // Chaque colonne compte à partir de son propre repère : le
+                  // temps d'attente avant qu'on s'en saisisse, puis le temps de
+                  // préparation. Les additionner masquerait lequel dérape.
+                  const depuis = cours ? o.preparation_started_at : o.sent_to_kitchen_at;
+                  const secondes = elapsedSeconds(depuis, now);
+                  const late = secondes !== null && secondes >= ELAPSED_ALERT_MINUTES * 60;
+                  return (
+                    <Card key={o.order_id} dark padding="md" className="text-white">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-xl font-bold">{o.table_label}</span>
+                        <span className="text-neutral-500 text-sm">#{o.order_id}</span>
+                      </div>
+                      {secondes !== null && (
+                        <Badge tone={late ? "danger" : "neutral"} dark className="mb-2">
+                          {cours ? `en cuisson depuis ${duree(secondes)}` : `en attente depuis ${duree(secondes)}`}
+                        </Badge>
+                      )}
+                      {o.scheduled_for && (
+                        <div className="text-xs text-indigo-300 mb-2 flex items-center gap-1">
+                          <MoonIcon className="w-3.5 h-3.5 shrink-0" />
+                          Iftar {formatTime(o.scheduled_for)}
+                        </div>
+                      )}
+                      <ul className="space-y-1 mb-4">
+                        {o.items.map((it, i) => (
+                          <li key={i}>
+                            <span className="font-medium">{it.quantity}×</span> {it.name}
+                            {it.is_shared && (
+                              <Badge tone="warning" dark className="ms-1.5 inline-flex items-center gap-1">
+                                <UtensilsIcon className="w-3 h-3 shrink-0" />
+                                à partager
+                              </Badge>
+                            )}
+                            {it.notes && <span className="text-neutral-500"> — {it.notes}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                      {cours ? (
+                        <Button variant="success" dark className="w-full" onClick={() => markDone(o.order_id)}>
+                          Prêt
+                        </Button>
+                      ) : (
+                        <Button dark className="w-full" onClick={() => commencerPreparation(o.order_id)}>
+                          Commencer
+                        </Button>
+                      )}
+                    </Card>
+                  );
+                })}
+                {colonne.length === 0 && (
+                  <EmptyState
+                    message={cours ? "Rien en cuisson." : "Rien en attente."}
+                    dark
+                  />
+                )}
               </div>
-            )}
-            <ul className="space-y-1 mb-4">
-              {o.items.map((it, i) => (
-                <li key={i}>
-                  <span className="font-medium">{it.quantity}×</span> {it.name}
-                  {it.is_shared && (
-                    <Badge tone="warning" dark className="ms-1.5 inline-flex items-center gap-1">
-                      <UtensilsIcon className="w-3 h-3 shrink-0" />
-                      à partager
-                    </Badge>
-                  )}
-                  {it.notes && <span className="text-neutral-500"> — {it.notes}</span>}
-                </li>
-              ))}
-            </ul>
-            <Button variant="success" dark className="w-full" onClick={() => markDone(o.order_id)}>
-              Prêt
-            </Button>
-          </Card>
-        ))}
+            </section>
+          );
+        })}
       </div>
-      {orders.length === 0 && <EmptyState message="Aucune commande en cuisine." dark className="mt-4" />}
     </div>
   );
 }

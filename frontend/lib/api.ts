@@ -120,6 +120,7 @@ export type Order = {
   created_at: string;
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
+  preparation_started_at: string | null;
   ready_at: string | null;
   // Présent uniquement sur les réponses servies au staff (routes sous JWT) :
   // la vue client ne porte plus de donnée personnelle depuis la Phase 12.2.
@@ -136,6 +137,8 @@ export type Order = {
     quantity: number;
     notes: string | null;
     is_shared: boolean;
+    /** Numéros de places entre lesquelles le plat est partagé. Vide = toute la table. */
+    shared_with: number[];
     from_suggestion: boolean;
   }[];
 };
@@ -404,6 +407,7 @@ export const api = {
       quantity: number;
       notes?: string | null;
       is_shared?: boolean;
+      shared_with?: number[];
       from_suggestion?: boolean;
     }[];
     scheduled_for?: string | null;

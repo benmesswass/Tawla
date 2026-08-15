@@ -18,6 +18,12 @@ import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
 import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
+import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
+
+// Même seuil que `ABANDONED_PENDING_AFTER` côté serveur : au-delà, la commande
+// est comptée perdue dans les chiffres du patron. L'écran doit donc alerter
+// avant, pas après — sinon le serveur découvre la perte dans le tableau de bord.
+const ATTENTE_ALERTE_MINUTES = 10;
 import Skeleton from "@/components/ui/Skeleton";
 
 type PendingOrder = {
@@ -67,6 +73,7 @@ function escapeHtml(value: string): string {
 export default function StaffPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["waiter", "manager"]);
+  const maintenant = useHorloge();
   const [pending, setPending] = useState<PendingOrder[]>([]);
   const [readyToServe, setReadyToServe] = useState<ReadyOrder[]>([]);
   const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
@@ -569,6 +576,23 @@ export default function StaffPage() {
               <div>
                 <div className="font-medium">{o.table_label}</div>
                 <div className="text-sm text-neutral-500">Commande #{o.order_id}</div>
+                {/* Depuis combien de temps la table attend. C'est le seul
+                    chiffre qui dit laquelle prendre en premier — et au-delà de
+                    dix minutes, cette commande est déjà comptée perdue. */}
+                {(() => {
+                  const secondes = elapsedSeconds(o.created_at, maintenant);
+                  if (secondes === null) return null;
+                  const tardive = secondes >= ATTENTE_ALERTE_MINUTES * 60;
+                  return (
+                    <div
+                      className={`text-xs mt-1 tabular-nums ${
+                        tardive ? "font-semibold text-[var(--harissa)]" : "text-[var(--ink-soft)]"
+                      }`}
+                    >
+                      en attente depuis {duree(secondes)}
+                    </div>
+                  );
+                })()}
                 {o.scheduled_for && (
                   <div className="text-xs text-indigo-700 mt-1 flex items-center gap-1">
                     <MoonIcon className="w-3.5 h-3.5 shrink-0" />

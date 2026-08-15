@@ -1,8 +1,25 @@
 from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.modules.orders.models import OrderStatus, PaymentMethod, PaymentStatus
+
+
+def _convives(value: object) -> object:
+    """
+    Les numéros de convives voyagent en liste côté API et sont stockés en
+    « 1,2 » côté base : la conversion se fait ici, dans les deux sens, pour que
+    ni le client ni le modèle n'aient à connaître l'autre format.
+    """
+    if value is None:
+        # Colonne vide : le plat est partagé par toute la table, pas par
+        # personne — d'où la liste vide plutôt qu'un `null` qui obligerait
+        # chaque appelant à distinguer les deux.
+        return []
+    if isinstance(value, str):
+        return [int(part) for part in value.split(",") if part.strip().isdigit()]
+    return value
 
 
 class OrderItemCreate(BaseModel):
@@ -10,6 +27,9 @@ class OrderItemCreate(BaseModel):
     quantity: int = 1
     notes: str | None = None
     is_shared: bool = False
+    # Numéros de places entre lesquelles le plat est partagé. Vide = toute la
+    # table, ce qui reste le cas courant d'un plat « à partager ».
+    shared_with: list[int] = Field(default_factory=list)
     # Ajouté depuis une suggestion « avec ce plat » plutôt que depuis la carte.
     # Déclaratif côté client : ça ne sert qu'à mesurer l'effet de la vente
     # incitative, jamais à autoriser ou tarifer quoi que ce soit — un client qui
@@ -53,6 +73,7 @@ class OrderItemOut(BaseModel):
     quantity: int
     notes: str | None
     is_shared: bool
+    shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
     from_suggestion: bool
 
 
@@ -86,6 +107,7 @@ class OrderOut(BaseModel):
     created_at: datetime
     confirmed_at: datetime | None
     sent_to_kitchen_at: datetime | None
+    preparation_started_at: datetime | None
     ready_at: datetime | None
     served_at: datetime | None
     taken_by_staff_id: int | None

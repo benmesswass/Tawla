@@ -49,3 +49,29 @@ def test_order_item_is_shared_defaults_to_false(client):
         },
     ).json()
     assert order["items"][0]["is_shared"] is False
+
+
+def test_les_convives_dun_plat_partage_survivent_a_la_commande(client):
+    """
+    Le client dit au moment de commander entre qui le plat est partagé ; le
+    calculateur d'addition doit retrouver cette réponse au lieu de la lui
+    redemander (retour du premier service).
+    """
+    _restaurant, table, salade, couscous, _headers = _setup_restaurant_with_items(client)
+
+    order = client.post(
+        "/api/v1/orders",
+        json={
+            "qr_token": table["qr_token"],
+            "items": [
+                {"menu_item_id": salade["id"], "quantity": 1, "is_shared": True, "shared_with": [1, 2]},
+                {"menu_item_id": couscous["id"], "quantity": 1},
+            ],
+        },
+    ).json()
+
+    par_nom = {i["menu_item_name"]: i for i in order["items"]}
+    assert par_nom["Salade méchouia"]["shared_with"] == [1, 2]
+    # Un plat sans précision reste partagé par toute la table : liste vide, et
+    # jamais `null`, pour que le client n'ait pas deux cas à distinguer.
+    assert par_nom["Couscous"]["shared_with"] == []

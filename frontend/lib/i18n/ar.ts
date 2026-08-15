@@ -82,6 +82,10 @@ export const ar = {
   loyaltyPrivacyLink: "سياسة الخصوصية",
   loyaltyProgress: (count, remaining) => `عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
   itemOutOfStock: "ما فماش توّا",
+  orderElapsed: (duree) => `تبعثت من ${duree}`,
+  sharedWithLabel: "مقسوم بين :",
+  sharedWithEveryone: "ما اخترت حتى واحد : مقسوم على الطاولة الكل.",
+  dinersLabel: "قداش عباد عالطاولة",
   openOrdersTitle: (count, reste) =>
     count > 1
       ? `${count} طلبيات مازالوا — باقي ${reste.toFixed(2)} د تتخلص`
