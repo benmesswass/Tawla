@@ -7,6 +7,9 @@ réel ou une présence physique de Wassim — elles ne sont jamais faisables en
 autonomie.
 
 Refondue le 2026-08-15 après l'audit final ([`AUDIT_FINAL.md`](./AUDIT_FINAL.md)).
+**Les 31 tâches 🧑 ont leur parcours pas à pas dans
+[`terrain/PARCOURS.md`](./terrain/PARCOURS.md)** — c'est le point d'entrée de
+Wassim, ce fichier-ci reste celui de Claude Code.
 Les phases 12 à 18 sont closes ; ce qu'elles ont livré est résumé en fin de
 fichier. Documents qui fondent celle-ci :
 
@@ -147,6 +150,8 @@ le plan de salle : des tables restaient rouges le lendemain, avec « +1 h »)
 
 ## Phase 20 — Mettre en ligne, pour de vrai
 
+**Mode d'emploi pas à pas : [`terrain/MISE_EN_LIGNE.md`](./terrain/MISE_EN_LIGNE.md)**
+
 **Bloquant avant la première commande d'un vrai client.** Un pilote qui perd son
 service du soir ne revient pas, et il le racontera aux autres patrons du
 quartier — c'est le seul incident dont le coût dépasse celui du produit.
@@ -169,6 +174,8 @@ domaine réel, vue sur l'écran cuisine, avec une sauvegarde restaurée la veill
 ---
 
 ## Phase 21 — Vingt entretiens de restaurateurs 🧑
+
+**Mode d'emploi : [`terrain/GUIDE_ENTRETIEN.md`](./terrain/GUIDE_ENTRETIEN.md) — comment obtenir les rendez-vous, puis comment mener la conversation.**
 
 **La ligne la plus lourde de la grille (20 %), notée 2,0, et la seule qui
 conditionne toutes les suivantes.** Elle n'attend rien : elle peut démarrer le
@@ -216,6 +223,8 @@ gratuites), jamais des dinars.
 ---
 
 ## Phase 23 — Les trois pilotes
+
+**Modes d'emploi : [`terrain/RELEVE_AVANT.md`](./terrain/RELEVE_AVANT.md) (la semaine de référence), [`terrain/FORMATION_10MIN.md`](./terrain/FORMATION_10MIN.md) et [`terrain/PRISE_EN_MAIN.md`](./terrain/PRISE_EN_MAIN.md) (installation et équipe).**
 
 C'est ici que la note « besoin marché prouvé » se gagne, et nulle part ailleurs.
 

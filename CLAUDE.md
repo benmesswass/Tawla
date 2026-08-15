@@ -131,10 +131,15 @@ pas construite. Le produit ne manque pas de fonctionnalité, il manque un client
   notation, failles vérifiées, plafond de revenus).
 - `PREMIERES_VENTES.md` — audit orienté vente et les dix recommandations pour
   les premiers clients.
-- `terrain/` — documents de terrain, pas du code : guide d'entretien
-  restaurateur, dépouillement des entretiens, fiche de prise en main fr/ar,
-  script de formation de l'équipe, journal des pilotes. Ils se tiennent à jour à
-  la main, sur place ; ne pas les remplir depuis une session.
+- `terrain/` — documents de terrain, pas du code. Point d'entrée :
+  `terrain/PARCOURS.md`, qui ordonne les 31 tâches 🧑 de la roadmap et renvoie
+  vers le mode d'emploi de chacune (`MISE_EN_LIGNE.md` pour la production,
+  `GUIDE_ENTRETIEN.md` pour obtenir et mener les entretiens, `RELEVE_AVANT.md`
+  pour la semaine de référence, `FORMATION_10MIN.md` et `PRISE_EN_MAIN.md` pour
+  l'installation, `ENTRETIENS.md` et `PILOTES.md` pour les relevés). Ils se
+  tiennent à jour à la main, sur place ; ne jamais les remplir depuis une
+  session — un chiffre de terrain inventé détruit la seule chose que Tawla a à
+  vendre.
 
 Objectif en cours : passer de 5,3/10 à 8/10 au prochain jury. Le tableau en tête
 de `ROADMAP.md` dit quelle dimension chaque phase déplace — le recalculer à la
