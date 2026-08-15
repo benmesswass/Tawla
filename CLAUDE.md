@@ -112,17 +112,25 @@ par le script, non commité).
 
 ## Roadmap
 
-`ROADMAP.md` est le fichier unique de pilotage du projet (phases 12 à 16 depuis
-la revue d'investissement du 2026-08-13). Prendre la première tâche non cochée
-en partant du haut, dans l'ordre des phases. Une tâche cochée `[x]` doit
-mentionner la PR qui l'a livrée ; si le scope a été réduit, écrire pourquoi sur
-la ligne.
+`ROADMAP.md` est le fichier unique de pilotage du projet (phases 19 à 24 depuis
+l'audit final du 2026-08-15). Prendre la première tâche non cochée en partant du
+haut, dans l'ordre des phases. Une tâche cochée `[x]` doit mentionner la PR qui
+l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne.
 
+**Règle qui prime sur tout ajout de code** : après la Phase 20, toute
+proposition de fonctionnalité doit nommer le restaurateur qui l'a demandée.
+Sans nom, elle va dans la section « Sous condition » de `ROADMAP.md` et n'est
+pas construite. Le produit ne manque pas de fonctionnalité, il manque un client.
+
+- `AUDIT_FINAL.md` — audit du 2026-08-15 qui fonde la roadmap actuelle : code
+  exécuté, 42 fonctionnalités notées, trois défauts à fermer, note recalculée.
 - `ROADMAP_ARCHIVE.md` — historique des phases 0 à 11. Lecture seule, ne rien y
   ajouter : les décisions et renoncements qu'il documente restent la
   justification de l'état du code.
-- `REVUE_INVESTISSEURS.md` — revue d'investissement qui fonde la roadmap
-  actuelle (grille de notation, failles vérifiées, plafond de revenus).
+- `REVUE_INVESTISSEURS.md` — revue d'investissement du 2026-08-13 (grille de
+  notation, failles vérifiées, plafond de revenus).
+- `PREMIERES_VENTES.md` — audit orienté vente et les dix recommandations pour
+  les premiers clients.
 - `terrain/` — documents de terrain, pas du code : guide d'entretien
   restaurateur, dépouillement des entretiens, fiche de prise en main fr/ar,
   script de formation de l'équipe, journal des pilotes. Ils se tiennent à jour à
