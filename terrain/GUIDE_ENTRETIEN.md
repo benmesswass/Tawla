@@ -12,6 +12,75 @@ un rendez-vous formel attire les patrons complaisants.
 
 ---
 
+## Obtenir les vingt entretiens
+
+Le guide ci-dessous décrit la conversation. Le plus dur est avant : y arriver.
+Vingt entretiens tiennent en **trois semaines**, à raison de deux sorties par
+semaine.
+
+### La liste, avant la première sortie (2 heures, une seule fois)
+
+Ouvrir une carte et lister **quarante** établissements — il en faudra deux fois
+plus que d'entretiens obtenus. Critères, dans l'ordre :
+
+1. **Six tables et plus**, visibles sur les photos ;
+2. **une terrasse** — c'est le signal le plus fort : tables loin du comptoir,
+   serveur qui marche le plus, commandes perdues au maximum ;
+3. **ouvert depuis plusieurs années** — un patron installé est plus dur à
+   convaincre et infiniment plus utile : les autres l'écoutent ;
+4. répartis entre quartier, centre-ville et zone touristique.
+
+Noter pour chacun : nom, rue, ville, type, nombre de tables estimé. Vingt
+entretiens dans le même quartier ne décrivent qu'un quartier.
+
+### Le créneau
+
+**15 h – 17 h, du mardi au jeudi.** Le service de midi est fini, celui du soir
+n'a pas commencé, le patron est là et il s'ennuie un peu. Ne jamais y aller
+pendant un coup de feu : on se fait renvoyer, et on brûle l'adresse.
+
+Une sortie = un quartier = quatre à six établissements à pied. Compter deux
+entretiens obtenus par sortie au début, trois ensuite.
+
+### Les trente secondes à la porte
+
+Demander le patron, jamais un serveur. Puis, debout, sans s'asseoir :
+
+> « Bonjour, je m'appelle Wassim. Je construis un outil pour les restaurants et
+> je ne suis pas là pour vous vendre quoi que ce soit. J'ai quatre questions,
+> ça prend un quart d'heure. Vous me dites d'arrêter quand vous voulez. »
+
+Ce qui fait la différence : **ne rien tenir dans les mains.** Pas d'ordinateur,
+pas de tablette, pas de brochure. Un carnet et un stylo. Quelqu'un qui arrive
+avec un écran vient vendre, et tout le monde le sait.
+
+Si le patron est absent : demander quand il est là, noter, revenir. Ne pas
+« laisser un numéro » — personne ne rappelle.
+
+### Les refus, et ce qu'ils valent
+
+| Ce qu'il dit | Ce que vous faites |
+|---|---|
+| « Je n'ai pas le temps » | « Je repasse jeudi à la même heure ? » — la moitié disent oui |
+| « On a déjà un truc comme ça » | **Rester.** C'est l'entretien le plus précieux des vingt : demander lequel, combien il paie, et ce qui l'agace dedans |
+| « Envoyez-moi un mail » | Poli pour non. Remercier, partir, ne pas envoyer de mail |
+| « C'est quoi exactement ? » | Ne pas répondre par une description du produit : « justement, c'est ce que j'essaie de comprendre — vous, qu'est-ce qui vous fait perdre de l'argent chaque semaine ? » |
+
+Un refus sec se note aussi dans `ENTRETIENS.md`, avec sa raison. Sur vingt
+tentatives, six ou sept refus est un taux normal — moins voudrait dire que vous
+ne visez pas assez haut.
+
+### Le rythme, et le seul piège
+
+Remplir la ligne du tableau **dans la rue, tout de suite après**. Et surtout :
+**ne pas commencer à coder entre deux sorties.** C'est exactement ce que l'audit
+du 15/08 a reproché aux trois phases précédentes — le code est la façon
+confortable de ne pas franchir la porte suivante.
+
+Avant la vingtième ligne remplie, aucune fonctionnalité ne se décide.
+
+---
+
 ## Ouvrir (1 min)
 
 > « Je construis un outil pour les restaurants et je ne veux surtout pas vous

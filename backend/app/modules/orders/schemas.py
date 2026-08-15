@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,12 +26,21 @@ class OrderCreate(BaseModel):
     # réellement préparée pour une table qui n'a rien demandé.
     qr_token: str
     items: list[OrderItemCreate]
+    # Identifiant du panier, fabriqué par le navigateur au moment où le client
+    # le compose — et surtout pas régénéré au rejeu, sinon il ne servirait à
+    # rien. Facultatif : sans lui, la création reste possible, sans le filet.
+    client_order_id: str | None = Field(default=None, max_length=64)
     # Pré-commande mode Ramadan : optionnel, réglé côté client sur l'heure
     # d'iftar du resto quand il choisit "commander pour l'iftar".
     scheduled_for: datetime | None = None
     # Carte de fidélité — facultatif, le client peut commander sans jamais
     # le renseigner.
     loyalty_phone: str | None = None
+    # Date de naissance, pour le bandeau anniversaire. Elle voyage avec la
+    # commande depuis la Phase 19.1 : c'est le seul moment où le client la
+    # donne pour lui-même. La route de consultation, elle, n'écrit plus rien —
+    # sinon elle permettait d'attacher une date au numéro de n'importe qui.
+    loyalty_birth_date: date | None = None
 
 
 class OrderItemOut(BaseModel):

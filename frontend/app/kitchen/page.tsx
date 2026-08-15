@@ -212,7 +212,7 @@ export default function KitchenPage() {
       .map(
         (o) => `
       <div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px dashed #000;">
-        <strong>${o.table_label} — Commande #${o.order_id}</strong>
+        <strong>${escapeHtml(o.table_label)} — Commande #${o.order_id}</strong>
         <ul style="margin:4px 0 0;padding-left:18px;">
           ${o.items
             .map(

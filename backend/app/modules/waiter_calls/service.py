@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.dates import service_day_start
 from app.core.logging import get_logger, log_event
 from app.modules.notifications.manager import manager
 from app.modules.staff.models import Staff
-from app.modules.tables.models import Table
+from app.modules.tables import service as tables_service
 from app.modules.waiter_calls import schemas
 from app.modules.waiter_calls.models import WaiterCall
 
@@ -14,12 +15,7 @@ logger = get_logger("waiter_calls")
 
 
 async def create_call(db: Session, payload: schemas.WaiterCallCreate) -> WaiterCall:
-    table = db.query(Table).filter(Table.qr_token == payload.qr_token).first()
-    if not table:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "INVALID_TABLE_CODE", "message": "invalid table code"},
-        )
+    table = tables_service.get_table_by_qr_token(db, payload.qr_token)
 
     call = WaiterCall(restaurant_id=table.restaurant_id, table_id=table.id)
     db.add(call)
@@ -48,7 +44,14 @@ async def list_pending_calls(db: Session, restaurant_id: int) -> list[WaiterCall
     return (
         db.query(WaiterCall)
         .options(selectinload(WaiterCall.table))
-        .filter(WaiterCall.restaurant_id == restaurant_id, WaiterCall.resolved_at.is_(None))
+        .filter(
+            WaiterCall.restaurant_id == restaurant_id,
+            WaiterCall.resolved_at.is_(None),
+            # Même borne de journée de service que les commandes actives : un
+            # appel jamais résolu de la veille n'a plus personne à la table
+            # (Phase 19.5).
+            WaiterCall.created_at >= service_day_start(),
+        )
         .order_by(WaiterCall.created_at)
         .all()
     )

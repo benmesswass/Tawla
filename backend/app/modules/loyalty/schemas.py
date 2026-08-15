@@ -6,9 +6,19 @@ from app.modules.loyalty.models import LOYALTY_REWARD_THRESHOLD
 
 
 class LoyaltyLookup(BaseModel):
-    restaurant_id: int
+    """
+    Consultation **en lecture seule** de sa propre carte de fidélité. Le
+    restaurant est déduit du `qr_token` de la table, comme `OrderCreate` depuis
+    la Phase 12.2 : un `restaurant_id` incrémental laissait balayer un numéro
+    de téléphone d'établissement en établissement.
+
+    Pas de `birth_date` ici : la route n'écrit plus rien. La date se donne avec
+    sa propre commande (`OrderCreate.loyalty_birth_date`), pas sur une route
+    publique qui accepterait de la coller sur le numéro de n'importe qui.
+    """
+
+    qr_token: str
     phone_number: str
-    birth_date: date | None = None
 
 
 class LoyaltyMemberPublicOut(BaseModel):

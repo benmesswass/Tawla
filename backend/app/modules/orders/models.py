@@ -2,7 +2,7 @@ import enum
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -50,6 +50,13 @@ class PaymentStatus(str, enum.Enum):
 
 class Order(Base):
     __tablename__ = "orders"
+    # Unicité portée par la table, pas globale : l'identifiant est fabriqué par
+    # le navigateur du client, donc rien ne garantit sa forme. Global, un
+    # client envoyant `client_order_id: "1"` récupérerait la commande — et le
+    # `public_token` — d'un inconnu qui aurait envoyé la même valeur ailleurs.
+    # Ramené à la table, le pire cas se limite à des convives déjà attablés
+    # ensemble, qui partagent de toute façon le `qr_token`.
+    __table_args__ = (UniqueConstraint("table_id", "client_order_id", name="uq_orders_table_client_order"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
@@ -61,6 +68,15 @@ class Order(Base):
     public_token: Mapped[str] = mapped_column(
         String(64), unique=True, index=True, default=generate_order_token
     )
+
+    # Identifiant du panier, fabriqué par le navigateur au moment où le client
+    # compose sa commande, et conservé tel quel dans la charge utile mise en
+    # file hors ligne. C'est ce qui rend la création idempotente : une réponse
+    # perdue en plein service, puis rejouée, retombe sur la même commande au
+    # lieu d'en créer une seconde — et de faire préparer deux fois le plat.
+    # Nullable : un navigateur resté sur une version antérieure de la page
+    # continue de commander, sans le filet.
+    client_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

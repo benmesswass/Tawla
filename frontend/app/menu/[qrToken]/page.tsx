@@ -107,6 +107,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [restaurant, setRestaurant] = useState<RestaurantPublic | null>(null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, CartLine>>({});
+  const [cartOrderId, setCartOrderId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, number[]>>({});
   // Plat dont on propose les accompagnements juste après l'ajout au panier.
   // Un seul à la fois : empiler les propositions transformerait la page en
@@ -131,6 +132,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [loyaltyPhone, setLoyaltyPhone] = useState("");
   const [loyaltyBirthDate, setLoyaltyBirthDate] = useState("");
   const [loyaltyStatus, setLoyaltyStatus] = useState<LoyaltyMember | null>(null);
+  const [loyaltyFirstVisit, setLoyaltyFirstVisit] = useState(false);
   const [pushState, setPushState] = useState<
     "idle" | "subscribing" | "subscribed" | "unsupported" | "denied" | "error"
   >("idle");
@@ -270,14 +272,25 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   async function checkLoyaltyStatus(phone: string) {
     if (!restaurant || !phone.trim()) {
       setLoyaltyStatus(null);
+      setLoyaltyFirstVisit(false);
       return;
     }
     try {
-      const status = await api.lookupLoyalty(restaurant.id, phone.trim(), loyaltyBirthDate || null);
+      const status = await api.lookupLoyalty(qrToken, phone.trim());
       setLoyaltyStatus(status);
+      setLoyaltyFirstVisit(false);
       localStorage.setItem(loyaltyPhoneStorageKey(restaurant.id), phone.trim());
-    } catch {
-      // Vérification de statut best-effort — une erreur ici ne doit jamais
+    } catch (e) {
+      // Depuis la Phase 19.1 la route ne crée plus la fiche : un numéro
+      // inconnu répond 404, et c'est exactement ce qu'est une première visite.
+      // Le client le voit dit ainsi plutôt qu'en lisant « 0 commande ».
+      if (e instanceof ApiError && e.code === "LOYALTY_MEMBER_NOT_FOUND") {
+        setLoyaltyStatus(null);
+        setLoyaltyFirstVisit(true);
+        localStorage.setItem(loyaltyPhoneStorageKey(restaurant.id), phone.trim());
+        return;
+      }
+      // Vérification de statut best-effort — une autre erreur ne doit jamais
       // bloquer la commande, qui reste possible sans numéro fidélité.
     }
   }
@@ -430,6 +443,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   function addToCart(item: MenuItem, fromSuggestion = false) {
+    // L'identifiant naît avec le panier, pas à l'envoi : régénéré à chaque
+    // tentative, il ne protégerait de rien. C'est lui qui fait qu'un double
+    // clic sur « Valider », ou une file hors ligne rejouée, retombe sur la
+    // même commande au lieu d'en faire préparer deux (Phase 19.2).
+    setCartOrderId((prev) => prev ?? crypto.randomUUID());
     setCart((prev) => {
       const existing = prev[item.id];
       return {
@@ -497,6 +515,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       loyalty_phone: loyaltyPhone.trim() || null,
+      loyalty_birth_date: loyaltyBirthDate || null,
+      client_order_id: cartOrderId,
     };
     try {
       const order = await api.createOrder(payload);
@@ -504,6 +524,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       setTrackedOrder(order);
       setOrderToken(order.public_token);
       setCart({});
+      setCartOrderId(null);
       setPreOrderForIftar(false);
       setShowCelebration(true);
     } catch (e) {
@@ -512,9 +533,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       // du client plutôt que de la perdre — envoi automatique dès que le
       // réseau revient (voir flushOfflineQueue).
       if (e instanceof TypeError) {
+        // La charge utile part en file avec son identifiant : c'est lui, et
+        // pas un nouveau, qui sera rejoué au retour du réseau.
         localStorage.setItem(offlineQueueStorageKey(qrToken), JSON.stringify(payload));
         setOfflineQueuedPayload(payload);
         setCart({});
+        setCartOrderId(null);
         setPreOrderForIftar(false);
         setSending(false);
         return;
@@ -1060,6 +1084,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
                 />
               </label>
+              {loyaltyFirstVisit && (
+                <p className="text-sm text-orange-900 pt-1 flex items-center gap-1.5">
+                  <GiftIcon className="w-4 h-4 shrink-0" />
+                  {t.loyaltyFirstVisit}
+                </p>
+              )}
               {loyaltyStatus && (
                 <div className="text-sm text-orange-900 pt-1">
                   <LoyaltyStampCard

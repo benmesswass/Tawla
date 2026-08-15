@@ -19,6 +19,14 @@ export function useLocale(): { t: Dictionary; locale: string; toggleLocale: () =
     if (saved && DICTIONARIES[saved]) setLocale(saved);
   }, []);
 
+  // `<html lang>` est rendu côté serveur, où la langue du client n'est pas
+  // encore connue : sans cette synchronisation il restait `fr` pendant tout un
+  // parcours en arabe, et un lecteur d'écran prononçait l'arabe avec les
+  // règles du français.
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   const toggleLocale = useCallback(() => {
     setLocale((prev) => {
       const next = prev === "fr" ? "ar" : "fr";
