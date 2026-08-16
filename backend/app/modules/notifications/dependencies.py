@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.modules.orders.models import Order
 from app.modules.staff.models import Staff
 from app.modules.staff.security import decode_access_token
+from app.modules.tables.models import Table
 
 # Code de fermeture applicatif (plage 4000-4999 réservée aux applications) :
 # la poignée de main WebSocket n'a pas de 401.
@@ -51,6 +52,27 @@ async def authenticate_staff_socket(websocket: WebSocket, restaurant_id: int, to
         return False
 
     return True
+
+
+async def authenticate_table_socket(
+    websocket: WebSocket, restaurant_id: int, qr_token: str, db: Session
+) -> Table | None:
+    """
+    Canal d'une table : réservé au navigateur qui a scanné son QR.
+
+    Il porte ce qui concerne la table sans concerner une commande précise — la
+    résolution d'un appel serveur, par exemple, que le client émet avant même
+    d'avoir commandé. Le canal `menu` ne pouvait pas s'en charger : il est
+    volontairement ouvert et ne porte que la disponibilité des plats, y glisser
+    l'activité de service dirait à quiconque ouvre l'URL du menu quelles tables
+    appellent un serveur.
+    """
+    table = db.query(Table).filter(Table.qr_token == qr_token).first()
+    if not table or table.restaurant_id != restaurant_id:
+        await _reject(websocket)
+        return None
+
+    return table
 
 
 async def authenticate_order_socket(

@@ -3,8 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.modules.notifications.dependencies import authenticate_order_socket, authenticate_staff_socket
-from app.modules.notifications.manager import manager
+from app.modules.notifications.dependencies import (
+    authenticate_order_socket,
+    authenticate_staff_socket,
+    authenticate_table_socket,
+)
+from app.modules.notifications.manager import manager, table_channel
 
 router = APIRouter(tags=["notifications"])
 
@@ -67,6 +71,22 @@ async def ws_menu(websocket: WebSocket, restaurant_id: int):
     """
     await manager.connect(websocket, restaurant_id, channel="menu")
     await _pump(websocket, restaurant_id, "menu")
+
+
+@router.websocket("/ws/table/{restaurant_id}/{qr_token}")
+async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: Session = Depends(get_db)):
+    """
+    Canal de la table scannée : ce qui concerne le client attablé sans
+    concerner une commande précise. Aujourd'hui la résolution de son appel
+    serveur — sans lui, le bouton « Appeler le serveur » restait grisé jusqu'à
+    ce que le client pense à recharger sa page.
+    """
+    table = await authenticate_table_socket(websocket, restaurant_id, qr_token, db)
+    if not table:
+        return
+    channel = table_channel(table.id)
+    await manager.connect(websocket, restaurant_id, channel=channel)
+    await _pump(websocket, restaurant_id, channel)
 
 
 @router.websocket("/ws/order/{restaurant_id}/{order_id}")

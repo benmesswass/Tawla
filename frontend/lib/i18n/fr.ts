@@ -85,6 +85,17 @@ export const fr = {
   loyaltyPrivacyLink: "Politique de confidentialité",
   loyaltyProgress: (count: number, remaining: number) =>
     `Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
+  itemOutOfStock: "Indisponible actuellement",
+  orderElapsed: (duree: string) => `Envoyée il y a ${duree}`,
+  sharedWithLabel: "Partagé entre :",
+  sharedWithEveryone: "Personne de sélectionnée : partagé par toute la table.",
+  dinersLabel: "Personnes à table",
+  openOrdersTitle: (count: number, reste: number) =>
+    count > 1
+      ? `${count} commandes en cours — ${reste.toFixed(2)} DT restent à régler`
+      : `Une commande en cours — ${reste.toFixed(2)} DT restent à régler`,
+  openOrderLine: (id: number, lines: number) =>
+    `Commande #${id} — ${lines} article${lines > 1 ? "s" : ""}`,
   loyaltyFirstVisit: "Première visite — votre carte démarre avec cette commande.",
   loyaltyRewardAvailable: "🎉 Récompense disponible ! Montrez cet écran à votre serveur.",
   loyaltyBirthdayBanner: "Bon anniversaire ! Demandez votre réduction spéciale au serveur.",

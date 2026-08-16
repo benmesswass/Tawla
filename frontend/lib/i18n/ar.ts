@@ -81,6 +81,16 @@ export const ar = {
     "رقمك يخدم كان لبطاقة الولاء تاع هذا المطعم. عمرو ما يتشارك، عمرو ما يتستعمل باش يعيطولك، ويتمسح بعد 24 شهر بلا طلبية.",
   loyaltyPrivacyLink: "سياسة الخصوصية",
   loyaltyProgress: (count, remaining) => `عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
+  itemOutOfStock: "ما فماش توّا",
+  orderElapsed: (duree) => `تبعثت من ${duree}`,
+  sharedWithLabel: "مقسوم بين :",
+  sharedWithEveryone: "ما اخترت حتى واحد : مقسوم على الطاولة الكل.",
+  dinersLabel: "قداش عباد عالطاولة",
+  openOrdersTitle: (count, reste) =>
+    count > 1
+      ? `${count} طلبيات مازالوا — باقي ${reste.toFixed(2)} د تتخلص`
+      : `طلبية مازالت — باقي ${reste.toFixed(2)} د تتخلص`,
+  openOrderLine: (id, lines) => `طلبية #${id} — ${lines} حاجة`,
   loyaltyFirstVisit: "أول مرة — بطاقتك تبدا مع هذي الطلبية.",
   loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",
   loyaltyBirthdayBanner: "عيد ميلاد سعيد! اطلب التخفيض الخاص من الجرسون.",

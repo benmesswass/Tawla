@@ -17,9 +17,15 @@ type SplitMode = "equal" | "items";
  */
 export default function SplitBill({ order, t = fr }: { order: Order; t?: Dictionary }) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<SplitMode>("equal");
-  const [peopleCount, setPeopleCount] = useState(2);
-  const [assignments, setAssignments] = useState<Record<number, number>>({});
+  // Par plat, et non à parts égales : c'est ce que la table demande dès qu'un
+  // convive a pris une entrée et l'autre un plat du jour. Et comme le client a
+  // déjà dit qui partageait quoi en commandant, la répartition arrive
+  // pré-remplie au lieu de lui reposer la question (retour du premier service).
+  const [mode, setMode] = useState<SplitMode>("items");
+  const [peopleCount, setPeopleCount] = useState(() => convivesDeLaCommande(order));
+  const [assignments, setAssignments] = useState<Record<number, number[]>>(() =>
+    Object.fromEntries(order.items.map((it) => [it.id, it.shared_with ?? []]))
+  );
 
   if (!open) {
     return (
@@ -69,31 +75,53 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
       </div>
 
       {mode === "items" && (
-        <div className="space-y-2">
-          {order.items.map((it) => (
-            <div key={it.id} className="flex items-center justify-between text-sm gap-2">
-              <span className="flex-1">
-                {it.quantity}× {it.menu_item_name}
-                {it.is_shared && (
-                  <span className="text-amber-700 inline-flex items-center gap-1 align-middle">
-                    · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
-                  </span>
-                )}
-              </span>
-              <select
-                value={assignments[it.id] ?? 0}
-                onChange={(e) => setAssignments((prev) => ({ ...prev, [it.id]: Number(e.target.value) }))}
-                className="border rounded px-2 py-1"
-              >
-                <option value={0}>{t.sharedOption}</option>
-                {Array.from({ length: peopleCount }, (_, i) => i + 1).map((p) => (
-                  <option key={p} value={p}>
-                    {t.personLabel(p)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
+        <div className="space-y-3">
+          {order.items.map((it) => {
+            const places = assignments[it.id] ?? [];
+            return (
+              <div key={it.id} className="text-sm">
+                <div>
+                  {it.quantity}× {it.menu_item_name}
+                  {it.is_shared && (
+                    <span className="text-amber-700 inline-flex items-center gap-1 align-middle">
+                      · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
+                    </span>
+                  )}
+                </div>
+                {/* Des pastilles plutôt qu'une liste déroulante : un plat peut
+                    être partagé entre deux convives sans l'être par toute la
+                    table, ce qu'un choix unique ne savait pas dire. */}
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {Array.from({ length: peopleCount }, (_, i) => i + 1).map((p) => {
+                    const choisi = places.includes(p);
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        aria-pressed={choisi}
+                        onClick={() =>
+                          setAssignments((prev) => {
+                            const actuel = prev[it.id] ?? [];
+                            return {
+                              ...prev,
+                              [it.id]: actuel.includes(p)
+                                ? actuel.filter((x) => x !== p)
+                                : [...actuel, p].sort((a, b) => a - b),
+                            };
+                          })
+                        }
+                        className={`rounded-full border px-2.5 py-1 text-xs ${
+                          choisi ? "bg-neutral-900 text-white border-neutral-900" : ""
+                        }`}
+                      >
+                        {t.personLabel(p)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
           <p className="text-xs text-neutral-400">{t.unassignedSharedNote}</p>
         </div>
       )}
@@ -114,27 +142,37 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
   );
 }
 
+/**
+ * Nombre de convives déduit de la commande : la plus grande place citée par un
+ * plat partagé. Le client l'a déjà indiqué en commandant, redemander « vous
+ * êtes combien ? » juste après serait de l'amnésie.
+ */
+function convivesDeLaCommande(order: Order): number {
+  const places = order.items.flatMap((it) => it.shared_with ?? []);
+  return Math.max(2, ...places);
+}
+
 function computeShares(
   order: Order,
   mode: SplitMode,
   peopleCount: number,
-  assignments: Record<number, number>
+  assignments: Record<number, number[]>
 ): number[] {
   if (mode === "equal") {
     return Array(peopleCount).fill(order.total_amount / peopleCount);
   }
 
   const totals = Array(peopleCount).fill(0);
-  let sharedTotal = 0;
   for (const item of order.items) {
     const lineTotal = item.unit_price * item.quantity;
-    const person = assignments[item.id];
-    if (person >= 1 && person <= peopleCount) {
-      totals[person - 1] += lineTotal;
-    } else {
-      sharedTotal += lineTotal;
+    // Personne de désigné = partagé par toute la table : c'est le sens d'un
+    // plat « à partager » sans précision, et le comportement d'avant.
+    const places = (assignments[item.id] ?? []).filter((p) => p >= 1 && p <= peopleCount);
+    const entreQui = places.length > 0 ? places : Array.from({ length: peopleCount }, (_, i) => i + 1);
+    const part = lineTotal / entreQui.length;
+    for (const place of entreQui) {
+      totals[place - 1] += part;
     }
   }
-  const sharedPerPerson = sharedTotal / peopleCount;
-  return totals.map((t) => t + sharedPerPerson);
+  return totals;
 }

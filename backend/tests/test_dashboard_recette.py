@@ -19,7 +19,7 @@ import pytest
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.modules.menu.models import MenuItem
-from app.modules.orders.models import Order, OrderItem, OrderStatus
+from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentStatus
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table
 
@@ -36,13 +36,27 @@ def resto(db_session):
     return restaurant, table, item
 
 
-def _order(db_session, restaurant, table, item, amount: float, status: OrderStatus, minutes_ago: int = 1):
+def _order(
+    db_session,
+    restaurant,
+    table,
+    item,
+    amount: float,
+    status: OrderStatus,
+    minutes_ago: int = 1,
+    payment_status: PaymentStatus = PaymentStatus.PAID,
+):
     """Commande posée directement en base : ces tests portent sur le calcul,
-    pas sur le parcours (couvert ailleurs)."""
+    pas sur le parcours (couvert ailleurs).
+
+    `payment_status` vaut PAID par défaut : depuis le retour du premier
+    service, seule une commande réglée entre dans la recette, donc c'est l'état
+    à donner à toute commande censée compter."""
     order = Order(
         restaurant_id=restaurant.id,
         table_id=table.id,
         status=status,
+        payment_status=payment_status,
         created_at=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago),
     )
     order.items.append(
@@ -81,6 +95,35 @@ def test_a_cancelled_order_is_not_counted_as_takings(client, db_session, resto):
     assert _dashboard(client, restaurant, manager)["revenue_today"] == pytest.approx(20.0)
 
 
+def test_une_commande_servie_mais_pas_encore_reglee_ne_compte_pas(client, db_session, resto):
+    """
+    Retour du premier service : la recette additionnait tout ce qui n'était pas
+    annulé, donc des commandes que personne n'avait payées. Le patron lisait
+    chaque soir un chiffre plus haut que sa caisse — et c'est ce chiffre-là qui
+    porte l'argument de vente.
+    """
+    restaurant, table, item = resto
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    _order(db_session, restaurant, table, item, 20.0, OrderStatus.SERVED)
+    _order(db_session, restaurant, table, item, 75.0, OrderStatus.SERVED, payment_status=PaymentStatus.UNPAID)
+    # Cash demandé par le client mais pas encore encaissé par le serveur :
+    # l'argent n'est pas dans la caisse, il n'a rien à faire dans la recette.
+    _order(db_session, restaurant, table, item, 40.0, OrderStatus.SERVED, payment_status=PaymentStatus.PENDING)
+
+    assert _dashboard(client, restaurant, manager)["revenue_today"] == pytest.approx(20.0)
+
+
+def test_le_cash_confirme_par_le_serveur_entre_dans_la_recette(client, db_session, resto):
+    """L'autre moitié : une fois le serveur ayant confirmé l'encaissement, la
+    commande compte — sinon le correctif ci-dessus rendrait la recette muette
+    dans un restaurant qui encaisse surtout en espèces."""
+    restaurant, table, item = resto
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    _order(db_session, restaurant, table, item, 33.0, OrderStatus.SERVED, payment_status=PaymentStatus.PAID)
+
+    assert _dashboard(client, restaurant, manager)["revenue_today"] == pytest.approx(33.0)
+
+
 def test_the_dashboard_shows_todays_lost_orders(client, db_session, resto):
     """Annulée, plus jamais prise en charge au-delà du seuil d'abandon."""
     restaurant, table, item = resto
@@ -103,8 +146,16 @@ def test_takings_and_lost_orders_match_the_proof_page(client, db_session, resto)
     manager = create_staff(restaurant.id, StaffRole.MANAGER)
     _order(db_session, restaurant, table, item, 20.0, OrderStatus.SERVED)
     _order(db_session, restaurant, table, item, 30.0, OrderStatus.READY)
-    _order(db_session, restaurant, table, item, 40.0, OrderStatus.CANCELLED)
-    _order(db_session, restaurant, table, item, 25.0, OrderStatus.PENDING_CONFIRMATION, minutes_ago=45)
+    # Une commande annulée ou jamais prise en charge n'est pas réglée : c'est
+    # l'état réel de ces deux-là en service.
+    _order(
+        db_session, restaurant, table, item, 40.0, OrderStatus.CANCELLED,
+        payment_status=PaymentStatus.UNPAID,
+    )
+    _order(
+        db_session, restaurant, table, item, 25.0, OrderStatus.PENDING_CONFIRMATION,
+        minutes_ago=45, payment_status=PaymentStatus.UNPAID,
+    )
 
     dashboard = _dashboard(client, restaurant, manager)
     today = date.today().isoformat()
@@ -114,10 +165,14 @@ def test_takings_and_lost_orders_match_the_proof_page(client, db_session, resto)
     ).json()["current"]
 
     assert dashboard["lost_orders_today"] == proof["lost_orders_count"]
-    # La recette est la somme des paniers non annulés, dont la page de preuve
-    # tire sa moyenne : les deux écrans partagent la même définition.
-    non_cancelled = proof["orders_count"] - proof["cancelled_count"]
-    assert dashboard["revenue_today"] == pytest.approx(proof["avg_basket_amount"] * non_cancelled)
+    # La recette est la somme des paniers réglés, dont la page de preuve tire
+    # sa moyenne : les deux écrans partagent la même définition.
+    regles = (
+        db_session.query(Order)
+        .filter(Order.restaurant_id == restaurant.id, Order.payment_status == PaymentStatus.PAID)
+        .count()
+    )
+    assert dashboard["revenue_today"] == pytest.approx(proof["avg_basket_amount"] * regles)
 
 
 def test_a_quiet_day_shows_zero_and_not_an_empty_screen(client, db_session, resto):

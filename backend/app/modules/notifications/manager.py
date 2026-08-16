@@ -54,3 +54,14 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+def table_channel(table_id: int) -> str:
+    """
+    Canal du client attablé, écouté dès le scan du QR — donc avant toute
+    commande. Défini ici plutôt que dans un module métier : le canal est
+    diffusé par `waiter_calls` et ouvert par `notifications`, et deux
+    définitions qui divergent d'un caractère font un message qui n'arrive
+    jamais, sans erreur nulle part.
+    """
+    return f"table-{table_id}"

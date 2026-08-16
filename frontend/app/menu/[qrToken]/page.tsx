@@ -19,6 +19,7 @@ import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
+import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
 import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon, ShareIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
@@ -35,6 +36,10 @@ type CartLine = {
   quantity: number;
   note: string;
   shared: boolean;
+  // Numéros de places qui se partagent ce plat. Vide = toute la table. Saisi
+  // ici plutôt qu'au moment de payer : le client vient de composer sa
+  // commande, il sait qui prend quoi — dix minutes plus tard, il ne sait plus.
+  sharedWith: number[];
   // Ajoutée depuis une proposition « avec ce plat » plutôt que depuis la carte.
   // Sert uniquement à mesurer l'effet de la vente incitative (Phase 14.1).
   fromSuggestion: boolean;
@@ -62,22 +67,47 @@ function lastOrderStorageKey(qrToken: string): string {
  */
 type TrackedOrderRef = { id: number; token: string };
 
+/**
+ * Une **liste** de commandes, et non plus une seule.
+ *
+ * Une table commande souvent en plusieurs fois — on reprend un dessert, une
+ * tournée de thé — et le token de chaque commande est la seule clé qui permet
+ * de la suivre et de la payer. Tant qu'on n'en gardait qu'un, « commander à
+ * nouveau » écrasait le précédent : l'addition d'une commande non réglée
+ * devenait inatteignable, donc impayable. Constaté au premier service.
+ */
 function storeTrackedOrderRef(qrToken: string, id: number, token: string): void {
-  sessionStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify({ id, token }));
+  const refs = readTrackedOrderRefs(qrToken).filter((r) => r.id !== id);
+  refs.push({ id, token });
+  sessionStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify(refs));
 }
 
-function readTrackedOrderRef(qrToken: string): TrackedOrderRef | null {
+function forgetTrackedOrderRef(qrToken: string, id: number): void {
+  const refs = readTrackedOrderRefs(qrToken).filter((r) => r.id !== id);
+  if (refs.length === 0) {
+    sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+    return;
+  }
+  sessionStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify(refs));
+}
+
+function readTrackedOrderRefs(qrToken: string): TrackedOrderRef[] {
   const raw = sessionStorage.getItem(lastOrderStorageKey(qrToken));
-  if (!raw) return null;
+  if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (typeof parsed?.id === "number" && typeof parsed?.token === "string") return parsed;
+    // Format d'avant : un objet unique. Un client qui a commandé juste avant
+    // une mise à jour ne doit pas perdre le suivi de sa commande en cours.
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    return list.filter(
+      (r): r is TrackedOrderRef => typeof r?.id === "number" && typeof r?.token === "string"
+    );
   } catch {
-    // Ancien format (l'identifiant seul, avant la Phase 12.2) : inutilisable
+    // Contenu illisible (l'identifiant seul, avant la Phase 12.2) : inutilisable
     // sans token, on l'oublie plutôt que de tenter un appel voué au 404.
   }
   sessionStorage.removeItem(lastOrderStorageKey(qrToken));
-  return null;
+  return [];
 }
 
 function offlineQueueStorageKey(qrToken: string): string {
@@ -108,6 +138,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, CartLine>>({});
   const [cartOrderId, setCartOrderId] = useState<string | null>(null);
+  // Nombre de personnes à table, demandé seulement quand un plat est marqué
+  // « à partager » — jamais à l'ouverture du menu, où la question n'a pas
+  // encore de raison d'être posée.
+  const [convives, setConvives] = useState(2);
+  // Toutes les commandes encore ouvertes de cette table — celle qu'on suit à
+  // l'écran, et celles qu'on a quittées sans les régler.
+  const [openOrders, setOpenOrders] = useState<{ order: Order; token: string }[]>([]);
+  // Horloge partagée de l'écran de suivi : une seule source pour tous les
+  // compteurs affichés.
+  const maintenant = useHorloge();
   const [suggestions, setSuggestions] = useState<Record<string, number[]>>({});
   // Plat dont on propose les accompagnements juste après l'ajout au panier.
   // Un seul à la fois : empiler les propositions transformerait la page en
@@ -176,22 +216,36 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         setMenu(items);
         setSuggestions(suggested);
 
-        // Si le client a déjà une commande en cours pour cette table (ex:
-        // téléphone rafraîchi pendant que le plat était en préparation), on
-        // reprend le suivi au lieu de lui montrer à nouveau tout le menu.
-        const saved = readTrackedOrderRef(qrToken);
-        if (saved) {
-          try {
-            const order = await api.getOrder(saved.id, saved.token);
-            if (order.status !== "served" && order.status !== "cancelled") {
-              setTrackedOrder(order);
-              setOrderToken(saved.token);
-            } else {
-              sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+        // Commandes encore ouvertes pour cette table (ex: téléphone rafraîchi
+        // pendant que le plat était en préparation, ou addition d'une première
+        // tournée pas encore réglée) : on reprend leur suivi au lieu de
+        // remontrer le menu comme si de rien n'était.
+        const refs = readTrackedOrderRefs(qrToken);
+        const resolved = await Promise.all(
+          refs.map(async (ref) => {
+            try {
+              const order = await api.getOrder(ref.id, ref.token);
+              // Servie ET réglée : plus rien à suivre ni à payer, on oublie.
+              // Servie mais impayée, en revanche, doit rester atteignable —
+              // c'est précisément l'addition qu'on perdait.
+              if (order.status === "cancelled" || (order.status === "served" && order.payment_status === "paid")) {
+                forgetTrackedOrderRef(qrToken, ref.id);
+                return null;
+              }
+              return { order, token: ref.token };
+            } catch {
+              forgetTrackedOrderRef(qrToken, ref.id);
+              return null;
             }
-          } catch {
-            sessionStorage.removeItem(lastOrderStorageKey(qrToken));
-          }
+          })
+        );
+
+        const ouvertes = resolved.filter((r): r is { order: Order; token: string } => r !== null);
+        setOpenOrders(ouvertes);
+        const derniere = ouvertes[ouvertes.length - 1];
+        if (derniere) {
+          setTrackedOrder(derniere.order);
+          setOrderToken(derniere.token);
         }
       })
       .catch((e) => setLoadError(toLocalizedMessage(e, locale)));
@@ -385,6 +439,36 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
   });
 
+  // Canal de la table, ouvert dès le scan du QR : il porte ce qui concerne le
+  // client sans concerner une commande précise. Sans lui, un serveur pouvait
+  // répondre à l'appel et cliquer « résolu » sans que le bouton redevienne
+  // cliquable côté client — il fallait recharger la page pour s'en apercevoir.
+  const tableWsUrl = restaurant ? wsUrl(`/ws/table/${restaurant.id}/${qrToken}`) : null;
+  useReconnectingSocket(tableWsUrl, (msg) => {
+    if (msg.event === "waiter_call.resolved") {
+      setWaiterCallState("idle");
+    }
+  });
+
+  // La commande suivie évolue (paiement, changement de statut) : on répercute
+  // dans la liste des commandes ouvertes, en un seul endroit plutôt qu'à chaque
+  // appel. Une fois servie ET réglée, elle en sort — c'est la seule condition
+  // qui autorise à l'oublier.
+  useEffect(() => {
+    if (!trackedOrder || !orderToken) return;
+    const soldee =
+      trackedOrder.status === "cancelled" ||
+      (trackedOrder.status === "served" && trackedOrder.payment_status === "paid");
+    setOpenOrders((prev) => {
+      const autres = prev.filter((r) => r.order.id !== trackedOrder.id);
+      if (soldee) {
+        forgetTrackedOrderRef(qrToken, trackedOrder.id);
+        return autres;
+      }
+      return [...autres, { order: trackedOrder, token: orderToken }];
+    });
+  }, [trackedOrder, orderToken, qrToken]);
+
   // Le compteur de fidélité n'avance qu'au paiement confirmé côté serveur —
   // on rafraîchit l'affichage client à ce moment précis (carte immédiate,
   // cash via le WebSocket ci-dessus) plutôt que de deviner la nouvelle valeur.
@@ -433,8 +517,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     try {
       await api.callWaiter(qrToken);
       setWaiterCallState("called");
-      // Cooldown le temps qu'un serveur arrive réellement à table — évite le
-      // spam de clics sans avoir besoin d'un canal temps réel côté client.
+      // Le bouton redevient cliquable dès qu'un serveur marque l'appel résolu
+      // (canal de la table, plus haut). Ce délai n'est plus que le filet du
+      // cas où personne ne le marque jamais : sans lui, le client resterait
+      // bloqué sur un appel que la salle a oublié.
       setTimeout(() => setWaiterCallState("idle"), 90_000);
     } catch (e) {
       setWaiterCallError(toLocalizedMessage(e, locale));
@@ -457,6 +543,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           quantity: (existing?.quantity ?? 0) + 1,
           note: existing?.note ?? "",
           shared: existing?.shared ?? false,
+          sharedWith: existing?.sharedWith ?? [],
           // Une ligne déjà au panier garde son origine : si le client a d'abord
           // pris le plat depuis la carte, en reprendre un depuis une suggestion
           // n'en fait pas une vente incitative.
@@ -494,7 +581,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   function setShared(itemId: number, shared: boolean) {
-    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], shared } } : prev));
+    setCart((prev) =>
+      prev[itemId]
+        ? { ...prev, [itemId]: { ...prev[itemId], shared, sharedWith: shared ? prev[itemId].sharedWith : [] } }
+        : prev
+    );
+  }
+
+  function toggleConvive(itemId: number, place: number) {
+    setCart((prev) => {
+      const ligne = prev[itemId];
+      if (!ligne) return prev;
+      const sharedWith = ligne.sharedWith.includes(place)
+        ? ligne.sharedWith.filter((p) => p !== place)
+        : [...ligne.sharedWith, place].sort((a, b) => a - b);
+      return { ...prev, [itemId]: { ...ligne, sharedWith } };
+    });
   }
 
   const cartLines = Object.values(cart);
@@ -511,6 +613,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         quantity: l.quantity,
         notes: l.note || null,
         is_shared: l.shared,
+        shared_with: l.shared ? l.sharedWith : [],
         from_suggestion: l.fromSuggestion,
       })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
@@ -565,10 +668,25 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   function orderAgain() {
+    // On quitte l'écran de suivi pour retourner au menu, sans rien oublier :
+    // la commande reste dans `openOrders` et son token en session. Tant qu'elle
+    // n'est pas réglée, le client doit pouvoir y revenir — l'effacer ici lui
+    // faisait perdre l'addition de sa première tournée.
     setTrackedOrder(null);
     setOrderToken(null);
-    sessionStorage.removeItem(lastOrderStorageKey(qrToken));
   }
+
+  function suivreCommande(ref: { order: Order; token: string }) {
+    setTrackedOrder(ref.order);
+    setOrderToken(ref.token);
+  }
+
+  // Commandes ouvertes autres que celle affichée : ce sont elles qu'un rappel
+  // doit signaler, sinon le client repart sans avoir payé.
+  const autresCommandesOuvertes = openOrders.filter((r) => r.order.id !== trackedOrder?.id);
+  const resteAPayer = autresCommandesOuvertes
+    .filter((r) => r.order.payment_status !== "paid")
+    .reduce((sum, r) => sum + r.order.total_amount, 0);
 
   // Carte de partage social (Instagram/WhatsApp Status) — générée
   // entièrement côté client sur <canvas>, sans backend ni service tiers.
@@ -579,7 +697,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     try {
       const blob = await generateShareCardBlob({
         restaurantName: restaurant.name,
-        items: trackedOrder.items.map((it) => ({ name: it.menu_item_name, quantity: it.quantity })),
+        items: trackedOrder.items.map((it) => ({
+          name: it.menu_item_name,
+          quantity: it.quantity,
+          unitPrice: it.unit_price,
+          lineTotal: it.unit_price * it.quantity,
+        })),
+        total: trackedOrder.total_amount,
+        tip: trackedOrder.tip_amount,
+        tableLabel: trackedOrder.table_label,
+        orderId: trackedOrder.id,
         locale: locale === "ar" ? "ar" : "fr",
       });
       if (!blob) return;
@@ -662,6 +789,20 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {cancelled ? t.orderCancelledTitle : t.orderSentTitle}
         </h1>
         <p className="mt-2 text-neutral-600 text-center">{t.orderSubtitle(table.label, trackedOrder.id)}</p>
+
+        {/* Le client voyait « Envoyé » sans savoir depuis combien de temps.
+            Une attente qu'on peut lire se supporte ; une attente muette fait
+            lever la tête pour chercher un serveur. */}
+        {!cancelled &&
+          (() => {
+            const secondes = elapsedSeconds(trackedOrder.created_at, maintenant);
+            if (secondes === null) return null;
+            return (
+              <p className="mt-1 text-sm text-center text-[var(--ink-soft)] tabular-nums">
+                {t.orderElapsed(duree(secondes))}
+              </p>
+            );
+          })()}
 
         <div className="mt-4 text-center">
           <button
@@ -901,15 +1042,58 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     );
   }
 
-  const availableItems = menu.filter((m) => m.is_available);
-  const categories = Array.from(new Set(availableItems.map((m) => m.category)));
+  // Toute la carte est affichée, ruptures comprises : elles apparaissent
+  // barrées et non commandables (voir renderItem). Une catégorie entièrement
+  // en rupture reste donc visible, ce qui est l'information juste — le
+  // restaurant a bien des desserts, il n'en a plus ce soir.
+  const categories = Array.from(new Set(menu.map((m) => m.category)));
 
-  function renderItem(item: MenuItem) {
+  function categoryAnchor(category: string): string {
+    // Ancre stable et sûre en URL : les catégories sont saisies par le
+    // restaurant, donc accentuées et espacées.
+    return `cat-${encodeURIComponent(category).replace(/%/g, "")}`;
+  }
+
+  function renderItem(item: MenuItem, index = 0) {
+    // Un plat en rupture reste sur la carte, barré : le faire disparaître
+    // laissait le client chercher un plat qu'il avait vu la minute d'avant, ou
+    // qu'un voisin de table est en train de manger. Le dire est plus honnête
+    // que l'escamoter (retour du premier service).
+    const rupture = !item.is_available;
     return (
-      <div key={item.id} className="border-b py-3">
-        <div className="flex justify-between items-center">
-          <div className="pe-3">
-            <div className="font-medium">
+      <div
+        key={item.id}
+        // Décalage plafonné à 6 plats : au-delà, l'attente se verrait plus que
+        // l'effet. Le style inline est le seul moyen d'indexer un délai.
+        style={{ animationDelay: `${Math.min(index, 6) * 35}ms` }}
+        className={`plat-apparait mb-3 rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] p-3 shadow-sm transition-shadow ${
+          rupture ? "opacity-60" : ""
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          {/* La photo d'abord, et visible sur téléphone : elle était masquée
+              en dessous de `sm`, c'est-à-dire précisément là où le client
+              commande. Une carte de restaurant sans photos ne donne pas faim. */}
+          {item.image_url && (
+            <div className="relative shrink-0 w-20 h-20">
+              {/* La même image, floutée derrière la vignette : elle projette la
+                  couleur du plat sur le fond crème et fait ressortir la photo
+                  sans ajouter le moindre octet. */}
+              <div
+                aria-hidden
+                className="absolute inset-0 rounded-xl bg-cover bg-center blur-md opacity-40 scale-95"
+                style={{ backgroundImage: `url(${item.image_url})` }}
+              />
+              <img
+                src={item.image_url}
+                alt={item.name}
+                loading="lazy"
+                className="relative w-20 h-20 rounded-xl object-cover border-2 border-white shadow-md"
+              />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className={`font-medium ${rupture ? "line-through" : ""}`}>
               {item.name}
               {item.spice_level > 0 && (
                 <span className="ms-1 inline-flex items-center gap-0.5 align-middle text-[var(--harissa)]">
@@ -924,47 +1108,54 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 </span>
               )}
             </div>
-            {item.description && <div className="text-sm text-neutral-500">{item.description}</div>}
+            {item.description && (
+              <div className="text-sm text-[var(--ink-soft)] mt-0.5 leading-snug">{item.description}</div>
+            )}
             {item.allergens && (
-              <div className="text-xs text-neutral-400 mt-0.5">{t.allergensLabel(item.allergens)}</div>
+              <div className="text-xs text-[var(--ink-soft)]/70 mt-0.5">{t.allergensLabel(item.allergens)}</div>
             )}
-            <div className="text-sm text-neutral-500 mt-0.5">
-              {item.price.toFixed(2)} {t.currency}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {item.image_url && (
-              <img
-                src={item.image_url}
-                alt={item.name}
-                className="w-12 h-12 rounded-lg object-cover hidden sm:block"
-              />
+            {rupture && (
+              <div className="text-xs font-medium text-[var(--harissa)] mt-1">{t.itemOutOfStock}</div>
             )}
-            {cart[item.id] && (
-              <>
+
+            {/* Prix et boutons sur la même ligne, au bas de la carte : le prix
+                est ce qu'on cherche, le bouton ce qu'on vise. Les séparer de
+                part et d'autre les rendait tous les deux difficiles à trouver. */}
+            <div className="flex items-center justify-between gap-2 mt-2">
+              <span
+                className={`font-semibold tabular-nums text-[var(--harissa)] ${rupture ? "line-through" : ""}`}
+              >
+                {item.price.toFixed(2)} {t.currency}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {cart[item.id] && (
+                  <>
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      aria-label={t.removeFromCartAria(item.name)}
+                      className="w-9 h-9 rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                    >
+                      −
+                    </button>
+                    <span
+                      className={`inline-block min-w-[1.5rem] text-center font-medium tabular-nums ${
+                        bumpedItemId === item.id ? "animate-cart-bump" : ""
+                      }`}
+                    >
+                      {cart[item.id].quantity}
+                    </span>
+                  </>
+                )}
                 <button
-                  onClick={() => removeFromCart(item.id)}
-                  aria-label={t.removeFromCartAria(item.name)}
-                  className="w-8 h-8 rounded-full border"
+                  onClick={() => addToCart(item)}
+                  disabled={rupture}
+                  aria-label={t.addToCartAria(item.name)}
+                  className="w-9 h-9 rounded-full bg-[var(--harissa)] text-white text-lg leading-none shadow-sm transition-transform active:scale-90 disabled:opacity-30 disabled:active:scale-100"
                 >
-                  -
+                  +
                 </button>
-                <span
-                  className={`inline-block min-w-[1.5rem] text-center ${
-                    bumpedItemId === item.id ? "animate-cart-bump" : ""
-                  }`}
-                >
-                  {cart[item.id].quantity}
-                </span>
-              </>
-            )}
-            <button
-              onClick={() => addToCart(item)}
-              aria-label={t.addToCartAria(item.name)}
-              className="w-8 h-8 rounded-full bg-neutral-900 text-white transition-transform active:scale-90"
-            >
-              +
-            </button>
+              </div>
+            </div>
           </div>
         </div>
         {cart[item.id] && (
@@ -985,6 +1176,34 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <UtensilsIcon className="w-4 h-4 shrink-0" />
               {t.sharedCheckboxLabel}
             </label>
+            {cart[item.id].shared && (
+              <div className="mt-2">
+                <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
+                    const choisi = cart[item.id].sharedWith.includes(place);
+                    return (
+                      <button
+                        key={place}
+                        type="button"
+                        onClick={() => toggleConvive(item.id, place)}
+                        aria-pressed={choisi}
+                        className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                          choisi
+                            ? "bg-[var(--harissa)] text-white border-[var(--harissa)]"
+                            : "border-[var(--line)] bg-white text-[var(--encre)]"
+                        }`}
+                      >
+                        {t.personLabel(place)}
+                      </button>
+                    );
+                  })}
+                </div>
+                {cart[item.id].sharedWith.length === 0 && (
+                  <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1029,7 +1248,53 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         </div>
       )}
 
+      {/* Navigation par catégories, collée en haut du défilement. Sur une carte
+          de cinquante plats, atteindre les desserts demandait de faire défiler
+          toute la carte — et le client qui cherche renonce avant de trouver.
+          Masquée en mode café, dont la carte est justement sans catégories. */}
+      {!restaurant.cafe_mode_enabled && categories.length > 1 && (
+        <nav className="sticky top-0 z-30 bg-[var(--semoule)]/95 backdrop-blur border-b border-[var(--line)]">
+          <ul className="flex gap-2 overflow-x-auto px-4 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {categories.map((category) => (
+              <li key={category}>
+                <a
+                  href={`#${categoryAnchor(category)}`}
+                  className="inline-block whitespace-nowrap rounded-full border border-[var(--line)] bg-white px-3.5 py-1.5 text-sm font-medium text-[var(--encre)] transition-colors active:bg-[var(--harissa)] active:text-white"
+                >
+                  {menuCategoryLabel(category, locale)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
       <div className="p-4 max-w-md mx-auto">
+        {/* Commandes déjà passées et pas encore réglées : sans ce rappel, une
+            première tournée s'oubliait dès qu'on retournait au menu, et le
+            client repartait sans avoir payé. */}
+        {autresCommandesOuvertes.length > 0 && (
+          <div className="mb-4 border rounded-lg p-3 bg-amber-50 border-amber-200">
+            <p className="text-sm font-medium text-amber-900">
+              {t.openOrdersTitle(autresCommandesOuvertes.length, resteAPayer)}
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {autresCommandesOuvertes.map((ref) => (
+                <li key={ref.order.id}>
+                  <button
+                    onClick={() => suivreCommande(ref)}
+                    className="w-full text-start text-sm underline text-amber-900 flex justify-between gap-2"
+                  >
+                    <span>{t.openOrderLine(ref.order.id, ref.order.items.length)}</span>
+                    <span className="tabular-nums shrink-0">
+                      {ref.order.total_amount.toFixed(2)} {t.currency}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {waiterCallError && (
           <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">
             {waiterCallError}
@@ -1117,14 +1382,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         </div>
 
         {restaurant.cafe_mode_enabled ? (
-          <section className="mb-6">{availableItems.map(renderItem)}</section>
+          <section className="mb-6">{menu.map((item, i) => renderItem(item, i))}</section>
         ) : (
           categories.map((category) => (
-            <section key={category} className="mb-6">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">
-                {menuCategoryLabel(category, locale)}
+            <section key={category} id={categoryAnchor(category)} className="mb-8 scroll-mt-20">
+              {/* Un titre encadré de deux filets : sur une carte longue, c'est
+                  ce qui fait qu'on voit qu'on a changé de section en faisant
+                  défiler, sans avoir à lire. */}
+              <h2 className="flex items-center gap-3 mb-3">
+                <span className="h-px flex-1 bg-[var(--line)]" />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--laiton)] whitespace-nowrap">
+                  {menuCategoryLabel(category, locale)}
+                </span>
+                <span className="h-px flex-1 bg-[var(--line)]" />
               </h2>
-              {availableItems.filter((m) => m.category === category).map(renderItem)}
+              {menu.filter((m) => m.category === category).map((item, i) => renderItem(item, i))}
             </section>
           ))
         )}
@@ -1132,6 +1404,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         {cartLines.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
             <div className="max-w-md mx-auto">
+              {/* Posé seulement quand un plat est à partager : sinon c'est une
+                  question de plus entre le client et sa commande. */}
+              {cartLines.some((l) => l.shared) && (
+                <label className="flex items-center gap-2 text-sm text-[var(--ink-soft)] mb-3">
+                  {t.dinersLabel}
+                  <input
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={convives}
+                    onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
+                    className="w-16 border border-[var(--line)] rounded px-2 py-1"
+                  />
+                </label>
+              )}
               {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
                 <label className="flex items-center gap-2 text-sm text-indigo-900 mb-3">
                   <input

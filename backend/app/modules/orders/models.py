@@ -83,6 +83,10 @@ class Order(Base):
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_to_kitchen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Moment où la cuisine s'est saisie du plat. Sans lui, l'écran cuisine ne
+    # pouvait afficher qu'un temps depuis l'envoi : une commande prise en main
+    # tout de suite et une autre oubliée dix minutes s'y ressemblaient.
+    preparation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     served_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -160,6 +164,16 @@ class OrderItem(Base):
     # une personne. N'implique aucun panier synchronisé multi-appareils :
     # une seule personne compose et valide toujours la commande.
     is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Entre quels convives le plat est partagé, en numéros de place séparés par
+    # une virgule (« 1,2 »). Vide = partagé par toute la table, ce qui reste le
+    # cas courant. Saisi par le client au moment de composer son panier : sans
+    # ça, le calculateur d'addition repartait de zéro et lui redemandait ce
+    # qu'il venait de dire (retour du premier service).
+    #
+    # Une chaîne plutôt qu'une table de liaison : la donnée ne sert qu'à
+    # pré-remplir un calcul indicatif, jamais à une requête ni à une jointure.
+    shared_with: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     # Ligne ajoutée depuis une suggestion « avec ce plat » plutôt que depuis la
     # carte. Sans ce drapeau, l'effet de la vente incitative est invérifiable :

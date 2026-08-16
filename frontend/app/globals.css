@@ -341,3 +341,29 @@
   .piece[data-urgente] { animation: none; }
   .piece { transition: none; }
 }
+
+/* --- Carte client : entrée des plats -------------------------------------
+   Le menu arrivait d'un bloc, en liste plate. Une apparition légère et
+   décalée donne à la carte le rythme d'un menu qu'on feuillette, sans jamais
+   retarder la lecture : 260 ms, et le plat est là. Le décalage est plafonné
+   pour que le dixième plat n'attende pas une seconde. */
+@keyframes plat-apparait {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.plat-apparait {
+  animation: plat-apparait 260ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plat-apparait {
+    animation: none;
+  }
+}

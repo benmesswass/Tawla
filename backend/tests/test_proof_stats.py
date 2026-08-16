@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.modules.menu.models import MenuItem
-from app.modules.orders.models import Order, OrderItem, OrderStatus
+from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentStatus
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table
 
@@ -39,13 +39,18 @@ def _add_order(
     sent_to_kitchen_after: timedelta | None = None,
     quantity: int = 1,
     unit_price: float = 20.0,
+    payment_status: PaymentStatus = PaymentStatus.PAID,
 ) -> Order:
     """Écrit une commande directement en base : les horodatages passés ne sont
-    pas atteignables par l'API, et c'est précisément ce qu'on veut mesurer."""
+    pas atteignables par l'API, et c'est précisément ce qu'on veut mesurer.
+
+    `payment_status` vaut PAID par défaut : le panier moyen ne se calcule que
+    sur les commandes réglées, une commande impayée n'étant pas un panier."""
     order = Order(
         restaurant_id=restaurant.id,
         table_id=table.id,
         status=status,
+        payment_status=payment_status,
         created_at=created_at,
         sent_to_kitchen_at=created_at + sent_to_kitchen_after if sent_to_kitchen_after else None,
     )

@@ -4,7 +4,7 @@ from datetime import datetime, time, timedelta, timezone
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.dates import as_utc
-from app.modules.orders.models import Order, OrderStatus
+from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
 from app.modules.staff.models import Staff
 from app.modules.stats import schemas
@@ -36,10 +36,26 @@ def _lost_orders(orders: list[Order], now: datetime) -> list[Order]:
     ]
 
 
-def _billable_orders(orders: list[Order]) -> list[Order]:
-    """Commandes qui comptent dans la recette : tout sauf les annulées. Même
-    ensemble que celui dont la page de preuve tire le panier moyen."""
-    return [o for o in orders if o.status != OrderStatus.CANCELLED]
+def _paid_orders(orders: list[Order]) -> list[Order]:
+    """
+    Commandes qui comptent dans la recette : celles **réellement réglées** —
+    paiement carte abouti, ou espèces confirmées par le serveur. Même ensemble
+    que celui dont la page de preuve tire le panier moyen.
+
+    Longtemps c'était « tout sauf les annulées », et la recette additionnait
+    donc des commandes que personne n'avait payées : le patron lisait chaque
+    soir un chiffre plus haut que sa caisse. Constaté au premier service.
+
+    Contrepartie assumée : le chiffre dépend désormais du personnel qui
+    enregistre l'encaissement. Un service où l'on oublie de confirmer le cash
+    sous-évaluera la recette — mais sous-évaluer ce qu'on ne peut pas prouver
+    vaut mieux que gonfler ce qu'on montre au patron.
+    """
+    return [
+        o
+        for o in orders
+        if o.payment_status == PaymentStatus.PAID and o.status != OrderStatus.CANCELLED
+    ]
 
 
 def _average(values: list[float]) -> float | None:
@@ -114,7 +130,7 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
     # avec les mêmes règles que la page de preuve : les deux écrans parlent du
     # même jour au même homme, ils doivent dire la même chose.
     now = datetime.now(timezone.utc)
-    revenue_today = sum(o.total_amount for o in _billable_orders(orders_today))
+    revenue_today = sum(o.total_amount for o in _paid_orders(orders_today))
     lost_orders_today = len(_lost_orders(orders_today, now))
 
     return schemas.DashboardStats(
@@ -161,7 +177,7 @@ def _period_proof(
     order_to_kitchen = [
         (o.sent_to_kitchen_at - o.created_at).total_seconds() for o in orders if o.sent_to_kitchen_at
     ]
-    paid_orders = _billable_orders(orders)
+    paid_orders = _paid_orders(orders)
     baskets = [o.total_amount for o in paid_orders]
 
     # Une commande « avec suggestion » est une commande où le client a accepté
