@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -43,7 +43,22 @@ class MenuItem(Base):
     category: Mapped[str] = mapped_column(String(60), default="Autre")
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Adresse de la photo affichée au client. Soit une URL externe saisie à la
+    # main, soit le chemin de la photo déposée par le manager et servie par
+    # `GET /api/v1/menu-items/{id}/image`.
     image_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    # La photo elle-même, en base et non sur le disque du conteneur : chez
+    # Railway comme chez Render le système de fichiers est éphémère, et toutes
+    # les photos de la carte disparaîtraient au premier redéploiement — c'est
+    # à dire un soir, en plein service, sans que personne comprenne pourquoi.
+    #
+    # Le volume reste dérisoire : une carte de quarante plats redimensionnés
+    # par le navigateur avant envoi pèse quelques mégaoctets, sauvegardés avec
+    # le reste. Le jour où une chaîne aura mille cartes, ce sera le moment de
+    # passer à un stockage objet — pas avant (YAGNI).
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    image_content_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     # 0 = pas épicé, 1-3 = léger/moyen/fort. Texte libre pour les allergènes
     # (comme `category`, saisi par le resto — pas de liste fermée qui

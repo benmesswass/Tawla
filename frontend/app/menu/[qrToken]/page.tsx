@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Cairo } from "next/font/google";
 import {
   api,
+  mediaUrl,
   wsUrl,
   orderWsUrl as buildOrderWsUrl,
   ApiError,
@@ -1060,6 +1061,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // qu'un voisin de table est en train de manger. Le dire est plus honnête
     // que l'escamoter (retour du premier service).
     const rupture = !item.is_available;
+    const photo = mediaUrl(item.image_url);
     return (
       <div
         key={item.id}
@@ -1074,7 +1076,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {/* La photo d'abord, et visible sur téléphone : elle était masquée
               en dessous de `sm`, c'est-à-dire précisément là où le client
               commande. Une carte de restaurant sans photos ne donne pas faim. */}
-          {item.image_url && (
+          {photo && (
             <div className="relative shrink-0 w-20 h-20">
               {/* La même image, floutée derrière la vignette : elle projette la
                   couleur du plat sur le fond crème et fait ressortir la photo
@@ -1082,10 +1084,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <div
                 aria-hidden
                 className="absolute inset-0 rounded-xl bg-cover bg-center blur-md opacity-40 scale-95"
-                style={{ backgroundImage: `url(${item.image_url})` }}
+                style={{ backgroundImage: `url(${photo})` }}
               />
               <img
-                src={item.image_url}
+                src={photo}
                 alt={item.name}
                 loading="lazy"
                 className="relative w-20 h-20 rounded-xl object-cover border-2 border-white shadow-md"

@@ -38,6 +38,15 @@ def upsert_restaurant(db, name: str, slug: str) -> Restaurant:
 def upsert_staff(db, restaurant_id: int, name: str, role: StaffRole, email: str) -> Staff:
     staff = db.query(Staff).filter(Staff.email == email).first()
     if staff:
+        # Le mot de passe est remis à celui que documente CLAUDE.md, et le
+        # compte réactivé. Sans ça, un compte de démo dont le mot de passe a
+        # dérivé — changé à la main pendant un essai, réactivé après une
+        # désactivation — reste inutilisable, et relancer le seed n'y change
+        # rien : on cherche alors le bug dans l'authentification.
+        staff.password_hash = hash_password(DEMO_PASSWORD)
+        staff.is_active = True
+        db.commit()
+        db.refresh(staff)
         return staff
     staff = Staff(
         restaurant_id=restaurant_id, name=name, role=role, email=email, password_hash=hash_password(DEMO_PASSWORD)

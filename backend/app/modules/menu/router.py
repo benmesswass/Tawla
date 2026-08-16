@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from hashlib import sha256
+
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -173,3 +175,87 @@ def delete_menu_item(item_id: int, db: Session = Depends(get_db), staff: Staff =
     item = _get_item_in_scope(db, item_id, staff)
     db.delete(item)
     db.commit()
+
+
+# --- Photos de la carte ------------------------------------------------------
+
+# Formats acceptés : ceux que produit un téléphone, plus le webp des
+# navigateurs récents. Pas de SVG — un SVG est un document exécutable, servi
+# depuis notre domaine il ouvrirait une injection de script.
+FORMATS_PHOTO = {"image/jpeg", "image/png", "image/webp"}
+
+# Le navigateur redimensionne avant d'envoyer (voir frontend/lib/photo.ts) :
+# 3 Mo laissent passer une photo correcte tout en refusant l'envoi brut d'un
+# appareil photo, qui immobiliserait la connexion du restaurant en plein service.
+TAILLE_PHOTO_MAX = 3 * 1024 * 1024
+
+
+@router.put("/{item_id}/image", response_model=schemas.MenuItemOut)
+async def upload_menu_item_image(
+    item_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Photo déposée par le manager sur la carte. Réservée au manager : la photo
+    d'un plat est un acte de gestion, au même titre que son prix.
+    """
+    item = _get_item_in_scope(db, item_id, staff)
+
+    if file.content_type not in FORMATS_PHOTO:
+        raise HTTPException(
+            status_code=415,
+            detail={"code": "UNSUPPORTED_IMAGE", "message": "image must be jpeg, png or webp"},
+        )
+
+    contenu = await file.read()
+    if len(contenu) > TAILLE_PHOTO_MAX:
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "IMAGE_TOO_LARGE", "message": "image exceeds 3 MB"},
+        )
+
+    item.image_data = contenu
+    item.image_content_type = file.content_type
+    # L'empreinte du contenu dans l'URL : sans elle, une photo remplacée
+    # resterait l'ancienne dans le cache du téléphone des clients, et le
+    # manager croirait que son dépôt n'a pas fonctionné.
+    item.image_url = f"/api/v1/menu-items/{item.id}/image?v={sha256(contenu).hexdigest()[:12]}"
+    db.commit()
+    db.refresh(item)
+
+    log_event(logger, "menu.image_uploaded", restaurant_id=item.restaurant_id, menu_item_id=item.id)
+    return item
+
+
+@router.get("/{item_id}/image")
+def get_menu_item_image(item_id: int, db: Session = Depends(get_db)):
+    """
+    Publique, comme la carte elle-même : c'est le client attablé qui la
+    regarde, et il n'a pas de compte.
+
+    Mise en cache longue sans risque : l'URL porte l'empreinte du contenu,
+    donc une photo remplacée change d'adresse.
+    """
+    item = db.get(MenuItem, item_id)
+    if not item or not item.image_data:
+        raise HTTPException(status_code=404, detail={"code": "IMAGE_NOT_FOUND", "message": "no image"})
+
+    return Response(
+        content=item.image_data,
+        media_type=item.image_content_type or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@router.delete("/{item_id}/image", response_model=schemas.MenuItemOut)
+def delete_menu_item_image(item_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """Retirer une photo ratée sans avoir à en déposer une autre."""
+    item = _get_item_in_scope(db, item_id, staff)
+    item.image_data = None
+    item.image_content_type = None
+    item.image_url = None
+    db.commit()
+    db.refresh(item)
+    return item

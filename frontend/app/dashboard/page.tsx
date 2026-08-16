@@ -26,6 +26,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons";
 import { MENU_CATEGORIES } from "@/lib/menuCategories";
+import { reduirePhoto } from "@/lib/photo";
+import PhotoDuPlat from "@/components/PhotoDuPlat";
 import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
 
@@ -131,6 +133,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["manager"]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [photoEnCours, setPhotoEnCours] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [newItem, setNewItem] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
@@ -286,6 +289,33 @@ export default function DashboardPage() {
       flash(`« ${draft.name} » enregistré.`);
       setEditingItemId(null);
       await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function deposerPhoto(item: MenuItem, fichier: File) {
+    setError(null);
+    setPhotoEnCours(item.id);
+    try {
+      // Réduite dans le navigateur avant l'envoi : une photo de téléphone
+      // brute mettrait la connexion du restaurant à genoux en plein service.
+      const reduite = await reduirePhoto(fichier);
+      const misAJour = await api.uploadMenuItemPhoto(item.id, reduite);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
+      flash(`Photo ajoutée à « ${item.name} ».`);
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    } finally {
+      setPhotoEnCours(null);
+    }
+  }
+
+  async function retirerPhoto(item: MenuItem) {
+    setError(null);
+    try {
+      const misAJour = await api.deleteMenuItemPhoto(item.id);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -606,18 +636,12 @@ export default function DashboardPage() {
               return (
                 <Card key={item.id} padding="sm" className={!item.is_available ? "bg-neutral-50" : ""}>
                   <div className="flex items-center gap-3">
-                    {item.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.image_url}
-                        alt={item.name}
-                        className="w-11 h-11 rounded-lg object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-lg bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-400">
-                        <UtensilsIcon className="w-5 h-5" />
-                      </div>
-                    )}
+                    <PhotoDuPlat
+                      item={item}
+                      enCours={photoEnCours === item.id}
+                      onFichier={(fichier) => deposerPhoto(item, fichier)}
+                      onRetirer={() => retirerPhoto(item)}
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{item.name}</div>
                       <div className="text-xs text-neutral-500 truncate">
