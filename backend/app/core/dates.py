@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+from pydantic import BeforeValidator
 
 # La Tunisie n'applique plus l'heure d'été depuis 2009 : un décalage fixe est
 # exact toute l'année, et évite de dépendre de la base de fuseaux du système,
@@ -30,6 +33,24 @@ def service_day_start(now: datetime | None = None) -> datetime:
     if local < start:
         start -= timedelta(days=1)
     return start.astimezone(timezone.utc)
+
+
+def _marquer_utc(value: object) -> object:
+    """Attache UTC à un horodatage qui n'a pas de fuseau, sans rien décaler."""
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+# Type à utiliser pour **tout** horodatage sortant de l'API.
+#
+# SQLite rend les datetime sans fuseau (Postgres les rend avec). Sérialisés
+# tels quels, ils arrivent au navigateur sous la forme « 2026-08-16T15:33:28 »,
+# que JavaScript interprète comme une heure *locale* : sur un Mac réglé à
+# UTC+1, une commande passée à l'instant s'affichait « en attente depuis
+# 1 h 00 ». L'écart valait exactement le décalage horaire, et il aurait fait
+# passer pour perdue chaque commande d'un vrai service.
+UtcDatetime = Annotated[datetime, BeforeValidator(_marquer_utc)]
 
 
 def as_utc(value: datetime) -> datetime:

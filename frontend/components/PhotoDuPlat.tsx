@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { mediaUrl, type MenuItem } from "@/lib/api";
 import { FORMATS_ACCEPTES } from "@/lib/photo";
 import { UtensilsIcon } from "@/components/icons";
@@ -74,8 +74,170 @@ export default function PhotoDuPlat({
         </button>
       )}
 
+      <ChampFichier ref={input} onFichier={onFichier} />
+    </div>
+  );
+}
+
+/**
+ * La zone de dépôt du formulaire d'édition — celle qu'on cherche quand on
+ * ouvre « Modifier ». La vignette de la liste est un raccourci pour garnir une
+ * carte entière ; ici, on vient s'occuper d'un plat en particulier.
+ */
+export function ZonePhoto({
+  item,
+  enCours,
+  onFichier,
+  onRetirer,
+}: {
+  item: MenuItem;
+  enCours: boolean;
+  onFichier: (fichier: File) => void;
+  onRetirer: () => void;
+}) {
+  const [survol, setSurvol] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const photo = mediaUrl(item.image_url);
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setSurvol(true);
+      }}
+      onDragLeave={() => setSurvol(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setSurvol(false);
+        const fichier = Array.from(e.dataTransfer.files).find((f) => FORMATS_ACCEPTES.includes(f.type));
+        if (fichier) onFichier(fichier);
+      }}
+      className={`mt-2 rounded-lg border-2 border-dashed p-3 transition-colors ${
+        survol ? "border-[var(--harissa)] bg-orange-50" : "border-[var(--line)]"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo} alt={item.name} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+        ) : (
+          <div className="w-16 h-16 rounded-lg bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-400">
+            <UtensilsIcon className="w-6 h-6" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm">
+            {enCours ? "Envoi en cours…" : photo ? "Photo du plat" : "Glissez une photo ici"}
+          </p>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            JPEG, PNG ou WebP — redimensionnée automatiquement avant l&apos;envoi.
+          </p>
+          <div className="mt-1.5 flex gap-3 text-sm">
+            <button
+              type="button"
+              onClick={() => input.current?.click()}
+              className="underline text-[var(--harissa)]"
+            >
+              {photo ? "Remplacer" : "Choisir un fichier"}
+            </button>
+            {photo && (
+              <button type="button" onClick={onRetirer} className="underline text-neutral-500">
+                Retirer
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <ChampFichier ref={input} onFichier={onFichier} />
+    </div>
+  );
+}
+
+/**
+ * Zone de dépôt du formulaire de création. Le plat n'a pas encore
+ * d'identifiant, donc rien à envoyer : la photo est gardée de côté et part
+ * juste après la création. L'aperçu vient d'une URL d'objet locale, révoquée
+ * dès qu'une autre photo la remplace.
+ */
+export function ZonePhotoNouveau({
+  fichier,
+  onFichier,
+}: {
+  fichier: File | null;
+  onFichier: (f: File | null) => void;
+}) {
+  const [survol, setSurvol] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const [apercu, setApercu] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!fichier) {
+      setApercu(null);
+      return;
+    }
+    const url = URL.createObjectURL(fichier);
+    setApercu(url);
+    return () => URL.revokeObjectURL(url);
+  }, [fichier]);
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setSurvol(true);
+      }}
+      onDragLeave={() => setSurvol(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setSurvol(false);
+        const trouve = Array.from(e.dataTransfer.files).find((f) => FORMATS_ACCEPTES.includes(f.type));
+        if (trouve) onFichier(trouve);
+      }}
+      className={`mt-2 rounded-lg border-2 border-dashed p-3 transition-colors ${
+        survol ? "border-[var(--harissa)] bg-orange-50" : "border-[var(--line)]"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {apercu ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={apercu} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+        ) : (
+          <div className="w-16 h-16 rounded-lg bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-400">
+            <UtensilsIcon className="w-6 h-6" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm">{fichier ? fichier.name : "Glissez une photo ici (facultatif)"}</p>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Elle sera envoyée dès que le plat sera créé.
+          </p>
+          <div className="mt-1.5 flex gap-3 text-sm">
+            <button
+              type="button"
+              onClick={() => input.current?.click()}
+              className="underline text-[var(--harissa)]"
+            >
+              {fichier ? "Changer" : "Choisir un fichier"}
+            </button>
+            {fichier && (
+              <button type="button" onClick={() => onFichier(null)} className="underline text-neutral-500">
+                Retirer
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <ChampFichier ref={input} onFichier={onFichier} />
+    </div>
+  );
+}
+
+/** Le `<input type="file">` caché, identique aux trois zones de dépôt. */
+const ChampFichier = forwardRef<HTMLInputElement, { onFichier: (f: File) => void }>(
+  function ChampFichier({ onFichier }, ref) {
+    return (
       <input
-        ref={input}
+        ref={ref}
         type="file"
         accept={FORMATS_ACCEPTES.join(",")}
         className="hidden"
@@ -87,6 +249,6 @@ export default function PhotoDuPlat({
           e.target.value = "";
         }}
       />
-    </div>
-  );
-}
+    );
+  }
+);

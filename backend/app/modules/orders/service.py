@@ -471,18 +471,23 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -
     return order
 
 
-async def request_cash_payment(db: Session, order_id: int) -> Order:
+async def request_cash_payment(db: Session, order_id: int, tip_amount: float = 0) -> Order:
     """Le client demande à payer en espèces — prévient le serveur assigné."""
     order = _get_payable_order(db, order_id)
 
     order.payment_method = PaymentMethod.CASH
     order.payment_status = PaymentStatus.PENDING
+    # Le pourboire était ignoré sur ce chemin : le client le saisissait, le
+    # serveur venait encaisser le total sans lui, et l'écart n'apparaissait
+    # qu'au comptage de la caisse.
+    order.tip_amount = tip_amount
     db.commit()
     db.refresh(order)
 
+    a_encaisser = order.total_amount + tip_amount
     log_event(
         logger, "order.cash_payment_requested",
-        restaurant_id=order.restaurant_id, order_id=order.id, amount=order.total_amount,
+        restaurant_id=order.restaurant_id, order_id=order.id, amount=a_encaisser,
     )
 
     # Diffusé sur le canal "staff" partagé (pas d'infra par membre du
@@ -496,8 +501,10 @@ async def request_cash_payment(db: Session, order_id: int) -> Order:
             "event": "order.cash_requested",
             "order_id": order.id,
             "table_id": order.table_id,
-                "table_label": order.table_label,
-            "amount": order.total_amount,
+            "table_label": order.table_label,
+            # Ce que le serveur doit réellement encaisser, pourboire compris —
+            # c'est le montant qu'il annonce à la table.
+            "amount": a_encaisser,
             "taken_by_staff_id": order.taken_by_staff_id,
             "loyalty_phone": order.loyalty_phone,
         },

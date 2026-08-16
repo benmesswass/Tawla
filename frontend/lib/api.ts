@@ -493,9 +493,10 @@ export const api = {
       body: JSON.stringify({ tip_amount: tipAmount }),
       headers: orderHeaders(orderToken),
     }),
-  requestCashPayment: (orderId: number, orderToken: string) =>
+  requestCashPayment: (orderId: number, tipAmount: number, orderToken: string) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash`, {
       method: "POST",
+      body: JSON.stringify({ tip_amount: tipAmount }),
       headers: orderHeaders(orderToken),
     }),
   confirmCashPayment: (orderId: number) =>

@@ -91,9 +91,13 @@ async def pay_by_card(
 
 
 @router.post("/{order_id}/pay/cash", response_model=schemas.OrderOut)
-async def request_cash_payment(order: Order = Depends(get_order_by_token), db: Session = Depends(get_db)):
+async def request_cash_payment(
+    payload: schemas.PayCashRequest = schemas.PayCashRequest(),
+    order: Order = Depends(get_order_by_token),
+    db: Session = Depends(get_db),
+):
     """Le client demande à payer en espèces — prévient le serveur en temps réel."""
-    return await service.request_cash_payment(db, order.id)
+    return await service.request_cash_payment(db, order.id, payload.tip_amount)
 
 
 @router.post("/{order_id}/pay/cash/confirm", response_model=schemas.OrderOutStaff)

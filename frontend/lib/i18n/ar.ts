@@ -83,6 +83,12 @@ export const ar = {
   loyaltyProgress: (count, remaining) => `عندك ${count} طلبية — باقي ${remaining} باش تربح حاجة فالمجان!`,
   itemOutOfStock: "ما فماش توّا",
   orderElapsed: (duree) => `تبعثت من ${duree}`,
+  tableTotalTitle: "شنوة تسال الطاولة تاعك بالكل",
+  orderLabel: (id) => `طلبية #${id}`,
+  thisOrder: "هاذي",
+  tableTotal: "المجموع إلي يتخلص",
+  tableTotalNote:
+    "الخلاص إلي تحت يخلص كان الطلبية المعروضة. ارجع للأخرين باش تخلصهم، ولا اطلب من الجرسون يخلصهم الكل مرة وحدة.",
   sharedWithLabel: "مقسوم بين :",
   sharedWithEveryone: "ما اخترت حتى واحد : مقسوم على الطاولة الكل.",
   dinersLabel: "قداش عباد عالطاولة",

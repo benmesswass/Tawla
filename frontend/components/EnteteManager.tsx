@@ -1,0 +1,72 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { clearToken } from "@/lib/auth";
+import { lalezar } from "@/lib/fonts";
+
+/**
+ * L'en-tête commun aux quatre écrans de direction.
+ *
+ * Chaque page portait le sien : les liens changeaient de place (sous le titre
+ * ici, à droite ailleurs), une même destination changeait de nom (« Suivi de
+ * l'activité » ou « Activité du jour », « Gérer le menu » ou « Menu »), et
+ * l'écran d'activité oubliait le rapport d'équipe. Passer d'une page à l'autre
+ * donnait l'impression de changer de logiciel — et sur un écran étroit, la
+ * rangée alignée à droite débordait, « Se déconnecter » se retrouvant coupé.
+ *
+ * Un seul composant, donc un seul jeu de libellés et une seule mise en page :
+ * l'onglet de la page courante est marqué, jamais cliquable pour rien.
+ */
+const PAGES = [
+  { href: "/dashboard", label: "Carte" },
+  { href: "/dashboard/stats", label: "Activité du jour" },
+  { href: "/dashboard/preuve", label: "Preuve du pilote" },
+  { href: "/dashboard/equipe", label: "Rapport d'équipe" },
+] as const;
+
+export default function EnteteManager({ titre, sousTitre }: { titre: string; sousTitre?: string }) {
+  const router = useRouter();
+  const chemin = usePathname();
+
+  function seDeconnecter() {
+    clearToken();
+    router.push("/login");
+  }
+
+  return (
+    <header className="mb-4">
+      {/* La navigation au-dessus du titre, et non à côté : elle appartient à
+          l'application, le titre à la page. Les inverser faisait sauter le
+          titre d'un bord à l'autre d'un écran au suivant. */}
+      <nav className="flex items-center gap-x-4 gap-y-1 flex-wrap border-b border-[var(--line)] pb-2 mb-3">
+        {PAGES.map((page) => {
+          const active = chemin === page.href;
+          return (
+            <Link
+              key={page.href}
+              href={page.href}
+              aria-current={active ? "page" : undefined}
+              className={
+                active
+                  ? "text-sm font-semibold text-[var(--harissa)]"
+                  : "text-sm text-[var(--ink-soft)] hover:text-[var(--encre)] underline"
+              }
+            >
+              {page.label}
+            </Link>
+          );
+        })}
+        <button
+          onClick={seDeconnecter}
+          className="text-sm text-[var(--ink-soft)] underline ms-auto"
+        >
+          Se déconnecter
+        </button>
+      </nav>
+
+      <h1 className={`${lalezar.className} text-2xl`}>{titre}</h1>
+      {sousTitre && <p className="text-sm text-[var(--ink-soft)] mt-1">{sousTitre}</p>}
+    </header>
+  );
+}

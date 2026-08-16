@@ -3,6 +3,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
+from app.core.dates import UtcDatetime
 from app.modules.orders.models import OrderStatus, PaymentMethod, PaymentStatus
 
 
@@ -52,7 +53,7 @@ class OrderCreate(BaseModel):
     client_order_id: str | None = Field(default=None, max_length=64)
     # Pré-commande mode Ramadan : optionnel, réglé côté client sur l'heure
     # d'iftar du resto quand il choisit "commander pour l'iftar".
-    scheduled_for: datetime | None = None
+    scheduled_for: UtcDatetime | None = None
     # Carte de fidélité — facultatif, le client peut commander sans jamais
     # le renseigner.
     loyalty_phone: str | None = None
@@ -81,6 +82,16 @@ class PayCardRequest(BaseModel):
     tip_amount: float = Field(default=0, ge=0)
 
 
+class PayCashRequest(BaseModel):
+    """
+    Le pourboire vaut aussi pour les espèces. Il était purement perdu : le
+    client le saisissait, le serveur venait encaisser le total sans lui, et
+    personne ne s'apercevait de l'écart avant de compter la caisse.
+    """
+
+    tip_amount: float = Field(default=0, ge=0)
+
+
 class PushSubscriptionIn(BaseModel):
     endpoint: str
     keys: dict[str, str]
@@ -104,15 +115,15 @@ class OrderOut(BaseModel):
     # téléphone. `table_id` seul envoyait le serveur à la mauvaise table.
     table_label: str
     status: OrderStatus
-    created_at: datetime
-    confirmed_at: datetime | None
-    sent_to_kitchen_at: datetime | None
-    preparation_started_at: datetime | None
-    ready_at: datetime | None
-    served_at: datetime | None
+    created_at: UtcDatetime
+    confirmed_at: UtcDatetime | None
+    sent_to_kitchen_at: UtcDatetime | None
+    preparation_started_at: UtcDatetime | None
+    ready_at: UtcDatetime | None
+    served_at: UtcDatetime | None
     taken_by_staff_id: int | None
     taken_by_staff_name: str | None
-    scheduled_for: datetime | None
+    scheduled_for: UtcDatetime | None
     payment_method: PaymentMethod | None
     payment_status: PaymentStatus
     tip_amount: float

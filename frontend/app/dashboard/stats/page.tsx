@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
-import { lalezar } from "@/lib/fonts";
 import { api, DashboardStats, Order, OrderStatus } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { duree } from "@/lib/duree";
@@ -115,10 +114,6 @@ export default function DashboardStatsPage() {
     if (restaurantId) load();
   }, [restaurantId, load]);
 
-  function logout() {
-    clearToken();
-    router.push("/login");
-  }
 
   if (staffLoading || !staff) {
     return (
@@ -143,20 +138,10 @@ export default function DashboardStatsPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h1 className={`${lalezar.className} text-xl`}>Suivi de l&apos;activité</h1>
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/dashboard" className="underline">
-            Gérer le menu
-          </Link>
-          <Link href="/dashboard/preuve" className="underline">
-            Preuve du pilote
-          </Link>
-          <button onClick={logout} className="text-neutral-500 underline">
-            Se déconnecter
-          </button>
-        </div>
-      </div>
+      <EnteteManager
+        titre="Activité du jour"
+        sousTitre="Ce qui se passe en salle aujourd'hui : ce qui attend, ce que chaque serveur a pris en charge, et le temps passé à chaque étape."
+      />
 
       <div className="flex items-center gap-2 mb-6 flex-wrap">
         <label htmlFor="date" className="text-sm text-[var(--ink-soft)]">

@@ -87,6 +87,12 @@ export const fr = {
     `Fidélité : ${count} commande${count > 1 ? "s" : ""} — encore ${remaining} pour un article offert !`,
   itemOutOfStock: "Indisponible actuellement",
   orderElapsed: (duree: string) => `Envoyée il y a ${duree}`,
+  tableTotalTitle: "Ce que votre table doit en tout",
+  orderLabel: (id: number) => `Commande #${id}`,
+  thisOrder: "celle-ci",
+  tableTotal: "Total à régler",
+  tableTotalNote:
+    "Le paiement ci-dessous règle uniquement la commande affichée. Revenez sur les autres pour les régler à leur tour, ou demandez au serveur de tout encaisser en une fois.",
   sharedWithLabel: "Partagé entre :",
   sharedWithEveryone: "Personne de sélectionnée : partagé par toute la table.",
   dinersLabel: "Personnes à table",

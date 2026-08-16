@@ -502,7 +502,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setPaymentError(null);
     try {
       if (!orderToken) return;
-      const updated = await api.requestCashPayment(trackedOrder.id, orderToken);
+      // Le pourboire vaut aussi pour les espèces : il était saisi puis perdu,
+      // et le serveur venait encaisser le total sans lui.
+      const tip = Number(tipInput.replace(",", ".")) || 0;
+      const updated = await api.requestCashPayment(trackedOrder.id, tip, orderToken);
       setTrackedOrder(updated);
     } catch (e) {
       setPaymentError(toLocalizedMessage(e, locale));
@@ -688,6 +691,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const resteAPayer = autresCommandesOuvertes
     .filter((r) => r.order.payment_status !== "paid")
     .reduce((sum, r) => sum + r.order.total_amount, 0);
+
+  // L'ardoise : toutes les commandes de la table encore à régler, celle qu'on
+  // regarde comprise, dans l'ordre où elles ont été passées.
+  const ardoise = openOrders
+    .filter((r) => r.order.payment_status !== "paid")
+    .sort((a, b) => a.order.id - b.order.id);
+  const totalArdoise = ardoise.reduce((sum, r) => sum + r.order.total_amount, 0);
 
   // Carte de partage social (Instagram/WhatsApp Status) — générée
   // entièrement côté client sur <canvas>, sans backend ni service tiers.
@@ -968,6 +978,35 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </span>
           </div>
         </div>
+
+        {/* L'ardoise de la table. Quand on a commandé deux fois sans payer, le
+            client voulait savoir ce qu'il doit **en tout** — l'addition de sa
+            deuxième tournée seule ne veut rien dire au moment de régler. */}
+        {!cancelled && ardoise.length > 1 && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm font-medium text-amber-900">{t.tableTotalTitle}</p>
+            <ul className="mt-2 space-y-1 text-sm text-amber-900">
+              {ardoise.map((r) => (
+                <li key={r.order.id} className="flex justify-between gap-2">
+                  <span>
+                    {t.orderLabel(r.order.id)}
+                    {r.order.id === trackedOrder.id && ` — ${t.thisOrder}`}
+                  </span>
+                  <span className="tabular-nums">
+                    {r.order.total_amount.toFixed(2)} {t.currency}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 pt-2 border-t border-amber-200 flex justify-between font-semibold text-amber-900">
+              <span>{t.tableTotal}</span>
+              <span className="tabular-nums">
+                {totalArdoise.toFixed(2)} {t.currency}
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs text-amber-900/80">{t.tableTotalNote}</p>
+          </div>
+        )}
 
         {!cancelled && (
           <div className="mt-6 border-t pt-4">
