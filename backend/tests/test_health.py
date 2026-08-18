@@ -19,6 +19,17 @@ def test_health_is_ok_when_the_database_answers(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_health_answers_head_requests(client):
+    """
+    UptimeRobot (et la plupart des moniteurs externes) sonde en `HEAD`, pas en
+    `GET`, pour économiser la bande passante. Constaté en production le
+    2026-08-18 : `HEAD /health` répondait 405, ce qui déclenchait une fausse
+    alerte de panne — la vraie raison n'a jamais été « la base est injoignable ».
+    """
+    response = client.head("/health")
+    assert response.status_code == 200
+
+
 def test_health_reports_503_when_the_database_is_unreachable(client):
     class BrokenSession:
         def execute(self, *_args, **_kwargs):
