@@ -121,14 +121,14 @@ la vérification est manuelle par nature.
 
 ### 19bis.2 — Les défauts à fermer avant le premier pilote
 
-- [ ] **F-3** — deux définitions de la journée cohabitent : les écrans de service coupent à 5 h heure de Tunis (`app/core/dates.py:16`), le tableau de bord et la page de preuve à minuit UTC (`app/modules/stats/service.py:66` et `:159-160`). Pendant Ramadan, l'iftar et le sohour d'une même soirée tombent sur deux journées différentes. Faire lire `service_day_start()` aux bornes de `stats/service.py`
-- [ ] **F-4** — `list_pending_cash_payments` (`app/modules/orders/service.py:97-107`) n'a aucune borne de date : une demande d'encaissement vieille de six jours reste à l'écran du serveur. Même borne que les commandes actives
-- [ ] **F-5** — `_get_payable_order` (`app/modules/orders/service.py:437-442`) laisse payer une commande que personne n'a confirmée, et `transition_status` (`:309-325`) laisse annuler une commande payée. Refuser le paiement avant confirmation, et refuser l'annulation d'une commande payée. **À faire avant toute intégration Konnect réelle**, pas après
-- [ ] **S-1** — `GET /menu-items/by-restaurant/{id}` et `/suggestions` (`app/modules/menu/router.py:89-102` et `:105-115`) sont publiques et acceptent un identifiant incrémental : la carte et les prix de tout établissement se lisent sans jeton. Servir la carte par `qr_token`, comme le reste du parcours client
+- [x] **F-3** — `service_day_bounds(day)` (nouveau, `core/dates.py`) appliquée aux 6 endroits de `stats/service.py` qui bornaient à minuit UTC, pas seulement les deux cités par l'audit. Un test existant qui encodait implicitement l'ancienne sémantique a dû être corrigé (PR #60)
+- [x] **F-4** — même borne `service_day_start()` que les commandes actives, ajoutée à `list_pending_cash_payments` (PR #60)
+- [x] **F-5** — `_get_payable_order` rejette désormais `ORDER_NOT_CONFIRMED` sur une commande `pending_confirmation` ; `transition_status` rejette `ORDER_ALREADY_PAID` avant un passage à `CANCELLED`. Tous les tests qui payaient sans confirmer d'abord ont été corrigés (PR #60)
+- [x] **S-1** — `list_menu`/`list_suggestions` fermés au manager authentifié (même motif que `tables/router.py`) ; deux nouvelles routes publiques `/menu-items/by-table/{qr_token}` pour le parcours client, qui n'a plus jamais besoin de connaître un `restaurant_id` (PR #60)
 - [x] **S-2a** — collision confirmée en production (PR #57) : `ProxyHeadersMiddleware` d'uvicorn lit la même variable `FORWARDED_ALLOW_IPS` que notre `Settings` et réécrivait `request.client.host` avant `client_ip()`. Retirer la variable ne suffisait pas : le pair TCP brut est lui-même une IP interne à Render qui change à chaque requête (mesuré sur 24 requêtes réelles), et la première valeur de `X-Forwarded-For` est trivialement forgeable (testé). Correctif : `client_ip()` s'appuie uniquement sur `CF-Connecting-IP`, posé par Cloudflare et rejeté en 403 à son propre niveau s'il est forgé. `FORWARDED_ALLOW_IPS` retiré du code
-- [ ] **S-2b** — monter le plafond de `POST /orders` au-dessus du nombre de couverts d'un service. Mesuré : 20 requêtes/minute par IP, partagées par **toute la salle** derrière le Wi-Fi du restaurant — or la Phase 23.1 impose du Wi-Fi à toutes les tables
-- [ ] **S-2c** — traduire `RATE_LIMITED` en français et en arabe (`frontend/lib/errors.ts:6-33` et `:46-57`). Aujourd'hui le client refusé lit « Réessayez dans un instant », ce qui prolonge le blocage
-- [ ] **D-1** — l'écran serveur, décrit comme *partagé*, occupe 448 px sur 1280 (35 %) et impose déjà un défilement avec **une seule** commande. L'écran cuisine, lui, occupe 96 % en deux colonnes. Lui donner la même mise en page multi-colonnes au-delà d'une largeur de tablette
+- [x] **S-2b** — `rate_limit()` devient une fabrique : 20/min par défaut (auth, inchangé), 120/min (`ORDER_VOLUME_MAX_REQUESTS`) pour `POST /orders` uniquement. Pas les appels serveur : un plafond bas par table y reste un choix voulu, confirmé par un test existant qui l'attendait explicitement (PR #60)
+- [x] **S-2c** — message dédié pour `RATE_LIMITED` en français et en arabe, qui explique l'attente au lieu d'inviter à réessayer "dans un instant" (PR #60)
+- [x] **D-1** — écran serveur en pleine largeur au-delà de `md:`, trois listes de commandes en colonnes comme l'écran cuisine. Vérifié en desktop (1280px, 3 colonnes) et mobile (375px, inchangé) (PR #60)
 
 ### 19bis.3 — Ce qui attend le premier retour de terrain
 
@@ -147,9 +147,9 @@ Photos de carte stockées en base, glisser-déposer, `UtcDatetime`, pourboire en
 espèces, ardoise de table, `EnteteManager`. Elle n'était pas dans le périmètre
 de l'audit et n'est comptée nulle part dans la grille.
 
-- [ ] Décider 🧑 : fusionner avant la mise en ligne, ou la laisser en attente jusqu'après les pilotes. Une PR ouverte qui vieillit se fusionne de plus en plus mal
-- [ ] Si elle est fusionnée : **valider `image_url` à la réception**. `S-5` a montré qu'un `javascript:` ou un SVG à script est accepté tel quel aujourd'hui (`app/modules/menu/schemas.py:80`) — non exploitable sans upload, mais la PR #53 apporte justement l'upload
-- [ ] Si elle est fusionnée : réexaminer le stockage des photos **en base**, choix assumé face aux systèmes de fichiers éphémères de Railway/Render, à revoir à l'échelle d'une chaîne
+- [x] Décidé 🧑 : fusionnée avant la mise en ligne (PR #53, PR #56, PR #57)
+- [x] **`image_url` validé à la réception** : `extra="forbid"` sur `MenuItemCreate`/`MenuItemUpdate`, seules les routes `/image` gèrent la photo (PR #53)
+- [ ] Réexaminer le stockage des photos **en base**, choix assumé face aux systèmes de fichiers éphémères de Railway/Render, à revoir à l'échelle d'une chaîne
 
 ---
 
