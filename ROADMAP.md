@@ -112,12 +112,12 @@ la vérification est manuelle par nature.
 
 ### 19bis.1 — Les trois bloquants
 
-- [ ] **F-1** — `scripts/seed_demo.py:74` appelle `create_all()` sans importer `model_registry` : une base neuve hors Docker n'a ni `orders`, ni `order_items`, ni `loyalty_members`, ni `waiter_calls`, et la première commande répond **HTTP 500**. Ajouter `from app.core import model_registry  # noqa: F401`, comme le fait déjà `scripts/purge_donnees_personnelles.py:26`
-- [ ] **F-1 (test)** — un test qui monte le schéma **par le script de seed** et passe une commande de bout en bout. Le filet actuel ne peut pas l'attraper : `tests/conftest.py` construit son schéma autrement
-- [ ] **F-2** — `active_orders_count` (`app/modules/stats/service.py:125-127`) n'est borné ni par la journée de service ni par le paramètre `day`. Le borner par `service_day_start()`, comme la liste qu'il surmonte (`app/modules/orders/service.py:82`)
-- [ ] **F-2 (test)** — une commande en attente datée de la veille ne compte plus dans `active_orders_count` ; le badge et sa ventilation (`frontend/app/dashboard/stats/page.tsx:198` et `:137`) disent le même nombre
-- [ ] **C-1** — `frontend/app/menu/[qrToken]/page.tsx:536` appelle `crypto.randomUUID()`, indisponible hors contexte sécurisé : le panier ne se remplit jamais, **sans aucun message**. Passer à `crypto.randomUUID?.() ?? <repli>` pour que le hors-HTTPS ne coûte plus que les notifications
-- [ ] **C-1 (vérification, sans test)** — rejouer l'ajout au panier depuis une IP en `http://`, et constater que « Valider la commande » apparaît
+- [x] **F-1** — `from app.core import model_registry` ajouté à `scripts/seed_demo.py`, même correctif que `scripts/purge_donnees_personnelles.py:26` (PR #58)
+- [x] **F-1 (test)** — process Python isolé qui exécute le script réel et passe une commande ; échoue sur l'ancien code (`no such table: orders`), passe avec le correctif (PR #58)
+- [x] **F-2** — `active_orders_count` borné par `service_day_start()`, même borne que `list_active_orders` (PR #58)
+- [x] **F-2 (test)** — une commande active datée d'avant le début de la journée de service ne compte plus (PR #58)
+- [x] **C-1** — repli `crypto.randomUUID?.() ?? \`${Date.now()}-${Math.random().toString(36).slice(2)}\`` : cet identifiant n'a besoin que d'être unique par panier, pas cryptographique (PR #58)
+- [x] **C-1 (vérification, sans test)** — `crypto.randomUUID` neutralisé sur une instance locale : l'ajout au panier fonctionne toujours, « Valider la commande » apparaît (PR #58)
 
 ### 19bis.2 — Les défauts à fermer avant le premier pilote
 
