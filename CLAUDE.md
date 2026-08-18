@@ -122,6 +122,10 @@ proposition de fonctionnalité doit nommer le restaurateur qui l'a demandée.
 Sans nom, elle va dans la section « Sous condition » de `ROADMAP.md` et n'est
 pas construite. Le produit ne manque pas de fonctionnalité, il manque un client.
 
+- `AUDIT_COUTS_PRODUCTION.md` — audit du 2026-08-18 : ce que coûte réellement
+  en argent la mise en production de Tawla (infrastructure, services tiers,
+  domaine, conformité technique), chiffré et sourcé, obligatoire vs
+  conditionnel clairement séparés.
 - `AUDIT_FINAL.md` — audit du 2026-08-15 qui fonde la roadmap actuelle : code
   exécuté, 42 fonctionnalités notées, trois défauts à fermer, note recalculée.
 - `ROADMAP_ARCHIVE.md` — historique des phases 0 à 11. Lecture seule, ne rien y
