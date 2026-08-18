@@ -112,7 +112,12 @@ grave qu'un backend dont tout le monde peut forger les jetons.
 | `FRONTEND_ORIGIN` | `https://tawla.tn` — **l'origine exacte**, sans barre finale |
 | `VAPID_PUBLIC_KEY` · `VAPID_PRIVATE_KEY` | les valeurs générées à l'étape 2 |
 | `VAPID_CONTACT_EMAIL` | `contact@tawla.tn` |
-| `FORWARDED_ALLOW_IPS` | la valeur documentée dans `.env.example` après la Phase 19.3 |
+
+Pas de variable à renseigner pour le limiteur de débit derrière le proxy
+(19.3) : Render est systématiquement fronté par Cloudflare, qui pose
+`CF-Connecting-IP` à l'IP réelle du client et rejette en 403 toute tentative
+de le forger — le code s'appuie directement sur cet en-tête, rien à
+configurer.
 
 4. **Sonde de santé** : chemin `/health`. Elle interroge la base et renvoie 503
    si elle est injoignable — c'est ce qui permet à l'hébergeur de redémarrer le
