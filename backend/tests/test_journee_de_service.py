@@ -61,7 +61,10 @@ def test_une_commande_de_la_veille_reste_une_commande_perdue(client, db_session)
     oubliee = _order_created_at(db_session, restaurant, table, veille)
     manager = create_staff(restaurant.id, StaffRole.MANAGER)
 
-    jour = veille.astimezone(TUNIS).date().isoformat()
+    # F-3 : le jour CALENDAIRE de `veille` (3 h du matin) n'est pas son jour de
+    # SERVICE — avant 5 h, on est encore dans la journée de service de la
+    # veille. `service_day_start(veille)` donne la bonne date à interroger.
+    jour = service_day_start(veille).astimezone(TUNIS).date().isoformat()
     preuve = client.get(
         f"/api/v1/stats/preuve/{restaurant.id}",
         params={"start": jour, "end": jour},

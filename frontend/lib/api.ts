@@ -365,11 +365,18 @@ export const api = {
     request<Table>("/api/v1/tables", { method: "POST", body: JSON.stringify(payload) }),
   updateTable: (tableId: number, payload: { label: string; zone?: string | null }) =>
     request<Table>(`/api/v1/tables/${tableId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  // Dashboard manager (staff authentifié — voir `getMenuByToken` pour le
+  // parcours client, public mais lié au qr_token — S-1).
   getMenu: (restaurantId: number) => request<MenuItem[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}`),
   // { id du plat: [ids proposés] } — une seule requête pour toute la carte,
   // le menu client se charge d'un coup sur une connexion mobile de salle.
   getMenuSuggestions: (restaurantId: number) =>
     request<Record<string, number[]>>(`/api/v1/menu-items/by-restaurant/${restaurantId}/suggestions`),
+  // Parcours client : public, mais lié au qr_token de la table scannée (S-1)
+  // — remplace la lecture par restaurant_id, publique et incrémentale.
+  getMenuByToken: (qrToken: string) => request<MenuItem[]>(`/api/v1/menu-items/by-token/${qrToken}`),
+  getMenuSuggestionsByToken: (qrToken: string) =>
+    request<Record<string, number[]>>(`/api/v1/menu-items/by-token/${qrToken}/suggestions`),
   setMenuSuggestions: (itemId: number, suggestedItemIds: number[]) =>
     request<{ menu_item_id: number; suggested_items: MenuItem[] }>(
       `/api/v1/menu-items/${itemId}/suggestions`,

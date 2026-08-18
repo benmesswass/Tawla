@@ -35,6 +35,11 @@ def _place_order(client, table, item, phone, birth_date=None):
 
 def _order_and_pay_by_card(client, restaurant, table, item, phone):
     order = _place_order(client, table, item, phone)
+    # F-5 : une commande non confirmée ne se paie plus — la confirmation en
+    # elle-même n'est pas ce que ce test mesure, un manager jetable suffit.
+    client.post(
+        f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(create_staff(restaurant.id))
+    )
     return client.post(
         f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
     ).json()
@@ -125,6 +130,7 @@ def test_order_count_increments_on_confirmed_cash_payment(client):
     phone = "20654321"
 
     order = _place_order(client, table, item, phone)
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=manager_headers)
     client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
     # Une demande cash seule (pas encore encaissée) ne doit rien faire gagner.
     assert _lookup(client, table, phone).json()["order_count"] == 0

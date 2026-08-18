@@ -134,6 +134,38 @@ def test_active_orders_count_excludes_orders_before_service_day(client):
     assert res.json()["active_orders_count"] == 0
 
 
+def test_dashboard_stats_uses_service_day_not_midnight_utc(client):
+    """
+    F-3 : le tableau de bord coupait la journée à minuit UTC, alors que les
+    écrans de service coupent à `service_day_start()` (5 h heure de Tunis,
+    `app/core/dates.py`). Une commande passée entre minuit et 5 h Tunis
+    appartenait donc encore, pour l'écran serveur, à la soirée de la VEILLE —
+    mais le tableau de bord du manager la comptait déjà dans AUJOURD'HUI.
+    Pendant Ramadan, l'iftar et le sohour d'une même soirée en auraient fait
+    les frais.
+
+    Date fixe (pas `datetime.now()`) pour que le test ne dépende jamais de
+    l'heure à laquelle la suite tourne.
+    """
+    restaurant, _manager, headers, table, item = _setup_restaurant(client)
+    order = _create_order(client, restaurant, table, item)
+
+    # 2 h UTC le 15/03/2026 = 3 h heure de Tunis (UTC+1) : encore avant les
+    # 5 h qui font basculer la journée de service, donc encore la soirée du
+    # 14/03 pour les écrans de service.
+    juste_apres_minuit_utc = datetime(2026, 3, 15, 2, 0, tzinfo=timezone.utc)
+    _set_order_timestamps(order["id"], created_at=juste_apres_minuit_utc)
+
+    # L'ancien code (minuit UTC) l'aurait comptée ici.
+    res_15 = client.get(f"/api/v1/stats/dashboard/{restaurant.id}?date=2026-03-15", headers=headers)
+    assert res_15.json()["top_items"] == []
+    assert res_15.json()["orders_by_hour"] == []
+
+    # Elle appartient encore à la soirée du 14.
+    res_14 = client.get(f"/api/v1/stats/dashboard/{restaurant.id}?date=2026-03-14", headers=headers)
+    assert res_14.json()["top_items"] == [{"menu_item_name": "Couscous", "quantity": 1}]
+
+
 def test_dashboard_stats_isolated_across_restaurants(client):
     restaurant_a, _manager_a, headers_a, table_a, item_a = _setup_restaurant(client)
     restaurant_b = create_restaurant(name="Café B Stats", slug="cafe-b-stats")

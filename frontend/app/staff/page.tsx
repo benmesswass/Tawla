@@ -456,7 +456,7 @@ export default function StaffPage() {
 
   if (staffLoading || !staff) {
     return (
-      <div className="p-4 max-w-md mx-auto space-y-3">
+      <div className="p-4 max-w-md lg:max-w-none mx-auto space-y-3">
         <Skeleton className="h-6 w-48" />
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-20 w-full mt-4" />
@@ -474,7 +474,12 @@ export default function StaffPage() {
   const scheduledCount = pending.filter((o) => o.scheduled_for).length;
 
   return (
-    <div className="p-4 max-w-md mx-auto">
+    // D-1 : contrairement à l'écran cuisine (96 % de la largeur, deux
+    // colonnes), cet écran restait plafonné à 448 px quelle que soit la
+    // largeur de l'appareil, avec défilement dès une seule commande. Le
+    // plafond ne s'applique plus qu'en dessous de la largeur tablette ; les
+    // trois files d'attente passent en colonnes au-delà (voir plus bas).
+    <div className="p-4 max-w-md lg:max-w-none mx-auto">
       <div className="flex items-center justify-between mb-1">
         <h1 className={`${lalezar.className} text-xl`}>Commandes à confirmer</h1>
         <ConnectionBadge status={status} />
@@ -566,6 +571,13 @@ export default function StaffPage() {
         </Card>
       )}
 
+      {/* D-1 : trois files côte à côte au-delà de la largeur tablette, comme
+          l'écran cuisine (à préparer / en préparation) — sur téléphone,
+          `lg:grid` ne s'applique pas et les trois sections s'empilent comme
+          avant. */}
+      <div className="lg:grid lg:grid-cols-3 lg:gap-6 lg:items-start">
+      <section>
+      <h2 className="text-lg font-semibold mb-4">À confirmer</h2>
       {pending.length === 0 && <EmptyState message="Aucune commande en attente." />}
       {pending.map((o) => {
         const takenByMe = o.taken_by_staff_id === staff.id;
@@ -613,7 +625,9 @@ export default function StaffPage() {
         );
       })}
 
-      <h2 className="text-lg font-semibold mt-8 mb-4">Prêtes à servir</h2>
+      </section>
+      <section>
+      <h2 className="text-lg font-semibold mt-8 lg:mt-0 mb-4">Prêtes à servir</h2>
       {readyToServe.length === 0 && <EmptyState message="Rien à servir pour l'instant." />}
       {readyToServe.map((o) => (
         <Card key={o.order_id} tone="success" className="mb-3 flex justify-between items-center">
@@ -627,7 +641,9 @@ export default function StaffPage() {
         </Card>
       ))}
 
-      <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement en espèces</h2>
+      </section>
+      <section>
+      <h2 className="text-lg font-semibold mt-8 lg:mt-0 mb-4">Demandes de paiement en espèces</h2>
       {myCashRequests.length === 0 && <EmptyState message="Aucune demande en attente." />}
       {myCashRequests.map((o) => {
         const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
@@ -667,6 +683,9 @@ export default function StaffPage() {
           </Card>
         );
       })}
+
+      </section>
+      </div>
 
       <h2 className="text-lg font-semibold mt-8 mb-4 flex items-center gap-1.5">
         <GiftIcon className="w-5 h-5 shrink-0" />

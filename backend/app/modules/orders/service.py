@@ -101,6 +101,10 @@ async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Or
             Order.restaurant_id == restaurant_id,
             Order.payment_method == PaymentMethod.CASH,
             Order.payment_status == PaymentStatus.PENDING,
+            # F-4 : même borne que `list_active_orders` — sans elle, une
+            # demande d'encaissement vieille de plusieurs jours (jamais
+            # confirmée, jamais annulée) reste affichée indéfiniment.
+            Order.created_at >= service_day_start(),
         )
         .order_by(Order.created_at)
         .all()
@@ -323,6 +327,14 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
             },
         )
 
+    # F-5 : l'argent (simulé aujourd'hui, réel demain avec Konnect) a déjà
+    # changé de main — une annulation ne doit plus pouvoir l'effacer.
+    if new_status == OrderStatus.CANCELLED and order.payment_status == PaymentStatus.PAID:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "CANNOT_CANCEL_PAID_ORDER", "message": "cannot cancel an order that has already been paid"},
+        )
+
     order.status = new_status
     now = datetime.now(timezone.utc)
     newly_assigned = False
@@ -437,6 +449,14 @@ def _get_payable_order(db: Session, order_id: int) -> Order:
     if order.status == OrderStatus.CANCELLED:
         raise HTTPException(
             status_code=409, detail={"code": "ORDER_CANCELLED", "message": "cannot pay a cancelled order"}
+        )
+    # F-5 : sans ce garde-fou, un client pouvait régler une commande que
+    # personne au restaurant n'avait encore vérifiée — à fermer avant toute
+    # intégration Konnect réelle, où l'argent capté serait cette fois réel.
+    if order.status == OrderStatus.PENDING_CONFIRMATION:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ORDER_NOT_CONFIRMED", "message": "order must be confirmed by staff before payment"},
         )
     if order.payment_status == PaymentStatus.PAID:
         raise HTTPException(status_code=409, detail={"code": "ALREADY_PAID", "message": "order already paid"})

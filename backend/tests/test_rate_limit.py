@@ -1,4 +1,5 @@
 from app.core.rate_limit import _hits
+from tests.conftest import create_restaurant, create_staff, auth_headers
 
 _LOGIN = {"email": "ratelimit@test.local", "password": "whatever123"}
 
@@ -60,6 +61,38 @@ def test_deux_clients_derriere_cloudflare_ne_partagent_pas_le_compteur(client):
 
         # Le téléphone de la table d'à côté n'a rien fait : il passe.
         assert _login(client, "41.226.0.2").status_code == 401
+    finally:
+        _hits.clear()
+
+
+def test_post_orders_tolere_toute_une_salle_derriere_la_meme_ip(client):
+    """
+    S-2b : mesuré en production (2026-08-18), 20 requêtes/minute par IP sont
+    partagées par toute la salle derrière le Wi-Fi du restaurant (Phase 23.1
+    impose du Wi-Fi à toutes les tables) — l'ancien plafond, commun avec la
+    connexion, bloquait un service normal, pas une attaque. `POST /orders` a
+    désormais son propre plafond, nettement plus haut.
+    """
+    _hits.clear()
+    try:
+        restaurant = create_restaurant(name="Grande Salle", slug="grande-salle-rate-limit")
+        manager_headers = auth_headers(create_staff(restaurant.id))
+        table = client.post(
+            "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=manager_headers
+        ).json()
+        item = client.post(
+            "/api/v1/menu-items",
+            json={"restaurant_id": restaurant.id, "name": "Couscous", "price": 20},
+            headers=manager_headers,
+        ).json()
+
+        # Au-delà de l'ancien plafond (20) : toutes doivent encore passer.
+        for _ in range(25):
+            res = client.post(
+                "/api/v1/orders",
+                json={"qr_token": table["qr_token"], "items": [{"menu_item_id": item["id"], "quantity": 1}]},
+            )
+            assert res.status_code == 201
     finally:
         _hits.clear()
 

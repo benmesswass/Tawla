@@ -8,8 +8,9 @@ from app.core.logging import get_logger, log_event
 from app.modules.menu import csv_import, schemas, suggestions
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
-from app.modules.staff.dependencies import require_role
+from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
+from app.modules.tables import service as tables_service
 
 logger = get_logger("menu")
 
@@ -88,13 +89,7 @@ def import_menu_csv(
     )
 
 
-@router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.MenuItemOut])
-def list_menu(restaurant_id: int, db: Session = Depends(get_db)):
-    """
-    Endpoint public appelé par la page client après scan du QR.
-    Ne renvoie que ce qui est nécessaire pour afficher le menu, triée dans
-    l'ordre logique d'un repas (voir CATEGORY_ORDER).
-    """
+def _menu_for_restaurant(db: Session, restaurant_id: int) -> list[MenuItem]:
     items = (
         db.query(MenuItem)
         .filter(MenuItem.restaurant_id == restaurant_id)
@@ -104,17 +99,50 @@ def list_menu(restaurant_id: int, db: Session = Depends(get_db)):
     return sorted(items, key=lambda item: (_category_rank(item.category), item.name))
 
 
-@router.get("/by-restaurant/{restaurant_id}/suggestions", response_model=dict[int, list[int]])
-def list_suggestions(restaurant_id: int, db: Session = Depends(get_db)):
+@router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.MenuItemOut])
+def list_menu(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(get_current_staff)):
     """
-    Toutes les suggestions du restaurant, en une requête : `{id du plat: [ids
-    proposés]}`. Public comme le menu, et n'expose que des identifiants
-    d'articles déjà publics.
+    Gestion de la carte côté dashboard manager, et lecture par le reste de
+    l'équipe (S-1) — ouvert à tous les rôles comme `tables.read_plan`, la
+    lecture de la carte ne demande pas de privilège particulier.
 
-    Les articles indisponibles sont écartés — proposer un plat en rupture est
-    pire que ne rien proposer.
+    Publique jusqu'à l'audit du 2026-08-18 (S-1) : n'importe qui pouvait lire
+    la carte et les prix de n'importe quel établissement en devinant
+    `restaurant_id`. Le parcours client passe désormais par `/by-token`.
     """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return _menu_for_restaurant(db, restaurant_id)
+
+
+@router.get("/by-restaurant/{restaurant_id}/suggestions", response_model=dict[int, list[int]])
+def list_suggestions(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(get_current_staff)
+):
+    """Suggestions « avec ce plat » côté dashboard — même garde que `list_menu`
+    (S-1), pour la même raison."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     return suggestions.get_suggestions_map(db, restaurant_id, only_available=True)
+
+
+@router.get("/by-token/{qr_token}", response_model=list[schemas.MenuItemOut])
+def list_menu_by_token(qr_token: str, db: Session = Depends(get_db)):
+    """
+    Endpoint public appelé par la page client après scan du QR (S-1). Lié au
+    `qr_token` de la table, comme le reste du parcours client — remplace la
+    lecture par `restaurant_id`, publique et incrémentale.
+    """
+    table = tables_service.get_table_by_qr_token(db, qr_token)
+    return _menu_for_restaurant(db, table.restaurant_id)
+
+
+@router.get("/by-token/{qr_token}/suggestions", response_model=dict[int, list[int]])
+def list_suggestions_by_token(qr_token: str, db: Session = Depends(get_db)):
+    """Suggestions « avec ce plat » côté client — même garde que
+    `list_menu_by_token` (S-1)."""
+    table = tables_service.get_table_by_qr_token(db, qr_token)
+    return suggestions.get_suggestions_map(db, table.restaurant_id, only_available=True)
 
 
 @router.put("/{item_id}/suggestions", response_model=schemas.MenuItemSuggestionsOut)

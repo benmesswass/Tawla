@@ -75,6 +75,32 @@ def _proof(client, restaurant, manager, **params):
     return response.json()
 
 
+def test_proof_period_uses_service_day_not_midnight_utc(client, db_session):
+    """
+    F-3, second endroit cité par l'audit : `_period_proof` coupait aussi à
+    minuit UTC. Même défaut, même correctif (`service_day_bounds`) — une
+    commande de 2 h du matin UTC (3 h Tunis, avant les 5 h de bascule)
+    appartient à la journée de service de la veille, pas à celle du jour
+    calendaire UTC.
+    """
+    restaurant, table, item = _setup(db_session, "preuve-journee-service")
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+
+    _add_order(
+        db_session, restaurant, table, item,
+        created_at=datetime(2026, 3, 15, 2, 0, tzinfo=timezone.utc),
+    )
+
+    # Période du seul 15/03 : l'ancien code (minuit UTC) aurait compté cette
+    # commande ici.
+    only_15 = _proof(client, restaurant, manager, start="2026-03-15", end="2026-03-15")["current"]
+    assert only_15["orders_count"] == 0
+
+    # Elle appartient à la journée de service du 14/03.
+    only_14 = _proof(client, restaurant, manager, start="2026-03-14", end="2026-03-14")["current"]
+    assert only_14["orders_count"] == 1
+
+
 def test_counts_orders_and_average_basket_over_the_period(client, db_session):
     restaurant, table, item = _setup(db_session, "preuve-panier")
     manager = create_staff(restaurant.id, StaffRole.MANAGER)

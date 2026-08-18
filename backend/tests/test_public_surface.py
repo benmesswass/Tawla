@@ -109,7 +109,7 @@ def test_staff_still_sees_the_phone_number(client, db_session):
 
 
 def test_card_payment_requires_the_order_token(client, db_session):
-    _, table, item = _setup(client, db_session)
+    restaurant, table, item = _setup(client, db_session)
     order = _create_order(client, table, item)
 
     anonymous = client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0})
@@ -119,6 +119,10 @@ def test_card_payment_requires_the_order_token(client, db_session):
     still_unpaid = client.get(f"/api/v1/orders/{order['id']}", headers=_order_headers(order))
     assert still_unpaid.json()["payment_status"] == "unpaid"
 
+    # F-5 : une commande non confirmée ne se paie plus.
+    client.post(
+        f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(create_staff(restaurant.id))
+    )
     legitimate = client.post(
         f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 2}, headers=_order_headers(order)
     )
@@ -127,10 +131,15 @@ def test_card_payment_requires_the_order_token(client, db_session):
 
 
 def test_cash_payment_request_requires_the_order_token(client, db_session):
-    _, table, item = _setup(client, db_session)
+    restaurant, table, item = _setup(client, db_session)
     order = _create_order(client, table, item)
 
     assert client.post(f"/api/v1/orders/{order['id']}/pay/cash").status_code == 404
+
+    # F-5 : une commande non confirmée ne se paie plus.
+    client.post(
+        f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(create_staff(restaurant.id))
+    )
     assert client.post(
         f"/api/v1/orders/{order['id']}/pay/cash", headers=_order_headers(order)
     ).status_code == 200

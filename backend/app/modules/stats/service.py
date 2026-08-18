@@ -3,7 +3,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.dates import as_utc, service_day_start
+from app.core.dates import as_utc, service_day_bounds, service_day_start
 from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
 from app.modules.staff.models import Staff
@@ -63,8 +63,10 @@ def _average(values: list[float]) -> float | None:
 
 
 async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> schemas.DashboardStats:
-    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    day_end = day_start + timedelta(days=1)
+    # F-3 : bornée par la journée de SERVICE (5 h Tunis), pas par minuit UTC —
+    # sinon ce tableau de bord et les écrans serveur/cuisine ne racontent pas
+    # le même jour pour une commande passée entre minuit et 5 h du matin.
+    day_start, day_end = service_day_bounds(day)
 
     orders_today = (
         db.query(Order)
@@ -166,8 +168,10 @@ def _period_proof(
     sinon le seuil d'abandon ne veut pas dire la même chose des deux côtés de la
     comparaison.
     """
-    period_start = datetime.combine(start, time.min, tzinfo=timezone.utc)
-    period_end = datetime.combine(end, time.min, tzinfo=timezone.utc) + timedelta(days=1)
+    # F-3 : mêmes bornes de journée de service que le tableau de bord — voir
+    # get_dashboard_stats ci-dessus.
+    period_start, _ = service_day_bounds(start)
+    _, period_end = service_day_bounds(end)
 
     orders = (
         db.query(Order)

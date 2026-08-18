@@ -158,7 +158,7 @@ def test_manager_imports_a_menu(client):
     assert body["disabled_count"] == 0
     assert body["errors"] == []
 
-    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()
+    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()
     assert {i["name"] for i in listed} == {"Couscous", "Brik"}
 
 
@@ -168,8 +168,12 @@ def test_import_lands_in_the_manager_restaurant_only(client):
 
     _import(client, manager, "nom,prix\nCouscous,24\n")
 
-    assert len(client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()) == 1
-    assert client.get(f"/api/v1/menu-items/by-restaurant/{other.id}").json() == []
+    assert len(client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()) == 1
+    # Isolation désormais garantie en amont par l'authentification (S-1) :
+    # le manager de `restaurant` ne peut plus lire la carte de `other` du tout.
+    assert client.get(
+        f"/api/v1/menu-items/by-restaurant/{other.id}", headers=auth_headers(manager)
+    ).status_code == 403
 
 
 def test_reimporting_the_same_file_updates_instead_of_duplicating(client):
@@ -185,7 +189,7 @@ def test_reimporting_the_same_file_updates_instead_of_duplicating(client):
         "created_count": 0, "updated_count": 1, "disabled_count": 0, "errors": []
     }
 
-    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()
+    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()
     assert len(listed) == 1
     assert listed[0]["price"] == 26.0  # le prix corrigé a bien été repris
 
@@ -198,7 +202,7 @@ def test_partial_import_does_not_remove_the_rest_of_the_card(client):
 
     _import(client, manager, "nom,prix\nTiramisu,7\n")
 
-    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()
+    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()
     assert {i["name"] for i in listed} == {"Couscous", "Brik", "Tiramisu"}
     assert all(i["is_available"] for i in listed)
 
@@ -217,7 +221,7 @@ def test_replace_existing_disables_what_is_absent_from_the_file(client):
     assert body["updated_count"] == 1
     assert body["disabled_count"] == 1
 
-    by_name = {i["name"]: i for i in client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()}
+    by_name = {i["name"]: i for i in client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()}
     assert by_name["Ancien plat"]["is_available"] is False
     assert by_name["Toujours là"]["is_available"] is True
     assert by_name["Nouveau plat"]["is_available"] is True
@@ -228,7 +232,7 @@ def test_reimport_makes_an_unavailable_item_available_again(client):
     pas avoir à rebasculer chaque plat à la main."""
     restaurant, manager = _manager("csv-import-rupture")
     _import(client, manager, "nom,prix\nCouscous,24\n")
-    item_id = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()[0]["id"]
+    item_id = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()[0]["id"]
     client.patch(
         f"/api/v1/menu-items/{item_id}/availability",
         json={"is_available": False},
@@ -236,7 +240,7 @@ def test_reimport_makes_an_unavailable_item_available_again(client):
     )
 
     _import(client, manager, "nom,prix\nCouscous,24\n")
-    assert client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()[0]["is_available"] is True
+    assert client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()[0]["is_available"] is True
 
 
 def test_import_reports_bad_lines_but_keeps_the_good_ones(client):
@@ -246,7 +250,7 @@ def test_import_reports_bad_lines_but_keeps_the_good_ones(client):
     assert response.status_code == 200
     assert response.json()["created_count"] == 1
     assert len(response.json()["errors"]) == 1
-    assert len(client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}").json()) == 1
+    assert len(client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=auth_headers(manager)).json()) == 1
 
 
 def test_unreadable_file_is_refused_with_the_reasons(client):

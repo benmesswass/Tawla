@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type
+from datetime import datetime, time, timedelta, timezone
 from typing import Annotated
 
 from pydantic import BeforeValidator
@@ -33,6 +34,22 @@ def service_day_start(now: datetime | None = None) -> datetime:
     if local < start:
         start -= timedelta(days=1)
     return start.astimezone(timezone.utc)
+
+
+def service_day_bounds(day: date_type) -> tuple[datetime, datetime]:
+    """
+    Bornes UTC [début, fin) de la journée de service qui correspond à ce jour
+    calendaire.
+
+    Ancrée à midi heure de Tunis plutôt qu'à minuit : ancrer à minuit
+    laisserait `day` retomber, entre 00 h et 5 h du matin Tunis, sur la
+    journée de service de la VEILLE (`service_day_start` y répondrait par la
+    veille). Midi est toujours à l'intérieur de la journée de service du jour
+    demandé, quelle que soit l'heure du jour où cette fonction est appelée.
+    """
+    midi_ce_jour = datetime.combine(day, time(12, 0), tzinfo=TUNIS)
+    start = service_day_start(midi_ce_jour)
+    return start, start + timedelta(days=1)
 
 
 def _marquer_utc(value: object) -> object:
