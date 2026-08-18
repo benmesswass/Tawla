@@ -61,7 +61,10 @@ def test_une_commande_de_la_veille_reste_une_commande_perdue(client, db_session)
     oubliee = _order_created_at(db_session, restaurant, table, veille)
     manager = create_staff(restaurant.id, StaffRole.MANAGER)
 
-    jour = veille.astimezone(TUNIS).date().isoformat()
+    # `veille` tombe avant 5h Tunis : sa journée de service est celle d'hier
+    # (F-3), même si son horodatage calendaire brut est encore aujourd'hui.
+    jour_de_service = service_day_start().astimezone(TUNIS).date() - timedelta(days=1)
+    jour = jour_de_service.isoformat()
     preuve = client.get(
         f"/api/v1/stats/preuve/{restaurant.id}",
         params={"start": jour, "end": jour},

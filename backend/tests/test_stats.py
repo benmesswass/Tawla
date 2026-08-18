@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from app.modules.orders.models import Order, OrderStatus
 from app.modules.staff.models import StaffRole
@@ -132,6 +132,33 @@ def test_active_orders_count_excludes_orders_before_service_day(client):
 
     res = client.get(f"/api/v1/stats/dashboard/{restaurant.id}", headers=headers)
     assert res.json()["active_orders_count"] == 0
+
+
+def test_dashboard_stats_attribue_une_commande_de_sohour_a_la_veille(client):
+    """
+    F-3 : les stats coupaient à minuit UTC, les écrans de service à 5h Tunis
+    (Phase 19.5). Une commande passée à 2h UTC (3h Tunis) — le sohour d'un
+    Ramadan — appartient encore au service de la veille pour les écrans, mais
+    tombait sous "aujourd'hui" dans les stats : le manager et le serveur ne
+    parlaient pas du même jour.
+    """
+    restaurant, _manager, headers, table, item = _setup_restaurant(client)
+    order = _create_order(client, restaurant, table, item)
+
+    aujourdhui = datetime.now(timezone.utc).date()
+    sohour = datetime.combine(aujourdhui, time(hour=2), tzinfo=timezone.utc)
+    _set_order_timestamps(order["id"], created_at=sohour)
+
+    res_aujourdhui = client.get(
+        f"/api/v1/stats/dashboard/{restaurant.id}", params={"date": aujourdhui.isoformat()}, headers=headers
+    )
+    assert res_aujourdhui.json()["top_items"] == []
+
+    veille = aujourdhui - timedelta(days=1)
+    res_veille = client.get(
+        f"/api/v1/stats/dashboard/{restaurant.id}", params={"date": veille.isoformat()}, headers=headers
+    )
+    assert res_veille.json()["top_items"] == [{"menu_item_name": "Couscous", "quantity": 1}]
 
 
 def test_dashboard_stats_isolated_across_restaurants(client):

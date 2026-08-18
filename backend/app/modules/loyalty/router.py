@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/v1/loyalty", tags=["loyalty"])
 _WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 
 
-@router.post("/lookup", response_model=schemas.LoyaltyMemberPublicOut, dependencies=[Depends(rate_limit)])
+@router.post("/lookup", response_model=schemas.LoyaltyMemberPublicOut, dependencies=[Depends(rate_limit())])
 def lookup_loyalty(payload: schemas.LoyaltyLookup, db: Session = Depends(get_db)):
     """
     Public — appelé par le client quand il saisit son numéro au moment de

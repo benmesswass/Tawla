@@ -1,9 +1,9 @@
 from datetime import date as date_type
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.dates import as_utc, service_day_start
+from app.core.dates import as_utc, service_day_bounds, service_day_start
 from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
 from app.modules.staff.models import Staff
@@ -63,8 +63,10 @@ def _average(values: list[float]) -> float | None:
 
 
 async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> schemas.DashboardStats:
-    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    day_end = day_start + timedelta(days=1)
+    # Bornée par la journée de service (5h Tunis, Phase 19.5), pas par minuit
+    # UTC : sinon une commande de sohour (2h Tunis) apparaît sous un jour
+    # différent ici et sur les écrans de service (F-3, audit 2026-08-18).
+    day_start, day_end = service_day_bounds(day)
 
     orders_today = (
         db.query(Order)
@@ -166,8 +168,11 @@ def _period_proof(
     sinon le seuil d'abandon ne veut pas dire la même chose des deux côtés de la
     comparaison.
     """
-    period_start = datetime.combine(start, time.min, tzinfo=timezone.utc)
-    period_end = datetime.combine(end, time.min, tzinfo=timezone.utc) + timedelta(days=1)
+    # Même bornage par journée de service que get_dashboard_stats (F-3) :
+    # le début de la période suit le début du jour `start`, sa fin suit la
+    # fin du jour `end` — jours inclus des deux côtés.
+    period_start = service_day_bounds(start)[0]
+    period_end = service_day_bounds(end)[1]
 
     orders = (
         db.query(Order)
@@ -242,8 +247,11 @@ async def get_team_report(
     Les comptes désactivés qui ont travaillé sur la période restent listés : un
     serveur parti en milieu de mois a droit à sa prime.
     """
-    period_start = datetime.combine(start, time.min, tzinfo=timezone.utc)
-    period_end = datetime.combine(end, time.min, tzinfo=timezone.utc) + timedelta(days=1)
+    # Même bornage par journée de service que get_dashboard_stats (F-3) :
+    # le début de la période suit le début du jour `start`, sa fin suit la
+    # fin du jour `end` — jours inclus des deux côtés.
+    period_start = service_day_bounds(start)[0]
+    period_end = service_day_bounds(end)[1]
 
     orders = (
         db.query(Order)
@@ -293,8 +301,10 @@ async def get_team_report(
 
 
 async def get_kitchen_today_count(db: Session, restaurant_id: int, day: date_type) -> schemas.KitchenTodayCount:
-    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    day_end = day_start + timedelta(days=1)
+    # Bornée par la journée de service (5h Tunis, Phase 19.5), pas par minuit
+    # UTC : sinon une commande de sohour (2h Tunis) apparaît sous un jour
+    # différent ici et sur les écrans de service (F-3, audit 2026-08-18).
+    day_start, day_end = service_day_bounds(day)
 
     count = (
         db.query(Order)
@@ -317,8 +327,10 @@ async def get_my_shift(db: Session, staff: Staff, day: date_type) -> schemas.MyS
     Le staff vient du JWT, jamais de l'URL : il n'y a donc aucun identifiant à
     deviner, et personne ne peut demander la soirée d'un autre.
     """
-    day_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    day_end = day_start + timedelta(days=1)
+    # Bornée par la journée de service (5h Tunis, Phase 19.5), pas par minuit
+    # UTC : sinon une commande de sohour (2h Tunis) apparaît sous un jour
+    # différent ici et sur les écrans de service (F-3, audit 2026-08-18).
+    day_start, day_end = service_day_bounds(day)
 
     orders = (
         db.query(Order)

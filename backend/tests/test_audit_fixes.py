@@ -141,7 +141,7 @@ def test_dashboard_can_update_and_delete_menu_items(client):
     res = client.delete(f"/api/v1/menu-items/{item['id']}", headers=headers)
     assert res.status_code == 204
 
-    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}")
+    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=headers)
     assert item["id"] not in [i["id"] for i in res.json()]
 
 
@@ -164,6 +164,6 @@ def test_menu_sorted_in_meal_order_not_alphabetically(client):
             headers=headers,
         )
 
-    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}")
+    res = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}", headers=headers)
     categories = [item["category"] for item in res.json()]
     assert categories == ["Entrées", "Plats", "Desserts", "Boissons"]

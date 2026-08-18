@@ -1,4 +1,5 @@
 from app.core.rate_limit import _hits
+from tests.conftest import auth_headers, create_restaurant, create_staff
 
 _LOGIN = {"email": "ratelimit@test.local", "password": "whatever123"}
 
@@ -80,5 +81,39 @@ def test_un_x_forwarded_for_force_ne_contourne_pas_le_compteur(client):
             assert client.post("/api/v1/auth/login", json=_LOGIN, headers=headers).status_code == 401
         headers["X-Forwarded-For"] = "9.9.9.200"
         assert client.post("/api/v1/auth/login", json=_LOGIN, headers=headers).status_code == 429
+    finally:
+        _hits.clear()
+
+
+def test_toute_la_salle_derriere_le_meme_wifi_peut_commander(client):
+    """
+    S-2b : depuis que le limiteur identifie enfin le vrai client (S-2a), tout
+    le monde derrière le Wi-Fi du restaurant partage la même IP publique — un
+    plafond pensé pour un individu (20/min) bloquerait un coup de feu où
+    plusieurs tables commandent à la même minute. Vérifie que la salle peut
+    dépasser ce plafond individuel sans être bloquée.
+    """
+    _hits.clear()
+    try:
+        headers = {"CF-Connecting-IP": "41.226.0.10"}
+
+        restaurant = create_restaurant(name="Le Rush", slug="rate-limit-rush")
+        staff_headers = auth_headers(create_staff(restaurant.id))
+        table = client.post(
+            "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=staff_headers
+        ).json()
+        item = client.post(
+            "/api/v1/menu-items",
+            json={"restaurant_id": restaurant.id, "name": "Couscous", "price": 20},
+            headers=staff_headers,
+        ).json()
+
+        for _ in range(25):
+            res = client.post(
+                "/api/v1/orders",
+                json={"qr_token": table["qr_token"], "items": [{"menu_item_id": item["id"], "quantity": 1}]},
+                headers=headers,
+            )
+            assert res.status_code == 201, res.text
     finally:
         _hits.clear()

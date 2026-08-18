@@ -216,10 +216,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         setTable(t);
         const [rest, items, suggested] = await Promise.all([
           api.getRestaurantByToken(qrToken),
-          api.getMenu(t.restaurant_id),
+          api.getMenuByToken(qrToken),
           // Best-effort : une carte sans suggestions reste une carte utilisable,
           // l'échec de cet appel ne doit jamais bloquer la commande.
-          api.getMenuSuggestions(t.restaurant_id).catch(() => ({})),
+          api.getMenuSuggestionsByToken(qrToken).catch(() => ({})),
         ]);
         setRestaurant(rest);
         setMenu(items);
@@ -671,7 +671,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             return next;
           });
         }
-        api.getMenu(table.restaurant_id).then(setMenu).catch(() => {});
+        api.getMenuByToken(qrToken).then(setMenu).catch(() => {});
       }
       setOrderError(toLocalizedMessage(e, locale));
     } finally {

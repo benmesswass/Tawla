@@ -13,7 +13,7 @@ _WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 
 
 @router.post(
-    "", response_model=schemas.WaiterCallOut, status_code=201, dependencies=[Depends(rate_limit)]
+    "", response_model=schemas.WaiterCallOut, status_code=201, dependencies=[Depends(rate_limit())]
 )
 async def create_call(payload: schemas.WaiterCallCreate, db: Session = Depends(get_db)):
     """

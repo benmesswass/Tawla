@@ -30,6 +30,12 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   INVALID_PERIOD: () => "La date de début doit précéder la date de fin.",
   LAST_ACTIVE_MANAGER: () =>
     "C'est le dernier compte manager actif : créez ou réactivez un autre manager avant de le modifier, sinon plus personne ne pourrait gérer l'établissement.",
+  // Sans entrée dédiée, ce code retombait sur le message générique
+  // « Réessayez dans un instant » (S-2c, audit 2026-08-18) — qui invite à
+  // réessayer tout de suite alors que la fenêtre est d'une minute pleine :
+  // le client refusé enchaînait les tentatives, ce qui prolongeait le blocage
+  // au lieu de le laisser retomber.
+  RATE_LIMITED: () => "Trop de tentatives. Patientez une minute avant de réessayer.",
 };
 
 export function toFrenchMessage(error: unknown): string {
@@ -54,6 +60,7 @@ const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   ALREADY_PAID: () => "هاذي الطلبية تخلصت من قبل.",
   ORDER_CANCELLED: () => "هاذي الطلبية تلغات، ما عادش ممكن تخلصها.",
   NO_PENDING_CASH_PAYMENT: () => "ما فماش طلب خلاص كاش قاعد ينتظر لهاذي الطلبية.",
+  RATE_LIMITED: () => "طلبت برشا مرات. استنى دقيقة وعاود جرب.",
 };
 
 export function toLocalizedMessage(error: unknown, locale: string): string {
