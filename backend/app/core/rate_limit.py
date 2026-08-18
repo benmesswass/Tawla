@@ -3,8 +3,6 @@ from collections import defaultdict
 
 from fastapi import HTTPException, Request
 
-from app.core.config import settings
-
 # Limiteur en mémoire, par IP + route — cohérent avec le choix déjà fait
 # pour le gestionnaire de connexions WebSocket (mono-instance assumé, cf.
 # notifications/manager.py "en mono-instance, un dict en mémoire suffit").
@@ -18,29 +16,27 @@ _hits: dict[tuple[str, str], list[float]] = defaultdict(list)
 
 def client_ip(request: Request) -> str:
     """
-    L'IP du client, pas celle du pair TCP. Derrière l'hébergeur, ce pair est
-    toujours son proxy : compter sur lui revient à donner un seul compteur de
-    20 requêtes par minute à tout le parc, où le premier téléphone qui en abuse
-    bloque le restaurant entier (défaut T3 de l'audit du 2026-08-15).
+    L'IP du client, pas celle du pair TCP.
 
-    `X-Forwarded-For` n'est cru que si le pair est un proxy déclaré : sinon
-    l'en-tête vient de n'importe qui, et une IP neuve à chaque requête revient
-    à ne plus avoir de limiteur du tout.
+    Vérifié en conditions réelles (Phase 20, 19.3, 2026-08-18) : sur Render, le
+    pair TCP vu par le conteneur est une IP interne qui change à chaque
+    requête (plusieurs nœuds internes en rotation) — ni lui, ni la dernière
+    valeur de `X-Forwarded-For` (Render y ajoute la même IP interne en bout de
+    chaîne) n'identifient le client. La première valeur, elle, est
+    trivialement forgeable par le client lui-même : Cloudflare l'ajoute après
+    la sienne sans écraser ce qui précède (confirmé en envoyant un
+    `X-Forwarded-For` forgé, retrouvé tel quel en tête de liste côté serveur).
 
-    C'est la **dernière** valeur de la liste qui est retenue, pas la première :
-    un client peut envoyer son propre en-tête, auquel le proxy ajoute l'IP
-    qu'il a réellement constatée. Lire la première rendrait le contournement
-    trivial. Corollaire assumé : un seul saut de proxy de confiance — en
-    empiler un second (un CDN devant l'hébergeur) ramènerait tout le monde sur
-    un compteur commun, sans pour autant rouvrir la faille.
+    Seul `CF-Connecting-IP` est fiable : Cloudflare — devant Render, y compris
+    sur le sous-domaine `onrender.com` brut, donc pas une config à maintenir —
+    le fixe lui-même à l'IP réelle du client, et rejette en 403 à son propre
+    niveau toute requête qui tente de le forger (confirmé : un `CF-Connecting-IP`
+    forgé n'atteint jamais le conteneur).
     """
-    peer = request.client.host if request.client else "unknown"
-    trusted = settings.trusted_proxy_ips
-    if not trusted or ("*" not in trusted and peer not in trusted):
-        return peer
-
-    forwarded = [part.strip() for part in request.headers.get("x-forwarded-for", "").split(",") if part.strip()]
-    return forwarded[-1] if forwarded else peer
+    cf_connecting_ip = request.headers.get("cf-connecting-ip")
+    if cf_connecting_ip:
+        return cf_connecting_ip
+    return request.client.host if request.client else "unknown"
 
 
 def rate_limit(request: Request) -> None:

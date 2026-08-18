@@ -34,17 +34,6 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_contact_email: str = "contact@tawla.tn"
 
-    # Pairs TCP autorisés à parler au nom d'un client via `X-Forwarded-For`,
-    # séparés par une virgule, ou `*` pour tout pair. Vide par défaut : en
-    # local il n'y a pas de proxy, et croire cet en-tête sans proxy déclaré
-    # reviendrait à laisser n'importe qui se donner une IP neuve à chaque
-    # requête — donc à supprimer le limiteur de débit.
-    #
-    # À renseigner au déploiement (Phase 20) : derrière l'hébergeur, le seul
-    # pair TCP est son proxy, et sans ce réglage tout le parc partage un unique
-    # compteur de 20 requêtes par minute.
-    forwarded_allow_ips: str = ""
-
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:
@@ -53,10 +42,6 @@ class Settings(BaseSettings):
                 "Générer une vraie valeur (voir backend/.env.example) avant de démarrer."
             )
         return self
-
-    @property
-    def trusted_proxy_ips(self) -> set[str]:
-        return {ip.strip() for ip in self.forwarded_allow_ips.split(",") if ip.strip()}
 
     @property
     def cors_origins(self) -> list[str]:
