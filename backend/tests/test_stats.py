@@ -116,6 +116,24 @@ def test_dashboard_stats_excludes_orders_from_other_days(client):
     assert res.json()["top_items"] == []
 
 
+def test_active_orders_count_excludes_orders_before_service_day(client):
+    """
+    F-2 : `active_orders_count` n'était borné par aucune date — une commande
+    active de la veille (jamais confirmée, jamais annulée) restait comptée
+    indéfiniment, contrairement à `list_active_orders` que l'écran serveur
+    affiche (bornée par `service_day_start()` depuis la Phase 19.5). Le
+    manager voyait donc un nombre que l'écran serveur ne montrait plus.
+    """
+    restaurant, _manager, headers, table, item = _setup_restaurant(client)
+    order = _create_order(client, restaurant, table, item)
+
+    before_service_day = datetime.now(timezone.utc) - timedelta(days=2)
+    _set_order_timestamps(order["id"], created_at=before_service_day)
+
+    res = client.get(f"/api/v1/stats/dashboard/{restaurant.id}", headers=headers)
+    assert res.json()["active_orders_count"] == 0
+
+
 def test_dashboard_stats_isolated_across_restaurants(client):
     restaurant_a, _manager_a, headers_a, table_a, item_a = _setup_restaurant(client)
     restaurant_b = create_restaurant(name="Café B Stats", slug="cafe-b-stats")

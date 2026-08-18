@@ -3,7 +3,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.dates import as_utc
+from app.core.dates import as_utc, service_day_start
 from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
 from app.modules.staff.models import Staff
@@ -123,7 +123,17 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
     orders_by_hour = [schemas.HourlyCount(hour=h, count=hour_counts[h]) for h in sorted(hour_counts)]
 
     active_orders_count = (
-        db.query(Order).filter(Order.restaurant_id == restaurant_id, Order.status.in_(ACTIVE_STATUSES)).count()
+        db.query(Order)
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.status.in_(ACTIVE_STATUSES),
+            # Même borne que `list_active_orders` (Phase 19.5) : sans elle, ce
+            # nombre reste au-dessus de zéro indéfiniment tant qu'une commande
+            # de la veille n'a jamais été confirmée ni annulée, alors que
+            # l'écran serveur a cessé de la montrer (F-2, audit 2026-08-18).
+            Order.created_at >= service_day_start(),
+        )
+        .count()
     )
 
     # Les deux chiffres que le patron vient chercher (Phase 17.1). Calculés

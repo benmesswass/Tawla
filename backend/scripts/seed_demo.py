@@ -14,6 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.core import model_registry  # noqa: E402,F401 — sans lui, create_all() ne
+# crée que les tables des modèles importés plus bas (orders/order_items/
+# loyalty_members/waiter_calls resteraient absentes, et la première commande
+# répondrait 500 sur une base neuve créée hors Docker par ce script)
 from app.core.database import Base, SessionLocal, engine  # noqa: E402
 from app.modules.menu.models import MenuItem  # noqa: E402
 from app.modules.staff.models import Staff, StaffRole  # noqa: E402

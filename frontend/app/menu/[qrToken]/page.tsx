@@ -128,6 +128,14 @@ function urlBase64ToUint8Array(base64url: string): Uint8Array {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
+// `crypto.randomUUID` n'existe qu'en contexte sécurisé (HTTPS) : absent, il
+// vaut `undefined` et l'appeler plantait le panier sans aucun message (C-1,
+// audit 2026-08-18). Repli suffisant : cet identifiant n'a besoin que d'être
+// unique par panier, pas cryptographique.
+function genererIdPanier(): string {
+  return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 type CreateOrderPayload = Parameters<typeof api.createOrder>[0];
 
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
@@ -537,7 +545,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // tentative, il ne protégerait de rien. C'est lui qui fait qu'un double
     // clic sur « Valider », ou une file hors ligne rejouée, retombe sur la
     // même commande au lieu d'en faire préparer deux (Phase 19.2).
-    setCartOrderId((prev) => prev ?? crypto.randomUUID());
+    setCartOrderId((prev) => prev ?? genererIdPanier());
     setCart((prev) => {
       const existing = prev[item.id];
       return {
