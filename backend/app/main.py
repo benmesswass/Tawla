@@ -64,7 +64,7 @@ app.include_router(waiter_calls_router)
 app.include_router(loyalty_router)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health(response: Response, db: Session = Depends(get_db)):
     """
     Sonde destinée à un monitoring externe (Phase 12.3).
@@ -77,6 +77,11 @@ def health(response: Response, db: Session = Depends(get_db)):
     En cas d'échec : 503 (un moniteur externe déclenche sur le code HTTP) et
     un code stable, jamais le message de l'exception — cette route est
     publique et l'erreur SQL nomme l'hôte et la base.
+
+    Répond aussi en `HEAD` : la plupart des moniteurs externes (UptimeRobot
+    compris) sondent ainsi pour économiser la bande passante — constaté en
+    production le 2026-08-18, une fausse alerte de panne le temps de le
+    découvrir.
     """
     try:
         db.execute(text("SELECT 1"))
