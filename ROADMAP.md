@@ -6,17 +6,22 @@ la PR qui l'a livrée. Les tâches marquées 🧑 demandent une décision, un co
 réel ou une présence physique de Wassim — elles ne sont jamais faisables en
 autonomie.
 
-Refondue le 2026-08-15 après l'audit final ([`AUDIT_FINAL.md`](./AUDIT_FINAL.md)).
-**Les 31 tâches 🧑 ont leur parcours pas à pas dans
-[`terrain/PARCOURS.md`](./terrain/PARCOURS.md)** — c'est le point d'entrée de
-Wassim, ce fichier-ci reste celui de Claude Code.
-Les phases 12 à 18 sont closes ; ce qu'elles ont livré est résumé en fin de
-fichier. Documents qui fondent celle-ci :
+Refondue le **2026-08-18** après l'audit de pré-lancement
+([`AUDIT_PRE_LANCEMENT.md`](./AUDIT_PRE_LANCEMENT.md), PR #54). Cette refonte
+**fusionne** ce qui restait ouvert de la roadmap du 2026-08-15 avec ce que
+l'audit a trouvé : les 44 tâches encore non cochées ont toutes été reprises ici,
+aucune n'a été perdue, et les constats de l'audit sont devenus des tâches.
+**Il n'existe toujours qu'une seule roadmap.**
 
-- [`AUDIT_FINAL.md`](./AUDIT_FINAL.md) — audit du 2026-08-15 : code exécuté,
-  42 fonctionnalités notées, trois défauts à fermer, note recalculée à 5,6.
-- [`REVUE_INVESTISSEURS.md`](./REVUE_INVESTISSEURS.md) — revue d'investissement
-  du 2026-08-13, grille de notation et plafond de revenus.
+Documents qui la fondent :
+
+- [`AUDIT_PRE_LANCEMENT.md`](./AUDIT_PRE_LANCEMENT.md) — audit du 2026-08-18 :
+  suites exécutées, parcours rejoués, attaques tentées avec leur code HTTP,
+  vingt constats cités en `fichier:ligne`, grille recalculée à 5,4.
+- [`AUDIT_FINAL.md`](./AUDIT_FINAL.md) — audit du 2026-08-15 : 42 fonctionnalités
+  notées, trois défauts fermés depuis (Phase 19).
+- [`REVUE_INVESTISSEURS.md`](./REVUE_INVESTISSEURS.md) — revue du 2026-08-13,
+  grille de notation et plafond de revenus.
 - [`PREMIERES_VENTES.md`](./PREMIERES_VENTES.md) — les dix recommandations pour
   décrocher les deux premiers clients payants.
 - [`ROADMAP_ARCHIVE.md`](./ROADMAP_ARCHIVE.md) — phases 0 à 11. Lecture seule.
@@ -25,28 +30,33 @@ fichier. Documents qui fondent celle-ci :
 
 **Deux restaurants qui paient, avant Ramadan 2027.**
 
-Ce n'est plus « passer de 5,3 à 8/10 au prochain jury ». La note suit, elle ne
-se pilote pas : deux lignes valant 40 % de la grille ne bougeront qu'avec des
-chiffres relevés dans un vrai établissement, et l'audit a montré qu'en visant la
-note directement on finit par se noter soi-même sur ses intentions.
+Ce n'est pas « passer de 5,4 à 8/10 au prochain jury ». La note suit, elle ne se
+pilote pas : deux lignes valant 40 % de la grille ne bougeront qu'avec des
+chiffres relevés dans un vrai établissement, et les deux audits successifs ont
+montré qu'en visant la note directement on finit par se noter sur ses intentions.
 
-L'objectif ci-dessus, lui, n'est pas interprétable : soit deux patrons ont
-viré 120 DT, soit non.
+L'objectif ci-dessus, lui, n'est pas interprétable : soit deux patrons ont viré
+120 DT, soit non.
 
 ## La règle qui structure toute cette roadmap
 
-**Une seule phase de code, au début, et plus rien ensuite avant le premier
-pilote.**
+**Une seule phase de code avant la mise en ligne, et plus rien ensuite avant le
+premier pilote.**
 
-L'audit est net : le produit est noté 7,6/10 sur ses fonctionnalités livrées et
-2,0/10 sur l'accès au marché. Il ne manque pas de fonctionnalité — il manque un
-restaurateur. La Phase 19 ferme les trois défauts qui coûteraient un client, la
-Phase 20 met en ligne, et **tout ce qui suit passe par la porte d'un
-restaurant**.
+Le produit ne manque pas de fonctionnalité — il manque un restaurateur. La
+Phase 19 a fermé les trois défauts de l'audit du 15 août ; la **Phase 19bis**
+ferme ce que l'audit du 18 août a trouvé en attaquant et en rejouant les
+parcours ; la Phase 20 met en ligne ; et **tout ce qui suit passe par la porte
+d'un restaurant**.
 
 Toute tâche de code proposée après la Phase 20 doit d'abord répondre à :
 « quel restaurateur l'a demandée, et lequel refuse de payer sans elle ? ».
 Sans réponse nommée, elle va en § « Sous condition ».
+
+**Une exception, et une seule** : un **défaut** constaté — le produit fait faux
+— n'est pas une fonctionnalité et ne tombe pas sous cette règle. C'est ce qui
+autorise la Phase 19bis. Un manque fonctionnel, lui, attend son restaurateur.
+La distinction est tranchée dans `AUDIT_PRE_LANCEMENT.md` §5.
 
 ## Le calendrier, à rebours de Ramadan
 
@@ -56,95 +66,90 @@ moment où la démonstration se fait toute seule. Rater cette fenêtre coûte un
 
 | Quand | Phases | Ce qui doit être vrai à la fin |
 |---|---|---|
-| **15 – 22 août 2026** | 19, 20 | Le produit tourne en ligne, sauvegardé, sur un vrai domaine |
+| **18 – 19 août 2026** | 19bis | Les trois bloquants de l'audit sont fermés, avec les tests qui les prouvent |
+| **19 – 25 août** | 20 | Le produit tourne en ligne, sauvegardé, sur un vrai domaine, déclaré à l'INPDP |
 | **Fin août – septembre** | 21, 22 | 20 entretiens faits, prix tranché, roadmap coupée |
 | **Octobre – novembre** | 23 | 3 pilotes installés, 4 semaines chacun, chiffres relevés |
 | **Décembre – janvier 2027** | 24 | 2 pilotes passés au payant |
 | **Février – mars 2027** | — | Ramadan : vendre avec des chiffres en main |
 
-Six semaines pour les phases 19 à 22, dont une seule est du code. Le calendrier
-n'a plus de marge : c'est ce qui justifie de refuser tout ajout fonctionnel.
+Une seule de ces lignes est du code. Le calendrier n'a plus de marge : c'est ce
+qui justifie de refuser tout ajout fonctionnel.
 
 ## Où en est la note, et ce qui la déplace
 
-Recalculée sur l'état constaté par l'audit, pas sur le travail fourni.
+Recalculée le 2026-08-18 sur l'état **constaté** par l'audit, jamais sur ce qui
+est préparé ou en cours de PR.
 
-| Dimension | Poids | Actuelle | Cible | Ce qui la déplace | Phase |
-|---|---:|---:|---:|---|---|
-| Accès au marché & vente | 20 % | 2,0 | 7,5 | 20 entretiens menés, 3 pilotes installés, 2 clients payants | 21, 23, 24 |
-| Besoin marché prouvé | 20 % | 5,5 | 8,5 | Les trois métriques relevées **avant** et **après** chez un pilote réel | 23 |
-| Viabilité économique | 20 % | 5,0 | 8,0 | Un prix tranché, puis réellement payé par deux établissements | 22, 24 |
-| Prêt à vendre (installable, sûr) | 15 % | 7,5 | 9,0 | Les trois défauts fermés, la production en ligne avec sauvegardes restaurées | 19, 20 |
-| Exécution technique | 15 % | 8,5 | 9,0 | T1, T2, T3 corrigés **avec les tests qui les prouvent** | 19 |
-| Différenciation sur une niche | 10 % | 6,5 | 7,5 | Un chiffre venu d'un vrai pilote, cité avec le nom de l'établissement | 23 |
-| **Note pondérée** | **100 %** | **5,6** | **8,2** | | |
+| Dimension | Poids | 08-15 | **Constatée** | Cible | Ce qui la déplace | Phase |
+|---|---:|---:|---:|---:|---|---|
+| Accès au marché & vente | 20 % | 2,0 | **2,0** | 7,5 | 20 entretiens menés, 3 pilotes installés, 2 clients payants | 21, 23, 24 |
+| Besoin marché prouvé | 20 % | 5,5 | **5,5** | 8,5 | Les trois métriques relevées **avant** et **après** chez un pilote réel | 23 |
+| Viabilité économique | 20 % | 5,0 | **5,0** | 8,0 | Un prix tranché, puis réellement payé par deux établissements | 22, 24 |
+| Prêt à vendre (installable, sûr) | 15 % | 7,5 | **7,0** | 9,0 | Les bloquants de 19bis fermés, la production en ligne avec sauvegardes restaurées | 19bis, 20 |
+| Exécution technique | 15 % | 8,5 | **8,0** | 9,0 | Les défauts de 19bis corrigés **avec les tests qui les prouvent** | 19bis |
+| Différenciation sur une niche | 10 % | 6,5 | **6,5** | 7,5 | Un chiffre venu d'un vrai pilote, cité avec le nom de l'établissement | 23 |
+| **Note pondérée** | **100 %** | **5,6** | **5,4** | **8,2** | | |
 
-Recalculer cette colonne à la clôture de chaque phase — **sur ce qui est
-constaté, jamais sur ce qui est préparé.** C'est la dérive que l'audit a
-relevée : « besoin marché prouvé » avait été monté à 7,0 sans qu'aucun chiffre
-n'ait été relevé nulle part.
+Deux lignes ont baissé, alors que deux PR avaient été livrées entre les deux
+audits : c'est exactement ce que la règle ci-dessus annonçait. Le travail de code
+ne déplace plus la note vers le haut ; un audit qui cherche vraiment la fait
+baisser. Recalculer cette colonne à la clôture de chaque phase.
 
 ---
 
-## Phase 19 — Fermer les trois défauts qui coûteraient un client
+## Phase 19bis — Fermer ce que l'audit de pré-lancement a trouvé
 
 **Une journée. La dernière phase de code avant la porte d'un restaurant.**
 
-Ces trois défauts ont en commun de ne se manifester qu'en conditions réelles :
-aucun n'est visible dans les 280 tests actuels, et chacun frappe un moment où le
-client regarde. Rien d'autre dans le dépôt n'a besoin d'être touché.
+Vingt constats, tous cités en `fichier:ligne` dans `AUDIT_PRE_LANCEMENT.md`.
+Aucun n'est une fonctionnalité : ce sont des endroits où le produit fait faux.
 
-Convention de la Phase 12.2, reconduite ici : **écrire d'abord le test qui
+Convention reconduite depuis la Phase 12.2 : **écrire d'abord le test qui
 échoue**, puis le correctif. Un correctif sans test qui le prouve ne compte pas
-comme livré.
+comme livré. Deux exceptions explicites ci-dessous, marquées *(sans test)*, où
+la vérification est manuelle par nature.
 
-**19.1 — T1 : fermer `POST /loyalty/lookup`** (dernière route publique qui
-accepte un `restaurant_id` incrémental et qui **écrit** en base)
+### 19bis.1 — Les trois bloquants
 
-- [x] `LoyaltyLookup` prend le `qr_token` de la table au lieu de `restaurant_id` — le restaurant en est déduit, exactement comme `OrderCreate` depuis la Phase 12.2 (PR #51)
-- [x] La route ne crée plus la fiche : `404 LOYALTY_MEMBER_NOT_FOUND` si elle n'existe pas. `create_order` la crée déjà au bon moment, et une route publique qui écrit des numéros de téléphone de tiers n'a aucune finalité au sens de la loi 2004-63 (PR #51) — conséquence non prévue ici : la date de naissance perdait son unique chemin de saisie, elle voyage donc avec la commande (`OrderCreate.loyalty_birth_date`), là où le client la donne pour lui-même
-- [x] Côté client : afficher « première visite » sur ce 404 au lieu de lire `order_count: 0` — le comportement visible ne change pas pour le client attablé (PR #51)
-- [x] Test `test_lookup_fidelite_refuse_sans_qr_token` : sans le token de la table, la réponse est identique pour un numéro client et un numéro inconnu (PR #51)
-- [x] Test `test_lookup_fidelite_ne_cree_jamais_de_fiche` : aucune ligne `LoyaltyMember` créée par cette route, quel que soit le numéro (PR #51)
-- [x] Relire `frontend/lib/i18n/privacy.ts` (fr **et** ar) : le texte promet que le numéro n'est jamais partagé — il doit redevenir vrai, et le rester (PR #51) — relu, aucun mot à changer : « uniquement si vous l'entrez vous-même » était faux sous l'ancienne route, le correctif suffit à le rendre vrai
+- [ ] **F-1** — `scripts/seed_demo.py:74` appelle `create_all()` sans importer `model_registry` : une base neuve hors Docker n'a ni `orders`, ni `order_items`, ni `loyalty_members`, ni `waiter_calls`, et la première commande répond **HTTP 500**. Ajouter `from app.core import model_registry  # noqa: F401`, comme le fait déjà `scripts/purge_donnees_personnelles.py:26`
+- [ ] **F-1 (test)** — un test qui monte le schéma **par le script de seed** et passe une commande de bout en bout. Le filet actuel ne peut pas l'attraper : `tests/conftest.py` construit son schéma autrement
+- [ ] **F-2** — `active_orders_count` (`app/modules/stats/service.py:125-127`) n'est borné ni par la journée de service ni par le paramètre `day`. Le borner par `service_day_start()`, comme la liste qu'il surmonte (`app/modules/orders/service.py:82`)
+- [ ] **F-2 (test)** — une commande en attente datée de la veille ne compte plus dans `active_orders_count` ; le badge et sa ventilation (`frontend/app/dashboard/stats/page.tsx:198` et `:137`) disent le même nombre
+- [ ] **C-1** — `frontend/app/menu/[qrToken]/page.tsx:536` appelle `crypto.randomUUID()`, indisponible hors contexte sécurisé : le panier ne se remplit jamais, **sans aucun message**. Passer à `crypto.randomUUID?.() ?? <repli>` pour que le hors-HTTPS ne coûte plus que les notifications
+- [ ] **C-1 (vérification, sans test)** — rejouer l'ajout au panier depuis une IP en `http://`, et constater que « Valider la commande » apparaît
 
-**Résidu assumé** : avec le `qr_token` en main, un client attablé peut vérifier
-si un numéro est connu de **ce** restaurant. C'est le même niveau d'accès que
-passer commande, et le prix à payer pour une carte de fidélité sans compte. À
-noter tel quel dans la PR.
+### 19bis.2 — Les défauts à fermer avant le premier pilote
 
-**19.2 — T2 : rendre la création de commande idempotente** (aujourd'hui, une
-réponse perdue en plein service produit deux commandes et deux préparations)
+- [ ] **F-3** — deux définitions de la journée cohabitent : les écrans de service coupent à 5 h heure de Tunis (`app/core/dates.py:16`), le tableau de bord et la page de preuve à minuit UTC (`app/modules/stats/service.py:66` et `:159-160`). Pendant Ramadan, l'iftar et le sohour d'une même soirée tombent sur deux journées différentes. Faire lire `service_day_start()` aux bornes de `stats/service.py`
+- [ ] **F-4** — `list_pending_cash_payments` (`app/modules/orders/service.py:97-107`) n'a aucune borne de date : une demande d'encaissement vieille de six jours reste à l'écran du serveur. Même borne que les commandes actives
+- [ ] **F-5** — `_get_payable_order` (`app/modules/orders/service.py:437-442`) laisse payer une commande que personne n'a confirmée, et `transition_status` (`:309-325`) laisse annuler une commande payée. Refuser le paiement avant confirmation, et refuser l'annulation d'une commande payée. **À faire avant toute intégration Konnect réelle**, pas après
+- [ ] **S-1** — `GET /menu-items/by-restaurant/{id}` et `/suggestions` (`app/modules/menu/router.py:89-102` et `:105-115`) sont publiques et acceptent un identifiant incrémental : la carte et les prix de tout établissement se lisent sans jeton. Servir la carte par `qr_token`, comme le reste du parcours client
+- [ ] **S-2a** — trancher **qui** détermine l'IP cliente, d'uvicorn ou de l'application, et n'en garder qu'un. Aujourd'hui `ProxyHeadersMiddleware` réécrit `request.client.host` avant que `client_ip()` (`app/core/rate_limit.py:37-43`) ne s'exécute, et les deux couches lisent la même variable `FORWARDED_ALLOW_IPS` avec des règles opposées (première valeur contre dernière)
+- [ ] **S-2b** — monter le plafond de `POST /orders` au-dessus du nombre de couverts d'un service. Mesuré : 20 requêtes/minute par IP, partagées par **toute la salle** derrière le Wi-Fi du restaurant — or la Phase 23.1 impose du Wi-Fi à toutes les tables
+- [ ] **S-2c** — traduire `RATE_LIMITED` en français et en arabe (`frontend/lib/errors.ts:6-33` et `:46-57`). Aujourd'hui le client refusé lit « Réessayez dans un instant », ce qui prolonge le blocage
+- [ ] **D-1** — l'écran serveur, décrit comme *partagé*, occupe 448 px sur 1280 (35 %) et impose déjà un défilement avec **une seule** commande. L'écran cuisine, lui, occupe 96 % en deux colonnes. Lui donner la même mise en page multi-colonnes au-delà d'une largeur de tablette
 
-- [x] `Order.client_order_id` (`String(64)`, unique, indexé, nullable) + migration Alembic + `model_registry.py` (PR #51) — unicité portée sur `(table_id, client_order_id)` et non sur la seule colonne : l'identifiant vient du navigateur, donc un `client_order_id: "1"` global aurait rendu la commande — et le `public_token` — d'un inconnu. `model_registry.py` inchangé, `Order` y était déjà
-- [x] `OrderCreate.client_order_id` : identifiant généré par le navigateur **au moment où le panier est composé**, et conservé tel quel dans la charge utile mise en file hors ligne — un identifiant régénéré au rejeu ne servirait à rien (PR #51)
-- [x] `create_order` renvoie la commande existante au lieu d'en créer une seconde, avec son `public_token` d'origine : le téléphone du client doit retomber sur **sa** commande, pas sur une commande qu'il ne pourra plus suivre (PR #51)
-- [x] Aucun second broadcast WebSocket sur un rejeu — sinon la commande réapparaît sur l'écran serveur alors qu'elle est déjà prise en charge (PR #51)
-- [x] Test `test_deux_envois_du_meme_panier_ne_font_quune_commande` : deux `POST /orders` identiques → une commande, un événement, le même `public_token` (PR #51)
-- [x] Test : deux paniers différents avec deux identifiants différents restent deux commandes (le filet ne doit pas avaler une vraie deuxième tournée) (PR #51)
+### 19bis.3 — Ce qui attend le premier retour de terrain
 
-**19.3 — T3 : le limiteur de débit derrière le proxy de l'hébergeur**
-(aujourd'hui `request.client.host` : en production, tout le parc partage un seul
-compteur de 20 requêtes par minute)
+Réel, cité, mais sans conséquence pour un patron cette semaine. À ne pas faire
+maintenant, à ne pas oublier non plus.
 
-- [x] Clé du limiteur sur l'IP réelle du client, pas sur le pair TCP — en ne faisant confiance à `X-Forwarded-For` que depuis le proxy déclaré, jamais depuis n'importe qui (PR #51) — c'est la **dernière** valeur de la liste qui fait foi, la première étant forgeable par le client
-- [x] `FORWARDED_ALLOW_IPS` documenté dans `backend/.env.example` avec la raison, et renseigné au déploiement (Phase 20) (PR #51)
-- [x] Test : deux requêtes portant des `X-Forwarded-For` différents ne partagent pas le compteur ; un en-tête envoyé par un client non fiable est ignoré (PR #51)
-- [ ] Vérifier sur staging derrière le vrai proxy avant la bascule 🧑 — c'est le seul des trois défauts qui ne se constate qu'en production. **À vérifier aussi** : les opérateurs mobiles tunisiens partagent une poignée d'IP publiques entre beaucoup d'abonnés (CGNAT), donc le plafond de 20 req/min sur `POST /orders` pourrait refuser des commandes légitimes à l'iftar
+- [ ] **F-6** — les `public_token` des commandes ouvertes vivent en `sessionStorage` (`frontend/app/menu/[qrToken]/page.tsx:82`) alors que la file hors ligne est en `localStorage` (`:641`) : un onglet fermé par iOS fait perdre l'addition. Passer en `localStorage`
+- [ ] **P-4** — le mot « Swagger » est affiché au restaurateur qui paie (`frontend/app/dashboard/page.tsx:547`). Réécrire la phrase de son point de vue
+- [ ] **S-3** — corriger la phrase du résidu de `/loyalty/lookup` : avec le `qr_token`, la réponse ne dit pas seulement qu'un numéro est connu, elle donne aussi `order_count` et `is_birthday_today` (`app/modules/loyalty/schemas.py:38-39`, `:53-62`). Corriger la description, ou retirer `order_count` de la vue publique
+- [ ] **S-4** — `authenticate_staff_socket` (`app/modules/notifications/dependencies.py:31-54`) ne vérifie pas le rôle : un compte cuisine peut écouter `/ws/staff`. Sans risque entre collègues, à aligner par cohérence avec les routes HTTP
+- [ ] **S-6** — `_hits` (`app/core/rate_limit.py:16`) crée une clé par IP et ne la supprime jamais. Fuite lente, sans conséquence à l'échelle de 45 établissements
 
-**19.4 — Les trois défauts mineurs, dans la même passe** (aucun ne mérite une
-PR à lui seul)
+### 19bis.4 — La PR #53, ouverte et non fusionnée 🧑
 
-- [x] `POST /orders` passe sous `rate_limit`, comme `POST /waiter-calls` : même niveau d'accès, même nuisance possible, sauf que celle-ci mobilise la cuisine (PR #51)
-- [x] `table_label` échappé dans les deux fenêtres d'impression (`app/staff/page.tsx`, `app/kitchen/page.tsx`) — les notes du client et le nom du serveur le sont déjà, dans la même fonction (PR #51) — trois occurrences en fait, la demande de paiement cash de l'écran serveur en portait une troisième
-- [x] `<html lang>` suit la langue choisie par le client : le parcours bascule en arabe, l'attribut reste `fr`, et un lecteur d'écran prononce l'arabe avec les règles du français (PR #51)
+Photos de carte stockées en base, glisser-déposer, `UtcDatetime`, pourboire en
+espèces, ardoise de table, `EnteteManager`. Elle n'était pas dans le périmètre
+de l'audit et n'est comptée nulle part dans la grille.
 
-**19.5 — Borner les commandes actives dans le temps** (défaut rendu visible par
-le plan de salle : des tables restaient rouges le lendemain, avec « +1 h »)
-
-- [x] Les écrans de service ne montrent que les commandes du service en cours — filtrage dans `list_active_orders` et `list_pending_calls`, pas dans le composant : deux écrans qui filtrent différemment finiraient par se contredire (PR #51)
-- [x] **Ne pas** changer le statut de ces commandes : elles restent « perdues » pour `stats/service.py::_lost_orders`, et c'est ce chiffre qui porte l'argument de vente. On cesse de les afficher, on ne les efface pas (PR #51)
-- [x] Seuil à proposer et à confronter au premier pilote (comme `ABANDONED_PENDING_AFTER`), documenté au même endroit (PR #51) — 5 h du matin, heure de Tunis, dans `app/core/dates.py` : assez tard pour ne jamais couper un service de nuit. Reste hors périmètre : `active_orders_count` du tableau de bord manager n'est pas borné, il peut afficher un nombre que l'écran serveur ne montre plus
+- [ ] Décider 🧑 : fusionner avant la mise en ligne, ou la laisser en attente jusqu'après les pilotes. Une PR ouverte qui vieillit se fusionne de plus en plus mal
+- [ ] Si elle est fusionnée : **valider `image_url` à la réception**. `S-5` a montré qu'un `javascript:` ou un SVG à script est accepté tel quel aujourd'hui (`app/modules/menu/schemas.py:80`) — non exploitable sans upload, mais la PR #53 apporte justement l'upload
+- [ ] Si elle est fusionnée : réexaminer le stockage des photos **en base**, choix assumé face aux systèmes de fichiers éphémères de Railway/Render, à revoir à l'échelle d'une chaîne
 
 ---
 
@@ -160,13 +165,21 @@ Tout ici demande un compte ou une carte bancaire de Wassim.
 
 - [ ] Choisir et provisionner l'hébergement 🧑 — backend dockerisé sur Railway ou Render (WebSocket natif + Postgres managé), frontend sur Vercel. Contrainte à respecter : **une seule instance backend** (gestionnaire WebSocket et limiteur de débit en mémoire)
 - [ ] Réserver le domaine 🧑 (`tawla.tn` en priorité, `.com` en secours)
-- [ ] Générer les vraies clés en variables d'environnement 🧑 : `JWT_SECRET`, `FRONTEND_ORIGIN` sur l'origine exacte de prod, paire VAPID, `FORWARDED_ALLOW_IPS` (cf. 19.3)
+- [ ] Générer les vraies clés en variables d'environnement 🧑 : `JWT_SECRET`, `FRONTEND_ORIGIN` sur l'origine exacte de prod, paire VAPID, `FORWARDED_ALLOW_IPS` (cf. 19bis.2 S-2a)
 - [ ] Activer les sauvegardes automatiques du Postgres managé 🧑
 - [ ] **Restaurer une sauvegarde une fois, sur une base jetable** 🧑 — une sauvegarde jamais restaurée n'est pas une sauvegarde. C'est la seule ligne de cette phase qu'on sera tenté de sauter, et la seule qui prouve les autres
 - [ ] Brancher le monitoring externe sur `/health` 🧑 (UptimeRobot gratuit) — la sonde interroge déjà la base et renvoie 503 si elle est injoignable
 - [ ] Collecte des erreurs 🧑 — log drain de l'hébergeur, ou Sentry si un DSN existe. Les logs sortent déjà en JSON sur stdout : ne rien coder avant d'avoir la destination
 - [ ] Rejouer le parcours complet sur staging — client, serveur, cuisine, manager — puis bascule finale 🧑
 - [ ] Déclaration du traitement des numéros de fidélité auprès de l'INPDP 🧑 (`inpdp.tn`) — avant le premier client réel, pas après. Le produit est conforme depuis la Phase 16 ; il manque le dépôt
+
+**20.1 — Les trois vérifications que seule la production permet** (héritées de
+la Phase 19.3 et de l'audit — aucune n'est constatable en local, et aucune ne
+doit être cochée sur une supposition)
+
+- [ ] **Mesurer** le limiteur derrière le vrai proxy 🧑 — envoyer des requêtes avec un `X-Forwarded-For` forgé et vérifier qu'elles **partagent** bien un compteur. En local, avec `FORWARDED_ALLOW_IPS=*`, 40 requêtes portant chacune une IP différente passent toutes. Le test `tests/test_rate_limit.py:63` ne peut pas le voir : `TestClient` n'exécute pas la couche d'uvicorn qui réécrit l'IP
+- [ ] Vérifier que le conteneur n'est **joignable que** par le proxy de l'hébergeur 🧑 — c'est l'hypothèse sur laquelle repose tout le limiteur, et elle n'est écrite nulle part ailleurs qu'en commentaire dans `backend/.env.example`
+- [ ] Confirmer sur le domaine réel que `isSecureContext` est vrai 🧑 — notifications push, service worker et `crypto.randomUUID` en dépendent (cf. C-1)
 
 **Critère de sortie de phase** : une commande passée depuis un téléphone sur le
 domaine réel, vue sur l'écran cuisine, avec une sauvegarde restaurée la veille.
@@ -179,11 +192,10 @@ domaine réel, vue sur l'écran cuisine, avec une sauvegarde restaurée la veill
 
 **La ligne la plus lourde de la grille (20 %), notée 2,0, et la seule qui
 conditionne toutes les suivantes.** Elle n'attend rien : elle peut démarrer le
-jour où la Phase 19 est en revue, sans attendre la mise en ligne.
+jour où la Phase 19bis est en revue, sans attendre la mise en ligne.
 
-Le matériel existe depuis la Phase 13 (`terrain/GUIDE_ENTRETIEN.md`,
-`terrain/ENTRETIENS.md`) et n'a jamais servi : le tableau de dépouillement porte
-vingt lignes vides.
+Le matériel existe depuis la Phase 13 et n'a jamais servi : au 2026-08-18,
+`terrain/ENTRETIENS.md` porte toujours **vingt lignes vides**.
 
 - [ ] Mener les 20 entretiens 🧑 — restaurants et brasseries de **6 tables et plus** (Tunis, La Marsa, Sousse, Hammamet), pas les petits cafés. Ne jamais montrer l'application avant la fin
 - [ ] Remplir `terrain/ENTRETIENS.md` sur place ou juste après 🧑 — une ligne par établissement, et les verbatims mot pour mot, surtout les refus
@@ -198,7 +210,7 @@ La synthèse doit produire un **retrait**, pas un ajout. Une fonctionnalité
 qu'aucun des vingt n'a mentionnée spontanément est candidate à la suppression —
 pas au maintien « au cas où ».
 
-- [ ] Trancher le sort des trois candidats déjà identifiés par l'audit 🧑 : partage d'addition (noté 6,0), mode café (6,5), célébration et carte à partager (4,0). Les retirer coûte moins cher que les maintenir dans chaque écran, chaque traduction et chaque test
+- [ ] Trancher le sort des trois candidats déjà identifiés par `AUDIT_FINAL.md` 🧑 : partage d'addition (noté 6,0), mode café (6,5), célébration et carte à partager (4,0). Les retirer coûte moins cher que les maintenir dans chaque écran, chaque traduction et chaque test
 - [ ] Écrire la coupe dans cette roadmap avec la raison, même si la décision est « on garde »
 - [ ] Si l'addition par table remonte spontanément chez plusieurs patrons, c'est la **seule** fonctionnalité qui remonte en Phase 23 ; sinon elle reste en § « Sous condition »
 
@@ -207,7 +219,8 @@ pas au maintien « au cas où ».
 ## Phase 22 — Un seul prix 🧑
 
 Décision qui n'attend aucune donnée nouvelle : elle est écrite dans deux
-documents et attendue par une constante `null` dans le code.
+documents et attendue par une constante `null` dans le code
+(`frontend/lib/offer.ts:18`, toujours `PRICE_MONTHLY_DT = null` au 2026-08-18).
 
 - [ ] Fixer le prix unique 🧑 — proposition tenue depuis la revue : **120 DT/mois, service d'installation inclus**, cible 45 établissements. 45 × 120 DT ≈ 65 k DT/an tenable seul, contre 290 clients à 35 DT pour un revenu comparable et une charge de support intenable
 - [ ] Renseigner `PRICE_MONTHLY_DT` dans `frontend/lib/offer.ts` — la page publique affiche alors le montant sans autre changement de code
@@ -227,6 +240,7 @@ gratuites), jamais des dinars.
 **Modes d'emploi : [`terrain/RELEVE_AVANT.md`](./terrain/RELEVE_AVANT.md) (la semaine de référence), [`terrain/FORMATION_10MIN.md`](./terrain/FORMATION_10MIN.md) et [`terrain/PRISE_EN_MAIN.md`](./terrain/PRISE_EN_MAIN.md) (installation et équipe).**
 
 C'est ici que la note « besoin marché prouvé » se gagne, et nulle part ailleurs.
+Au 2026-08-18, `terrain/PILOTES.md` ne contient qu'un modèle à copier.
 
 **23.1 — Avant d'installer quoi que ce soit** 🧑
 
@@ -251,8 +265,9 @@ préparation)
 - [ ] Répéter le repli papier **avant** d'en avoir besoin, pas le soir où le réseau tombe 🧑
 - [ ] Tenir `terrain/PILOTES.md` le soir même de chaque service observé 🧑 : incidents, verbatims, ce qui a été contourné ou jamais utilisé
 - [ ] Relever les trois métriques chaque semaine sur `/dashboard/preuve` 🧑
-- [ ] Confronter les seuils codés au réel 🧑 : `ABANDONED_PENDING_AFTER` (10 min) et le seuil de fin de service de 19.5 sont des propositions, pas des vérités
+- [ ] Confronter les seuils codés au réel 🧑 : `ABANDONED_PENDING_AFTER` (10 min) et le seuil de fin de service de 5 h (`app/core/dates.py:16`) sont des propositions, pas des vérités
 - [ ] Confronter le plan de salle aux entretiens 🧑 : les zones suffisaient-elles, ou le plan dessiné change-t-il vraiment la conversation ?
+- [ ] Vérifier en service réel que le plafond du limiteur tient 🧑 — c'est le premier endroit où vingt tables commandent vraiment dans la même minute (cf. 19bis.2 S-2b)
 
 **23.4 — Ce qui sort des pilotes**
 
@@ -280,13 +295,13 @@ est la condition **exacte** qui la ferait entrer dans la roadmap.
 
 | Chantier | Déclencheur |
 |---|---|
-| **Addition au niveau de la table** (une table qui commande en deux temps produit deux additions) | Trois patrons sur vingt le mentionnent **spontanément** en Phase 21 |
+| **Addition au niveau de la table** — vérifié le 2026-08-18 : `payment_status` vit sur `Order`, et les commandes ouvertes multiples (PR #52) font qu'une table qui commande en deux temps produit deux additions séparées | Trois patrons sur vingt le mentionnent **spontanément** en Phase 21 |
 | **Formules / menus du jour** | Idem — trois mentions spontanées |
-| **Tests frontend** (aucun aujourd'hui, sur 7 861 lignes) | Un bug de panier constaté chez un pilote, ou un deuxième développeur qui touche `menu/[qrToken]/page.tsx`. L'idempotence de 19.2 est testée côté serveur : c'est ce qui couvre l'argent |
-| **Découper les deux fichiers de plus de 1 000 lignes** | Le même déclencheur que ci-dessus. Un refactor qui ne corrige aucun bug ne rapproche d'aucun client |
-| **Intégration Konnect réelle** (le paiement carte reste simulé) | Un pilote qui le réclame. Le cash domine encore largement le commerce tunisien |
+| **Tests frontend** (aucun aujourd'hui, sur 8 466 lignes) — C-1 et D-1 auraient été attrapés par un test de rendu, mais aucun pilote ne les a constatés | Un bug de panier constaté **chez un pilote**, ou un deuxième développeur qui touche `menu/[qrToken]/page.tsx` |
+| **Découper les deux fichiers de plus de 1 000 lignes** (`menu/[qrToken]/page.tsx` : 1 516 ; `dashboard/page.tsx` : 1 292) | Le même déclencheur que ci-dessus. Un refactor qui ne corrige aucun bug ne rapproche d'aucun client |
+| **Intégration Konnect réelle** (le paiement carte reste simulé) | Un pilote qui le réclame. **F-5 doit être fermé avant**, pas après |
 | **Intégration caisse / stock** | Dix prospects qui la citent comme motif de refus. C'est un autre produit, et la vraie douleur du patron |
-| **Plusieurs instances backend** (WebSocket et limiteur en mémoire) | Une coupure de service constatée en pleine soirée, ou le 30ᵉ client |
+| **Plusieurs instances backend** (WebSocket et limiteur en mémoire ; S-6 en est un symptôme) | Une coupure de service constatée en pleine soirée, ou le 30ᵉ client |
 | **Multi-établissements sous un même compte** | Un client qui possède deux établissements et le demande |
 | **Mode sombre côté client** | Un retour de pilote sur la lisibilité en terrasse le soir |
 
@@ -299,7 +314,7 @@ est la condition **exacte** qui la ferait entrer dans la roadmap.
 
 ---
 
-## Ce qui est déjà livré (phases 12 à 18, closes)
+## Ce qui est déjà livré (phases 12 à 19, closes)
 
 Résumé destiné à ce fichier ; le détail par tâche vit dans l'historique git et
 dans les PR citées.
@@ -307,21 +322,25 @@ dans les PR citées.
 | Phase | Ce qu'elle a livré | PR |
 |---|---|---|
 | **12.1** | Comptes serveur et cuisine créés par le manager, `Staff.is_active` vérifié à chaque requête, onglet Équipe | #36 |
-| **12.2** | Surface publique fermée : `Order.public_token`, `qr_token` exigé à la création, `loyalty_phone` sorti de la vue client, WebSockets authentifiés, `POST /restaurants` supprimé — 20 tests nommés d'après chaque constat | #36, #44 |
+| **12.2** | Surface publique fermée : `Order.public_token`, `qr_token` exigé à la création, `loyalty_phone` sorti de la vue client, WebSockets authentifiés, `POST /restaurants` supprimé | #36, #44 |
 | **12.3** | Alembic seule voie du schéma, test de conformité modèles/migrations, sonde `/health` qui interroge la base | #36, #41, #43 |
 | **13.2** | Kit d'installation : `setup_restaurant.py`, import CSV, chevalets QR, fiches de prise en main et de formation | #37 |
 | **13.3** | Les trois métriques de preuve, `/dashboard/preuve`, export CSV, définition codée de « commande perdue » | #37 |
 | **14.1** | Vente incitative « avec ce plat » et son effet **mesuré** (`OrderItem.from_suggestion`) | #38 |
 | **14.2** | Page publique « service inclus », rapport hebdomadaire par serveur, jamais de statistiques nominatives en salle | #39 |
-| **15** | Tenue en service réel : écran cuisine à 360 px, repli papier, session expirée gérée, test de charge, deux défauts trouvés en rejouant un service | #39, #45 |
+| **15** | Tenue en service réel : écran cuisine à 360 px, repli papier, session expirée gérée, test de charge | #39, #45 |
 | **16** | Conformité 2004-63 : consentement au-dessus du champ, politique fr/ar, rétention et purge réelle | #40 |
 | **17** | Recette du jour et commandes perdues en tête du dashboard, encart « ma soirée » sur l'écran serveur | #46 |
-| **18** | Plan de salle : édition par glisser-déposer avec enregistrement automatique, vue serveur en direct, action depuis la table, couverts dessinés | #47, #48, #49, #50 |
+| **18** | Plan de salle : édition par glisser-déposer, vue serveur en direct, action depuis la table, couverts dessinés | #47, #48, #49, #50 |
+| **19** | `/loyalty/lookup` fermée, création de commande idempotente (`client_order_id`), limiteur sur l'IP réelle, échappement de `table_label`, `<html lang>`, journée de service bornée à 5 h | #51 |
+| **19 (suite)** | Recette limitée aux commandes réglées, résolution d'appel serveur poussée au client, commandes ouvertes multiples, durées par étape, cuisine en deux colonnes, note partageable, plats partagés par convive, rupture barrée | #52 |
+| **Audit** | Audit de pré-lancement : 299 tests, parcours rejoués, attaques mesurées, 20 constats, grille recalculée | #54 |
 
-Ce qui reste ouvert de ces phases a été repris ci-dessus : la mise en ligne
-(→ Phase 20), les entretiens et les pilotes (→ 21, 23), le prix (→ 22), l'écran
-de relevé « avant » (→ 23.2), le bandeau de fin de pilote (→ 22), et les
-commandes actives non bornées dans le temps (→ 19.5).
+Ce qui restait ouvert de ces phases a été repris ci-dessus, sans perte : la
+vérification du limiteur derrière le vrai proxy (→ 20.1), la mise en ligne
+(→ 20), les entretiens et les pilotes (→ 21, 23), le prix (→ 22), l'écran de
+relevé « avant » (→ 23.2), le bandeau de fin de pilote (→ 22), et
+`active_orders_count` non borné, jusqu'ici « hors périmètre » (→ 19bis.1 F-2).
 
 ---
 
@@ -329,9 +348,11 @@ commandes actives non bornées dans le temps (→ 19.5).
 
 1. **Une tâche = une branche = une PR.** Jamais de push direct sur `main`. CI verte avant merge.
 2. **Ordre strict**, sauf la Phase 21 (les entretiens) qui tourne en parallèle et n'attend aucun code.
-3. **Phase 19 : écrire le test qui échoue d'abord**, puis le correctif. Un correctif de sécurité ou d'intégrité sans test qui le prouve ne compte pas comme livré.
+3. **Phase 19bis : écrire le test qui échoue d'abord**, puis le correctif. Un correctif de sécurité ou d'intégrité sans test qui le prouve ne compte pas comme livré — sauf les deux lignes marquées *(sans test)*, où la vérification est manuelle par nature.
 4. **Cocher `[x]` avec le numéro de PR**, et si le scope a été réduit, écrire pourquoi sur la ligne.
 5. **À la clôture d'une phase, recalculer la grille** — sur ce qui est constaté, jamais sur ce qui est préparé. Si une phase n'a déplacé aucune note, le dire dans la PR : c'est le signal que la tâche n'aurait pas dû être faite.
-6. **Après la Phase 20, toute proposition de code doit nommer le restaurateur qui l'a demandée.** Sans nom, elle va en § « Sous condition ». C'est la règle que l'audit du 2026-08-15 rend nécessaire : trois phases irréprochables ont été livrées après que ce fichier eut écrit qu'écrire du code ferait baisser la note.
-7. **Conventions inchangées** : voir `CLAUDE.md` (multi-tenant partout, transitions d'état contrôlées, prix figé sur `OrderItem`, tout nouveau modèle dans `model_registry.py`, toute migration dans la même PR, logs via `log_event`).
-8. **Face à une ambiguïté produit** : livrer le scope le plus étroit qui règle le problème réel, et signaler l'ambiguïté dans la PR — plutôt que d'inventer une réponse.
+6. **Après la Phase 20, toute proposition de code doit nommer le restaurateur qui l'a demandée.** Sans nom, elle va en § « Sous condition ». Un **défaut constaté** échappe à cette règle — un manque fonctionnel, jamais.
+7. **Ne jamais cocher une case sur une supposition.** Les trois lignes de 20.1 sont là parce qu'un test vert en local a déjà laissé passer un contournement réel du limiteur : `TestClient` n'exécute pas la couche qui, en production, réécrit l'IP.
+8. **Ne jamais remplir `terrain/*` depuis une session.** Ces fichiers se tiennent à la main, sur place. Un chiffre de terrain inventé détruit la seule chose que Tawla a à vendre.
+9. **Conventions inchangées** : voir `CLAUDE.md` (multi-tenant partout, transitions d'état contrôlées, prix figé sur `OrderItem`, tout nouveau modèle dans `model_registry.py`, toute migration dans la même PR, logs via `log_event`).
+10. **Face à une ambiguïté produit** : livrer le scope le plus étroit qui règle le problème réel, et signaler l'ambiguïté dans la PR — plutôt que d'inventer une réponse.
