@@ -156,6 +156,7 @@ de l'audit et n'est comptée nulle part dans la grille.
 ## Phase 20 — Mettre en ligne, pour de vrai
 
 **Mode d'emploi pas à pas : [`terrain/MISE_EN_LIGNE.md`](./terrain/MISE_EN_LIGNE.md)**
+**Budget chiffré et sourcé : [`AUDIT_COUTS_PRODUCTION.md`](./AUDIT_COUTS_PRODUCTION.md)**
 
 **Bloquant avant la première commande d'un vrai client.** Un pilote qui perd son
 service du soir ne revient pas, et il le racontera aux autres patrons du

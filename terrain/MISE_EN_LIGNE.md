@@ -43,11 +43,16 @@ Trois autres exigences, toutes satisfaites par Render comme par Railway :
   connexions et le limiteur de débit vivent en mémoire du processus ;
 - **un chemin de sonde de santé configurable** — ce sera `/health`.
 
-Ordre de grandeur du budget mensuel : une instance web d'entrée de gamme plus une
-base managée, soit environ 15 à 25 $ par mois, plus le domaine. Le frontend tient
-sur l'offre gratuite de Vercel. **Ne pas prendre l'offre gratuite pour le
-backend** : elle met le service en veille, et un service en veille perd ses
-connexions WebSocket — donc les commandes du soir.
+Budget chiffré et sourcé, poste par poste (hébergement, domaine, monitoring,
+INPDP, trajectoire de coût, conditionnels) : voir
+[`AUDIT_COUTS_PRODUCTION.md`](../AUDIT_COUTS_PRODUCTION.md) — ne pas dupliquer
+les chiffres ici, ce fichier daterait plus vite que l'audit lui-même. Deux
+rappels opérationnels qui ne sont pas des chiffres et restent ici : **ne pas
+prendre l'offre gratuite pour le backend** (elle met le service en veille, et
+un service en veille perd ses connexions WebSocket — donc les commandes du
+soir) ; et le palier gratuit Vercel porte une réserve contractuelle détaillée
+dans l'audit (usage commercial) — la lire avant de choisir le palier
+frontend, pas seulement une question de bande passante.
 
 ---
 
