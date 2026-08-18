@@ -10,6 +10,7 @@ from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
+from app.modules.tables import service as tables_service
 
 logger = get_logger("menu")
 
@@ -88,13 +89,7 @@ def import_menu_csv(
     )
 
 
-@router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.MenuItemOut])
-def list_menu(restaurant_id: int, db: Session = Depends(get_db)):
-    """
-    Endpoint public appelé par la page client après scan du QR.
-    Ne renvoie que ce qui est nécessaire pour afficher le menu, triée dans
-    l'ordre logique d'un repas (voir CATEGORY_ORDER).
-    """
+def _sorted_menu(db: Session, restaurant_id: int) -> list[MenuItem]:
     items = (
         db.query(MenuItem)
         .filter(MenuItem.restaurant_id == restaurant_id)
@@ -104,17 +99,50 @@ def list_menu(restaurant_id: int, db: Session = Depends(get_db)):
     return sorted(items, key=lambda item: (_category_rank(item.category), item.name))
 
 
+@router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.MenuItemOut])
+def list_menu(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """
+    Gestion de la carte côté dashboard manager.
+
+    S-1 (audit 2026-08-18) : cette route était publique et acceptait un
+    identifiant incrémental — la carte et les prix de n'importe quel
+    établissement se lisaient sans jeton. Le parcours client passe désormais
+    par `/by-table/{qr_token}` (ci-dessous), lié à la table scannée.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return _sorted_menu(db, restaurant_id)
+
+
 @router.get("/by-restaurant/{restaurant_id}/suggestions", response_model=dict[int, list[int]])
-def list_suggestions(restaurant_id: int, db: Session = Depends(get_db)):
+def list_suggestions(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
     """
     Toutes les suggestions du restaurant, en une requête : `{id du plat: [ids
-    proposés]}`. Public comme le menu, et n'expose que des identifiants
-    d'articles déjà publics.
-
-    Les articles indisponibles sont écartés — proposer un plat en rupture est
-    pire que ne rien proposer.
+    proposés]}`. Gestion côté dashboard manager — voir S-1 ci-dessus, même
+    fermeture que `list_menu`.
     """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     return suggestions.get_suggestions_map(db, restaurant_id, only_available=True)
+
+
+@router.get("/by-table/{qr_token}", response_model=list[schemas.MenuItemOut])
+def list_menu_by_table(qr_token: str, db: Session = Depends(get_db)):
+    """
+    Parcours client, après scan du QR — public, mais lié à la table (comme
+    les commandes depuis la Phase 12.2), pas à un identifiant à deviner.
+    """
+    table = tables_service.get_table_by_qr_token(db, qr_token)
+    return _sorted_menu(db, table.restaurant_id)
+
+
+@router.get("/by-table/{qr_token}/suggestions", response_model=dict[int, list[int]])
+def list_suggestions_by_table(qr_token: str, db: Session = Depends(get_db)):
+    """Suggestions du restaurant de la table scannée — même principe que
+    `list_menu_by_table`. Les articles indisponibles sont écartés : proposer
+    un plat en rupture est pire que ne rien proposer."""
+    table = tables_service.get_table_by_qr_token(db, qr_token)
+    return suggestions.get_suggestions_map(db, table.restaurant_id, only_available=True)
 
 
 @router.put("/{item_id}/suggestions", response_model=schemas.MenuItemSuggestionsOut)

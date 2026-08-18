@@ -474,9 +474,19 @@ export default function StaffPage() {
   const scheduledCount = pending.filter((o) => o.scheduled_for).length;
 
   return (
-    <div className="p-4 max-w-md mx-auto">
+    // D-1 (audit 2026-08-18) : cet écran, décrit comme partagé toute la
+    // soirée, restait à max-w-md (448 px) même sur l'écran large de la
+    // cuisine — défilement dès une seule commande. `md:max-w-none` le
+    // laisse s'étaler au-delà d'une largeur de tablette ; les trois listes
+    // de commandes passent alors en colonnes (voir plus bas), comme l'écran
+    // cuisine. En dessous, sur le téléphone d'un serveur en salle, rien ne
+    // change.
+    <div className="p-4 max-w-md mx-auto md:max-w-none md:mx-0 md:px-8">
       <div className="flex items-center justify-between mb-1">
-        <h1 className={`${lalezar.className} text-xl`}>Commandes à confirmer</h1>
+        {/* Titre de page générique : les trois listes ci-dessous (dont
+            "Commandes à confirmer") ont chacune leur propre en-tête depuis
+            le passage en colonnes (D-1). */}
+        <h1 className={`${lalezar.className} text-xl`}>Service en cours</h1>
         <ConnectionBadge status={status} />
       </div>
       <div className="flex items-center justify-between mb-4 text-sm text-neutral-500 gap-2 flex-wrap">
@@ -566,6 +576,13 @@ export default function StaffPage() {
         </Card>
       )}
 
+      {/* D-1 : les trois listes de commandes en colonnes au-delà d'une
+          largeur de tablette, comme l'écran cuisine — sinon chacune force
+          un défilement dès sa première carte, sur un écran par ailleurs
+          large. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div>
+      <h2 className="text-lg font-semibold mb-4">Commandes à confirmer</h2>
       {pending.length === 0 && <EmptyState message="Aucune commande en attente." />}
       {pending.map((o) => {
         const takenByMe = o.taken_by_staff_id === staff.id;
@@ -612,8 +629,10 @@ export default function StaffPage() {
           </Card>
         );
       })}
+      </div>
 
-      <h2 className="text-lg font-semibold mt-8 mb-4">Prêtes à servir</h2>
+      <div>
+      <h2 className="text-lg font-semibold mb-4">Prêtes à servir</h2>
       {readyToServe.length === 0 && <EmptyState message="Rien à servir pour l'instant." />}
       {readyToServe.map((o) => (
         <Card key={o.order_id} tone="success" className="mb-3 flex justify-between items-center">
@@ -626,8 +645,10 @@ export default function StaffPage() {
           </Button>
         </Card>
       ))}
+      </div>
 
-      <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement en espèces</h2>
+      <div>
+      <h2 className="text-lg font-semibold mb-4">Demandes de paiement en espèces</h2>
       {myCashRequests.length === 0 && <EmptyState message="Aucune demande en attente." />}
       {myCashRequests.map((o) => {
         const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
@@ -667,6 +688,8 @@ export default function StaffPage() {
           </Card>
         );
       })}
+      </div>
+      </div>
 
       <h2 className="text-lg font-semibold mt-8 mb-4 flex items-center gap-1.5">
         <GiftIcon className="w-5 h-5 shrink-0" />

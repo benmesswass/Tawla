@@ -109,8 +109,10 @@ def test_staff_still_sees_the_phone_number(client, db_session):
 
 
 def test_card_payment_requires_the_order_token(client, db_session):
-    _, table, item = _setup(client, db_session)
+    restaurant, table, item = _setup(client, db_session)
     order = _create_order(client, table, item)
+    # Payer une commande non confirmée est refusé depuis le correctif F-5.
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(create_staff(restaurant.id)))
 
     anonymous = client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0})
     assert anonymous.status_code == 404
@@ -127,8 +129,10 @@ def test_card_payment_requires_the_order_token(client, db_session):
 
 
 def test_cash_payment_request_requires_the_order_token(client, db_session):
-    _, table, item = _setup(client, db_session)
+    restaurant, table, item = _setup(client, db_session)
     order = _create_order(client, table, item)
+    # Payer une commande non confirmée est refusé depuis le correctif F-5.
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(create_staff(restaurant.id)))
 
     assert client.post(f"/api/v1/orders/{order['id']}/pay/cash").status_code == 404
     assert client.post(

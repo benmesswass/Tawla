@@ -33,8 +33,10 @@ def _place_order(client, table, item, phone, birth_date=None):
     return client.post("/api/v1/orders", json=payload).json()
 
 
-def _order_and_pay_by_card(client, restaurant, table, item, phone):
+def _order_and_pay_by_card(client, restaurant, table, item, phone, manager_headers):
     order = _place_order(client, table, item, phone)
+    # Payer une commande non confirmée est refusé depuis le correctif F-5.
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=manager_headers)
     return client.post(
         f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
     ).json()
@@ -111,10 +113,10 @@ def test_order_count_only_increments_on_confirmed_payment(client):
 
 
 def test_order_count_increments_on_card_payment(client):
-    restaurant, table, item, _headers = _setup_restaurant(client)
+    restaurant, table, item, manager_headers = _setup_restaurant(client)
     phone = "20123456"
 
-    order = _order_and_pay_by_card(client, restaurant, table, item, phone)
+    order = _order_and_pay_by_card(client, restaurant, table, item, phone, manager_headers)
     assert order["payment_status"] == "paid"
 
     assert _lookup(client, table, phone).json()["order_count"] == 1
@@ -125,6 +127,7 @@ def test_order_count_increments_on_confirmed_cash_payment(client):
     phone = "20654321"
 
     order = _place_order(client, table, item, phone)
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=manager_headers)
     client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
     # Une demande cash seule (pas encore encaissée) ne doit rien faire gagner.
     assert _lookup(client, table, phone).json()["order_count"] == 0
@@ -134,11 +137,11 @@ def test_order_count_increments_on_confirmed_cash_payment(client):
 
 
 def test_reward_becomes_available_at_threshold(client):
-    restaurant, table, item, _headers = _setup_restaurant(client)
+    restaurant, table, item, manager_headers = _setup_restaurant(client)
     phone = "20111222"
 
     for _ in range(LOYALTY_REWARD_THRESHOLD):
-        order = _order_and_pay_by_card(client, restaurant, table, item, phone)
+        order = _order_and_pay_by_card(client, restaurant, table, item, phone, manager_headers)
 
     status = _lookup(client, table, phone).json()
     assert status["order_count"] == LOYALTY_REWARD_THRESHOLD
@@ -151,7 +154,7 @@ def test_staff_can_redeem_reward(client):
     restaurant, table, item, manager_headers = _setup_restaurant(client)
     phone = "20111222"
     for _ in range(LOYALTY_REWARD_THRESHOLD):
-        _order_and_pay_by_card(client, restaurant, table, item, phone)
+        _order_and_pay_by_card(client, restaurant, table, item, phone, manager_headers)
 
     member = client.get(
         f"/api/v1/loyalty/by-restaurant/{restaurant.id}/member",

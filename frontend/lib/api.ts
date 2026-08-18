@@ -365,11 +365,18 @@ export const api = {
     request<Table>("/api/v1/tables", { method: "POST", body: JSON.stringify(payload) }),
   updateTable: (tableId: number, payload: { label: string; zone?: string | null }) =>
     request<Table>(`/api/v1/tables/${tableId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  // Dashboard manager uniquement, sous JWT — la lecture par identifiant était
+  // publique et incrémentale : la carte et les prix de n'importe quel
+  // établissement se lisaient sans jeton (S-1, audit 2026-08-18).
   getMenu: (restaurantId: number) => request<MenuItem[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}`),
+  // Vue client, liée à la table scannée — voir getMenuByToken plus bas.
   // { id du plat: [ids proposés] } — une seule requête pour toute la carte,
   // le menu client se charge d'un coup sur une connexion mobile de salle.
   getMenuSuggestions: (restaurantId: number) =>
     request<Record<string, number[]>>(`/api/v1/menu-items/by-restaurant/${restaurantId}/suggestions`),
+  getMenuByToken: (qrToken: string) => request<MenuItem[]>(`/api/v1/menu-items/by-table/${qrToken}`),
+  getMenuSuggestionsByToken: (qrToken: string) =>
+    request<Record<string, number[]>>(`/api/v1/menu-items/by-table/${qrToken}/suggestions`),
   setMenuSuggestions: (itemId: number, suggestedItemIds: number[]) =>
     request<{ menu_item_id: number; suggested_items: MenuItem[] }>(
       `/api/v1/menu-items/${itemId}/suggestions`,

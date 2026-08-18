@@ -42,7 +42,7 @@ def _unique_slug(db: Session, name: str) -> str:
     return slug
 
 
-@router.post("/register", response_model=schemas.LoginResponse, status_code=201, dependencies=[Depends(rate_limit)])
+@router.post("/register", response_model=schemas.LoginResponse, status_code=201, dependencies=[Depends(rate_limit())])
 def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     """
     Onboarding self-service d'un nouvel établissement : crée le restaurant
@@ -76,7 +76,7 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     return schemas.LoginResponse(access_token=token, staff=staff)
 
 
-@router.post("/login", response_model=schemas.LoginResponse, dependencies=[Depends(rate_limit)])
+@router.post("/login", response_model=schemas.LoginResponse, dependencies=[Depends(rate_limit())])
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     staff = db.query(Staff).filter(Staff.email == payload.email.lower()).first()
 

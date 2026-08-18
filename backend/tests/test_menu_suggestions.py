@@ -51,7 +51,7 @@ def test_manager_sets_and_replaces_suggestions(client, db_session):
     response = _set(client, manager, plat.id, [dessert.id])
     assert [i["name"] for i in response.json()["suggested_items"]] == ["Baklawa"]
 
-    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions").json()
+    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions", headers=auth_headers(manager)).json()
     assert listed == {str(plat.id): [dessert.id]}
 
 
@@ -61,7 +61,7 @@ def test_empty_list_removes_all_suggestions(client, db_session):
     _set(client, manager, plat.id, [boisson.id])
 
     assert _set(client, manager, plat.id, []).status_code == 200
-    assert client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions").json() == {}
+    assert client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions", headers=auth_headers(manager)).json() == {}
 
 
 def test_a_dish_cannot_suggest_itself(client, db_session):
@@ -136,7 +136,7 @@ def test_unavailable_suggestions_are_hidden_from_the_client(client, db_session):
         headers=auth_headers(manager),
     )
 
-    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions").json()
+    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions", headers=auth_headers(manager)).json()
     assert listed == {str(plat.id): [dessert.id]}
 
 
@@ -148,7 +148,7 @@ def test_suggestions_are_scoped_to_the_restaurant(client, db_session):
     _set(client, manager, plat.id, [boisson.id])
     _set(client, other_manager, other_plat.id, [other_boisson.id])
 
-    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions").json()
+    listed = client.get(f"/api/v1/menu-items/by-restaurant/{restaurant.id}/suggestions", headers=auth_headers(manager)).json()
     assert listed == {str(plat.id): [boisson.id]}
 
 

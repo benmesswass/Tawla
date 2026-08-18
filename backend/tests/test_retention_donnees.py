@@ -183,6 +183,8 @@ def _member(db_session, restaurant_id: int, phone: str, created_days_ago: int, l
 def test_a_paid_order_refreshes_the_retention_clock(client, db_session, resto):
     restaurant, table, item = resto
     order = _place_order(client, table, item, loyalty_phone="20123456")
+    # Payer une commande non confirmée est refusé depuis le correctif F-5.
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(create_staff(restaurant.id)))
 
     paid = client.post(
         f"/api/v1/orders/{order['id']}/pay/card",

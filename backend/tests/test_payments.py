@@ -1,8 +1,12 @@
+from datetime import timedelta
+
+from app.core.dates import service_day_start
+from app.modules.orders.models import Order
 from app.modules.staff.models import StaffRole
-from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
+from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff, order_headers
 
 
-def _setup_order(client):
+def _setup_order(client, confirmed=True):
     restaurant = create_restaurant(name="Café Paiement", slug="cafe-paiement")
     manager_headers = auth_headers(create_staff(restaurant.id))
     table = client.post(
@@ -20,6 +24,15 @@ def _setup_order(client):
             "items": [{"menu_item_id": item["id"], "quantity": 2}],
         },
     ).json()
+    # Payer une commande non confirmée est refusé depuis le correctif F-5 :
+    # la quasi-totalité de ces tests veut une commande payable, donc
+    # confirmée par défaut. `confirmed=False` pour les deux qui testent
+    # justement ce garde-fou. Fusion (pas remplacement) : la réponse de
+    # /confirm est un OrderOutStaff, qui n'a pas `public_token` — un simple
+    # remplacement le ferait disparaître pour le reste du test.
+    if confirmed:
+        confirmed_order = client.post(f"/api/v1/orders/{order['id']}/confirm", headers=manager_headers).json()
+        order = {**order, **confirmed_order}
     return restaurant, manager_headers, order
 
 
@@ -80,16 +93,85 @@ def test_request_cash_payment_notifies_staff_and_is_confirmable(client):
     assert pending_after.json() == []
 
 
+def test_pending_cash_payments_excludes_orders_before_service_day(client):
+    """
+    F-4 : `list_pending_cash_payments` n'était borné par aucune date — une
+    demande d'encaissement vieille de plusieurs jours (table oubliée,
+    éventuellement réglée entre-temps par un autre moyen) restait affichée
+    indéfiniment à l'écran serveur. Même borne que `list_active_orders`
+    (Phase 19.5).
+    """
+    restaurant, manager_headers, order = _setup_order(client)
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
+
+    db = _TestingSessionLocal()
+    db_order = db.get(Order, order["id"])
+    db_order.created_at = service_day_start() - timedelta(days=2)
+    db.commit()
+    db.close()
+
+    pending = client.get(
+        f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-cash-payments", headers=manager_headers
+    )
+    assert pending.json() == []
+
+
+def test_cannot_pay_an_order_that_has_not_been_confirmed(client):
+    """
+    F-5 : rien n'empêchait de payer une commande que personne, côté
+    restaurant, n'avait encore confirmée — `request_cash_payment` suppose
+    ensuite (commentaire ligne ~500) que `taken_by_staff_id` est
+    "garanti non-nul" à ce stade, ce qui n'est vrai que si la commande est
+    déjà confirmée (auto-claim à la confirmation). Sans ce garde-fou, cette
+    hypothèse était fausse, et la demande de paiement pouvait ne s'afficher
+    sur aucun écran.
+    """
+    restaurant, _manager_headers, order = _setup_order(client, confirmed=False)
+    assert order["status"] == "pending_confirmation"
+
+    card = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
+    )
+    assert card.status_code == 409
+    assert card.json()["detail"]["code"] == "ORDER_NOT_CONFIRMED"
+
+    cash = client.post(
+        f"/api/v1/orders/{order['id']}/pay/cash", json={"tip_amount": 0}, headers=order_headers(order)
+    )
+    assert cash.status_code == 409
+    assert cash.json()["detail"]["code"] == "ORDER_NOT_CONFIRMED"
+
+
+def test_cannot_cancel_an_order_that_has_been_paid(client):
+    """F-5 : `transition_status` autorisait CONFIRMED/SENT_TO_KITCHEN ->
+    CANCELLED sans jamais regarder `payment_status` — une commande déjà
+    réglée pouvait être annulée."""
+    restaurant, manager_headers, order = _setup_order(client)
+    paid = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
+    )
+    assert paid.json()["payment_status"] == "paid"
+
+    cancel = client.post(f"/api/v1/orders/{order['id']}/cancel", headers=manager_headers)
+    assert cancel.status_code == 409
+    assert cancel.json()["detail"]["code"] == "ORDER_ALREADY_PAID"
+
+
 def test_pending_cash_payment_carries_the_dedicated_server_id(client):
     """
     Le frontend n'affiche la demande de paiement qu'au serveur qui a pris en
     charge la table (le manager voit tout) — ça suppose que taken_by_staff_id
     est bien porté par la liste des demandes en attente.
     """
-    restaurant, manager_headers, order = _setup_order(client)
+    restaurant, manager_headers, order = _setup_order(client, confirmed=False)
     sami = create_staff(restaurant.id, role=StaffRole.WAITER)
 
+    # Claim avant confirmation (seul moment où claim_order l'autorise) : le
+    # correctif F-5 refuse de payer une commande non confirmée, donc sami
+    # doit aussi confirmer — l'auto-claim de la confirmation ne le
+    # réaffecte pas, il est déjà le serveur assigné.
     client.post(f"/api/v1/orders/{order['id']}/claim", headers=auth_headers(sami))
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(sami))
     client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
 
     pending = client.get(

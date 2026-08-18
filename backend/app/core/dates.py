@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Annotated
 
 from pydantic import BeforeValidator
@@ -33,6 +33,26 @@ def service_day_start(now: datetime | None = None) -> datetime:
     if local < start:
         start -= timedelta(days=1)
     return start.astimezone(timezone.utc)
+
+
+def service_day_bounds(day: date) -> tuple[datetime, datetime]:
+    """
+    Début et fin, en UTC, de la journée de service correspondant à un jour
+    calendaire donné.
+
+    F-3 (audit de pré-lancement) : les stats (`stats/service.py`) bornaient
+    leurs journées à minuit UTC, pendant que les écrans de service (Phase
+    19.5) coupent à 5 h Tunis — deux définitions différentes, l'une des
+    conséquences étant qu'une commande passée entre minuit et 5 h Tunis
+    (l'iftar et le sohour d'une même soirée, pendant le Ramadan) apparaissait
+    sous un jour dans les stats et sous un autre sur les écrans de service.
+
+    Midi UTC (13 h Tunis) comme instant de référence : toujours dans le même
+    jour calendaire côté Tunis que `day`, donc `service_day_start` en déduit
+    sans ambiguïté le début de la bonne journée de service.
+    """
+    start = service_day_start(datetime.combine(day, time(hour=12), tzinfo=timezone.utc))
+    return start, start + timedelta(days=1)
 
 
 def _marquer_utc(value: object) -> object:

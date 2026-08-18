@@ -101,6 +101,10 @@ async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Or
             Order.restaurant_id == restaurant_id,
             Order.payment_method == PaymentMethod.CASH,
             Order.payment_status == PaymentStatus.PENDING,
+            # Même borne que list_active_orders (Phase 19.5) : sans elle, une
+            # demande d'encaissement vieille de plusieurs jours reste affichée
+            # indéfiniment à l'écran serveur (F-4, audit 2026-08-18).
+            Order.created_at >= service_day_start(),
         )
         .order_by(Order.created_at)
         .all()
@@ -323,6 +327,15 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
             },
         )
 
+    # `ALLOWED_TRANSITIONS` ne connaît que `status` : une commande déjà payée
+    # pouvait donc être annulée (F-5, audit 2026-08-18), `payment_status`
+    # n'étant jamais regardé ici.
+    if new_status == OrderStatus.CANCELLED and order.payment_status == PaymentStatus.PAID:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ORDER_ALREADY_PAID", "message": "cannot cancel an order that has already been paid"},
+        )
+
     order.status = new_status
     now = datetime.now(timezone.utc)
     newly_assigned = False
@@ -440,6 +453,15 @@ def _get_payable_order(db: Session, order_id: int) -> Order:
         )
     if order.payment_status == PaymentStatus.PAID:
         raise HTTPException(status_code=409, detail={"code": "ALREADY_PAID", "message": "order already paid"})
+    # Rien ne garantissait qu'un humain côté restaurant avait vu la commande
+    # avant qu'elle soit payée (F-5, audit 2026-08-18) — `request_cash_payment`
+    # suppose ensuite que `taken_by_staff_id` est déjà renseigné (auto-claim à
+    # la confirmation), hypothèse fausse sans ce garde-fou.
+    if order.status == OrderStatus.PENDING_CONFIRMATION:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ORDER_NOT_CONFIRMED", "message": "cannot pay an order that hasn't been confirmed yet"},
+        )
     return order
 
 

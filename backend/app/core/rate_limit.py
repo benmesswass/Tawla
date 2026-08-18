@@ -11,6 +11,16 @@ from fastapi import HTTPException, Request
 _WINDOW_SECONDS = 60
 _MAX_REQUESTS = 20
 
+# Les commandes viennent d'une salle entière derrière le Wi-Fi du
+# restaurant, donc une seule IP publique une fois le client correctement
+# identifié (S-2a, CF-Connecting-IP) — mesuré : un plafond pensé pour un
+# individu bloquait tout le monde dès qu'une poignée de tables commandaient
+# à la même minute (S-2b, audit 2026-08-18). Pas les appels serveur : y
+# insister reste une nuisance qu'on veut freiner par table, pas un volume de
+# service à absorber. Proposition, pas une vérité : à confronter au premier
+# service réel (Phase 23.3), comme SERVICE_DAY_START_HOUR.
+ORDER_VOLUME_MAX_REQUESTS = 120
+
 _hits: dict[tuple[str, str], list[float]] = defaultdict(list)
 
 
@@ -39,15 +49,25 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def rate_limit(request: Request) -> None:
-    key = (client_ip(request), request.url.path)
-    now = time.monotonic()
-    hits = _hits[key]
-    while hits and now - hits[0] > _WINDOW_SECONDS:
-        hits.pop(0)
-    if len(hits) >= _MAX_REQUESTS:
-        raise HTTPException(
-            status_code=429,
-            detail={"code": "RATE_LIMITED", "message": "too many attempts, try again later"},
-        )
-    hits.append(now)
+def rate_limit(max_requests: int = _MAX_REQUESTS):
+    """
+    `Depends(rate_limit())` — 20 requêtes/minute par défaut, pensé pour
+    freiner un brute-force sur l'auth. `Depends(rate_limit(ORDER_VOLUME_MAX_REQUESTS))`
+    pour les routes où le vrai plafond est celui d'un service, pas celui
+    d'un individu (S-2b).
+    """
+
+    def _dependency(request: Request) -> None:
+        key = (client_ip(request), request.url.path)
+        now = time.monotonic()
+        hits = _hits[key]
+        while hits and now - hits[0] > _WINDOW_SECONDS:
+            hits.pop(0)
+        if len(hits) >= max_requests:
+            raise HTTPException(
+                status_code=429,
+                detail={"code": "RATE_LIMITED", "message": "too many attempts, try again later"},
+            )
+        hits.append(now)
+
+    return _dependency
