@@ -1,6 +1,6 @@
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict
+
+from app.core.dates import UtcDatetime
 
 
 class WaiterCallCreate(BaseModel):
@@ -24,6 +24,6 @@ class WaiterCallOut(BaseModel):
     restaurant_id: int
     table_id: int
     table_label: str
-    created_at: datetime
-    resolved_at: datetime | None
+    created_at: UtcDatetime
+    resolved_at: UtcDatetime | None
     resolved_by_staff_id: int | None

@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
-import { lalezar } from "@/lib/fonts";
 import { api, PeriodProof, ProofStats } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { duree } from "@/lib/duree";
@@ -186,10 +185,6 @@ export default function ProofPage() {
     if (restaurantId) load();
   }, [restaurantId, load]);
 
-  function logout() {
-    clearToken();
-    router.push("/login");
-  }
 
   if (staffLoading || !staff) {
     return (
@@ -202,27 +197,10 @@ export default function ProofPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-1">
-        <h1 className={`${lalezar.className} text-2xl`}>Preuve du pilote</h1>
-        <div className="flex items-center gap-3 text-sm">
-          <Link href="/dashboard" className="underline">
-            Menu
-          </Link>
-          <Link href="/dashboard/stats" className="underline">
-            Activité du jour
-          </Link>
-          <Link href="/dashboard/equipe" className="underline">
-            Rapport d&apos;équipe
-          </Link>
-          <button onClick={logout} className="text-[var(--ink-soft)] underline">
-            Se déconnecter
-          </button>
-        </div>
-      </div>
-      <p className="text-sm text-[var(--ink-soft)] mb-4">
-        Les trois seuls chiffres qui comptent pour décider si Tawla vous fait gagner de l&apos;argent, comparés à
-        la période précédente de même longueur.
-      </p>
+      <EnteteManager
+        titre="Preuve du pilote"
+        sousTitre="Les trois seuls chiffres qui comptent pour décider si Tawla vous fait gagner de l'argent, comparés à la période précédente de même longueur."
+      />
 
       <div className="flex items-end gap-2 mb-6 flex-wrap">
         <div className="flex flex-col">

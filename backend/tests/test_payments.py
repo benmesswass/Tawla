@@ -155,3 +155,47 @@ def test_pay_by_card_is_public_no_auth_required(client):
 
     res = client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
     assert res.status_code == 200
+
+
+def test_le_pourboire_est_conserve_sur_un_paiement_en_especes(client):
+    """
+    Le pourboire n'était lu que sur le chemin carte. En espèces, le client le
+    saisissait, il était jeté, et le serveur venait encaisser le total sans
+    lui — l'écart n'apparaissait qu'au comptage de la caisse.
+    """
+    _restaurant, _manager_headers, order = _setup_order(client)
+
+    demande = client.post(
+        f"/api/v1/orders/{order['id']}/pay/cash",
+        json={"tip_amount": 8.0},
+        headers=order_headers(order),
+    )
+
+    assert demande.status_code == 200
+    assert demande.json()["tip_amount"] == 8.0
+    assert demande.json()["payment_status"] == "pending"
+
+
+def test_une_demande_despeces_sans_pourboire_reste_possible(client):
+    """Le champ est facultatif : un client qui ne laisse rien doit pouvoir
+    demander l'addition comme avant."""
+    _restaurant, _manager_headers, order = _setup_order(client)
+
+    demande = client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
+
+    assert demande.status_code == 200
+    assert demande.json()["tip_amount"] == 0
+
+
+def test_les_horodatages_sortent_avec_leur_fuseau(client):
+    """
+    Sans fuseau explicite, le navigateur lit « 2026-08-16T15:33:28 » comme une
+    heure locale : sur un Mac réglé à UTC+1, une commande passée à l'instant
+    s'affichait « en attente depuis 1 h 00 », et chaque commande d'un vrai
+    service serait passée pour perdue.
+    """
+    _restaurant, _manager_headers, order = _setup_order(client)
+
+    lue = client.get(f"/api/v1/orders/{order['id']}", headers=order_headers(order)).json()
+
+    assert lue["created_at"].endswith(("Z", "+00:00")), lue["created_at"]

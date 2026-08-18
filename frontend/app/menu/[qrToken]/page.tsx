@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Cairo } from "next/font/google";
 import {
   api,
+  mediaUrl,
   wsUrl,
   orderWsUrl as buildOrderWsUrl,
   ApiError,
@@ -501,7 +502,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setPaymentError(null);
     try {
       if (!orderToken) return;
-      const updated = await api.requestCashPayment(trackedOrder.id, orderToken);
+      // Le pourboire vaut aussi pour les espèces : il était saisi puis perdu,
+      // et le serveur venait encaisser le total sans lui.
+      const tip = Number(tipInput.replace(",", ".")) || 0;
+      const updated = await api.requestCashPayment(trackedOrder.id, tip, orderToken);
       setTrackedOrder(updated);
     } catch (e) {
       setPaymentError(toLocalizedMessage(e, locale));
@@ -687,6 +691,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const resteAPayer = autresCommandesOuvertes
     .filter((r) => r.order.payment_status !== "paid")
     .reduce((sum, r) => sum + r.order.total_amount, 0);
+
+  // L'ardoise : toutes les commandes de la table encore à régler, celle qu'on
+  // regarde comprise, dans l'ordre où elles ont été passées.
+  const ardoise = openOrders
+    .filter((r) => r.order.payment_status !== "paid")
+    .sort((a, b) => a.order.id - b.order.id);
+  const totalArdoise = ardoise.reduce((sum, r) => sum + r.order.total_amount, 0);
 
   // Carte de partage social (Instagram/WhatsApp Status) — générée
   // entièrement côté client sur <canvas>, sans backend ni service tiers.
@@ -968,6 +979,35 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
         </div>
 
+        {/* L'ardoise de la table. Quand on a commandé deux fois sans payer, le
+            client voulait savoir ce qu'il doit **en tout** — l'addition de sa
+            deuxième tournée seule ne veut rien dire au moment de régler. */}
+        {!cancelled && ardoise.length > 1 && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm font-medium text-amber-900">{t.tableTotalTitle}</p>
+            <ul className="mt-2 space-y-1 text-sm text-amber-900">
+              {ardoise.map((r) => (
+                <li key={r.order.id} className="flex justify-between gap-2">
+                  <span>
+                    {t.orderLabel(r.order.id)}
+                    {r.order.id === trackedOrder.id && ` — ${t.thisOrder}`}
+                  </span>
+                  <span className="tabular-nums">
+                    {r.order.total_amount.toFixed(2)} {t.currency}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 pt-2 border-t border-amber-200 flex justify-between font-semibold text-amber-900">
+              <span>{t.tableTotal}</span>
+              <span className="tabular-nums">
+                {totalArdoise.toFixed(2)} {t.currency}
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs text-amber-900/80">{t.tableTotalNote}</p>
+          </div>
+        )}
+
         {!cancelled && (
           <div className="mt-6 border-t pt-4">
             <p className="text-sm font-medium mb-3">{t.paymentTitle}</p>
@@ -1060,6 +1100,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // qu'un voisin de table est en train de manger. Le dire est plus honnête
     // que l'escamoter (retour du premier service).
     const rupture = !item.is_available;
+    const photo = mediaUrl(item.image_url);
     return (
       <div
         key={item.id}
@@ -1074,7 +1115,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {/* La photo d'abord, et visible sur téléphone : elle était masquée
               en dessous de `sm`, c'est-à-dire précisément là où le client
               commande. Une carte de restaurant sans photos ne donne pas faim. */}
-          {item.image_url && (
+          {photo && (
             <div className="relative shrink-0 w-20 h-20">
               {/* La même image, floutée derrière la vignette : elle projette la
                   couleur du plat sur le fond crème et fait ressortir la photo
@@ -1082,10 +1123,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <div
                 aria-hidden
                 className="absolute inset-0 rounded-xl bg-cover bg-center blur-md opacity-40 scale-95"
-                style={{ backgroundImage: `url(${item.image_url})` }}
+                style={{ backgroundImage: `url(${photo})` }}
               />
               <img
-                src={item.image_url}
+                src={photo}
                 alt={item.name}
                 loading="lazy"
                 className="relative w-20 h-20 rounded-xl object-cover border-2 border-white shadow-md"

@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
-import { lalezar } from "@/lib/fonts";
 import {
   api,
   DashboardStats,
@@ -26,6 +25,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons";
 import { MENU_CATEGORIES } from "@/lib/menuCategories";
+import { reduirePhoto } from "@/lib/photo";
+import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
 import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
 
@@ -67,7 +68,6 @@ type Draft = {
   category: string;
   price: string;
   description: string;
-  image_url: string;
   spiceLevel: string;
   allergens: string;
   isHalal: boolean;
@@ -84,7 +84,6 @@ function itemToDraft(item: MenuItem): Draft {
     category: item.category,
     price: String(item.price),
     description: item.description ?? "",
-    image_url: item.image_url ?? "",
     spiceLevel: String(item.spice_level),
     allergens: item.allergens ?? "",
     isHalal: item.is_halal,
@@ -96,7 +95,6 @@ const EMPTY_DRAFT: Draft = {
   category: "Plats",
   price: "",
   description: "",
-  image_url: "",
   spiceLevel: "0",
   allergens: "",
   isHalal: true,
@@ -131,6 +129,10 @@ export default function DashboardPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["manager"]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [photoEnCours, setPhotoEnCours] = useState<number | null>(null);
+  // Photo choisie pour un plat pas encore créé : elle attend d'avoir un
+  // identifiant à qui être rattachée.
+  const [nouvellePhoto, setNouvellePhoto] = useState<File | null>(null);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [newItem, setNewItem] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
@@ -254,10 +256,6 @@ export default function DashboardPage() {
     }
   }
 
-  function logout() {
-    clearToken();
-    router.push("/login");
-  }
 
   function flash(text: string) {
     setMessage(text);
@@ -278,7 +276,10 @@ export default function DashboardPage() {
         category: draft.category,
         price,
         description: draft.description.trim() || null,
-        image_url: draft.image_url.trim() || null,
+        // `image_url` volontairement absent : la photo est gérée par ses
+        // propres routes. L'envoyer d'ici renverrait la valeur du brouillon,
+        // figée à l'ouverture du formulaire — enregistrer un changement de
+        // prix après avoir déposé une photo l'aurait effacée.
         spice_level: Number(draft.spiceLevel),
         allergens: draft.allergens.trim() || null,
         is_halal: draft.isHalal,
@@ -286,6 +287,33 @@ export default function DashboardPage() {
       flash(`« ${draft.name} » enregistré.`);
       setEditingItemId(null);
       await load();
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function deposerPhoto(item: MenuItem, fichier: File) {
+    setError(null);
+    setPhotoEnCours(item.id);
+    try {
+      // Réduite dans le navigateur avant l'envoi : une photo de téléphone
+      // brute mettrait la connexion du restaurant à genoux en plein service.
+      const reduite = await reduirePhoto(fichier);
+      const misAJour = await api.uploadMenuItemPhoto(item.id, reduite);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
+      flash(`Photo ajoutée à « ${item.name} ».`);
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    } finally {
+      setPhotoEnCours(null);
+    }
+  }
+
+  async function retirerPhoto(item: MenuItem) {
+    setError(null);
+    try {
+      const misAJour = await api.deleteMenuItemPhoto(item.id);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -323,19 +351,29 @@ export default function DashboardPage() {
       return;
     }
     try {
-      await api.createMenuItem({
+      const cree = await api.createMenuItem({
         restaurant_id: restaurantId,
         name: newItem.name.trim(),
         category: newItem.category,
         price,
         description: newItem.description.trim() || null,
-        image_url: newItem.image_url.trim() || null,
         spice_level: Number(newItem.spiceLevel),
         allergens: newItem.allergens.trim() || null,
         is_halal: newItem.isHalal,
       });
+      // La photo part après coup : elle a besoin de l'identifiant du plat, qui
+      // n'existe qu'une fois celui-ci créé. Un échec ici ne doit pas faire
+      // croire que le plat n'a pas été ajouté — il l'est.
+      if (nouvellePhoto) {
+        try {
+          await api.uploadMenuItemPhoto(cree.id, await reduirePhoto(nouvellePhoto));
+        } catch {
+          setError("Le plat est ajouté, mais sa photo n'est pas passée. Glissez-la sur sa vignette.");
+        }
+      }
       flash(`« ${newItem.name} » ajouté au menu.`);
       setNewItem(EMPTY_DRAFT);
+      setNouvellePhoto(null);
       setAddingItem(false);
       await load();
     } catch (e) {
@@ -526,26 +564,10 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h1 className={`${lalezar.className} text-xl`}>Dashboard resto — gérer le menu</h1>
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/dashboard/stats" className="underline">
-            Suivi de l&apos;activité
-          </Link>
-          <Link href="/dashboard/preuve" className="underline">
-            Preuve du pilote
-          </Link>
-          <Link href="/dashboard/equipe" className="underline">
-            Rapport d&apos;équipe
-          </Link>
-          <button onClick={logout} className="text-neutral-500 underline">
-            Se déconnecter
-          </button>
-        </div>
-      </div>
-      <p className="text-sm text-neutral-500 mb-4">
-        Modifier un article, basculer une rupture de stock, ou en ajouter un nouveau — sans passer par Swagger.
-      </p>
+      <EnteteManager
+        titre="Carte"
+        sousTitre="Modifier un plat, signaler une rupture, en ajouter un — et déposer les photos en les glissant sur leur vignette."
+      />
 
       <RecetteDuJour stats={dayStats} />
 
@@ -606,18 +628,12 @@ export default function DashboardPage() {
               return (
                 <Card key={item.id} padding="sm" className={!item.is_available ? "bg-neutral-50" : ""}>
                   <div className="flex items-center gap-3">
-                    {item.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.image_url}
-                        alt={item.name}
-                        className="w-11 h-11 rounded-lg object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-lg bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-400">
-                        <UtensilsIcon className="w-5 h-5" />
-                      </div>
-                    )}
+                    <PhotoDuPlat
+                      item={item}
+                      enCours={photoEnCours === item.id}
+                      onFichier={(fichier) => deposerPhoto(item, fichier)}
+                      onRetirer={() => retirerPhoto(item)}
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{item.name}</div>
                       <div className="text-xs text-neutral-500 truncate">
@@ -677,13 +693,14 @@ export default function DashboardPage() {
                         className="border rounded px-2 py-1 w-full mt-2"
                         placeholder="Description (facultatif)"
                       />
-                      <input
-                        value={draft.image_url}
-                        onChange={(e) =>
-                          setDrafts((d) => ({ ...d, [item.id]: { ...draft, image_url: e.target.value } }))
-                        }
-                        className="border rounded px-2 py-1 w-full mt-2"
-                        placeholder="URL de la photo (facultatif)"
+                      {/* Une zone de dépôt, et non plus un champ « URL de la
+                          photo » : ce champ supposait que le patron héberge
+                          ses images ailleurs, ce qu'aucun ne fait. */}
+                      <ZonePhoto
+                        item={item}
+                        enCours={photoEnCours === item.id}
+                        onFichier={(fichier) => deposerPhoto(item, fichier)}
+                        onRetirer={() => retirerPhoto(item)}
                       />
                       <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
                         <select
@@ -814,12 +831,7 @@ export default function DashboardPage() {
                   className="border rounded px-2 py-1 w-full mt-2"
                   placeholder="Description (facultatif)"
                 />
-                <input
-                  value={newItem.image_url}
-                  onChange={(e) => setNewItem({ ...newItem, image_url: e.target.value })}
-                  className="border rounded px-2 py-1 w-full mt-2"
-                  placeholder="URL de la photo (facultatif)"
-                />
+                <ZonePhotoNouveau fichier={nouvellePhoto} onFichier={setNouvellePhoto} />
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 mt-2 items-center">
                   <select
                     value={newItem.spiceLevel}

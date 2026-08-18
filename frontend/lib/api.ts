@@ -304,11 +304,19 @@ function orderHeaders(orderToken: string): Record<string, string> {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  // Un envoi de fichier ne doit pas porter de Content-Type : c'est le
+  // navigateur qui le pose, avec le `boundary` du multipart qu'il vient de
+  // tirer au hasard. L'imposer ici casserait le découpage côté serveur.
+  const envoiFichier = options?.body instanceof FormData;
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     // Après le spread : sinon des en-têtes passés dans `options` écrasent
     // silencieusement Content-Type et l'Authorization du staff.
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(options?.headers ?? {}) },
+    headers: {
+      ...(envoiFichier ? {} : { "Content-Type": "application/json" }),
+      ...authHeaders(),
+      ...(options?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -330,6 +338,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+/**
+ * Résout une adresse d'image servie par l'API. Les photos déposées par le
+ * manager sont renvoyées en chemin relatif (`/api/v1/...`) : tel quel, le
+ * navigateur le résoudrait sur l'origine du frontend, où il n'y a rien. Les
+ * URL externes saisies à la main, elles, sont déjà absolues et passent
+ * inchangées.
+ */
+export function mediaUrl(url: string | null): string | null {
+  if (!url) return null;
+  return url.startsWith("/") ? `${API_URL}${url}` : url;
 }
 
 export const api = {
@@ -373,19 +393,15 @@ export const api = {
     description?: string | null;
     category?: string;
     price: number;
-    image_url?: string | null;
     spice_level?: number;
     allergens?: string | null;
     is_halal?: boolean;
   }) => request<MenuItem>("/api/v1/menu-items", { method: "POST", body: JSON.stringify(payload) }),
+  // `image_url` n'est pas éditable ici : le backend rejette le champ (422),
+  // seules les routes /image gèrent la photo — voir MenuItemUpdate côté serveur.
   updateMenuItem: (
     itemId: number,
-    payload: Partial<
-      Pick<
-        MenuItem,
-        "name" | "description" | "category" | "price" | "image_url" | "spice_level" | "allergens" | "is_halal"
-      >
-    >
+    payload: Partial<Pick<MenuItem, "name" | "description" | "category" | "price" | "spice_level" | "allergens" | "is_halal">>
   ) => request<MenuItem>(`/api/v1/menu-items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   setMenuItemAvailability: (itemId: number, isAvailable: boolean) =>
     request<MenuItem>(`/api/v1/menu-items/${itemId}/availability`, {
@@ -393,6 +409,13 @@ export const api = {
       body: JSON.stringify({ is_available: isAvailable }),
     }),
   deleteMenuItem: (itemId: number) => request<void>(`/api/v1/menu-items/${itemId}`, { method: "DELETE" }),
+  uploadMenuItemPhoto: (itemId: number, photo: Blob) => {
+    const form = new FormData();
+    form.append("file", photo, "photo.jpg");
+    return request<MenuItem>(`/api/v1/menu-items/${itemId}/image`, { method: "PUT", body: form });
+  },
+  deleteMenuItemPhoto: (itemId: number) =>
+    request<MenuItem>(`/api/v1/menu-items/${itemId}/image`, { method: "DELETE" }),
   importMenuCsv: (content: string, replaceExisting: boolean) =>
     request<MenuCsvImportResult>("/api/v1/menu-items/import-csv", {
       method: "POST",
@@ -466,9 +489,10 @@ export const api = {
       body: JSON.stringify({ tip_amount: tipAmount }),
       headers: orderHeaders(orderToken),
     }),
-  requestCashPayment: (orderId: number, orderToken: string) =>
+  requestCashPayment: (orderId: number, tipAmount: number, orderToken: string) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash`, {
       method: "POST",
+      body: JSON.stringify({ tip_amount: tipAmount }),
       headers: orderHeaders(orderToken),
     }),
   confirmCashPayment: (orderId: number) =>

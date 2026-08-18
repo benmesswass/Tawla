@@ -11,3 +11,4 @@ qrcode[pil]==7.4.2
 bcrypt==4.2.0
 pyjwt==2.9.0
 pywebpush==2.4.0
+python-multipart==0.0.12

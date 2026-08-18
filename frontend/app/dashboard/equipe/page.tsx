@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
-import { lalezar } from "@/lib/fonts";
 import { api, StaffRole, TeamReport } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { duree } from "@/lib/duree";
@@ -99,10 +98,6 @@ export default function TeamReportPage() {
     if (restaurantId) load();
   }, [restaurantId, load]);
 
-  function logout() {
-    clearToken();
-    router.push("/login");
-  }
 
   if (staffLoading || !staff) {
     return (
@@ -115,25 +110,10 @@ export default function TeamReportPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-1">
-        <h1 className={`${lalezar.className} text-2xl`}>Rapport d&apos;équipe</h1>
-        <div className="flex items-center gap-3 text-sm">
-          <Link href="/dashboard" className="underline">
-            Menu
-          </Link>
-          <Link href="/dashboard/preuve" className="underline">
-            Preuve du pilote
-          </Link>
-          <button onClick={logout} className="text-[var(--ink-soft)] underline">
-            Se déconnecter
-          </button>
-        </div>
-      </div>
-      <p className="text-sm text-[var(--ink-soft)] mb-4">
-        Activité de chaque membre de l&apos;équipe sur la période — de quoi asseoir une prime de rendement sur
-        des chiffres plutôt que sur une impression. Ce rapport ne s&apos;affiche nulle part ailleurs que sur
-        cette page.
-      </p>
+      <EnteteManager
+        titre="Rapport d'équipe"
+        sousTitre="Activité de chaque membre de l'équipe sur la période — de quoi asseoir une prime de rendement sur des chiffres plutôt que sur une impression. Ce rapport ne s'affiche nulle part ailleurs que sur cette page."
+      />
 
       <div className="flex items-end gap-2 mb-6 flex-wrap">
         <div className="flex flex-col">

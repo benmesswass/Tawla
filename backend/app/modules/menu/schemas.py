@@ -2,12 +2,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MenuItemCreate(BaseModel):
+    # `image_url` n'est pas un champ que le client écrit : il est calculé par la
+    # route de dépôt de photo, qui seule vérifie le format et la taille. Le
+    # laisser en chaîne libre rouvrirait un `javascript:` ou un `data:` à script
+    # dans le `src` affiché aux clients. Champ inconnu = 422, pas une écriture
+    # silencieuse.
+    model_config = ConfigDict(extra="forbid")
+
     restaurant_id: int
     name: str
     description: str | None = None
     category: str = "Autre"
     price: float
-    image_url: str | None = None
     spice_level: int = Field(default=0, ge=0, le=3)
     allergens: str | None = None
     is_halal: bool = True
@@ -71,13 +77,17 @@ class MenuCsvImportResult(BaseModel):
 
 
 class MenuItemUpdate(BaseModel):
-    """Mise à jour partielle depuis le dashboard resto — tous les champs sont optionnels."""
+    """Mise à jour partielle depuis le dashboard resto — tous les champs sont optionnels.
+
+    La photo ne s'édite pas ici : `PUT /{id}/image` et `DELETE /{id}/image` sont
+    les seules portes d'entrée (voir MenuItemCreate)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str | None = None
     description: str | None = None
     category: str | None = None
     price: float | None = None
-    image_url: str | None = None
     spice_level: int | None = Field(default=None, ge=0, le=3)
     allergens: str | None = None
     is_halal: bool | None = None
