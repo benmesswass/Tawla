@@ -393,19 +393,15 @@ export const api = {
     description?: string | null;
     category?: string;
     price: number;
-    image_url?: string | null;
     spice_level?: number;
     allergens?: string | null;
     is_halal?: boolean;
   }) => request<MenuItem>("/api/v1/menu-items", { method: "POST", body: JSON.stringify(payload) }),
+  // `image_url` n'est pas éditable ici : le backend rejette le champ (422),
+  // seules les routes /image gèrent la photo — voir MenuItemUpdate côté serveur.
   updateMenuItem: (
     itemId: number,
-    payload: Partial<
-      Pick<
-        MenuItem,
-        "name" | "description" | "category" | "price" | "image_url" | "spice_level" | "allergens" | "is_halal"
-      >
-    >
+    payload: Partial<Pick<MenuItem, "name" | "description" | "category" | "price" | "spice_level" | "allergens" | "is_halal">>
   ) => request<MenuItem>(`/api/v1/menu-items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   setMenuItemAvailability: (itemId: number, isAvailable: boolean) =>
     request<MenuItem>(`/api/v1/menu-items/${itemId}/availability`, {

@@ -357,7 +357,6 @@ export default function DashboardPage() {
         category: newItem.category,
         price,
         description: newItem.description.trim() || null,
-        image_url: null,
         spice_level: Number(newItem.spiceLevel),
         allergens: newItem.allergens.trim() || null,
         is_halal: newItem.isHalal,

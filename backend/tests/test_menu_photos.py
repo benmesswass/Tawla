@@ -121,3 +121,33 @@ def test_un_plat_sans_photo_repond_404(client):
     _restaurant, item, _headers = _setup(client, slug="photos-absente")
 
     assert client.get(f"/api/v1/menu-items/{item['id']}/image").status_code == 404
+
+
+def test_image_url_est_refuse_en_ecriture_directe(client):
+    """
+    S-5 (audit initial) : `image_url` était en chaîne libre sur la création et
+    l'édition — un `javascript:` ou un `data:image/svg+xml` à script y passait,
+    sans jamais transiter par les vérifications de format/taille ci-dessus.
+    Les routes `/image` sont désormais la seule porte d'entrée ; le champ est
+    un extra inconnu, rejeté par le schéma (422), pas juste ignoré.
+    """
+    restaurant, item, headers = _setup(client, slug="photos-image-url-ferme")
+
+    edition = client.patch(
+        f"/api/v1/menu-items/{item['id']}",
+        json={"image_url": "javascript:alert(1)"},
+        headers=headers,
+    )
+    assert edition.status_code == 422
+
+    creation = client.post(
+        "/api/v1/menu-items",
+        json={
+            "restaurant_id": restaurant.id,
+            "name": "Autre plat",
+            "price": 10.0,
+            "image_url": "data:image/svg+xml,<svg onload=alert(1)>",
+        },
+        headers=headers,
+    )
+    assert creation.status_code == 422
