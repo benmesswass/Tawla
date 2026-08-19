@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.konnect import is_konnect_enabled, verify_konnect_order_webhook
+from app.core.logging import get_logger, log_event
 from app.core.rate_limit import ORDER_VOLUME_MAX_REQUESTS, rate_limit
 from app.modules.orders import schemas, service
 from app.modules.orders.dependencies import get_order_by_token
@@ -10,6 +12,7 @@ from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
+logger = get_logger("orders")
 
 _WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 _KITCHEN_OR_MANAGER = require_role(StaffRole.KITCHEN, StaffRole.MANAGER)
@@ -87,11 +90,53 @@ async def pay_by_card(
     db: Session = Depends(get_db),
 ):
     """
-    Paiement carte par le client — mode simulé. Lié au token : sans ça,
-    n'importe qui pouvait marquer n'importe quelle commande « payée » sans
-    régler un dinar (constat 2 de la revue).
+    Paiement carte par le client. Lié au token : sans ça, n'importe qui
+    pouvait marquer n'importe quelle commande « payée » sans régler un dinar
+    (constat 2 de la revue). Réglé chez le restaurant s'il a connecté son
+    propre Konnect (modèle direct, 2026-08-19), sinon mode démo — voir
+    `service.start_card_payment`. `pay_url` non-null = rediriger le client.
     """
-    return await service.pay_by_card_simulated(db, order.id, payload.tip_amount)
+    order, pay_url = await service.start_card_payment(db, order.id, payload.tip_amount)
+    return schemas.serialize_order(order, pay_url)
+
+
+@router.get("/{order_id}/pay/card/webhook")
+async def order_card_payment_webhook(
+    order_id: int,
+    sig: str,
+    db: Session = Depends(get_db),
+    _rate: None = Depends(rate_limit()),
+):
+    """
+    Appelée en GET par Konnect (`?payment_ref=…` ajouté, non utilisé ici : le
+    règlement relit toujours le paiement depuis l'API Konnect). `sig` signe
+    `order_id` (voir sign_konnect_order_webhook) — sans elle, un id connu ne
+    suffit pas à forger un règlement.
+
+    En dev local, Konnect ne peut pas joindre localhost : le filet de
+    sécurité est `POST /pay/card/check`, appelé par la page de retour.
+    """
+    if not is_konnect_enabled():
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "not found"})
+    if not verify_konnect_order_webhook(order_id, sig):
+        log_event(logger, "order.card_payment_webhook_bad_signature", order_id=order_id)
+        raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"})
+
+    result = await service.settle_card_payment(db, order_id)
+    return {"received": True, "result": result}
+
+
+@router.post("/{order_id}/pay/card/check", response_model=schemas.OrderOut)
+async def check_card_payment(order: Order = Depends(get_order_by_token), db: Session = Depends(get_db)):
+    """
+    Filet de sécurité appelé par la page de retour (`?konnect=success`) — en
+    dev local le webhook ci-dessus ne peut jamais être atteint. Sans effet si
+    rien n'est en attente (idempotent, voir settle_card_payment), donc sans
+    risque à appeler même quand Konnect est désactivé.
+    """
+    await service.settle_card_payment(db, order.id)
+    db.refresh(order)
+    return schemas.serialize_order(order)
 
 
 @router.post("/{order_id}/pay/cash", response_model=schemas.OrderOut)

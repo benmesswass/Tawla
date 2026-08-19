@@ -80,3 +80,31 @@ class Restaurant(Base):
     subscription_pending_tier: Mapped[SubscriptionTier | None] = mapped_column(
         Enum(SubscriptionTier), nullable=True
     )
+
+    # Konnect propre au restaurant, pour le paiement carte du CLIENT — modèle
+    # direct (connexion Konnect au paiement carte, 2026-08-19) : la promesse
+    # commerciale de Tawla est "vos clients vous règlent directement", donc le
+    # wallet qui reçoit ce paiement ne peut jamais être celui de Tawla (utilisé
+    # uniquement pour l'abonnement, voir subscription_payment_ref ci-dessus).
+    # Clé chiffrée au repos (app/core/crypto.py) : contrairement au wallet de
+    # Tawla, c'est un secret appartenant à un tiers. Null tant que le
+    # restaurant n'a rien connecté = paiement carte en mode démo.
+    konnect_api_key_encrypted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    konnect_wallet_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    @property
+    def konnect_configured(self) -> bool:
+        return bool(self.konnect_api_key_encrypted and self.konnect_wallet_id)
+
+    def konnect_credentials(self) -> tuple[str, str] | None:
+        """`(api_key, wallet_id)` déchiffrés, ou `None` tant que ce restaurant
+        n'a rien connecté (ou si la clé de chiffrement a changé depuis —
+        `decrypt_field` renvoie `None` plutôt que de lever, voir crypto.py)."""
+        if not self.konnect_api_key_encrypted or not self.konnect_wallet_id:
+            return None
+        from app.core.crypto import decrypt_field
+
+        api_key = decrypt_field(self.konnect_api_key_encrypted)
+        if not api_key:
+            return None
+        return api_key, self.konnect_wallet_id

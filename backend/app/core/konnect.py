@@ -70,6 +70,23 @@ def verify_konnect_webhook(restaurant_id: int, sig: str) -> bool:
     return hmac.compare_digest(sign_konnect_webhook(restaurant_id), sig)
 
 
+def sign_konnect_order_webhook(order_id: int) -> str:
+    """
+    Même principe que `sign_konnect_webhook`, pour le webhook de paiement
+    carte d'une COMMANDE (modèle direct, connexion Konnect au paiement carte,
+    2026-08-19) — domaine séparé (préfixe `order:`) : une signature de
+    commande ne doit jamais pouvoir être rejouée comme signature de
+    restaurant, ni réciproquement.
+    """
+    return hmac.new(_webhook_key(), f"order:{order_id}".encode("utf-8"), sha256).hexdigest()
+
+
+def verify_konnect_order_webhook(order_id: int, sig: str) -> bool:
+    if not sig:
+        return False
+    return hmac.compare_digest(sign_konnect_order_webhook(order_id), sig)
+
+
 class KonnectError(Exception):
     def __init__(self, message: str, status: int | None = None):
         super().__init__(message)
@@ -85,11 +102,11 @@ class KonnectPayment:
     order_id: str | None = None
 
 
-def _headers() -> dict[str, str]:
-    api_key = os.environ.get("KONNECT_API_KEY")
-    if not api_key:
+def _headers(api_key: str | None = None) -> dict[str, str]:
+    key = api_key or os.environ.get("KONNECT_API_KEY")
+    if not key:
         raise KonnectError("KONNECT_API_KEY manquante")
-    return {"Content-Type": "application/json", "x-api-key": api_key}
+    return {"Content-Type": "application/json", "x-api-key": key}
 
 
 def init_konnect_payment(
@@ -101,6 +118,8 @@ def init_konnect_payment(
     success_url: str,
     fail_url: str,
     lifespan_minutes: int,
+    api_key: str | None = None,
+    receiver_wallet_id: str | None = None,
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
@@ -109,15 +128,20 @@ def init_konnect_payment(
     """
     Initialise un paiement. Le montant est TOUJOURS réglé en TND.
 
-    Renvoie `(pay_url, payment_ref)` — rediriger le manager vers `pay_url`,
-    stocker `payment_ref` sur le restaurant.
+    `api_key`/`receiver_wallet_id` : identifiants explicites (wallet d'un
+    restaurant précis, paiement carte du client — modèle direct, 2026-08-19).
+    Absents, on retombe sur `KONNECT_API_KEY`/`KONNECT_RECEIVER_WALLET_ID`
+    (wallet de Tawla elle-même, utilisé pour l'abonnement uniquement).
+
+    Renvoie `(pay_url, payment_ref)` — rediriger vers `pay_url`, stocker
+    `payment_ref` pour le règlement.
     """
-    receiver_wallet_id = os.environ.get("KONNECT_RECEIVER_WALLET_ID")
-    if not receiver_wallet_id:
+    wallet_id = receiver_wallet_id or os.environ.get("KONNECT_RECEIVER_WALLET_ID")
+    if not wallet_id:
         raise KonnectError("KONNECT_RECEIVER_WALLET_ID manquante")
 
     body: dict[str, Any] = {
-        "receiverWalletId": receiver_wallet_id,
+        "receiverWalletId": wallet_id,
         "token": "TND",
         "amount": tnd_to_millimes(amount_tnd),
         "type": "immediate",
@@ -137,7 +161,7 @@ def init_konnect_payment(
     }
 
     try:
-        res = httpx.post(f"{KONNECT_API_URL}/payments/init-payment", headers=_headers(), json=body, timeout=15)
+        res = httpx.post(f"{KONNECT_API_URL}/payments/init-payment", headers=_headers(api_key), json=body, timeout=15)
     except httpx.HTTPError as err:
         raise KonnectError(f"init-payment réseau: {err}") from err
 
@@ -151,11 +175,11 @@ def init_konnect_payment(
     return pay_url, payment_ref
 
 
-def get_konnect_payment(payment_ref: str) -> KonnectPayment:
+def get_konnect_payment(payment_ref: str, api_key: str | None = None) -> KonnectPayment:
     """Récupère les détails d'un paiement pour vérifier son statut — source de
     vérité côté serveur, jamais un statut transmis par le client."""
     try:
-        res = httpx.get(f"{KONNECT_API_URL}/payments/{payment_ref}", headers=_headers(), timeout=15)
+        res = httpx.get(f"{KONNECT_API_URL}/payments/{payment_ref}", headers=_headers(api_key), timeout=15)
     except httpx.HTTPError as err:
         raise KonnectError(f"get-payment réseau: {err}") from err
 

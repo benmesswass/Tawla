@@ -69,6 +69,11 @@ export type Restaurant = RestaurantPublic & {
   kitchen_sound_enabled: boolean;
   subscription_tier: SubscriptionTier;
   subscription_period_end: string | null;
+  // Wallet Konnect PROPRE à ce restaurant, pour le paiement carte du client
+  // (modèle direct, 2026-08-19) — jamais celui de Tawla. La clé API elle-même
+  // n'est jamais renvoyée, seulement ces deux champs.
+  konnect_configured: boolean;
+  konnect_wallet_id: string | null;
 };
 
 /**
@@ -142,6 +147,10 @@ export type Order = {
   payment_status: PaymentStatus;
   tip_amount: number;
   total_amount: number;
+  // Posé uniquement par la réponse de `payByCard` quand le restaurant a
+  // connecté son propre Konnect : rediriger le client vers cette URL pour
+  // qu'il règle. `payment_status` reste "pending" tant que ce n'est pas fait.
+  pay_url?: string | null;
   items: {
     id: number;
     menu_item_id: number;
@@ -517,6 +526,13 @@ export const api = {
     }),
   confirmCashPayment: (orderId: number) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash/confirm`, { method: "POST" }),
+  // Filet de sécurité appelé au retour de Konnect (`?konnect=success`) : en
+  // dev, Konnect ne peut jamais joindre le webhook sur localhost.
+  checkCardPayment: (orderId: number, orderToken: string) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/card/check`, {
+      method: "POST",
+      headers: orderHeaders(orderToken),
+    }),
   listPendingCashPayments: (restaurantId: number) =>
     request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-cash-payments`),
   setRamadanMode: (restaurantId: number, enabled: boolean, iftarTime: string | null) =>
@@ -533,6 +549,14 @@ export const api = {
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/kitchen-sound`, {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
+    }),
+  // Connexion du wallet Konnect PROPRE au restaurant (modèle direct,
+  // 2026-08-19) — jamais réaffiché après coup, seul `konnect_configured` le
+  // confirme ensuite (voir Restaurant).
+  setKonnectCredentials: (restaurantId: number, apiKey: string, walletId: string) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/konnect-credentials`, {
+      method: "PUT",
+      body: JSON.stringify({ api_key: apiKey, wallet_id: walletId }),
     }),
   startSubscriptionCheckout: (restaurantId: number, tier: SubscriptionTier) =>
     request<SubscriptionCheckoutResult>(`/api/v1/restaurants/${restaurantId}/subscription/checkout`, {

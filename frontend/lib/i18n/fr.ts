@@ -57,6 +57,7 @@ export const fr = {
   tipPlaceholder: "0.00 DT",
   payByCard: "Payer par carte",
   payByCash: "Payer en espèces (le serveur passera encaisser)",
+  paymentFailedRetry: "Le paiement n'a pas abouti. Vous pouvez réessayer.",
   orderAgain: "Commander à nouveau",
 
   splitBillToggle: "Partager l'addition entre plusieurs personnes",

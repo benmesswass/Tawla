@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.crypto import encrypt_field
 from app.core.database import get_db
 from app.core.dates import as_utc
 from app.core.konnect import (
@@ -148,6 +149,33 @@ def set_kitchen_sound(
     restaurant.kitchen_sound_enabled = payload.enabled
     db.commit()
     db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
+@router.put("/{restaurant_id}/konnect-credentials", response_model=schemas.RestaurantOut)
+def set_konnect_credentials(
+    restaurant_id: int,
+    payload: schemas.KonnectCredentialsIn,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Connecte le wallet Konnect PROPRE au restaurant — modèle direct (paiement
+    carte du client, 2026-08-19) : sans ça, le client n'a que le mode démo
+    (voir orders/service.py::start_card_payment). La clé n'est jamais
+    réaffichée après coup (voir RestaurantOut.konnect_configured), même
+    logique que le mot de passe temporaire d'un compte staff — on peut la
+    remplacer, jamais la relire.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    restaurant.konnect_api_key_encrypted = encrypt_field(payload.api_key)
+    restaurant.konnect_wallet_id = payload.wallet_id
+    db.commit()
+    db.refresh(restaurant)
+    log_event(logger, "restaurant.konnect_credentials_set", restaurant_id=restaurant_id)
     return schemas.serialize_restaurant(restaurant)
 
 

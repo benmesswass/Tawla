@@ -56,6 +56,7 @@ export const ar = {
   tipPlaceholder: "0.00 د.ت",
   payByCard: "خلص بالكارت",
   payByCash: "خلص كاش (الجرسون باش يجي يقبض)",
+  paymentFailedRetry: "الخلاص ما نجحش. تنجم تعاود تجرب.",
   orderAgain: "أطلب مرة أخرى",
 
   splitBillToggle: "قسم الفاتورة بين بعضكم",

@@ -1,9 +1,19 @@
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.core.dates import service_day_start
+from app.core.konnect import (
+    KonnectError,
+    get_konnect_payment,
+    init_konnect_payment,
+    is_konnect_enabled,
+    sign_konnect_order_webhook,
+    tnd_to_millimes,
+)
 from app.core.logging import get_logger, log_event
 from app.core.push import send_push_notification
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
@@ -516,6 +526,161 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -
         amount=order.total_amount, tip_amount=tip_amount,
     )
     return order
+
+
+async def start_card_payment(db: Session, order_id: int, tip_amount: float) -> tuple[Order, str | None]:
+    """
+    Paiement carte du client — modèle direct (connexion Konnect au paiement
+    carte, 2026-08-19) : réglé chez LE RESTAURANT, jamais chez Tawla (dont le
+    wallet ne sert qu'à son propre abonnement, voir subscription_payments.py).
+    Retombe sur le mode démo (`pay_by_card_simulated`) tant que ce restaurant
+    précis n'a pas connecté son propre wallet — dégradation gracieuse comme le
+    reste de l'intégration Konnect.
+
+    Renvoie `(order, pay_url)` : `pay_url` non-null seulement quand un
+    règlement Konnect réel vient d'être initié — la commande reste alors
+    `payment_status="pending"`, le client doit être redirigé pour payer.
+    """
+    order = _get_payable_order(db, order_id)
+
+    restaurant = db.get(Restaurant, order.restaurant_id)
+    if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
+        raise upgrade_required_error(SubscriptionTier.PRO)
+
+    credentials = restaurant.konnect_credentials()
+    if not is_konnect_enabled() or not credentials:
+        order = await pay_by_card_simulated(db, order_id, tip_amount)
+        return order, None
+
+    api_key, wallet_id = credentials
+    amount = order.total_amount + tip_amount
+    qr_token = order.table.qr_token
+    try:
+        pay_url, payment_ref = init_konnect_payment(
+            api_key=api_key,
+            receiver_wallet_id=wallet_id,
+            amount_tnd=amount,
+            order_id=str(order.id),
+            description=f"{order.table_label} — commande #{order.id}",
+            webhook=(
+                f"{settings.backend_url}/api/v1/orders/{order.id}/pay/card/webhook"
+                f"?sig={sign_konnect_order_webhook(order.id)}"
+            ),
+            success_url=(
+                f"{settings.frontend_url}/menu/{qr_token}"
+                f"?konnect=success&order_id={order.id}&order_token={order.public_token}"
+            ),
+            fail_url=f"{settings.frontend_url}/menu/{qr_token}?konnect=fail",
+            lifespan_minutes=30,
+        )
+    except KonnectError as err:
+        log_event(
+            logger, "order.card_payment_init_failed",
+            restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
+        )
+        raise HTTPException(
+            status_code=502, detail={"code": "PAYMENT_INIT_FAILED", "message": "could not start the payment"}
+        ) from err
+
+    order.payment_method = PaymentMethod.CARD
+    order.payment_status = PaymentStatus.PENDING
+    order.tip_amount = tip_amount
+    order.payment_ref = payment_ref
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.card_payment_initiated",
+        restaurant_id=order.restaurant_id, order_id=order.id, payment_ref=payment_ref, amount=amount,
+    )
+    return order, pay_url
+
+
+SettleCardResult = Literal["paid", "pending", "not_found", "error"]
+
+
+async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
+    """
+    Règle un paiement carte Konnect en attente — appelée par le webhook ET par
+    le filet de sécurité `/pay/card/check`, même principe d'idempotence que
+    `settle_subscription_payment` : gardée par `payment_ref`, jamais réglée
+    deux fois pour la même référence.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        return "not_found"
+
+    # Rien à régler : déjà réglé par un appel concurrent (webhook + retour
+    # client arrivés en même temps), jamais initié, ou payé autrement.
+    if order.payment_method != PaymentMethod.CARD or order.payment_status != PaymentStatus.PENDING:
+        return "pending"
+    payment_ref = order.payment_ref
+    if not payment_ref:
+        return "pending"
+
+    restaurant = db.get(Restaurant, order.restaurant_id)
+    credentials = restaurant.konnect_credentials() if restaurant else None
+    if not credentials:
+        # Konnect déconnecté par le manager entre l'initiation et le règlement
+        # (rare) : rien à régler sans la clé, mais ne pas planter le webhook.
+        log_event(
+            logger, "order.card_payment_settle_missing_credentials",
+            restaurant_id=order.restaurant_id, order_id=order.id,
+        )
+        return "error"
+    api_key, _wallet_id = credentials
+
+    try:
+        payment = get_konnect_payment(payment_ref, api_key=api_key)
+    except KonnectError as err:
+        log_event(
+            logger, "order.card_payment_settle_fetch_failed",
+            restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
+        )
+        return "error"
+
+    if payment.status != "completed":
+        return "pending"
+
+    # Contrôle d'intégrité : montant réellement reçu jamais inférieur au
+    # total + pourboire figés à l'initiation — jamais un montant transmis par
+    # le client ou par le webhook lui-même.
+    expected_millimes = tnd_to_millimes(order.total_amount + float(order.tip_amount))
+    if payment.reached_amount < expected_millimes:
+        log_event(
+            logger, "order.card_payment_amount_mismatch",
+            restaurant_id=order.restaurant_id, order_id=order.id,
+            expected_millimes=expected_millimes, reached_amount=payment.reached_amount,
+        )
+        return "error"
+
+    # Mise à jour gardée par `payment_ref` (pas par id seul) : c'est la garde
+    # d'idempotence — un règlement concurrent pour la MÊME référence ne peut
+    # jamais s'appliquer deux fois.
+    updated = (
+        db.query(Order)
+        .filter(Order.id == order.id, Order.payment_ref == payment_ref)
+        .update({"payment_status": PaymentStatus.PAID})
+    )
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.card_payment_settled",
+        restaurant_id=order.restaurant_id, order_id=order.id, already_settled=updated == 0,
+    )
+
+    if updated:
+        if order.loyalty_phone:
+            loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
+        # Le client peut avoir sa page ouverte en attendant le webhook —
+        # même événement que la confirmation d'un paiement en espèces.
+        await manager.broadcast(
+            order.restaurant_id, channel=_order_channel(order.id),
+            message={"event": "order.payment_confirmed", "order_id": order.id},
+        )
+
+    return "paid"
 
 
 async def request_cash_payment(db: Session, order_id: int, tip_amount: float = 0) -> Order:
