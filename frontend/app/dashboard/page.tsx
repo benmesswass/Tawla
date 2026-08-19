@@ -218,6 +218,32 @@ export default function DashboardPage() {
     if (restaurantId) load();
   }, [restaurantId, load]);
 
+  // Page de retour du paiement en ligne d'un palier (`?konnect=success` /
+  // `?konnect=fail`, voir tenants/router.py::start_subscription_checkout) :
+  // en dev local le webhook Konnect ne peut jamais joindre localhost, ce
+  // filet de sécurité est donc le SEUL moyen de refléter le paiement. Restait
+  // non branché côté frontend malgré l'endpoint déjà prêt (`api.
+  // checkSubscriptionPayment`) — sans lui un manager qui revient de Konnect
+  // voit son ancien palier tant qu'il ne recharge pas après le webhook.
+  useEffect(() => {
+    if (!restaurantId) return;
+    const params = new URLSearchParams(window.location.search);
+    const konnectResult = params.get("konnect");
+    if (!konnectResult) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    if (konnectResult === "success") {
+      api
+        .checkSubscriptionPayment(restaurantId)
+        .then((updated) => {
+          setRestaurant(updated);
+          flash(`Palier ${TIER_LABELS[updated.subscription_tier]} activé.`);
+        })
+        .catch((e) => setError(toFrenchMessage(e)));
+    } else if (konnectResult === "fail") {
+      setError("Le paiement n'a pas abouti. Vous pouvez réessayer depuis Réglages.");
+    }
+  }, [restaurantId]);
+
   /**
    * Remplace `setError(toFrenchMessage(e))` dans tous les catch de cette
    * page : un refus `UPGRADE_REQUIRED` ouvre l'écran d'incitation à passer au
