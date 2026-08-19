@@ -160,6 +160,7 @@ export default function DashboardPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
+  const [copiedTableId, setCopiedTableId] = useState<number | null>(null);
   const [team, setTeam] = useState<Staff[]>([]);
   const [staffDrafts, setStaffDrafts] = useState<Record<number, StaffDraft>>({});
   const [newStaff, setNewStaff] = useState<NewStaffDraft>(EMPTY_STAFF_DRAFT);
@@ -1105,6 +1106,29 @@ export default function DashboardPage() {
                     placeholder="Zone (facultatif)"
                   />
                   <Button onClick={() => saveTable(table)}>Enregistrer</Button>
+                  {/* Sans ce lien, seul un accès direct à l'API donnait le
+                      qr_token : le manager dépendait de nous pour tester ou
+                      remplacer un QR perdu, alors que la donnée est déjà là
+                      côté client (audit pilote, 2026-08-19). */}
+                  <div className="sm:col-span-3 flex items-center gap-2 text-xs text-neutral-500">
+                    <span className="truncate">
+                      Lien client : {typeof window !== "undefined" ? window.location.origin : ""}/menu/
+                      {table.qr_token}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const link = `${window.location.origin}/menu/${table.qr_token}`;
+                        navigator.clipboard.writeText(link);
+                        setCopiedTableId(table.id);
+                        setTimeout(() => setCopiedTableId((id) => (id === table.id ? null : id)), 2000);
+                      }}
+                    >
+                      {copiedTableId === table.id ? "Copié !" : "Copier le lien"}
+                    </Button>
+                  </div>
                 </Card>
               );
             })}

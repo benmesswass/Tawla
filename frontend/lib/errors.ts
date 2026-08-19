@@ -23,6 +23,8 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   ALREADY_PAID: () => "Cette commande a déjà été payée.",
   ORDER_CANCELLED: () => "Cette commande a été annulée, le paiement n'est plus possible.",
   NO_PENDING_CASH_PAYMENT: () => "Aucune demande de paiement en espèces en attente pour cette commande.",
+  ORDER_NOT_CONFIRMED: () =>
+    "Cette commande doit d'abord être confirmée par un serveur avant de pouvoir être payée.",
   EMAIL_EXISTS: () => "Un compte existe déjà avec cet e-mail.",
   ACCOUNT_DISABLED: () => "Ce compte a été désactivé. Demandez à votre manager de le réactiver.",
   CSV_UNREADABLE: () =>
@@ -86,6 +88,7 @@ const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   ALREADY_PAID: () => "هاذي الطلبية تخلصت من قبل.",
   ORDER_CANCELLED: () => "هاذي الطلبية تلغات، ما عادش ممكن تخلصها.",
   NO_PENDING_CASH_PAYMENT: () => "ما فماش طلب خلاص كاش قاعد ينتظر لهاذي الطلبية.",
+  ORDER_NOT_CONFIRMED: () => "لازم الجرسون يأكد الطلبية قبل ما تنجم تخلصها.",
   RATE_LIMITED: () => "طلبت برشا مرات. استنى دقيقة وعاود جرب.",
   // Rare côté client : seul le paiement carte peut déclencher ce code ici,
   // les autres fonctionnalités par palier sont toutes côté dashboard manager.
