@@ -4,7 +4,7 @@ from typing import Annotated
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.core.dates import UtcDatetime
-from app.modules.orders.models import OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.models import Order, OrderStatus, PaymentMethod, PaymentStatus
 
 
 def _convives(value: object) -> object:
@@ -129,6 +129,22 @@ class OrderOut(BaseModel):
     tip_amount: float
     total_amount: float
     items: list[OrderItemOut]
+    # Posé UNIQUEMENT par la réponse de `POST /pay/card` quand le restaurant a
+    # connecté son propre Konnect (modèle direct, 2026-08-19) : le client doit
+    # être redirigé pour régler, `payment_status` reste "pending" jusqu'au
+    # règlement (webhook ou `/pay/card/check`). Absent partout ailleurs — ce
+    # n'est pas une donnée de la commande, juste le résultat de l'initiation.
+    pay_url: str | None = None
+
+
+def serialize_order(order: Order, pay_url: str | None = None) -> OrderOut:
+    """
+    À utiliser quand une route veut renvoyer `pay_url` en plus des champs de
+    la commande — `response_model` seul ne peut pas le lire depuis `Order`,
+    qui n'a pas cette colonne (même principe que
+    `tenants.schemas.serialize_restaurant`).
+    """
+    return OrderOut.model_validate(order).model_copy(update={"pay_url": pay_url})
 
 
 class OrderCreatedOut(OrderOut):

@@ -157,6 +157,9 @@ export default function DashboardPage() {
   const [savingCafeMode, setSavingCafeMode] = useState(false);
   const [kitchenSoundEnabled, setKitchenSoundEnabled] = useState(false);
   const [savingKitchenSound, setSavingKitchenSound] = useState(false);
+  const [konnectApiKeyInput, setKonnectApiKeyInput] = useState("");
+  const [konnectWalletIdInput, setKonnectWalletIdInput] = useState("");
+  const [savingKonnect, setSavingKonnect] = useState(false);
   const [tables, setTables] = useState<Table[]>([]);
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
@@ -307,6 +310,24 @@ export default function DashboardPage() {
       handleGatedError(e);
     } finally {
       setSavingKitchenSound(false);
+    }
+  }
+
+  async function saveKonnectCredentials() {
+    if (!restaurantId || !konnectApiKeyInput.trim() || !konnectWalletIdInput.trim()) return;
+    setError(null);
+    setSavingKonnect(true);
+    try {
+      const updated = await api.setKonnectCredentials(
+        restaurantId, konnectApiKeyInput.trim(), konnectWalletIdInput.trim()
+      );
+      setRestaurant(updated);
+      setKonnectApiKeyInput("");
+      flash("Konnect connecté — le paiement carte de vos clients passe désormais par votre compte.");
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingKonnect(false);
     }
   }
 
@@ -1386,6 +1407,50 @@ export default function DashboardPage() {
                 Le paiement carte, la fidélité, le plan de salle visuel, les photos, le mode Ramadan, l&apos;import
                 CSV et la page de preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications
                 push demandent Business. Pour changer de palier, contactez Tawla.
+              </p>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm" className="mt-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Paiement carte de vos clients</span>
+                <Badge tone={restaurant.konnect_configured ? "success" : "neutral"}>
+                  {restaurant.konnect_configured ? "Connecté" : "Non connecté"}
+                </Badge>
+              </div>
+              <p className="text-xs text-neutral-500 mt-2 mb-3">
+                Sans compte Konnect connecté, le paiement carte reste en mode démonstration (confirmé
+                immédiatement, sans vrai débit). Une fois connecté, vos clients règlent directement votre propre
+                compte — jamais celui de Tawla.
+                {restaurant.konnect_configured && restaurant.konnect_wallet_id && (
+                  <> Wallet connecté : <code className="text-neutral-700">{restaurant.konnect_wallet_id}</code>.</>
+                )}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2">
+                <input
+                  type="password"
+                  value={konnectApiKeyInput}
+                  onChange={(e) => setKonnectApiKeyInput(e.target.value)}
+                  placeholder="Clé API Konnect"
+                  className="border rounded px-2 py-1"
+                />
+                <input
+                  value={konnectWalletIdInput}
+                  onChange={(e) => setKonnectWalletIdInput(e.target.value)}
+                  placeholder="ID du portefeuille"
+                  className="border rounded px-2 py-1"
+                />
+                <Button
+                  onClick={saveKonnectCredentials}
+                  disabled={savingKonnect || !konnectApiKeyInput.trim() || !konnectWalletIdInput.trim()}
+                >
+                  {restaurant.konnect_configured ? "Remplacer" : "Connecter"}
+                </Button>
+              </div>
+              <p className="text-xs text-neutral-500 mt-2">
+                Jamais réaffichée après coup, comme un mot de passe temporaire — vous pourrez toujours la
+                remplacer par une nouvelle.
               </p>
             </Card>
           )}

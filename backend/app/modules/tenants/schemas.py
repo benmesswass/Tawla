@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.dates import UtcDatetime
 from app.core.subscription import effective_tier
@@ -38,6 +38,10 @@ class RestaurantOut(RestaurantPublicOut):
     kitchen_sound_enabled: bool
     subscription_tier: SubscriptionTier
     subscription_period_end: UtcDatetime | None
+    # Jamais la clé API elle-même (voir Restaurant.konnect_credentials) —
+    # juste de quoi afficher "connecté" et le wallet, qui n'est pas un secret.
+    konnect_configured: bool
+    konnect_wallet_id: str | None
 
 
 def serialize_restaurant(restaurant: Restaurant) -> RestaurantOut:
@@ -65,6 +69,18 @@ class CafeModeUpdate(BaseModel):
 
 class KitchenSoundUpdate(BaseModel):
     enabled: bool
+
+
+class KonnectCredentialsIn(BaseModel):
+    """
+    Connexion du wallet Konnect PROPRE au restaurant (modèle direct,
+    2026-08-19) — jamais celui de Tawla. `wallet_id` n'est pas un secret
+    (Konnect l'affiche en clair dans son propre dashboard) ; `api_key` l'est,
+    chiffrée avant stockage (voir Restaurant.konnect_api_key_encrypted).
+    """
+
+    api_key: str = Field(min_length=1)
+    wallet_id: str = Field(min_length=1)
 
 
 class SubscriptionCheckoutIn(BaseModel):

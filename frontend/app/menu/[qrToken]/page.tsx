@@ -264,6 +264,41 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     load();
   }, [load]);
 
+  // Page de retour du paiement carte Konnect (`?konnect=success` /
+  // `?konnect=fail`, voir orders/router.py::start_card_payment) : Konnect ne
+  // peut jamais joindre un webhook sur localhost en dev, ce filet de sécurité
+  // (`api.checkCardPayment`) est donc le SEUL moyen de refléter le paiement —
+  // même principe que la page de retour de l'abonnement (dashboard/page.tsx).
+  // L'id et le token de la commande voyagent dans l'URL de retour : cette
+  // page peut suivre plusieurs commandes ouvertes à la fois, rien d'autre ne
+  // dit laquelle vient d'être payée.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const konnectResult = params.get("konnect");
+    if (!konnectResult) return;
+    const returnedOrderId = Number(params.get("order_id"));
+    const returnedOrderToken = params.get("order_token");
+    window.history.replaceState(null, "", window.location.pathname);
+
+    if (konnectResult === "fail") {
+      setPaymentError(t.paymentFailedRetry);
+      return;
+    }
+    if (konnectResult !== "success" || !returnedOrderId || !returnedOrderToken) return;
+
+    api
+      .checkCardPayment(returnedOrderId, returnedOrderToken)
+      .then((updated) => {
+        setOpenOrders((prev) =>
+          prev.map((r) => (r.order.id === updated.id ? { order: updated, token: returnedOrderToken } : r))
+        );
+        setTrackedOrder(updated);
+        setOrderToken(returnedOrderToken);
+      })
+      .catch((e) => setPaymentError(toLocalizedMessage(e, locale)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // PWA offline-first : une commande mise de côté faute de réseau (voir
   // validateOrder) est stockée sur l'appareil du client, pas en mémoire —
   // elle doit survivre à une page fermée puis rouverte.
@@ -496,6 +531,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     try {
       if (!orderToken) return;
       const updated = await api.payByCard(trackedOrder.id, tip, orderToken);
+      // Restaurant ayant connecté son propre Konnect (modèle direct,
+      // 2026-08-19) : rediriger pour régler, la commande reste "pending"
+      // jusqu'au retour (`?konnect=success`, voir l'effet plus bas). Sans
+      // `pay_url` : mode démo, déjà payée, rien de plus à faire.
+      if (updated.pay_url) {
+        window.location.href = updated.pay_url;
+        return;
+      }
       setTrackedOrder(updated);
     } catch (e) {
       setPaymentError(toLocalizedMessage(e, locale));
