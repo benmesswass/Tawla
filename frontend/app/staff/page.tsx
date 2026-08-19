@@ -44,6 +44,9 @@ type CashRequest = {
   taken_by_staff_id: number | null;
   loyalty_phone: string | null;
 };
+// Carte physique (terminal apporté par un serveur) — même mécanique, même
+// forme que la demande en espèces (2026-08-19).
+type CardTerminalRequest = CashRequest;
 type WaiterCall = { call_id: number; table_id: number; table_label: string; created_at: string | null };
 /** Commandes parties en cuisine : rien à faire pour le serveur, mais la table
  *  n'est pas libre pour autant — le plan doit la montrer occupée. */
@@ -77,6 +80,7 @@ export default function StaffPage() {
   const [pending, setPending] = useState<PendingOrder[]>([]);
   const [readyToServe, setReadyToServe] = useState<ReadyOrder[]>([]);
   const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
+  const [cardTerminalRequests, setCardTerminalRequests] = useState<CardTerminalRequest[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [myShift, setMyShift] = useState<MyShift | null>(null);
@@ -145,6 +149,28 @@ export default function StaffPage() {
     }
   }, [restaurantId]);
 
+  const loadCardTerminalRequests = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const orders = await api.listPendingCardTerminalPayments(restaurantId);
+      setCardTerminalRequests(
+        orders.map((o) => ({
+          order_id: o.id,
+          table_id: o.table_id,
+          table_label: o.table_label,
+          amount: o.total_amount,
+          taken_by_staff_id: o.taken_by_staff_id,
+          loyalty_phone: o.loyalty_phone ?? null,
+        }))
+      );
+      for (const o of orders) {
+        if (o.loyalty_phone) fetchLoyaltyForPhone(restaurantId, o.loyalty_phone);
+      }
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
   const loadPlan = useCallback(async () => {
     if (!restaurantId) return;
     // Best-effort : une salle non dessinée ne doit pas empêcher le service.
@@ -181,11 +207,12 @@ export default function StaffPage() {
     if (restaurantId) {
       loadActiveOrders();
       loadCashRequests();
+      loadCardTerminalRequests();
       loadWaiterCalls();
       loadMyShift();
       loadPlan();
     }
-  }, [restaurantId, loadActiveOrders, loadCashRequests, loadWaiterCalls, loadMyShift, loadPlan]);
+  }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadMyShift, loadPlan]);
 
   const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
@@ -248,6 +275,24 @@ export default function StaffPage() {
       );
       if (msg.loyalty_phone && restaurantId) fetchLoyaltyForPhone(restaurantId, msg.loyalty_phone);
     }
+    if (msg.event === "order.card_terminal_requested") {
+      setCardTerminalRequests((prev) =>
+        prev.some((o) => o.order_id === msg.order_id)
+          ? prev
+          : [
+              ...prev,
+              {
+                order_id: msg.order_id,
+                table_id: msg.table_id,
+                table_label: msg.table_label,
+                amount: msg.amount,
+                taken_by_staff_id: msg.taken_by_staff_id,
+                loyalty_phone: msg.loyalty_phone ?? null,
+              },
+            ]
+      );
+      if (msg.loyalty_phone && restaurantId) fetchLoyaltyForPhone(restaurantId, msg.loyalty_phone);
+    }
     if (msg.event === "waiter_call.created") {
       setWaiterCalls((prev) =>
         prev.some((c) => c.call_id === msg.call_id) ? prev : [...prev, { call_id: msg.call_id, table_id: msg.table_id, table_label: msg.table_label, created_at: msg.created_at ?? null }]
@@ -275,10 +320,11 @@ export default function StaffPage() {
     if (status === "connected") {
       loadActiveOrders();
       loadCashRequests();
+      loadCardTerminalRequests();
       loadWaiterCalls();
       loadMyShift();
     }
-  }, [status, loadActiveOrders, loadCashRequests, loadWaiterCalls, loadMyShift]);
+  }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadMyShift]);
 
   const etatsDesTables = useMemo(
     () =>
@@ -290,14 +336,17 @@ export default function StaffPage() {
           aMoi: o.taken_by_staff_id === staff?.id,
         })),
         aServir: readyToServe.map((o) => ({ table_id: o.table_id, depuis: o.ready_at })),
-        additions: cashRequests.map((o) => ({
+        // Espèces et carte physique se traitent pareil sur le plan : une
+        // table qui doit être encaissée s'allume, quel que soit le moyen —
+        // seule la liste plus bas distingue les deux (2026-08-19).
+        additions: [...cashRequests, ...cardTerminalRequests].map((o) => ({
           table_id: o.table_id,
           aMoi: o.taken_by_staff_id === staff?.id,
         })),
         appels: waiterCalls.map((c) => ({ table_id: c.table_id, depuis: c.created_at })),
         enCuisine,
       }),
-    [pending, readyToServe, cashRequests, waiterCalls, enCuisine, staff?.id]
+    [pending, readyToServe, cashRequests, cardTerminalRequests, waiterCalls, enCuisine, staff?.id]
   );
 
   const salleDessinee = plan.some((t) => t.pos_x !== null && t.pos_y !== null);
@@ -317,13 +366,18 @@ export default function StaffPage() {
     const appel = waiterCalls.find((c) => c.table_id === tableId);
     const aPrendre = pending.find((o) => o.table_id === tableId);
     const aServir = readyToServe.find((o) => o.table_id === tableId);
-    const addition = cashRequests.find((o) => o.table_id === tableId);
+    const additionCash = cashRequests.find((o) => o.table_id === tableId);
+    const additionCarte = cardTerminalRequests.find((o) => o.table_id === tableId);
     return {
       resoudreAppel: appel ? () => resolveWaiterCall(appel.call_id) : undefined,
       prendreEnCharge: aPrendre ? () => claim(aPrendre.order_id) : undefined,
       envoyerEnCuisine: aPrendre ? () => confirmAndSend(aPrendre.order_id) : undefined,
       servir: aServir ? () => markServed(aServir.order_id) : undefined,
-      encaisser: addition ? () => confirmCash(addition.order_id) : undefined,
+      encaisser: additionCash
+        ? () => confirmCash(additionCash.order_id)
+        : additionCarte
+          ? () => confirmCardTerminal(additionCarte.order_id)
+          : undefined,
     };
   }
 
@@ -377,6 +431,16 @@ export default function StaffPage() {
     try {
       await api.confirmCashPayment(orderId);
       setCashRequests((prev) => prev.filter((o) => o.order_id !== orderId));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }
+
+  async function confirmCardTerminal(orderId: number) {
+    setError(null);
+    try {
+      await api.confirmCardTerminalPayment(orderId);
+      setCardTerminalRequests((prev) => prev.filter((o) => o.order_id !== orderId));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -470,6 +534,10 @@ export default function StaffPage() {
   // tables (celles qu'il a prises en charge) — le manager voit tout.
   const myCashRequests =
     staff.role === "manager" ? cashRequests : cashRequests.filter((o) => o.taken_by_staff_id === staff.id);
+  const myCardTerminalRequests =
+    staff.role === "manager"
+      ? cardTerminalRequests
+      : cardTerminalRequests.filter((o) => o.taken_by_staff_id === staff.id);
 
   const scheduledCount = pending.filter((o) => o.scheduled_for).length;
 
@@ -690,6 +758,47 @@ export default function StaffPage() {
       })}
       </div>
       </div>
+
+      <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement carte (terminal)</h2>
+      {myCardTerminalRequests.length === 0 && <EmptyState message="Aucune demande en attente." />}
+      {myCardTerminalRequests.map((o) => {
+        const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
+        return (
+          <Card key={o.order_id} tone="warning" className="mb-3">
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="font-medium">{o.table_label}</div>
+                <div className="text-sm text-neutral-500">
+                  Commande #{o.order_id} — {o.amount.toFixed(2)} DT
+                </div>
+              </div>
+              <Button variant="success" onClick={() => confirmCardTerminal(o.order_id)}>
+                Encaissé
+              </Button>
+            </div>
+            {loyaltyMember && (
+              <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                  <GiftIcon className="w-4 h-4 shrink-0" />
+                  {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
+                  {loyaltyMember.order_count > 1 ? "s" : ""}
+                  {loyaltyMember.reward_available ? " — récompense disponible" : ""}
+                  {loyaltyMember.is_birthday_today && (
+                    <span className="inline-flex items-center gap-1">
+                      — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
+                    </span>
+                  )}
+                </span>
+                {loyaltyMember.reward_available && (
+                  <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(loyaltyMember)}>
+                    Récompense donnée
+                  </Button>
+                )}
+              </Card>
+            )}
+          </Card>
+        );
+      })}
 
       <h2 className="text-lg font-semibold mt-8 mb-4 flex items-center gap-1.5">
         <GiftIcon className="w-5 h-5 shrink-0" />

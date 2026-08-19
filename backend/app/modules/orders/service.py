@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.dates import service_day_start
+from app.core.email import is_email_enabled, send_email_with_attachment
+from app.core.invoice import generate_invoice_pdf
 from app.core.konnect import (
     KonnectError,
     get_konnect_payment,
@@ -116,6 +118,23 @@ async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Or
             # Même borne que list_active_orders (Phase 19.5) : sans elle, une
             # demande d'encaissement vieille de plusieurs jours reste affichée
             # indéfiniment à l'écran serveur (F-4, audit 2026-08-18).
+            Order.created_at >= service_day_start(),
+        )
+        .order_by(Order.created_at)
+        .all()
+    )
+
+
+async def list_pending_card_terminal_payments(db: Session, restaurant_id: int) -> list[Order]:
+    """Tables ayant demandé à payer par carte physique, pas encore encaissées
+    — même principe que list_pending_cash_payments, moyen distinct."""
+    return (
+        db.query(Order)
+        .options(selectinload(Order.table))
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.payment_method == PaymentMethod.CARD_TERMINAL,
+            Order.payment_status == PaymentStatus.PENDING,
             Order.created_at >= service_day_start(),
         )
         .order_by(Order.created_at)
@@ -493,7 +512,38 @@ def _get_payable_order(db: Session, order_id: int) -> Order:
     return order
 
 
-async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -> Order:
+def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> None:
+    """
+    Confirmation + facture PDF par email, si (et seulement si) le client a
+    laissé son adresse au moment de payer (confirmations de paiement,
+    2026-08-19) — quel que soit le moyen. Best-effort absolu : ne doit
+    JAMAIS lever, un email raté ne doit jamais faire échouer un paiement déjà
+    encaissé (un nom de plat en arabe ferait par exemple échouer le rendu PDF,
+    la police du cœur ne couvrant que le latin-1).
+    """
+    if not order.customer_email or not restaurant or not is_email_enabled():
+        return
+    try:
+        pdf_bytes = generate_invoice_pdf(order, restaurant.name)
+        total = order.total_amount + float(order.tip_amount)
+        sent = send_email_with_attachment(
+            to=order.customer_email,
+            subject=f"Votre facture - {restaurant.name}, commande #{order.id}",
+            html_body=(
+                f"<p>Bonjour,</p>"
+                f"<p>Votre commande #{order.id} chez {restaurant.name} a bien été payée "
+                f"({total:.2f} DT). Vous trouverez la facture détaillée en pièce jointe.</p>"
+                f"<p>Merci de votre visite !</p>"
+            ),
+            attachment_filename=f"facture-commande-{order.id}.pdf",
+            attachment_bytes=pdf_bytes,
+        )
+        log_event(logger, "order.payment_confirmation_email", order_id=order.id, sent=sent)
+    except Exception as err:  # noqa: BLE001 — best-effort, voir docstring
+        log_event(logger, "order.payment_confirmation_email_failed", order_id=order.id, error=str(err))
+
+
+async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float, customer_email: str | None = None) -> Order:
     """
     Paiement carte — mode simulé (Konnect choisi comme prestataire, mais pas
     de vraie intégration tant qu'un pilote resto réel n'a pas de clés API).
@@ -514,11 +564,14 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -
     order.payment_method = PaymentMethod.CARD
     order.tip_amount = tip_amount
     order.payment_status = PaymentStatus.PAID
+    if customer_email:
+        order.customer_email = customer_email
     db.commit()
     db.refresh(order)
 
     if order.loyalty_phone:
         loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
+    _send_payment_confirmation(order, restaurant)
 
     log_event(
         logger, "order.paid_card_simulated",
@@ -528,7 +581,9 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -
     return order
 
 
-async def start_card_payment(db: Session, order_id: int, tip_amount: float) -> tuple[Order, str | None]:
+async def start_card_payment(
+    db: Session, order_id: int, tip_amount: float, customer_email: str | None = None
+) -> tuple[Order, str | None]:
     """
     Paiement carte du client — modèle direct (connexion Konnect au paiement
     carte, 2026-08-19) : réglé chez LE RESTAURANT, jamais chez Tawla (dont le
@@ -549,7 +604,7 @@ async def start_card_payment(db: Session, order_id: int, tip_amount: float) -> t
 
     credentials = restaurant.konnect_credentials()
     if not is_konnect_enabled() or not credentials:
-        order = await pay_by_card_simulated(db, order_id, tip_amount)
+        order = await pay_by_card_simulated(db, order_id, tip_amount, customer_email)
         return order, None
 
     api_key, wallet_id = credentials
@@ -586,6 +641,8 @@ async def start_card_payment(db: Session, order_id: int, tip_amount: float) -> t
     order.payment_status = PaymentStatus.PENDING
     order.tip_amount = tip_amount
     order.payment_ref = payment_ref
+    if customer_email:
+        order.customer_email = customer_email
     db.commit()
     db.refresh(order)
 
@@ -673,6 +730,7 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
     if updated:
         if order.loyalty_phone:
             loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
+        _send_payment_confirmation(order, restaurant)
         # Le client peut avoir sa page ouverte en attendant le webhook —
         # même événement que la confirmation d'un paiement en espèces.
         await manager.broadcast(
@@ -683,7 +741,9 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
     return "paid"
 
 
-async def request_cash_payment(db: Session, order_id: int, tip_amount: float = 0) -> Order:
+async def request_cash_payment(
+    db: Session, order_id: int, tip_amount: float = 0, customer_email: str | None = None
+) -> Order:
     """Le client demande à payer en espèces — prévient le serveur assigné."""
     order = _get_payable_order(db, order_id)
 
@@ -693,6 +753,8 @@ async def request_cash_payment(db: Session, order_id: int, tip_amount: float = 0
     # serveur venait encaisser le total sans lui, et l'écart n'apparaissait
     # qu'au comptage de la caisse.
     order.tip_amount = tip_amount
+    if customer_email:
+        order.customer_email = customer_email
     db.commit()
     db.refresh(order)
 
@@ -741,6 +803,7 @@ async def confirm_cash_payment(db: Session, order_id: int, staff: Staff) -> Orde
 
     if order.loyalty_phone:
         loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
+    _send_payment_confirmation(order, db.get(Restaurant, order.restaurant_id))
 
     log_event(
         logger, "order.cash_payment_confirmed",
@@ -749,6 +812,80 @@ async def confirm_cash_payment(db: Session, order_id: int, staff: Staff) -> Orde
 
     # Le client qui a demandé à payer en espèces peut avoir sa page ouverte
     # en attendant que le serveur passe encaisser.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.payment_confirmed", "order_id": order.id},
+    )
+    return order
+
+
+async def request_card_terminal_payment(
+    db: Session, order_id: int, tip_amount: float = 0, customer_email: str | None = None
+) -> Order:
+    """
+    Le client demande à payer par carte physique — un serveur apporte le
+    terminal. Même mécanique que le paiement en espèces (carte physique / en
+    ligne / espèces, 2026-08-19), moyen distinct pour ne pas mélanger les
+    deux dans les stats de moyen de paiement.
+    """
+    order = _get_payable_order(db, order_id)
+
+    order.payment_method = PaymentMethod.CARD_TERMINAL
+    order.payment_status = PaymentStatus.PENDING
+    order.tip_amount = tip_amount
+    if customer_email:
+        order.customer_email = customer_email
+    db.commit()
+    db.refresh(order)
+
+    a_encaisser = order.total_amount + tip_amount
+    log_event(
+        logger, "order.card_terminal_payment_requested",
+        restaurant_id=order.restaurant_id, order_id=order.id, amount=a_encaisser,
+    )
+
+    await manager.broadcast(
+        order.restaurant_id, channel="staff",
+        message={
+            "event": "order.card_terminal_requested",
+            "order_id": order.id,
+            "table_id": order.table_id,
+            "table_label": order.table_label,
+            "amount": a_encaisser,
+            "taken_by_staff_id": order.taken_by_staff_id,
+            "loyalty_phone": order.loyalty_phone,
+        },
+    )
+    return order
+
+
+async def confirm_card_terminal_payment(db: Session, order_id: int, staff: Staff) -> Order:
+    """Le serveur confirme avoir encaissé la carte physique à table."""
+    order = db.get(Order, order_id)
+    if not order or order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    if order.payment_method != PaymentMethod.CARD_TERMINAL or order.payment_status != PaymentStatus.PENDING:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "NO_PENDING_CARD_TERMINAL_PAYMENT",
+                "message": "no pending card terminal payment for this order",
+            },
+        )
+
+    order.payment_status = PaymentStatus.PAID
+    db.commit()
+    db.refresh(order)
+
+    if order.loyalty_phone:
+        loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
+    _send_payment_confirmation(order, db.get(Restaurant, order.restaurant_id))
+
+    log_event(
+        logger, "order.card_terminal_payment_confirmed",
+        restaurant_id=order.restaurant_id, order_id=order.id, staff_id=staff.id,
+    )
+
     await manager.broadcast(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_confirmed", "order_id": order.id},

@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from app.core.dates import service_day_start
+from app.modules.orders import service as orders_service
 from app.modules.orders.models import Order
 from app.modules.staff.models import StaffRole
 from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff, order_headers
@@ -281,3 +282,179 @@ def test_les_horodatages_sortent_avec_leur_fuseau(client):
     lue = client.get(f"/api/v1/orders/{order['id']}", headers=order_headers(order)).json()
 
     assert lue["created_at"].endswith(("Z", "+00:00")), lue["created_at"]
+
+
+# --- Carte physique (terminal apporté par un serveur) -----------------------
+# Même mécanique que les espèces, moyen de paiement distinct (2026-08-19).
+
+
+def test_request_card_terminal_payment_notifies_staff_and_is_confirmable(client):
+    restaurant, manager_headers, order = _setup_order(client)
+
+    res = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal", headers=order_headers(order))
+    assert res.status_code == 200
+    assert res.json()["payment_status"] == "pending"
+    assert res.json()["payment_method"] == "card_terminal"
+
+    pending = client.get(
+        f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-card-terminal-payments", headers=manager_headers
+    )
+    assert [o["id"] for o in pending.json()] == [order["id"]]
+
+    confirmed = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal/confirm", headers=manager_headers)
+    assert confirmed.status_code == 200
+    assert confirmed.json()["payment_status"] == "paid"
+
+    pending_after = client.get(
+        f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-card-terminal-payments", headers=manager_headers
+    )
+    assert pending_after.json() == []
+
+
+def test_card_terminal_requests_are_isolated_from_cash_requests(client):
+    """Les deux moyens partagent la même mécanique (PENDING) : une demande
+    carte physique ne doit jamais apparaître dans la liste espèces, et
+    réciproquement — sinon un serveur annoncerait le mauvais montant/moyen."""
+    restaurant, manager_headers, order = _setup_order(client)
+
+    client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal", headers=order_headers(order))
+
+    cash_pending = client.get(
+        f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-cash-payments", headers=manager_headers
+    )
+    assert cash_pending.json() == []
+
+
+def test_confirm_card_terminal_payment_rejects_when_no_pending_request(client):
+    _restaurant, manager_headers, order = _setup_order(client)
+
+    res = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal/confirm", headers=manager_headers)
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "NO_PENDING_CARD_TERMINAL_PAYMENT"
+
+
+def test_cannot_pay_card_terminal_for_an_order_that_has_not_been_confirmed(client):
+    _restaurant, _manager_headers, order = _setup_order(client, confirmed=False)
+
+    res = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal", headers=order_headers(order))
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "ORDER_NOT_CONFIRMED"
+
+
+# --- Facture PDF -------------------------------------------------------------
+
+
+def test_invoice_is_downloadable_once_paid(client):
+    _restaurant, _headers, order = _setup_order(client)
+    client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
+
+    res = client.get(f"/api/v1/orders/{order['id']}/invoice", params={"token": order["public_token"]})
+
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+    assert res.content.startswith(b"%PDF")
+
+
+def test_invoice_is_not_available_before_payment(client):
+    _restaurant, _headers, order = _setup_order(client)
+
+    res = client.get(f"/api/v1/orders/{order['id']}/invoice", params={"token": order["public_token"]})
+
+    assert res.status_code == 404
+
+
+def test_invoice_rejects_the_wrong_token(client):
+    _restaurant, _headers, order = _setup_order(client)
+    client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
+
+    res = client.get(f"/api/v1/orders/{order['id']}/invoice", params={"token": "not-the-real-token"})
+
+    assert res.status_code == 404
+
+
+# --- Confirmation de paiement par email -------------------------------------
+# Dégradation gracieuse (comme Konnect) : sans RESEND_API_KEY, aucun envoi
+# n'est tenté, jamais une erreur qui bloquerait le paiement.
+
+
+def test_no_email_sent_when_customer_did_not_leave_an_address(client, monkeypatch):
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    calls = []
+    monkeypatch.setattr(orders_service, "send_email_with_attachment", lambda **kwargs: calls.append(kwargs) or True)
+
+    _restaurant, _headers, order = _setup_order(client)
+    client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
+
+    assert calls == []
+
+
+def test_no_email_sent_when_resend_is_not_configured(client, monkeypatch):
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    calls = []
+    monkeypatch.setattr(orders_service, "send_email_with_attachment", lambda **kwargs: calls.append(kwargs) or True)
+
+    _restaurant, _headers, order = _setup_order(client)
+    client.post(
+        f"/api/v1/orders/{order['id']}/pay/card",
+        json={"tip_amount": 0, "customer_email": "client@example.com"},
+        headers=order_headers(order),
+    )
+
+    assert calls == []
+
+
+def test_confirmation_email_sent_with_invoice_attached_when_address_left(client, monkeypatch):
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    calls = []
+    monkeypatch.setattr(orders_service, "send_email_with_attachment", lambda **kwargs: calls.append(kwargs) or True)
+
+    _restaurant, _headers, order = _setup_order(client)
+    res = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card",
+        json={"tip_amount": 0, "customer_email": "client@example.com"},
+        headers=order_headers(order),
+    )
+
+    assert res.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["to"] == "client@example.com"
+    assert calls[0]["attachment_bytes"].startswith(b"%PDF")
+
+
+def test_confirmation_email_sent_on_cash_confirmation_not_on_request(client, monkeypatch):
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    calls = []
+    monkeypatch.setattr(orders_service, "send_email_with_attachment", lambda **kwargs: calls.append(kwargs) or True)
+
+    restaurant, manager_headers, order = _setup_order(client)
+    client.post(
+        f"/api/v1/orders/{order['id']}/pay/cash",
+        json={"tip_amount": 0, "customer_email": "client@example.com"},
+        headers=order_headers(order),
+    )
+    assert calls == []  # pas encore payée, juste demandée
+
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=manager_headers)
+    assert len(calls) == 1
+
+
+def test_a_failing_pdf_generation_never_breaks_the_payment_itself(client, monkeypatch):
+    """Best-effort absolu (voir docstring de _send_payment_confirmation) : un
+    nom de plat en arabe, par exemple, ferait échouer le rendu PDF (police du
+    cœur latin-1 uniquement) — le paiement, lui, doit rester acquis."""
+    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+
+    def _boom(order, restaurant_name):
+        raise ValueError("rendu PDF impossible")
+
+    monkeypatch.setattr(orders_service, "generate_invoice_pdf", _boom)
+
+    _restaurant, _headers, order = _setup_order(client)
+    res = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card",
+        json={"tip_amount": 0, "customer_email": "client@example.com"},
+        headers=order_headers(order),
+    )
+
+    assert res.status_code == 200
+    assert res.json()["payment_status"] == "paid"

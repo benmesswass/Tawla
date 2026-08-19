@@ -48,16 +48,23 @@ export const fr = {
   total: "Total",
 
   paymentTitle: "Paiement",
-  paidMessage: (method: "card" | "cash", tipAmount: number) =>
-    `Payé ✓ ${method === "card" ? "par carte" : "en espèces"}` +
+  paidMessage: (method: "card" | "card_terminal" | "cash", tipAmount: number) =>
+    `Payé ✓ ${method === "cash" ? "en espèces" : "par carte"}` +
     (tipAmount > 0 ? ` (dont ${tipAmount.toFixed(2)} DT de pourboire)` : ""),
   cashPendingMessage: (amount: number) =>
     `Paiement en espèces demandé — un serveur va passer encaisser ${amount.toFixed(2)} DT.`,
+  cardTerminalPendingMessage: (amount: number) =>
+    `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${amount.toFixed(2)} DT.`,
   tipLabel: "Pourboire (facultatif, pour un paiement par carte)",
   tipPlaceholder: "0.00 DT",
-  payByCard: "Payer par carte",
+  emailLabel: "E-mail (facultatif, pour recevoir votre facture)",
+  emailPlaceholder: "vous@exemple.com",
+  payByCard: "Payer en ligne",
+  payByCardTerminal: "Payer par carte (le serveur apporte le terminal)",
   payByCash: "Payer en espèces (le serveur passera encaisser)",
   paymentFailedRetry: "Le paiement n'a pas abouti. Vous pouvez réessayer.",
+  invoiceDownload: "Télécharger la facture (PDF)",
+  invoiceQrCaption: "Scannez pour la retrouver sur un autre appareil",
   orderAgain: "Commander à nouveau",
 
   splitBillToggle: "Partager l'addition entre plusieurs personnes",

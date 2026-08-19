@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Annotated
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
 
 from app.core.dates import UtcDatetime
 from app.modules.orders.models import Order, OrderStatus, PaymentMethod, PaymentStatus
@@ -80,6 +80,9 @@ class OrderItemOut(BaseModel):
 
 class PayCardRequest(BaseModel):
     tip_amount: float = Field(default=0, ge=0)
+    # Facultatif : sert uniquement à envoyer la confirmation + facture PDF une
+    # fois payée. Jamais requis, un client qui ne le laisse pas paie pareil.
+    customer_email: EmailStr | None = None
 
 
 class PayCashRequest(BaseModel):
@@ -90,6 +93,18 @@ class PayCashRequest(BaseModel):
     """
 
     tip_amount: float = Field(default=0, ge=0)
+    customer_email: EmailStr | None = None
+
+
+class PayCardTerminalRequest(BaseModel):
+    """
+    Carte physique : le client demande, un serveur apporte le terminal —
+    même mécanique que PayCashRequest, moyen de paiement distinct (voir
+    PaymentMethod.CARD_TERMINAL).
+    """
+
+    tip_amount: float = Field(default=0, ge=0)
+    customer_email: EmailStr | None = None
 
 
 class PushSubscriptionIn(BaseModel):
@@ -165,3 +180,5 @@ class OrderOutStaff(OrderOut):
     """
 
     loyalty_phone: str | None
+    # Pour que le serveur sache si une confirmation + facture a été envoyée.
+    customer_email: str | None

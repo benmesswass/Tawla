@@ -38,13 +38,17 @@ class OrderStatus(str, enum.Enum):
 
 
 class PaymentMethod(str, enum.Enum):
-    CARD = "card"
+    CARD = "card"  # en ligne (Konnect ou démo) — le client paie depuis son téléphone
+    # Carte physique, terminal apporté par un serveur — même mécanique que CASH
+    # (demande -> encaissement confirmé par un serveur), distincte pour que les
+    # stats de moyen de paiement ne mélangent pas espèces et carte en salle.
+    CARD_TERMINAL = "card_terminal"
     CASH = "cash"
 
 
 class PaymentStatus(str, enum.Enum):
     UNPAID = "unpaid"
-    PENDING = "pending"  # cash : demandé par le client, en attente que le serveur encaisse
+    PENDING = "pending"  # cash/carte physique : en attente que le serveur encaisse
     PAID = "paid"
 
 
@@ -109,6 +113,13 @@ class Order(Base):
     payment_status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.UNPAID)
     tip_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     payment_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    # Saisi par le client au moment de payer (facultatif, quel que soit le
+    # moyen) — sert UNIQUEMENT à envoyer la confirmation + facture PDF une
+    # fois payée (voir orders/service.py::_send_payment_confirmation).
+    # Jamais demandé à la commande : un client qui ne veut pas la laisser doit
+    # pouvoir commander et payer sans, comme aujourd'hui.
+    customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Carte de fidélité — facultatif, saisi par le client à la commande. Le
     # compteur ne bouge qu'au paiement confirmé (voir orders/service.py),
