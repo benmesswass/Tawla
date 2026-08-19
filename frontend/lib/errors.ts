@@ -36,7 +36,17 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   // le client refusé enchaînait les tentatives, ce qui prolongeait le blocage
   // au lieu de le laisser retomber.
   RATE_LIMITED: () => "Trop de tentatives. Patientez une minute avant de réessayer.",
+  // Sans entrée dédiée, un manager qui clique sur une fonctionnalité d'un
+  // palier supérieur lisait le même message générique qu'un vrai bug —
+  // l'inverse de ce qu'une offre à trois paliers doit donner envie de faire
+  // (offre à trois paliers, 2026-08-18).
+  UPGRADE_REQUIRED: (ctx) => {
+    const label = TIER_LABELS[ctx.required_tier as string] ?? String(ctx.required_tier);
+    return `Cette fonctionnalité demande le palier ${label} ou plus.`;
+  },
 };
+
+const TIER_LABELS: Record<string, string> = { essentiel: "Essentiel", pro: "Pro", business: "Business" };
 
 export function toFrenchMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -44,6 +54,22 @@ export function toFrenchMessage(error: unknown): string {
     if (translate) return translate(error.context);
   }
   return "Une erreur est survenue. Réessayez dans un instant.";
+}
+
+/**
+ * Palier requis si `error` est un refus `UPGRADE_REQUIRED`, sinon `null`.
+ *
+ * Sert à distinguer, à l'endroit où chaque action gérée par palier échoue,
+ * le cas « proposer de passer au palier supérieur » d'une vraie erreur —
+ * sans dupliquer cette logique à chaque site d'appel (paiement en ligne du
+ * passage à un palier supérieur, 2026-08-19).
+ */
+export function requiredTierFromError(error: unknown): "pro" | "business" | null {
+  if (error instanceof ApiError && error.code === "UPGRADE_REQUIRED") {
+    const tier = error.context.required_tier;
+    if (tier === "pro" || tier === "business") return tier;
+  }
+  return null;
 }
 
 // Sous-ensemble des codes rencontrés côté parcours client (page
@@ -61,6 +87,9 @@ const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   ORDER_CANCELLED: () => "هاذي الطلبية تلغات، ما عادش ممكن تخلصها.",
   NO_PENDING_CASH_PAYMENT: () => "ما فماش طلب خلاص كاش قاعد ينتظر لهاذي الطلبية.",
   RATE_LIMITED: () => "طلبت برشا مرات. استنى دقيقة وعاود جرب.",
+  // Rare côté client : seul le paiement carte peut déclencher ce code ici,
+  // les autres fonctionnalités par palier sont toutes côté dashboard manager.
+  UPGRADE_REQUIRED: () => "الخلاص بالكارط ماشي متوفر هنا. خلص كاش.",
 };
 
 export function toLocalizedMessage(error: unknown, locale: string): string {

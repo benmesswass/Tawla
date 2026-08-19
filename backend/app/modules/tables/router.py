@@ -2,21 +2,38 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.subscription import effective_tier, require_tier, tier_includes
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import schemas, service
 from app.modules.tables.models import Table
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 router = APIRouter(prefix="/api/v1/tables", tags=["tables"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
 
 
+def _zone_or_none_for_tier(db: Session, restaurant_id: int, zone: str | None) -> str | None:
+    """
+    Les zones de salle (plan visuel, Pro+) n'ont pas de sens sans lui — plutôt
+    que de refuser la création/modification d'une table pour un champ annexe,
+    Essentiel l'ignore silencieusement (offre à trois paliers, 2026-08-18).
+    """
+    if not zone:
+        return None
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
+        return None
+    return zone
+
+
 @router.post("", response_model=schemas.TableOut, status_code=201)
 def create_table(payload: schemas.TableCreate, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
     if payload.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    table = Table(restaurant_id=payload.restaurant_id, label=payload.label, zone=payload.zone)
+    zone = _zone_or_none_for_tier(db, payload.restaurant_id, payload.zone)
+    table = Table(restaurant_id=payload.restaurant_id, label=payload.label, zone=zone)
     db.add(table)
     db.commit()
     db.refresh(table)
@@ -40,7 +57,7 @@ def update_table(
         raise HTTPException(status_code=404, detail={"code": "TABLE_NOT_FOUND", "message": "table not found"})
 
     table.label = payload.label
-    table.zone = payload.zone
+    table.zone = _zone_or_none_for_tier(db, table.restaurant_id, payload.zone)
     db.commit()
     db.refresh(table)
     return table
@@ -99,6 +116,7 @@ def save_plan(
     payload: schemas.PlanUpdate,
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
     """
     Enregistre le plan de salle en une seule écriture.
@@ -110,6 +128,9 @@ def save_plan(
     découpage, une table étrangère glissée en fin de liste laisserait le plan
     à moitié enregistré — et un plan à moitié juste envoie un serveur au
     mauvais endroit.
+
+    Réservé à Pro et Business (offre à trois paliers, 2026-08-18) — Essentiel
+    reste à une liste de tables simple, sans positionnement.
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})

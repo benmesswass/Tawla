@@ -33,7 +33,7 @@ from app.modules.staff.models import Staff, StaffRole  # noqa: E402
 from app.modules.staff.security import hash_password  # noqa: E402
 from app.modules.tables.models import Table  # noqa: E402
 from app.modules.tables.qr_card import save_table_card  # noqa: E402
-from app.modules.tenants.models import Restaurant  # noqa: E402
+from app.modules.tenants.models import Restaurant, SubscriptionTier  # noqa: E402
 
 
 def slugify(name: str) -> str:
@@ -49,11 +49,21 @@ def generated_password() -> str:
     return secrets.token_urlsafe(9)
 
 
-def upsert_restaurant(db, name: str, slug: str) -> tuple[Restaurant, bool]:
+def upsert_restaurant(db, name: str, slug: str, subscription_tier: SubscriptionTier) -> tuple[Restaurant, bool]:
+    """
+    Le palier vendu est celui du contrat signé sur place — pas de portail de
+    changement de palier en self-service tant que la facturation reste
+    manuelle (offre à trois paliers, 2026-08-18) : c'est en relançant ce
+    script, avec la config mise à jour, qu'un pilote passe d'un palier à un
+    autre après un appel avec Wassim.
+    """
     existing = db.query(Restaurant).filter(Restaurant.slug == slug).first()
     if existing:
+        if existing.subscription_tier != subscription_tier:
+            existing.subscription_tier = subscription_tier
+            db.commit()
         return existing, False
-    restaurant = Restaurant(name=name, slug=slug)
+    restaurant = Restaurant(name=name, slug=slug, subscription_tier=subscription_tier)
     db.add(restaurant)
     db.commit()
     db.refresh(restaurant)
@@ -138,10 +148,16 @@ def main() -> None:
     config = json.loads(args.config.read_text(encoding="utf-8"))
     name = config["restaurant"]["name"]
     slug = config["restaurant"].get("slug") or slugify(name)
+    # Essentiel par défaut si absent du fichier : c'est déjà le défaut du
+    # modèle, pas une omission qui déverrouillerait Pro/Business par erreur.
+    subscription_tier = SubscriptionTier(config["restaurant"].get("subscription_tier", "essentiel"))
 
     db = SessionLocal()
-    restaurant, created_restaurant = upsert_restaurant(db, name, slug)
-    print(f"{'Créé' if created_restaurant else 'Existant'} : {restaurant.name} (id {restaurant.id})")
+    restaurant, created_restaurant = upsert_restaurant(db, name, slug, subscription_tier)
+    print(
+        f"{'Créé' if created_restaurant else 'Existant'} : {restaurant.name} (id {restaurant.id}, "
+        f"palier {restaurant.subscription_tier.value})"
+    )
 
     # --- Comptes ---
     accounts: list[tuple[Staff, str | None]] = []

@@ -1,8 +1,11 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.modules.tenants.models import SubscriptionTier
+from app.core.dates import UtcDatetime
+from app.core.subscription import effective_tier
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 
 class RestaurantPublicOut(BaseModel):
@@ -22,7 +25,7 @@ class RestaurantPublicOut(BaseModel):
     id: int
     name: str
     ramadan_mode_enabled: bool
-    iftar_time: datetime | None
+    iftar_time: UtcDatetime | None
     cafe_mode_enabled: bool
 
 
@@ -31,9 +34,24 @@ class RestaurantOut(RestaurantPublicOut):
     seulement pour son propre établissement."""
 
     slug: str
-    created_at: datetime
+    created_at: UtcDatetime
     kitchen_sound_enabled: bool
     subscription_tier: SubscriptionTier
+    subscription_period_end: UtcDatetime | None
+
+
+def serialize_restaurant(restaurant: Restaurant) -> RestaurantOut:
+    """
+    À utiliser PARTOUT où un `Restaurant` est renvoyé au staff, jamais
+    `RestaurantOut.model_validate(restaurant)` directement : `subscription_tier`
+    doit refléter le palier EFFECTIF (voir app/core/subscription.py), pas la
+    valeur brute en base, qui peut être un palier payé en ligne et expiré
+    depuis sans jamais avoir été corrigée en base (calcul à la lecture, pas de
+    mutation, voir effective_tier).
+    """
+    return RestaurantOut.model_validate(restaurant).model_copy(
+        update={"subscription_tier": effective_tier(restaurant)}
+    )
 
 
 class RamadanModeUpdate(BaseModel):
@@ -47,3 +65,23 @@ class CafeModeUpdate(BaseModel):
 
 class KitchenSoundUpdate(BaseModel):
     enabled: bool
+
+
+class SubscriptionCheckoutIn(BaseModel):
+    """Le palier VISÉ — jamais un montant : le prix est toujours recalculé
+    côté serveur depuis TIER_PRICES_TND (app/core/subscription.py)."""
+
+    tier: SubscriptionTier
+
+
+class SubscriptionCheckoutOut(BaseModel):
+    """
+    `mode="demo"` : palier déjà appliqué, `restaurant` à jour, `pay_url` absent
+    — aucun paiement réel tant que Konnect n'est pas activé (PAYMENT_MODE).
+    `mode="konnect"` : palier PAS encore appliqué (il ne le sera qu'au
+    règlement du paiement) — rediriger le manager vers `pay_url`.
+    """
+
+    mode: Literal["demo", "konnect"]
+    restaurant: RestaurantOut | None = None
+    pay_url: str | None = None

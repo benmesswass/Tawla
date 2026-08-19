@@ -1,8 +1,9 @@
 {
-  "_comment": "Modèle de configuration d'un pilote. Copier, adapter, puis lancer : python scripts/setup_restaurant.py --config mon-pilote.json --frontend-url https://tawla.tn",
+  "_comment": "Modèle de configuration d'un pilote. Copier, adapter, puis lancer : python scripts/setup_restaurant.py --config mon-pilote.json --frontend-url https://tawla.tn. subscription_tier : essentiel, pro ou business — le palier vendu sur place ; relancer le script avec une valeur mise à jour pour changer le palier d'un pilote existant.",
   "restaurant": {
     "name": "Chez Slah",
-    "slug": "chez-slah"
+    "slug": "chez-slah",
+    "subscription_tier": "pro"
   },
   "manager": {
     "name": "Slah",

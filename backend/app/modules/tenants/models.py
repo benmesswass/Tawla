@@ -10,13 +10,10 @@ from app.core.database import Base
 class SubscriptionTier(str, enum.Enum):
     """
     Modèle économique décidé le 2026-08-12 : abonnement à 3 paliers, aucune
-    commission sur les commandes (voir ROADMAP.md Phase 11). Champ posé ici
-    en préparation — aucune fonctionnalité n'est bloquée par palier pour
-    l'instant (pas de prix fixé, pas de facturation active : gater des
-    fonctionnalités déjà utilisées par les restaurants pilotes avant que ce
-    soit réellement facturé casserait leur expérience sans aucun bénéfice).
-    La logique de gating est un chantier séparé, à ouvrir une fois les prix
-    tranchés par Wassim.
+    commission sur les commandes (voir ROADMAP.md Phase 11). Le gating réel
+    est en place depuis l'offre à trois paliers (2026-08-18, voir
+    app/core/subscription.py) et le paiement en ligne du passage à un palier
+    supérieur depuis app/core/konnect.py / subscription_payments.py.
     """
     ESSENTIEL = "essentiel"
     PRO = "pro"
@@ -54,7 +51,32 @@ class Restaurant(Base):
     # activable par le manager depuis le dashboard.
     kitchen_sound_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Palier d'abonnement — informationnel pour l'instant, voir SubscriptionTier.
+    # Palier d'abonnement — conditionne l'accès aux fonctionnalités Pro/Business,
+    # voir app/core/subscription.py. Essentiel par défaut : c'est le palier
+    # qu'obtient un établissement inscrit en self-service via /auth/register.
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
         Enum(SubscriptionTier), default=SubscriptionTier.ESSENTIEL
+    )
+
+    # Fin de la période payée en ligne (self-service, voir subscription_payments.py).
+    # Null = pas de suivi d'expiration : soit jamais payé en ligne, soit palier
+    # fixé à la main par setup_restaurant.py (relation commerciale directe avec
+    # Wassim) — ce cas-là ne doit JAMAIS retomber tout seul à Essentiel. Ce n'est
+    # que lorsque cette date est dépassée que effective_tier() (subscription.py)
+    # ramène le palier effectif à Essentiel, sans jamais muter cette colonne.
+    subscription_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Paiement Konnect d'abonnement en cours — même mécanique que
+    # orders.payment_ref (mode simulé tant qu'aucune clé Konnect réelle
+    # n'existe pour Tawla elle-même) : posé à l'initiation du paiement, remis à
+    # null au règlement (settle_subscription_payment). Une référence encore
+    # présente = paiement en attente, jamais deux fois réglée pour la même
+    # référence (garde d'idempotence).
+    subscription_payment_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    # Palier visé par le paiement en cours (subscription_payment_ref non nul) —
+    # appliqué à subscription_tier seulement au règlement effectif, jamais à
+    # l'initiation : tant que Konnect n'a pas confirmé, l'accès ne change pas.
+    subscription_pending_tier: Mapped[SubscriptionTier | None] = mapped_column(
+        Enum(SubscriptionTier), nullable=True
     )

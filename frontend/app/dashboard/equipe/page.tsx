@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
-import { api, StaffRole, TeamReport } from "@/lib/api";
-import { toFrenchMessage } from "@/lib/errors";
+import { api, StaffRole, SubscriptionTier, TeamReport } from "@/lib/api";
+import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
 import { duree } from "@/lib/duree";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -12,6 +12,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
+import UpgradeModal from "@/components/UpgradeModal";
 
 /**
  * Rapport d'activité par membre de l'équipe — la base d'une prime de rendement.
@@ -81,6 +82,7 @@ export default function TeamReportPage() {
   const [end, setEnd] = useState(todayIso());
   const [report, setReport] = useState<TeamReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeTier, setUpgradeTier] = useState<SubscriptionTier | null>(null);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -90,6 +92,11 @@ export default function TeamReportPage() {
     try {
       setReport(await api.getTeamReport(restaurantId, start, end));
     } catch (e) {
+      const tier = requiredTierFromError(e);
+      if (tier) {
+        setUpgradeTier(tier);
+        return;
+      }
       setError(toFrenchMessage(e));
     }
   }, [restaurantId, start, end]);
@@ -110,6 +117,14 @@ export default function TeamReportPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
+      {upgradeTier && restaurantId && (
+        <UpgradeModal
+          restaurantId={restaurantId}
+          requiredTier={upgradeTier}
+          onClose={() => setUpgradeTier(null)}
+          onUpgraded={() => load()}
+        />
+      )}
       <EnteteManager
         titre="Rapport d'équipe"
         sousTitre="Activité de chaque membre de l'équipe sur la période — de quoi asseoir une prime de rendement sur des chiffres plutôt que sur une impression. Ce rapport ne s'affiche nulle part ailleurs que sur cette page."

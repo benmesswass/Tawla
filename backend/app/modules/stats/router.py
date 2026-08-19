@@ -5,9 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.subscription import require_tier
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.stats import schemas, service
+from app.modules.tenants.models import SubscriptionTier
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 
@@ -52,6 +54,7 @@ async def proof(
     end: date_type | None = None,
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
     """
     Les trois chiffres à montrer au patron à la fin d'un pilote : commandes
@@ -59,6 +62,8 @@ async def proof(
     période précédente de même longueur, pour avoir un « avant ».
 
     Par défaut les 7 derniers jours, aujourd'hui inclus.
+
+    Réservé à Pro et Business (offre à trois paliers, 2026-08-18).
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
@@ -81,11 +86,14 @@ async def team_report(
     end: date_type | None = None,
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.BUSINESS)),
 ):
     """
     Activité de chaque membre de l'équipe sur une période — la base des primes
     de rendement. Réservé au manager : c'est un document de direction, pas un
     classement à afficher en salle.
+
+    Réservé à Business seul (offre à trois paliers, 2026-08-18).
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})

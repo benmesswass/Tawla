@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.dates import service_day_start
 from app.core.logging import get_logger, log_event
 from app.core.push import send_push_notification
+from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
@@ -13,6 +14,7 @@ from app.modules.orders import schemas
 from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 logger = get_logger("orders")
 
@@ -179,11 +181,21 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
         )
 
     restaurant_id = table.restaurant_id
+    restaurant = db.get(Restaurant, restaurant_id)
+    # Fidélité réservée à Pro et Business (offre à trois paliers, 2026-08-18) :
+    # en Essentiel, le numéro n'est jamais retenu, donc aucune fiche n'est
+    # créée plus bas — silencieux plutôt qu'une erreur, le client ne doit
+    # jamais voir sa commande bloquée pour un champ facultatif.
+    loyalty_phone = (
+        payload.loyalty_phone
+        if restaurant and tier_includes(effective_tier(restaurant), SubscriptionTier.PRO)
+        else None
+    )
     order = Order(
         restaurant_id=restaurant_id,
         table_id=table.id,
         scheduled_for=payload.scheduled_for,
-        loyalty_phone=payload.loyalty_phone,
+        loyalty_phone=loyalty_phone,
         client_order_id=payload.client_order_id,
     )
 
@@ -426,7 +438,13 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
         # Le WebSocket ci-dessus ne réveille que l'onglet resté ouvert au
         # premier plan — la notification push touche aussi le client qui a
         # quitté la page (best-effort, no-op si pas d'abonnement/clés VAPID).
-        if order.push_subscription:
+        # Réservée à Business (offre à trois paliers, 2026-08-18) : silencieux
+        # pour les autres paliers, le WebSocket ci-dessus couvre déjà l'écran
+        # resté ouvert.
+        restaurant = db.get(Restaurant, order.restaurant_id)
+        if order.push_subscription and restaurant and tier_includes(
+            effective_tier(restaurant), SubscriptionTier.BUSINESS
+        ):
             send_push_notification(
                 order.push_subscription,
                 title="Votre commande est prête !",
@@ -473,8 +491,15 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float) -
     Confirmation immédiate, comme le fallback simulé de Darna quand Konnect
     est désactivé — `payment_ref` reste vide ici, prêt à accueillir la
     référence Konnect le jour où l'intégration réelle remplace cette fonction.
+
+    Réservé à Pro et Business (offre à trois paliers, 2026-08-18) : en
+    Essentiel, seul l'encaissement en espèces est proposé.
     """
     order = _get_payable_order(db, order_id)
+
+    restaurant = db.get(Restaurant, order.restaurant_id)
+    if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
+        raise upgrade_required_error(SubscriptionTier.PRO)
 
     order.payment_method = PaymentMethod.CARD
     order.tip_amount = tip_amount

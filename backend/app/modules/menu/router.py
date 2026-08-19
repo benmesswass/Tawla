@@ -5,12 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.logging import get_logger, log_event
+from app.core.subscription import require_tier
 from app.modules.menu import csv_import, schemas, suggestions
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import service as tables_service
+from app.modules.tenants.models import SubscriptionTier
 
 logger = get_logger("menu")
 
@@ -51,7 +53,10 @@ def create_menu_item(payload: schemas.MenuItemCreate, db: Session = Depends(get_
 
 @router.post("/import-csv", response_model=schemas.MenuCsvImportResult)
 def import_menu_csv(
-    payload: schemas.MenuCsvImport, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
+    payload: schemas.MenuCsvImport,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
     """
     Import d'une carte complète depuis un export de tableur. Saisir 30 plats un
@@ -60,6 +65,8 @@ def import_menu_csv(
     Les lignes valides sont importées même si d'autres sont fautives : le
     manager reçoit la liste précise des lignes à corriger, plutôt que de devoir
     recommencer tout le fichier pour une faute de frappe.
+
+    Réservé à Pro et Business (offre à trois paliers, 2026-08-18).
     """
     result = csv_import.parse_menu_csv(payload.content)
     if not result.items:
@@ -151,9 +158,12 @@ def set_suggestions(
     payload: schemas.MenuSuggestionsUpdate,
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
     """Le manager choisit ce qui est proposé « avec ce plat » — remplacement en
-    bloc, ce qui rend l'appel rejouable sans effet de bord."""
+    bloc, ce qui rend l'appel rejouable sans effet de bord.
+
+    Réservé à Pro et Business (offre à trois paliers, 2026-08-18)."""
     suggested = suggestions.set_suggestions(db, item_id, payload.suggested_item_ids, staff.restaurant_id)
     log_event(
         logger, "menu.suggestions_set",
@@ -224,10 +234,13 @@ async def upload_menu_item_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
     """
     Photo déposée par le manager sur la carte. Réservée au manager : la photo
     d'un plat est un acte de gestion, au même titre que son prix.
+
+    Réservé à Pro et Business (offre à trois paliers, 2026-08-18).
     """
     item = _get_item_in_scope(db, item_id, staff)
 

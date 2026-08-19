@@ -68,6 +68,19 @@ export type Restaurant = RestaurantPublic & {
   slug: string;
   kitchen_sound_enabled: boolean;
   subscription_tier: SubscriptionTier;
+  subscription_period_end: string | null;
+};
+
+/**
+ * `mode: "demo"` : palier déjà appliqué, `restaurant` à jour, aucun paiement
+ * réel (aucune clé Konnect pour Tawla elle-même pour l'instant — voir
+ * backend app/core/konnect.py). `mode: "konnect"` : rediriger vers `pay_url`,
+ * le palier ne change qu'au règlement effectif du paiement.
+ */
+export type SubscriptionCheckoutResult = {
+  mode: "demo" | "konnect";
+  restaurant: Restaurant | null;
+  pay_url: string | null;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -521,6 +534,13 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
     }),
+  startSubscriptionCheckout: (restaurantId: number, tier: SubscriptionTier) =>
+    request<SubscriptionCheckoutResult>(`/api/v1/restaurants/${restaurantId}/subscription/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ tier }),
+    }),
+  checkSubscriptionPayment: (restaurantId: number) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/subscription/check`, { method: "POST" }),
   // Le token du QR, jamais des identifiants : sans ça, une boucle sur
   // `table_id` faisait sonner tous les écrans serveur, depuis n'importe où.
   callWaiter: (qrToken: string) =>

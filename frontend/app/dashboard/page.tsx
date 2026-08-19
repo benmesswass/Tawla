@@ -15,7 +15,7 @@ import {
   Table,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
-import { toFrenchMessage } from "@/lib/errors";
+import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 import Button from "@/components/ui/Button";
@@ -29,6 +29,7 @@ import { reduirePhoto } from "@/lib/photo";
 import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
 import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
+import UpgradeModal from "@/components/UpgradeModal";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -136,6 +137,7 @@ export default function DashboardPage() {
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [newItem, setNewItem] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeTier, setUpgradeTier] = useState<SubscriptionTier | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [dayStats, setDayStats] = useState<DashboardStats | null>(null);
@@ -200,13 +202,29 @@ export default function DashboardPage() {
       setStaffDrafts(Object.fromEntries(teamList.map((m) => [m.id, staffToDraft(m)])));
       setSuggestions(suggested);
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }, [restaurantId]);
 
   useEffect(() => {
     if (restaurantId) load();
   }, [restaurantId, load]);
+
+  /**
+   * Remplace `setError(toFrenchMessage(e))` dans tous les catch de cette
+   * page : un refus `UPGRADE_REQUIRED` ouvre l'écran d'incitation à passer au
+   * palier supérieur au lieu du simple bandeau rouge (paiement en ligne du
+   * passage à un palier supérieur, 2026-08-19) ; toute autre erreur se
+   * comporte exactement comme avant.
+   */
+  function handleGatedError(e: unknown) {
+    const tier = requiredTierFromError(e);
+    if (tier) {
+      setUpgradeTier(tier);
+      return;
+    }
+    setError(toFrenchMessage(e));
+  }
 
   async function saveRamadanMode(nextEnabled: boolean) {
     if (!restaurantId) return;
@@ -218,7 +236,8 @@ export default function DashboardPage() {
       setRamadanEnabled(updated.ramadan_mode_enabled);
       flash(nextEnabled ? "Mode Ramadan activé." : "Mode Ramadan désactivé.");
     } catch (e) {
-      setError(toFrenchMessage(e));
+      setRamadanEnabled(!nextEnabled);
+      handleGatedError(e);
     } finally {
       setSavingRamadan(false);
     }
@@ -234,7 +253,7 @@ export default function DashboardPage() {
       setCafeModeEnabled(updated.cafe_mode_enabled);
       flash(nextEnabled ? "Mode café simplifié activé." : "Mode café simplifié désactivé.");
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     } finally {
       setSavingCafeMode(false);
     }
@@ -250,7 +269,7 @@ export default function DashboardPage() {
       setKitchenSoundEnabled(updated.kitchen_sound_enabled);
       flash(nextEnabled ? "Retour sonore cuisine activé." : "Retour sonore cuisine désactivé.");
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     } finally {
       setSavingKitchenSound(false);
     }
@@ -288,7 +307,7 @@ export default function DashboardPage() {
       setEditingItemId(null);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -303,7 +322,7 @@ export default function DashboardPage() {
       setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
       flash(`Photo ajoutée à « ${item.name} ».`);
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     } finally {
       setPhotoEnCours(null);
     }
@@ -315,7 +334,7 @@ export default function DashboardPage() {
       const misAJour = await api.deleteMenuItemPhoto(item.id);
       setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -325,7 +344,7 @@ export default function DashboardPage() {
       await api.setMenuItemAvailability(item.id, !item.is_available);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -338,7 +357,7 @@ export default function DashboardPage() {
       setEditingItemId(null);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -377,7 +396,7 @@ export default function DashboardPage() {
       setAddingItem(false);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -393,7 +412,7 @@ export default function DashboardPage() {
       flash(`« ${draft.label} » enregistrée.`);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -414,7 +433,7 @@ export default function DashboardPage() {
       setNewTable(EMPTY_TABLE_DRAFT);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -437,7 +456,7 @@ export default function DashboardPage() {
       setSuggestions((prev) => ({ ...prev, [String(item.id)]: next }));
       flash("Suggestions enregistrées.");
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     } finally {
       setSavingSuggestionsFor(null);
     }
@@ -465,7 +484,7 @@ export default function DashboardPage() {
           errors: e.context.errors as string[],
         });
       } else {
-        setError(toFrenchMessage(e));
+        handleGatedError(e);
       }
     } finally {
       setSavingCsv(false);
@@ -496,7 +515,7 @@ export default function DashboardPage() {
       setNewStaff(EMPTY_STAFF_DRAFT);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     } finally {
       setSavingStaff(false);
     }
@@ -514,7 +533,7 @@ export default function DashboardPage() {
       flash(`${draft.name} mis à jour.`);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -525,7 +544,7 @@ export default function DashboardPage() {
       flash(member.is_active ? `Accès de ${member.name} désactivé.` : `Accès de ${member.name} rétabli.`);
       await load();
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -538,7 +557,7 @@ export default function DashboardPage() {
       }
       flash(`Nouveau mot de passe généré pour ${member.name}.`);
     } catch (e) {
-      setError(toFrenchMessage(e));
+      handleGatedError(e);
     }
   }
 
@@ -564,6 +583,14 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
+      {upgradeTier && restaurantId && (
+        <UpgradeModal
+          restaurantId={restaurantId}
+          requiredTier={upgradeTier}
+          onClose={() => setUpgradeTier(null)}
+          onUpgraded={(updated) => setRestaurant(updated)}
+        />
+      )}
       <EnteteManager
         titre="Carte"
         sousTitre="Modifier un plat, signaler une rupture, en ajouter un — et déposer les photos en les glissant sur leur vignette."
@@ -1004,7 +1031,7 @@ export default function DashboardPage() {
                   // un bandeau vert à chaque table déplacée serait du bruit.
                   setTables(await api.savePlan(restaurantId, placements));
                 } catch (e) {
-                  setError(toFrenchMessage(e));
+                  handleGatedError(e);
                 } finally {
                   setSavingPlan(false);
                 }
@@ -1292,8 +1319,9 @@ export default function DashboardPage() {
                 <Badge tone="neutral">{TIER_LABELS[restaurant.subscription_tier]}</Badge>
               </div>
               <p className="text-xs text-neutral-500 mt-2">
-                Informatif pour l&apos;instant — aucune fonctionnalité n&apos;est limitée par palier tant que la
-                facturation n&apos;est pas active.
+                Le paiement carte, la fidélité, le plan de salle visuel, les photos, le mode Ramadan, l&apos;import
+                CSV et la page de preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications
+                push demandent Business. Pour changer de palier, contactez Tawla.
               </p>
             </Card>
           )}

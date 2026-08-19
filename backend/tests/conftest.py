@@ -12,7 +12,7 @@ from app.core.rate_limit import _hits as _rate_limit_hits
 from app.main import app
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import create_access_token, hash_password
-from app.modules.tenants.models import Restaurant
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 # Base SQLite en mémoire dédiée aux tests. StaticPool = une seule connexion
 # partagée, sinon chaque session SQLite :memory: repart d'une DB vide.
@@ -69,16 +69,24 @@ def db_session():
         db.close()
 
 
-def create_restaurant(name: str = "Resto de test", slug: str | None = None) -> Restaurant:
+def create_restaurant(
+    name: str = "Resto de test", slug: str | None = None, subscription_tier: SubscriptionTier = SubscriptionTier.BUSINESS
+) -> Restaurant:
     """
     Crée un restaurant directement en base. Remplace l'ancien
     `POST /api/v1/restaurants`, supprimé en Phase 12.2 : cet endpoint n'était
     appelé par aucun frontend, mais restait ouvert sans authentification —
     n'importe qui pouvait créer des établissements. Les tests en avaient
     besoin comme fixture, plus comme contrat public.
+
+    Palier Business par défaut : la quasi-totalité des tests exercent le
+    produit, pas le gating par palier (offre à trois paliers, 2026-08-18) —
+    les tests qui testent justement ce gating passent leur propre palier.
     """
     db = _TestingSessionLocal()
-    restaurant = Restaurant(name=name, slug=slug or f"resto-{uuid.uuid4().hex[:8]}")
+    restaurant = Restaurant(
+        name=name, slug=slug or f"resto-{uuid.uuid4().hex[:8]}", subscription_tier=subscription_tier
+    )
     db.add(restaurant)
     db.commit()
     db.refresh(restaurant)
