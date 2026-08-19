@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.invoice import generate_invoice_pdf
 from app.core.konnect import is_konnect_enabled, verify_konnect_order_webhook
 from app.core.logging import get_logger, log_event
 from app.core.rate_limit import ORDER_VOLUME_MAX_REQUESTS, rate_limit
 from app.modules.orders import schemas, service
-from app.modules.orders.dependencies import get_order_by_token
+from app.modules.orders.dependencies import get_order_by_token, get_paid_order_by_query_token
 from app.modules.orders.models import Order, OrderStatus
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
+from app.modules.tenants.models import Restaurant
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 logger = get_logger("orders")
@@ -96,7 +99,7 @@ async def pay_by_card(
     propre Konnect (modèle direct, 2026-08-19), sinon mode démo — voir
     `service.start_card_payment`. `pay_url` non-null = rediriger le client.
     """
-    order, pay_url = await service.start_card_payment(db, order.id, payload.tip_amount)
+    order, pay_url = await service.start_card_payment(db, order.id, payload.tip_amount, payload.customer_email)
     return schemas.serialize_order(order, pay_url)
 
 
@@ -146,13 +149,64 @@ async def request_cash_payment(
     db: Session = Depends(get_db),
 ):
     """Le client demande à payer en espèces — prévient le serveur en temps réel."""
-    return await service.request_cash_payment(db, order.id, payload.tip_amount)
+    return await service.request_cash_payment(db, order.id, payload.tip_amount, payload.customer_email)
 
 
 @router.post("/{order_id}/pay/cash/confirm", response_model=schemas.OrderOutStaff)
 async def confirm_cash_payment(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Le serveur confirme avoir encaissé le cash à table."""
     return await service.confirm_cash_payment(db, order_id, staff)
+
+
+@router.post("/{order_id}/pay/card-terminal", response_model=schemas.OrderOut)
+async def request_card_terminal_payment(
+    payload: schemas.PayCardTerminalRequest = schemas.PayCardTerminalRequest(),
+    order: Order = Depends(get_order_by_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Carte physique : le client demande, un serveur apporte le terminal —
+    même mécanique que le paiement en espèces (carte physique / en ligne /
+    espèces, 2026-08-19).
+    """
+    return await service.request_card_terminal_payment(db, order.id, payload.tip_amount, payload.customer_email)
+
+
+@router.post("/{order_id}/pay/card-terminal/confirm", response_model=schemas.OrderOutStaff)
+async def confirm_card_terminal_payment(
+    order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+):
+    """Le serveur confirme avoir encaissé la carte physique à table."""
+    return await service.confirm_card_terminal_payment(db, order_id, staff)
+
+
+@router.get(
+    "/by-restaurant/{restaurant_id}/pending-card-terminal-payments", response_model=list[schemas.OrderOutStaff]
+)
+async def list_pending_card_terminal_payments(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+):
+    """Tables ayant demandé à payer par carte physique, pas encore encaissées."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return await service.list_pending_card_terminal_payments(db, restaurant_id)
+
+
+@router.get("/{order_id}/invoice")
+async def get_order_invoice(order: Order = Depends(get_paid_order_by_query_token), db: Session = Depends(get_db)):
+    """
+    Facture PDF — ouverte directement dans un navigateur (lien ou QR affiché
+    après paiement, éventuellement sur un autre appareil que celui qui a
+    commandé), jamais depuis l'app elle-même : pas de X-Order-Token en
+    en-tête possible, voir get_paid_order_by_query_token.
+    """
+    restaurant = db.get(Restaurant, order.restaurant_id)
+    pdf_bytes = generate_invoice_pdf(order, restaurant.name if restaurant else "Tawla")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="facture-commande-{order.id}.pdf"'},
+    )
 
 
 @router.post("/{order_id}/claim", response_model=schemas.OrderOutStaff)

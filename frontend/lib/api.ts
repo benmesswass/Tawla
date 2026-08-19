@@ -122,7 +122,7 @@ export type OrderStatus =
   | "served"
   | "cancelled";
 
-export type PaymentMethod = "card" | "cash";
+export type PaymentMethod = "card" | "card_terminal" | "cash";
 export type PaymentStatus = "unpaid" | "pending" | "paid";
 
 export type Order = {
@@ -374,6 +374,16 @@ export function mediaUrl(url: string | null): string | null {
   return url.startsWith("/") ? `${API_URL}${url}` : url;
 }
 
+/**
+ * Lien direct vers la facture PDF d'une commande payée — ouvrable tel quel
+ * dans un navigateur (scan du QR affiché après paiement), donc le jeton
+ * voyage en paramètre plutôt qu'en en-tête `X-Order-Token` (confirmations de
+ * paiement, 2026-08-19).
+ */
+export function invoiceUrl(orderId: number, orderToken: string): string {
+  return `${API_URL}/api/v1/orders/${orderId}/invoice?token=${encodeURIComponent(orderToken)}`;
+}
+
 export const api = {
   // Fiche complète — écrans staff uniquement, sous JWT.
   getRestaurant: (restaurantId: number) => request<Restaurant>(`/api/v1/restaurants/${restaurantId}`),
@@ -512,20 +522,32 @@ export const api = {
   },
   getKitchenTodayCount: (restaurantId: number) =>
     request<KitchenTodayCount>(`/api/v1/stats/kitchen-today-count/${restaurantId}`),
-  payByCard: (orderId: number, tipAmount: number, orderToken: string) =>
+  payByCard: (orderId: number, tipAmount: number, orderToken: string, customerEmail?: string) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/card`, {
       method: "POST",
-      body: JSON.stringify({ tip_amount: tipAmount }),
+      body: JSON.stringify({ tip_amount: tipAmount, customer_email: customerEmail || undefined }),
       headers: orderHeaders(orderToken),
     }),
-  requestCashPayment: (orderId: number, tipAmount: number, orderToken: string) =>
+  requestCashPayment: (orderId: number, tipAmount: number, orderToken: string, customerEmail?: string) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash`, {
       method: "POST",
-      body: JSON.stringify({ tip_amount: tipAmount }),
+      body: JSON.stringify({ tip_amount: tipAmount, customer_email: customerEmail || undefined }),
       headers: orderHeaders(orderToken),
     }),
   confirmCashPayment: (orderId: number) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash/confirm`, { method: "POST" }),
+  // Carte physique : le client demande, un serveur apporte le terminal —
+  // même mécanique que les espèces, moyen distinct (2026-08-19).
+  requestCardTerminalPayment: (orderId: number, tipAmount: number, orderToken: string, customerEmail?: string) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/card-terminal`, {
+      method: "POST",
+      body: JSON.stringify({ tip_amount: tipAmount, customer_email: customerEmail || undefined }),
+      headers: orderHeaders(orderToken),
+    }),
+  confirmCardTerminalPayment: (orderId: number) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/card-terminal/confirm`, { method: "POST" }),
+  listPendingCardTerminalPayments: (restaurantId: number) =>
+    request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-card-terminal-payments`),
   // Filet de sécurité appelé au retour de Konnect (`?konnect=success`) : en
   // dev, Konnect ne peut jamais joindre le webhook sur localhost.
   checkCardPayment: (orderId: number, orderToken: string) =>

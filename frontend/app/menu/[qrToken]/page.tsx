@@ -6,6 +6,7 @@ import { Cairo } from "next/font/google";
 import {
   api,
   mediaUrl,
+  invoiceUrl,
   wsUrl,
   orderWsUrl as buildOrderWsUrl,
   ApiError,
@@ -27,6 +28,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
 import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
 import LoyaltyStampCard from "@/components/LoyaltyStampCard";
+import InvoiceQr from "@/components/InvoiceQr";
 import { CULTURAL_FACTS } from "@/lib/culturalFacts";
 import { generateShareCardBlob } from "@/lib/shareCard";
 
@@ -170,6 +172,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // appel de suivi ni de paiement n'est autorisé (Phase 12.2).
   const [orderToken, setOrderToken] = useState<string | null>(null);
   const [tipInput, setTipInput] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
@@ -530,7 +533,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     const tip = Number(tipInput.replace(",", ".")) || 0;
     try {
       if (!orderToken) return;
-      const updated = await api.payByCard(trackedOrder.id, tip, orderToken);
+      const updated = await api.payByCard(trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined);
       // Restaurant ayant connecté son propre Konnect (modèle direct,
       // 2026-08-19) : rediriger pour régler, la commande reste "pending"
       // jusqu'au retour (`?konnect=success`, voir l'effet plus bas). Sans
@@ -556,7 +559,25 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       // Le pourboire vaut aussi pour les espèces : il était saisi puis perdu,
       // et le serveur venait encaisser le total sans lui.
       const tip = Number(tipInput.replace(",", ".")) || 0;
-      const updated = await api.requestCashPayment(trackedOrder.id, tip, orderToken);
+      const updated = await api.requestCashPayment(trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined);
+      setTrackedOrder(updated);
+    } catch (e) {
+      setPaymentError(toLocalizedMessage(e, locale));
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  async function payByCardTerminal() {
+    if (!trackedOrder) return;
+    setPaying(true);
+    setPaymentError(null);
+    try {
+      if (!orderToken) return;
+      const tip = Number(tipInput.replace(",", ".")) || 0;
+      const updated = await api.requestCardTerminalPayment(
+        trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined
+      );
       setTrackedOrder(updated);
     } catch (e) {
       setPaymentError(toLocalizedMessage(e, locale));
@@ -1064,14 +1085,34 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             <p className="text-sm font-medium mb-3">{t.paymentTitle}</p>
 
             {trackedOrder.payment_status === "paid" && (
-              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                {t.paidMessage(trackedOrder.payment_method === "card" ? "card" : "cash", trackedOrder.tip_amount)}
-              </p>
+              <>
+                <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                  {t.paidMessage(trackedOrder.payment_method ?? "card", trackedOrder.tip_amount)}
+                </p>
+                {orderToken && (
+                  <div className="mt-3 text-center">
+                    <a
+                      href={invoiceUrl(trackedOrder.id, orderToken)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm underline text-neutral-700"
+                    >
+                      {t.invoiceDownload}
+                    </a>
+                    <InvoiceQr
+                      url={invoiceUrl(trackedOrder.id, orderToken)}
+                      caption={t.invoiceQrCaption}
+                    />
+                  </div>
+                )}
+              </>
             )}
 
             {trackedOrder.payment_status === "pending" && (
               <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                {t.cashPendingMessage(trackedOrder.total_amount)}
+                {trackedOrder.payment_method === "card_terminal"
+                  ? t.cardTerminalPendingMessage(trackedOrder.total_amount)
+                  : t.cashPendingMessage(trackedOrder.total_amount)}
               </p>
             )}
 
@@ -1097,12 +1138,32 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
                   />
                 </div>
+                <div>
+                  <label htmlFor="customer-email" className="text-sm text-neutral-500">
+                    {t.emailLabel}
+                  </label>
+                  <input
+                    id="customer-email"
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder={t.emailPlaceholder}
+                    className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
+                  />
+                </div>
                 <button
                   onClick={payByCard}
                   disabled={paying}
                   className="w-full bg-neutral-900 text-white rounded-lg py-2.5 disabled:opacity-50"
                 >
                   {t.payByCard}
+                </button>
+                <button
+                  onClick={payByCardTerminal}
+                  disabled={paying}
+                  className="w-full border border-neutral-300 rounded-lg py-2.5 disabled:opacity-50"
+                >
+                  {t.payByCardTerminal}
                 </button>
                 <button
                   onClick={payByCash}

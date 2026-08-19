@@ -49,14 +49,21 @@ export const ar = {
 
   paymentTitle: "الخلاص",
   paidMessage: (method, tipAmount) =>
-    `الخلاص تم ✓ ${method === "card" ? "بالكارت" : "كاش"}` +
+    `الخلاص تم ✓ ${method === "cash" ? "كاش" : "بالكارت"}` +
     (tipAmount > 0 ? ` (فيها ${tipAmount.toFixed(2)} د.ت إكرامية)` : ""),
   cashPendingMessage: (amount) => `طلبت تخلص كاش — جرسون باش يجي يقبض ${amount.toFixed(2)} د.ت.`,
+  cardTerminalPendingMessage: (amount) =>
+    `طلبت تخلص بالكارت — جرسون باش يجي بالماكينة يقبض ${amount.toFixed(2)} د.ت.`,
   tipLabel: "الإكرامية (إختياري، للخلاص بالكارت)",
   tipPlaceholder: "0.00 د.ت",
-  payByCard: "خلص بالكارت",
+  emailLabel: "الإيميل (إختياري، باش توصلك الفاتورة)",
+  emailPlaceholder: "انت@مثال.com",
+  payByCard: "خلص أونلاين",
+  payByCardTerminal: "خلص بالكارت (الجرسون يجيب الماكينة)",
   payByCash: "خلص كاش (الجرسون باش يجي يقبض)",
   paymentFailedRetry: "الخلاص ما نجحش. تنجم تعاود تجرب.",
+  invoiceDownload: "حمل الفاتورة (PDF)",
+  invoiceQrCaption: "إسكانيها باش تلقاها في جهاز آخر",
   orderAgain: "أطلب مرة أخرى",
 
   splitBillToggle: "قسم الفاتورة بين بعضكم",
