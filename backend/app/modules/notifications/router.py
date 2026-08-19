@@ -9,6 +9,7 @@ from app.modules.notifications.dependencies import (
     authenticate_table_socket,
 )
 from app.modules.notifications.manager import manager, table_channel
+from app.modules.staff.models import StaffRole
 
 router = APIRouter(tags=["notifications"])
 
@@ -39,10 +40,11 @@ async def ws_staff(
 ):
     """
     Le serveur reçoit ici les nouvelles commandes à confirmer pour ses tables.
-    Réservé au personnel du restaurant (JWT en paramètre `token` : la poignée
-    de main WebSocket du navigateur ne permet pas d'en-tête personnalisé).
+    Réservé au personnel serveur/manager du restaurant (JWT en paramètre
+    `token` : la poignée de main WebSocket du navigateur ne permet pas
+    d'en-tête personnalisé).
     """
-    if not await authenticate_staff_socket(websocket, restaurant_id, token, db):
+    if not await authenticate_staff_socket(websocket, restaurant_id, token, db, StaffRole.WAITER, StaffRole.MANAGER):
         return
     await manager.connect(websocket, restaurant_id, channel="staff")
     await _pump(websocket, restaurant_id, "staff")
@@ -52,8 +54,9 @@ async def ws_staff(
 async def ws_kitchen(
     websocket: WebSocket, restaurant_id: int, token: str | None = None, db: Session = Depends(get_db)
 ):
-    """Le grand écran cuisine reçoit ici les commandes validées par le serveur."""
-    if not await authenticate_staff_socket(websocket, restaurant_id, token, db):
+    """Le grand écran cuisine reçoit ici les commandes validées par le serveur.
+    Réservé au personnel cuisine/manager, comme les routes HTTP équivalentes."""
+    if not await authenticate_staff_socket(websocket, restaurant_id, token, db, StaffRole.KITCHEN, StaffRole.MANAGER):
         return
     await manager.connect(websocket, restaurant_id, channel="kitchen")
     await _pump(websocket, restaurant_id, "kitchen")

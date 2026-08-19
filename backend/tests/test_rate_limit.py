@@ -1,4 +1,5 @@
-from app.core.rate_limit import _hits
+import app.core.rate_limit as rate_limit_module
+from app.core.rate_limit import _WINDOW_SECONDS, _hits, _sweep_expired
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 _LOGIN = {"email": "ratelimit@test.local", "password": "whatever123"}
@@ -82,6 +83,33 @@ def test_un_x_forwarded_for_force_ne_contourne_pas_le_compteur(client):
         headers["X-Forwarded-For"] = "9.9.9.200"
         assert client.post("/api/v1/auth/login", json=_LOGIN, headers=headers).status_code == 429
     finally:
+        _hits.clear()
+
+
+def test_une_ip_qui_ne_revient_jamais_finit_par_etre_oubliee(client):
+    """
+    S-6 : `_hits` créait une clé par (IP, route) et ne la supprimait jamais,
+    même une fois toutes ses requêtes sorties de la fenêtre glissante — fuite
+    lente sur une IP qui ne revient jamais (client mobile, IP publique qui
+    tourne). Le balayage périodique doit purger une clé entièrement expirée.
+    """
+    _hits.clear()
+    original_last_sweep = rate_limit_module._last_sweep
+    try:
+        assert _login(client, "41.226.0.99").status_code == 401
+        key = ("41.226.0.99", "/api/v1/auth/login")
+        assert key in _hits
+
+        # Force le balayage (normalement retardé de _WINDOW_SECONDS) et
+        # simule le temps écoulé depuis la seule requête de cette IP —
+        # `time.monotonic()` ne repart pas de zéro, il faut donc avancer
+        # depuis le timestamp réel enregistré, pas depuis une valeur absolue.
+        rate_limit_module._last_sweep = 0.0
+        _sweep_expired(now=_hits[key][-1] + _WINDOW_SECONDS + 1)
+
+        assert key not in _hits
+    finally:
+        rate_limit_module._last_sweep = original_last_sweep
         _hits.clear()
 
 

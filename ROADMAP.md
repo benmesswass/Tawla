@@ -135,11 +135,11 @@ la vérification est manuelle par nature.
 Réel, cité, mais sans conséquence pour un patron cette semaine. À ne pas faire
 maintenant, à ne pas oublier non plus.
 
-- [ ] **F-6** — les `public_token` des commandes ouvertes vivent en `sessionStorage` (`frontend/app/menu/[qrToken]/page.tsx:82`) alors que la file hors ligne est en `localStorage` (`:641`) : un onglet fermé par iOS fait perdre l'addition. Passer en `localStorage`
-- [ ] **P-4** — le mot « Swagger » est affiché au restaurateur qui paie (`frontend/app/dashboard/page.tsx:547`). Réécrire la phrase de son point de vue
-- [ ] **S-3** — corriger la phrase du résidu de `/loyalty/lookup` : avec le `qr_token`, la réponse ne dit pas seulement qu'un numéro est connu, elle donne aussi `order_count` et `is_birthday_today` (`app/modules/loyalty/schemas.py:38-39`, `:53-62`). Corriger la description, ou retirer `order_count` de la vue publique
-- [ ] **S-4** — `authenticate_staff_socket` (`app/modules/notifications/dependencies.py:31-54`) ne vérifie pas le rôle : un compte cuisine peut écouter `/ws/staff`. Sans risque entre collègues, à aligner par cohérence avec les routes HTTP
-- [ ] **S-6** — `_hits` (`app/core/rate_limit.py:16`) crée une clé par IP et ne la supprime jamais. Fuite lente, sans conséquence à l'échelle de 45 établissements
+- [x] **F-6** — les `public_token` des commandes ouvertes vivaient en `sessionStorage` alors que la file hors ligne est en `localStorage` : un onglet fermé par iOS faisait perdre l'addition. Passé en `localStorage` (`frontend/app/menu/[qrToken]/page.tsx`) (PR #65)
+- [x] **P-4** — déjà résolu incidemment par la PR #53 (photos par glisser-déposer) : la phrase « sans passer par Swagger » a été remplacée par une description neutre du point de vue du patron avant même la mise en ligne. Rien à coder ; vérifié qu'aucune autre mention technique ne subsiste (PR #65, vérification)
+- [x] **S-3** — phrase du résidu assumé de `/loyalty/lookup` corrigée (`backend/app/modules/loyalty/service.py::lookup_for_client`) : elle décrit désormais explicitement que le nombre de commandes, la progression vers la récompense et l'anniversaire du jour sont exposés, pas seulement l'existence du numéro. Champ `order_count` conservé — utilisé par le client lui-même pour sa propre progression fidélité (`frontend/app/menu/[qrToken]/page.tsx`) (PR #65)
+- [x] **S-4** — `authenticate_staff_socket` vérifie désormais le rôle, même séparation que les routes HTTP (`require_role`) : `/ws/staff` réservé serveur/manager, `/ws/kitchen` réservé cuisine/manager (`app/modules/notifications/dependencies.py`, `router.py`) (PR #65)
+- [x] **S-6** — `_hits` (`app/core/rate_limit.py`) est désormais purgé par un balayage global périodique des clés (IP, route) entièrement expirées, en plus du trim par clé existant (PR #65)
 
 ### 19bis.4 — La PR #53, ouverte et non fusionnée 🧑
 
@@ -217,22 +217,28 @@ pas au maintien « au cas où ».
 
 ---
 
-## Phase 22 — Un seul prix 🧑
+## Phase 22 — Facturer les paliers payants pour de vrai 🧑
 
-Décision qui n'attend aucune donnée nouvelle : elle est écrite dans deux
-documents et attendue par une constante `null` dans le code
-(`frontend/lib/offer.ts:18`, toujours `PRICE_MONTHLY_DT = null` au 2026-08-18).
+**Le prix unique envisagé ici (120 DT/mois, `PRICE_MONTHLY_DT`) a été
+abandonné le 2026-08-18, avant d'être codé.** Décision retenue à la place :
+**trois paliers (Essentiel 50 DT / Pro 100 DT / Business 150 DT), gating réel
+par fonctionnalité, et paiement en ligne du passage à un palier supérieur —
+livrés en PR #63** (`app/core/subscription.py`, `app/core/konnect.py`,
+`subscription_payments.py`, `frontend/lib/offer.ts`). `PRICE_MONTHLY_DT`
+n'existe plus nulle part dans le code ; cette section ne doit plus s'y
+référer, seul l'historique git le garde.
 
-- [ ] Fixer le prix unique 🧑 — proposition tenue depuis la revue : **120 DT/mois, service d'installation inclus**, cible 45 établissements. 45 × 120 DT ≈ 65 k DT/an tenable seul, contre 290 clients à 35 DT pour un revenu comparable et une charge de support intenable
-- [ ] Renseigner `PRICE_MONTHLY_DT` dans `frontend/lib/offer.ts` — la page publique affiche alors le montant sans autre changement de code
-- [ ] `Restaurant.pilot_ends_on` + bandeau « pilote gratuit jusqu'au JJ/MM » sur le dashboard + migration. Rend l'échéance explicite au lieu d'une conversation gênante à avoir. **Ne pas coder avant que le prix soit tranché** : un bandeau qui n'annonce aucune suite ne sert à rien
-- [ ] Facturation : facture mensuelle **manuelle** pour les dix premiers clients (un virement ou un chèque). N'automatiser qu'au-delà — YAGNI strict
-- [ ] Ne pas activer la facturation avant la fin de la phase pilote gratuite
+- [x] Trois paliers d'abonnement, gating réel (import CSV, suggestions, photos, plan de salle, mode Ramadan, rapport d'équipe, notifications push, paiement carte et fidélité au parcours client), page tarifaire publique réécrite en conséquence (PR #63)
+- [x] Paiement en ligne du passage à un palier supérieur — écran d'incitation avec prix et fonctionnalités débloquées, réutilise le contenu de la page tarifaire ; palier payé en ligne expire après 30 jours sans renouvellement (`effective_tier()`), palier fixé à la main par `setup_restaurant.py` reste sans expiration (PR #63)
+- [ ] **Activer un vrai moyen de paiement avant le premier palier réellement encaissé** 🧑 — `PAYMENT_MODE=konnect` reste dormant faute de clés réelles (`KONNECT_API_KEY`/`KONNECT_RECEIVER_WALLET_ID`, `backend/.env.example:47-51`) : tout paiement de palier reste en mode démonstration tant que ce n'est pas fait. Décision à prendre par Wassim : ouvrir un compte Konnect réel (passerelle déjà câblée, sandbox gratuit, coût chiffré en `AUDIT_COUTS_PRODUCTION.md` §4.5 — 1,3 % à 2,9 % par transaction, pas d'abonnement) ou évaluer une alternative (ex. Click to Pay / un autre PSP tunisien) si Konnect ne convient pas le moment venu
+- [ ] `Restaurant.subscription_period_end` n'est affiché nulle part au manager (`frontend/app/dashboard/page.tsx` montre le palier, pas l'échéance) — ajouter la date d'expiration du palier payé en ligne sur le dashboard, pour rendre l'échéance explicite au lieu d'une conversation gênante
+- [ ] Facturation manuelle (facture, virement ou chèque) pour les pilotes installés à la main par `setup_restaurant.py`. N'automatiser qu'au-delà des dix premiers clients — YAGNI strict
+- [ ] Ne pas activer de facturation réelle avant la fin de la phase pilote gratuite de chaque établissement
 
-**Le prix ne bouge jamais. Le périmètre, oui.** La première remise tue le
-positionnement définitivement, et elle se saura — dans un milieu où tout le
-monde se parle. Face à une négociation : donner du temps (quatre semaines
-gratuites), jamais des dinars.
+**Le prix ne bouge jamais une fois annoncé à un restaurateur. Le périmètre,
+oui.** La première remise tue le positionnement définitivement, et elle se
+saura — dans un milieu où tout le monde se parle. Face à une négociation :
+donner du temps (quatre semaines gratuites), jamais des dinars.
 
 ---
 
@@ -309,7 +315,6 @@ est la condition **exacte** qui la ferait entrer dans la roadmap.
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul
-- **Trois paliers d'abonnement** — remplacés par un prix unique. `Restaurant.subscription_tier` reste en base sans coût, et **aucun gating n'est codé** : bloquer une fonctionnalité déjà utilisée par un pilote casserait son service sans aucun bénéfice
 - **Grands groupes, événements, réservations de salle** — Wassim a choisi de ne pas cadrer ; ne pas relancer
 - **SMS au client, imprimante cuisine matérielle, montée de version Next.js** — arbitrages déjà tranchés (cf. archive)
 

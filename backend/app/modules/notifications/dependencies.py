@@ -2,7 +2,7 @@ from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
 from app.modules.orders.models import Order
-from app.modules.staff.models import Staff
+from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import decode_access_token
 from app.modules.tables.models import Table
 
@@ -28,9 +28,14 @@ async def _reject(websocket: WebSocket) -> None:
     await websocket.close(code=WS_UNAUTHORIZED)
 
 
-async def authenticate_staff_socket(websocket: WebSocket, restaurant_id: int, token: str | None, db: Session) -> bool:
+async def authenticate_staff_socket(
+    websocket: WebSocket, restaurant_id: int, token: str | None, db: Session, *roles: StaffRole
+) -> bool:
     """
-    Canaux staff et cuisine : réservés au personnel de CE restaurant.
+    Canaux staff et cuisine : réservés au personnel de CE restaurant, et
+    depuis S-4 (audit 2026-08-18) au(x) rôle(s) `roles` — même séparation que
+    les routes HTTP équivalentes (`require_role`) : `/ws/staff` pour
+    serveur/manager, `/ws/kitchen` pour cuisine/manager.
 
     Ces canaux diffusaient jusqu'ici en clair, sans aucun contrôle, l'activité
     complète d'un établissement à qui connaissait son identifiant numérique
@@ -48,6 +53,10 @@ async def authenticate_staff_socket(websocket: WebSocket, restaurant_id: int, to
 
     staff = db.get(Staff, int(payload["sub"]))
     if not staff or not staff.is_active or staff.restaurant_id != restaurant_id:
+        await _reject(websocket)
+        return False
+
+    if roles and staff.role not in roles:
         await _reject(websocket)
         return False
 
