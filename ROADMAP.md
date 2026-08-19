@@ -135,11 +135,11 @@ la vérification est manuelle par nature.
 Réel, cité, mais sans conséquence pour un patron cette semaine. À ne pas faire
 maintenant, à ne pas oublier non plus.
 
-- [x] **F-6** — les `public_token` des commandes ouvertes vivaient en `sessionStorage` alors que la file hors ligne est en `localStorage` : un onglet fermé par iOS faisait perdre l'addition. Passé en `localStorage` (`frontend/app/menu/[qrToken]/page.tsx`) (PR #65)
-- [x] **P-4** — déjà résolu incidemment par la PR #53 (photos par glisser-déposer) : la phrase « sans passer par Swagger » a été remplacée par une description neutre du point de vue du patron avant même la mise en ligne. Rien à coder ; vérifié qu'aucune autre mention technique ne subsiste (PR #65, vérification)
-- [x] **S-3** — phrase du résidu assumé de `/loyalty/lookup` corrigée (`backend/app/modules/loyalty/service.py::lookup_for_client`) : elle décrit désormais explicitement que le nombre de commandes, la progression vers la récompense et l'anniversaire du jour sont exposés, pas seulement l'existence du numéro. Champ `order_count` conservé — utilisé par le client lui-même pour sa propre progression fidélité (`frontend/app/menu/[qrToken]/page.tsx`) (PR #65)
-- [x] **S-4** — `authenticate_staff_socket` vérifie désormais le rôle, même séparation que les routes HTTP (`require_role`) : `/ws/staff` réservé serveur/manager, `/ws/kitchen` réservé cuisine/manager (`app/modules/notifications/dependencies.py`, `router.py`) (PR #65)
-- [x] **S-6** — `_hits` (`app/core/rate_limit.py`) est désormais purgé par un balayage global périodique des clés (IP, route) entièrement expirées, en plus du trim par clé existant (PR #65)
+- [x] **F-6** — les `public_token` des commandes ouvertes vivaient en `sessionStorage` alors que la file hors ligne est en `localStorage` : un onglet fermé par iOS faisait perdre l'addition. Passé en `localStorage` (`frontend/app/menu/[qrToken]/page.tsx`) (PR #64)
+- [x] **P-4** — déjà résolu incidemment par la PR #53 (photos par glisser-déposer) : la phrase « sans passer par Swagger » a été remplacée par une description neutre du point de vue du patron avant même la mise en ligne. Rien à coder ; vérifié qu'aucune autre mention technique ne subsiste (PR #64, vérification)
+- [x] **S-3** — phrase du résidu assumé de `/loyalty/lookup` corrigée (`backend/app/modules/loyalty/service.py::lookup_for_client`) : elle décrit désormais explicitement que le nombre de commandes, la progression vers la récompense et l'anniversaire du jour sont exposés, pas seulement l'existence du numéro. Champ `order_count` conservé — utilisé par le client lui-même pour sa propre progression fidélité (`frontend/app/menu/[qrToken]/page.tsx`) (PR #64)
+- [x] **S-4** — `authenticate_staff_socket` vérifie désormais le rôle, même séparation que les routes HTTP (`require_role`) : `/ws/staff` réservé serveur/manager, `/ws/kitchen` réservé cuisine/manager (`app/modules/notifications/dependencies.py`, `router.py`) (PR #64)
+- [x] **S-6** — `_hits` (`app/core/rate_limit.py`) est désormais purgé par un balayage global périodique des clés (IP, route) entièrement expirées, en plus du trim par clé existant (PR #64)
 
 ### 19bis.4 — La PR #53, ouverte et non fusionnée 🧑
 
