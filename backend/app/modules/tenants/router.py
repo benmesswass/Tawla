@@ -1,16 +1,38 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.dates import as_utc
+from app.core.konnect import (
+    KonnectError,
+    init_konnect_payment,
+    is_konnect_enabled,
+    sign_konnect_webhook,
+    verify_konnect_webhook,
+)
+from app.core.logging import get_logger, log_event
+from app.core.rate_limit import rate_limit
+from app.core.subscription import (
+    SUBSCRIPTION_DURATION_DAYS,
+    TIER_PRICES_TND,
+    effective_tier,
+    require_tier,
+    tier_includes,
+)
+from app.core.subscription_payments import settle_subscription_payment
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import service as tables_service
 from app.modules.tenants import schemas
-from app.modules.tenants.models import Restaurant
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 router = APIRouter(prefix="/api/v1/restaurants", tags=["restaurants"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
+logger = get_logger("tenants")
 
 
 # `POST /api/v1/restaurants` a été supprimé en Phase 12.2 : il créait un
@@ -57,7 +79,7 @@ def get_restaurant(
         raise HTTPException(
             status_code=404, detail={"code": "RESTAURANT_NOT_FOUND", "message": "restaurant not found"}
         )
-    return restaurant
+    return schemas.serialize_restaurant(restaurant)
 
 
 @router.patch("/{restaurant_id}/ramadan-mode", response_model=schemas.RestaurantOut)
@@ -66,7 +88,9 @@ def set_ramadan_mode(
     payload: schemas.RamadanModeUpdate,
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
+    """Réservé à Pro et Business (offre à trois paliers, 2026-08-18)."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
 
@@ -80,7 +104,7 @@ def set_ramadan_mode(
     restaurant.iftar_time = payload.iftar_time
     db.commit()
     db.refresh(restaurant)
-    return restaurant
+    return schemas.serialize_restaurant(restaurant)
 
 
 @router.patch("/{restaurant_id}/cafe-mode", response_model=schemas.RestaurantOut)
@@ -102,7 +126,7 @@ def set_cafe_mode(
     restaurant.cafe_mode_enabled = payload.enabled
     db.commit()
     db.refresh(restaurant)
-    return restaurant
+    return schemas.serialize_restaurant(restaurant)
 
 
 @router.patch("/{restaurant_id}/kitchen-sound", response_model=schemas.RestaurantOut)
@@ -124,4 +148,146 @@ def set_kitchen_sound(
     restaurant.kitchen_sound_enabled = payload.enabled
     db.commit()
     db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
+def _restaurant_or_404(db: Session, restaurant_id: int) -> Restaurant:
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant:
+        raise HTTPException(
+            status_code=404, detail={"code": "RESTAURANT_NOT_FOUND", "message": "restaurant not found"}
+        )
     return restaurant
+
+
+@router.post("/{restaurant_id}/subscription/checkout", response_model=schemas.SubscriptionCheckoutOut)
+def start_subscription_checkout(
+    restaurant_id: int,
+    payload: schemas.SubscriptionCheckoutIn,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Passage à un palier supérieur, payé en ligne (offre à trois paliers,
+    paiement en ligne du 2026-08-18). Essentiel n'est jamais une cible valide
+    — c'est déjà le palier gratuit par défaut, payer pour l'obtenir n'a pas de
+    sens — ni un palier déjà couvert par le palier effectif actuel : ceci est
+    un passage à un palier SUPÉRIEUR, jamais un renouvellement à l'identique
+    ni une rétrogradation.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    target = payload.tier
+    if target not in TIER_PRICES_TND:
+        raise HTTPException(
+            status_code=400, detail={"code": "INVALID_TIER", "message": "essentiel is never a paid checkout target"}
+        )
+    current = effective_tier(restaurant)
+    if tier_includes(current, target):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NOT_AN_UPGRADE", "message": f"restaurant already has {current.value} or above"},
+        )
+
+    if not is_konnect_enabled():
+        # Mode démonstration : aucune clé Konnect réelle pour Tawla elle-même
+        # pour l'instant (voir app/core/konnect.py) — le palier est appliqué
+        # immédiatement, comme pay_by_card_simulated pour le paiement d'une
+        # commande. Même calcul de prolongation que le règlement réel
+        # (settle_subscription_payment) : reproduire ce même comportement ici
+        # en mode démo évite un abonnement qui se comporterait différemment
+        # le jour où Konnect devient réel.
+        now = datetime.now(timezone.utc)
+        base = (
+            as_utc(restaurant.subscription_period_end)
+            if restaurant.subscription_period_end and as_utc(restaurant.subscription_period_end) > now
+            else now
+        )
+        restaurant.subscription_tier = target
+        restaurant.subscription_period_end = base + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
+        db.commit()
+        db.refresh(restaurant)
+        log_event(
+            logger, "subscription.checkout_demo",
+            restaurant_id=restaurant_id, tier=target.value, provider="demo",
+        )
+        return schemas.SubscriptionCheckoutOut(mode="demo", restaurant=schemas.serialize_restaurant(restaurant))
+
+    try:
+        pay_url, payment_ref = init_konnect_payment(
+            amount_tnd=TIER_PRICES_TND[target],
+            order_id=str(restaurant.id),
+            description=f"Tawla — abonnement {target.value}",
+            webhook=(
+                f"{settings.backend_url}/api/v1/restaurants/{restaurant.id}/subscription/webhook"
+                f"?sig={sign_konnect_webhook(restaurant.id)}"
+            ),
+            success_url=f"{settings.frontend_url}/dashboard?konnect=success",
+            fail_url=f"{settings.frontend_url}/dashboard?konnect=fail",
+            lifespan_minutes=60,
+        )
+    except KonnectError as err:
+        log_event(logger, "subscription.checkout_init_failed", restaurant_id=restaurant_id, error=str(err))
+        raise HTTPException(
+            status_code=502, detail={"code": "PAYMENT_INIT_FAILED", "message": "could not start the payment"}
+        ) from err
+
+    restaurant.subscription_payment_ref = payment_ref
+    restaurant.subscription_pending_tier = target
+    db.commit()
+    log_event(
+        logger, "subscription.checkout_initiated",
+        restaurant_id=restaurant_id, tier=target.value, payment_ref=payment_ref, provider="konnect",
+    )
+    return schemas.SubscriptionCheckoutOut(mode="konnect", pay_url=pay_url)
+
+
+@router.get("/{restaurant_id}/subscription/webhook")
+def subscription_webhook(
+    restaurant_id: int,
+    sig: str,
+    db: Session = Depends(get_db),
+    _rate: None = Depends(rate_limit()),
+):
+    """
+    Appelée en GET par Konnect avec `?payment_ref=…` ajouté à l'URL fournie à
+    l'init-payment (non utilisé ici : le règlement relit toujours le paiement
+    depuis l'API Konnect, jamais depuis les query params). `sig` signe
+    `restaurant_id` (voir sign_konnect_webhook) — sans elle, un id connu ne
+    suffit pas à forger un règlement.
+
+    En dev local, Konnect ne peut pas joindre localhost : le filet de sécurité
+    est `POST /subscription/check`, appelée par la page de retour.
+    """
+    if not is_konnect_enabled():
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "not found"})
+    if not verify_konnect_webhook(restaurant_id, sig):
+        log_event(logger, "subscription.webhook_bad_signature", restaurant_id=restaurant_id)
+        raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"})
+
+    result = settle_subscription_payment(db, restaurant_id)
+    log_event(logger, "subscription.webhook", restaurant_id=restaurant_id, result=result)
+    return {"received": True, "result": result}
+
+
+@router.post("/{restaurant_id}/subscription/check", response_model=schemas.RestaurantOut)
+def check_subscription_payment(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Filet de sécurité appelé par la page de retour (`?konnect=success`) : en
+    dev local, le webhook Konnect ci-dessus ne peut jamais être atteint
+    (Konnect ne joint pas localhost). Sans effet si rien n'est en attente
+    (idempotent, voir settle_subscription_payment) — donc sans risque à
+    appeler même quand Konnect est désactivé.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+    settle_subscription_payment(db, restaurant_id)
+    db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)

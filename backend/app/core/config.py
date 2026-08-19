@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_contact_email: str = "contact@tawla.tn"
 
+    # URLs canoniques (une seule valeur chacune, contrairement à
+    # `frontend_origin` qui peut lister plusieurs origines CORS) — utilisées
+    # pour construire les URLs de retour/webhook du paiement d'abonnement
+    # (app/core/konnect.py) : là où rediriger le manager après paiement, et
+    # l'adresse à laquelle Konnect doit rappeler ce backend.
+    frontend_url: str = "http://localhost:3000"
+    backend_url: str = "http://localhost:8000"
+
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:

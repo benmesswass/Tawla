@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { lalezar } from "@/lib/fonts";
 import TawlaLogo from "@/components/brand/TawlaLogo";
-import { BENEFITS, INCLUDED, PILOT_RESULTS, PRICE_MONTHLY_DT } from "@/lib/offer";
+import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
 
 /**
  * Page d'accueil publique (Phase 14.2).
@@ -84,24 +84,39 @@ export default function HomePage() {
 
       <section className="bg-[var(--semoule)] border-t border-[var(--line)]">
         <div className="max-w-3xl mx-auto px-6 py-12">
-          <h2 className={`${lalezar.className} text-2xl mb-2`}>Un seul prix</h2>
-          {PRICE_MONTHLY_DT === null ? (
-            <p className="text-[var(--ink-soft)]">
-              Un abonnement mensuel unique, service compris, sans commission sur vos commandes. Le tarif vous
-              est communiqué au premier rendez-vous.
-            </p>
-          ) : (
-            <p className="text-[var(--ink-soft)]">
-              <span className="text-3xl font-semibold text-[var(--encre)] tabular-nums">
-                {PRICE_MONTHLY_DT} DT
-              </span>{" "}
-              par mois, service compris, sans commission sur vos commandes.
-            </p>
-          )}
-          <p className="text-sm text-[var(--ink-soft)] mt-3">
-            Aucune commission n&apos;est prélevée sur vos encaissements : vos clients vous règlent
-            directement, comme aujourd&apos;hui.
+          <h2 className={`${lalezar.className} text-2xl mb-2`}>Trois paliers, un seul abonnement</h2>
+          <p className="text-sm text-[var(--ink-soft)] mb-8 max-w-xl">
+            Sans commission sur vos commandes, quel que soit le palier : vos clients vous règlent directement,
+            comme aujourd&apos;hui.
           </p>
+
+          <div className="grid gap-6 sm:grid-cols-3">
+            {TIERS.map((tier) => (
+              <div
+                key={tier.id}
+                className={`rounded-lg border p-5 bg-white ${
+                  tier.recommended ? "border-[var(--harissa)] ring-1 ring-[var(--harissa)]" : "border-[var(--line)]"
+                }`}
+              >
+                {tier.recommended && (
+                  <p className="text-xs font-semibold text-[var(--harissa)] mb-2 uppercase tracking-wide">
+                    Recommandé
+                  </p>
+                )}
+                <h3 className="font-semibold text-lg">{tier.name}</h3>
+                <p className="text-xs text-[var(--ink-soft)] mb-3">{tier.tagline}</p>
+                <p className="mb-4">
+                  <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">{tier.priceDT} DT</span>
+                  <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
+                </p>
+                <ul className="text-sm text-[var(--ink-soft)] space-y-1.5">
+                  {tier.features.map((feature) => (
+                    <li key={feature}>• {feature}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <a

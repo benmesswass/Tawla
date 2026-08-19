@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
-import { api, PeriodProof, ProofStats } from "@/lib/api";
-import { toFrenchMessage } from "@/lib/errors";
+import { api, PeriodProof, ProofStats, SubscriptionTier } from "@/lib/api";
+import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
 import { duree } from "@/lib/duree";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
 import Skeleton from "@/components/ui/Skeleton";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import UpgradeModal from "@/components/UpgradeModal";
 
 /**
  * La page que Wassim montre à un patron à la fin d'un pilote, et au jury.
@@ -168,6 +169,7 @@ export default function ProofPage() {
   const [end, setEnd] = useState(todayIso());
   const [proof, setProof] = useState<ProofStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeTier, setUpgradeTier] = useState<SubscriptionTier | null>(null);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -177,6 +179,11 @@ export default function ProofPage() {
     try {
       setProof(await api.getProofStats(restaurantId, start, end));
     } catch (e) {
+      const tier = requiredTierFromError(e);
+      if (tier) {
+        setUpgradeTier(tier);
+        return;
+      }
       setError(toFrenchMessage(e));
     }
   }, [restaurantId, start, end]);
@@ -197,6 +204,14 @@ export default function ProofPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
+      {upgradeTier && restaurantId && (
+        <UpgradeModal
+          restaurantId={restaurantId}
+          requiredTier={upgradeTier}
+          onClose={() => setUpgradeTier(null)}
+          onUpgraded={() => load()}
+        />
+      )}
       <EnteteManager
         titre="Preuve du pilote"
         sousTitre="Les trois seuls chiffres qui comptent pour décider si Tawla vous fait gagner de l'argent, comparés à la période précédente de même longueur."

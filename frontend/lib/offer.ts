@@ -7,15 +7,71 @@
  */
 
 /**
- * Prix mensuel affiché publiquement, en dinars.
+ * Trois paliers d'abonnement (offre tranchée le 2026-08-18, remplace le prix
+ * unique de la Phase 14.3/22). Chaque palier inclut tout ce qu'offre le
+ * précédent — voir `app/core/subscription.py` côté backend pour le gating
+ * réel derrière chaque fonctionnalité listée ici.
  *
- * `null` tant que Wassim ne l'a pas tranché (ROADMAP Phase 14.3) : la page
- * affiche alors « tarif communiqué au premier rendez-vous » plutôt qu'un
- * montant. La revue d'investissement du 2026-08-13 propose 120 DT avec le
- * service inclus — c'est une proposition, pas une décision, et publier un prix
- * non validé engagerait l'entreprise sur un montant que personne n'a arrêté.
+ * Le palier vendu à un établissement se fixe dans le fichier de config de
+ * `scripts/setup_restaurant.py` au moment de l'installation — il n'existe
+ * pas de portail self-service tant que la facturation reste manuelle.
  */
-export const PRICE_MONTHLY_DT: number | null = null;
+export type OfferTier = {
+  id: "essentiel" | "pro" | "business";
+  name: string;
+  priceDT: number;
+  tagline: string;
+  features: string[];
+  recommended?: boolean;
+};
+
+export const TIERS: OfferTier[] = [
+  {
+    id: "essentiel",
+    name: "Essentiel",
+    priceDT: 50,
+    tagline: "Pour un petit café, une seule salle",
+    features: [
+      "QR, menu et commande client",
+      "Écrans serveur et cuisine en temps réel",
+      "Appel serveur depuis la table",
+      "Paiement en espèces",
+      "Mode café simplifié",
+      "Liste de tables simple",
+      "Installation, QR imprimés et formation",
+    ],
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    priceDT: 100,
+    tagline: "Pour vendre plus et fidéliser vos clients",
+    recommended: true,
+    features: [
+      "Tout Essentiel",
+      "Paiement carte",
+      "Programme de fidélité",
+      "Vente incitative « avec ce plat »",
+      "Plan de salle visuel, plusieurs zones",
+      "Photos des plats, mode Ramadan",
+      "Import CSV du menu",
+      "Page de preuve complète",
+    ],
+  },
+  {
+    id: "business",
+    name: "Business",
+    priceDT: 150,
+    tagline: "Pour une équipe, plusieurs adresses",
+    features: [
+      "Tout Pro",
+      "Rapport d'équipe et primes par serveur",
+      "Multi-établissements (construit pour vous à la demande)",
+      "Notifications push à vos clients",
+      "Support prioritaire",
+    ],
+  },
+];
 
 /**
  * Ce qui est inclus dans l'abonnement. C'est le cœur du positionnement retenu :
