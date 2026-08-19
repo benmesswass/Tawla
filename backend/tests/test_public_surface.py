@@ -246,6 +246,36 @@ def test_staff_websocket_accepts_its_own_staff(client, db_session):
         assert "loyalty_phone" not in message
 
 
+def test_staff_websocket_refuses_a_kitchen_account(client, db_session):
+    """S-4 (audit 2026-08-18) : `/ws/staff` diffusait l'activité de service à
+    quiconque avait un JWT valide du restaurant, cuisine incluse — alors que la
+    route HTTP équivalente (`POST /orders/{id}/confirm`) est réservée à
+    serveur/manager (`_WAITER_OR_MANAGER`, `orders/router.py`)."""
+    restaurant, _, _ = _setup(client, db_session)
+    kitchen = create_staff(restaurant.id, StaffRole.KITCHEN)
+
+    with pytest_raises_ws(client, f"/ws/staff/{restaurant.id}?token={_token_of(kitchen)}"):
+        pass
+
+
+def test_kitchen_websocket_refuses_a_waiter_account(client, db_session):
+    """Symétrique de S-4 : `/ws/kitchen` réservé à cuisine/manager, comme la
+    route HTTP équivalente (`_KITCHEN_OR_MANAGER`, `orders/router.py`)."""
+    restaurant, _, _ = _setup(client, db_session)
+    waiter = create_staff(restaurant.id, StaffRole.WAITER)
+
+    with pytest_raises_ws(client, f"/ws/kitchen/{restaurant.id}?token={_token_of(waiter)}"):
+        pass
+
+
+def test_kitchen_websocket_accepts_its_own_kitchen_staff(client, db_session):
+    restaurant, _, _ = _setup(client, db_session)
+    kitchen = create_staff(restaurant.id, StaffRole.KITCHEN)
+
+    with client.websocket_connect(f"/ws/kitchen/{restaurant.id}?token={_token_of(kitchen)}") as ws:
+        assert ws is not None
+
+
 def test_order_websocket_requires_the_order_token(client, db_session):
     restaurant, table, item = _setup(client, db_session)
     order = _create_order(client, table, item)

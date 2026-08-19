@@ -23,6 +23,25 @@ ORDER_VOLUME_MAX_REQUESTS = 120
 
 _hits: dict[tuple[str, str], list[float]] = defaultdict(list)
 
+# Balayage global périodique des clés (IP, route) devenues inactives (S-6,
+# audit 2026-08-18) : le trim par clé, dans `_dependency`, ne purge que la
+# clé de la requête en cours — une IP qui ne revient jamais (client mobile,
+# IP publique qui tourne) laisse sa clé en mémoire pour toujours. Fuite lente,
+# sans conséquence à l'échelle visée (quelques dizaines d'établissements),
+# mais réelle : un balayage périodique suffit, pas de structure plus lourde.
+_SWEEP_INTERVAL_SECONDS = _WINDOW_SECONDS
+_last_sweep = time.monotonic()
+
+
+def _sweep_expired(now: float) -> None:
+    global _last_sweep
+    if now - _last_sweep < _SWEEP_INTERVAL_SECONDS:
+        return
+    _last_sweep = now
+    expired = [key for key, hits in _hits.items() if not hits or now - hits[-1] > _WINDOW_SECONDS]
+    for key in expired:
+        del _hits[key]
+
 
 def client_ip(request: Request) -> str:
     """
@@ -60,6 +79,7 @@ def rate_limit(max_requests: int = _MAX_REQUESTS):
     def _dependency(request: Request) -> None:
         key = (client_ip(request), request.url.path)
         now = time.monotonic()
+        _sweep_expired(now)
         hits = _hits[key]
         while hits and now - hits[0] > _WINDOW_SECONDS:
             hits.pop(0)

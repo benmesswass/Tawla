@@ -60,10 +60,13 @@ def lookup_for_client(db: Session, payload: schemas.LoyaltyLookup) -> LoyaltyMem
     Consultation par le client attablé, en lecture seule (Phase 19.1). Le
     restaurant vient du `qr_token`, jamais d'un identifiant fourni.
 
-    Résidu assumé et documenté : avec le token de la table en main, on peut
-    encore savoir si un numéro est connu de **ce** restaurant. C'est le même
-    niveau d'accès que passer commande, et le prix d'une carte de fidélité
-    sans compte.
+    Résidu assumé et documenté (précisé après S-3, audit 2026-08-18) : avec le
+    token de la table en main, on peut savoir si un numéro est connu de **ce**
+    restaurant, et si oui consulter son nombre de commandes, sa progression
+    vers la récompense et si c'est son anniversaire aujourd'hui
+    (`LoyaltyMemberPublicOut`) — pas seulement l'existence du numéro. C'est le
+    même niveau d'accès que passer commande, et le prix d'une carte de
+    fidélité sans compte.
     """
     table = tables_service.get_table_by_qr_token(db, payload.qr_token)
     member = _get_member(db, table.restaurant_id, payload.phone_number)

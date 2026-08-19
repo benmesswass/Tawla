@@ -80,20 +80,20 @@ type TrackedOrderRef = { id: number; token: string };
 function storeTrackedOrderRef(qrToken: string, id: number, token: string): void {
   const refs = readTrackedOrderRefs(qrToken).filter((r) => r.id !== id);
   refs.push({ id, token });
-  sessionStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify(refs));
+  localStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify(refs));
 }
 
 function forgetTrackedOrderRef(qrToken: string, id: number): void {
   const refs = readTrackedOrderRefs(qrToken).filter((r) => r.id !== id);
   if (refs.length === 0) {
-    sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+    localStorage.removeItem(lastOrderStorageKey(qrToken));
     return;
   }
-  sessionStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify(refs));
+  localStorage.setItem(lastOrderStorageKey(qrToken), JSON.stringify(refs));
 }
 
 function readTrackedOrderRefs(qrToken: string): TrackedOrderRef[] {
-  const raw = sessionStorage.getItem(lastOrderStorageKey(qrToken));
+  const raw = localStorage.getItem(lastOrderStorageKey(qrToken));
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -107,7 +107,7 @@ function readTrackedOrderRefs(qrToken: string): TrackedOrderRef[] {
     // Contenu illisible (l'identifiant seul, avant la Phase 12.2) : inutilisable
     // sans token, on l'oublie plutôt que de tenter un appel voué au 404.
   }
-  sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+  localStorage.removeItem(lastOrderStorageKey(qrToken));
   return [];
 }
 
@@ -409,7 +409,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     if (msg.event === "order.status_changed" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, status: msg.status } : prev));
       if (msg.status === "served" || msg.status === "cancelled") {
-        sessionStorage.removeItem(lastOrderStorageKey(qrToken));
+        localStorage.removeItem(lastOrderStorageKey(qrToken));
       }
     }
     // Le serveur vient d'encaisser un paiement en espèces demandé depuis
