@@ -42,6 +42,14 @@ const TIER_LABELS: Record<SubscriptionTier, string> = {
   business: "Business",
 };
 
+// `subscription_period_end` reste posé même après expiration (calcul à la
+// lecture côté serveur, voir effective_tier()) : ne jamais l'afficher seul,
+// toujours avec la garde `subscription_tier !== "essentiel"` — sinon un
+// palier déjà retombé à Essentiel afficherait une échéance passée.
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+}
+
 type TableDraft = { label: string; zone: string };
 
 function tableToDraft(table: Table): TableDraft {
@@ -1318,6 +1326,12 @@ export default function DashboardPage() {
                 <span className="font-medium">Palier d&apos;abonnement</span>
                 <Badge tone="neutral">{TIER_LABELS[restaurant.subscription_tier]}</Badge>
               </div>
+              {restaurant.subscription_tier !== "essentiel" && restaurant.subscription_period_end && (
+                <p className="text-xs text-neutral-500 mt-2">
+                  Valable jusqu&apos;au {formatDate(restaurant.subscription_period_end)}. Repasse automatiquement à
+                  Essentiel sans renouvellement d&apos;ici là.
+                </p>
+              )}
               <p className="text-xs text-neutral-500 mt-2">
                 Le paiement carte, la fidélité, le plan de salle visuel, les photos, le mode Ramadan, l&apos;import
                 CSV et la page de preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications
