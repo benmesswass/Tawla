@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.subscription import effective_tier, require_tier, tier_includes
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import schemas, service
 from app.modules.tables.models import Table
+from app.modules.tables.poster import generate_table_poster_pdf
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 router = APIRouter(prefix="/api/v1/tables", tags=["tables"])
@@ -61,6 +63,31 @@ def update_table(
     db.commit()
     db.refresh(table)
     return table
+
+
+@router.get("/{table_id}/poster")
+def get_table_poster(table_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """
+    Affiche QR en PDF, à imprimer et coller sur la table — pour les
+    restaurants en self-service, qui n'ont pas de chevalet fourni à
+    l'installation contrairement aux pilotes de `setup_restaurant.py`.
+    """
+    table = db.get(Table, table_id)
+    if not table or table.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "TABLE_NOT_FOUND", "message": "table not found"})
+
+    restaurant = db.get(Restaurant, table.restaurant_id)
+    pdf_bytes = generate_table_poster_pdf(
+        menu_url=f"{settings.frontend_url}/menu/{table.qr_token}",
+        table_label=table.label,
+        restaurant_name=restaurant.name if restaurant else "Tawla",
+        zone=table.zone,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="affiche-{table.qr_token}.pdf"'},
+    )
 
 
 @router.get("/by-token/{qr_token}", response_model=schemas.TableOut)

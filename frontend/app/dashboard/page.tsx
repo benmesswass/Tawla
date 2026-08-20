@@ -165,6 +165,7 @@ export default function DashboardPage() {
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
   const [copiedTableId, setCopiedTableId] = useState<number | null>(null);
+  const [downloadingPosterId, setDownloadingPosterId] = useState<number | null>(null);
   const [team, setTeam] = useState<Staff[]>([]);
   const [staffDrafts, setStaffDrafts] = useState<Record<number, StaffDraft>>({});
   const [newStaff, setNewStaff] = useState<NewStaffDraft>(EMPTY_STAFF_DRAFT);
@@ -470,6 +471,25 @@ export default function DashboardPage() {
       await load();
     } catch (e) {
       handleGatedError(e);
+    }
+  }
+
+  async function downloadTablePoster(table: Table) {
+    setError(null);
+    setDownloadingPosterId(table.id);
+    try {
+      const blob = await api.downloadTablePoster(table.id);
+      const slug = table.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `tawla-affiche-${slug || table.id}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setDownloadingPosterId(null);
     }
   }
 
@@ -1151,6 +1171,15 @@ export default function DashboardPage() {
                       }}
                     >
                       {copiedTableId === table.id ? "Copié !" : "Copier le lien"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={downloadingPosterId === table.id}
+                      onClick={() => downloadTablePoster(table)}
+                    >
+                      {downloadingPosterId === table.id ? "Téléchargement..." : "Télécharger l'affiche (PDF)"}
                     </Button>
                   </div>
                   {clientLink && (
