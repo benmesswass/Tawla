@@ -40,6 +40,29 @@ def is_konnect_enabled() -> bool:
     return os.environ.get("PAYMENT_MODE") == "konnect"
 
 
+def is_subscription_konnect_enabled() -> bool:
+    """
+    Vrai si le paiement réel Konnect est utilisable pour l'ABONNEMENT Tawla
+    précisément — pas seulement si `PAYMENT_MODE=konnect` est posé.
+
+    `PAYMENT_MODE` est un interrupteur UNIQUE partagé avec le paiement carte
+    du client (modèle direct, wallet de CHAQUE restaurant, voir
+    `Restaurant.konnect_credentials()`) : l'activer pour l'un active
+    mécaniquement `is_konnect_enabled()` pour l'autre. Côté abonnement il n'y
+    a pas d'équivalent par-restaurant à vérifier — seulement les variables
+    globales `KONNECT_API_KEY`/`KONNECT_RECEIVER_WALLET_ID` (wallet de Tawla
+    elle-même). Sans elles, activer Konnect pour le paiement carte ferait
+    sortir le checkout d'abonnement du mode démo alors qu'aucune clé réelle
+    n'existe pour lui : `init_konnect_payment` lèverait `KonnectError` et le
+    checkout renverrait 502 au lieu de rester en démo.
+    """
+    return (
+        is_konnect_enabled()
+        and bool(os.environ.get("KONNECT_API_KEY"))
+        and bool(os.environ.get("KONNECT_RECEIVER_WALLET_ID"))
+    )
+
+
 def _webhook_key() -> bytes:
     """
     Clé de signature du webhook. Konnect NE signe PAS ses webhooks (simple GET

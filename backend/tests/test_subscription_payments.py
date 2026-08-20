@@ -135,11 +135,32 @@ def test_a_gated_feature_is_blocked_again_once_the_paid_period_expires(client, d
     assert res.json()["detail"]["code"] == "UPGRADE_REQUIRED"
 
 
+def test_demo_checkout_used_even_with_payment_mode_konnect_if_tawlas_own_keys_are_missing(client, monkeypatch):
+    """Régression : PAYMENT_MODE=konnect est l'interrupteur UNIQUE partagé
+    avec le paiement carte du client (wallet par restaurant, pas besoin des
+    clés Tawla). L'activer pour lui seul ne doit jamais faire sortir le
+    checkout d'abonnement du mode démo tant que Tawla n'a pas SES PROPRES
+    KONNECT_API_KEY/KONNECT_RECEIVER_WALLET_ID — sinon 502 systématique
+    (KonnectError: clé/wallet manquante) au lieu de rester en démo."""
+    monkeypatch.setenv("PAYMENT_MODE", "konnect")
+    restaurant = create_restaurant(slug="konnect-mode-on-no-tawla-keys", subscription_tier=SubscriptionTier.ESSENTIEL)
+    headers = _manager_headers(restaurant.id)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "pro"}, headers=headers)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["mode"] == "demo"
+    assert body["restaurant"]["subscription_tier"] == "pro"
+
+
 # --- Chemin Konnect réel (dormant, simulé via monkeypatch) ------------------
 
 
 def test_konnect_checkout_stores_pending_payment_without_changing_tier_yet(client, db_session, monkeypatch):
     monkeypatch.setenv("PAYMENT_MODE", "konnect")
+    monkeypatch.setenv("KONNECT_API_KEY", "tawla-test-key")
+    monkeypatch.setenv("KONNECT_RECEIVER_WALLET_ID", "tawla-test-wallet")
     restaurant = create_restaurant(slug="konnect-checkout-init", subscription_tier=SubscriptionTier.ESSENTIEL)
     headers = _manager_headers(restaurant.id)
 
