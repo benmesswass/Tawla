@@ -33,34 +33,60 @@ export class PlatformAdminApiError extends Error {
 
 export type SubscriptionTier = "essentiel" | "pro" | "business";
 
+export type PlatformAdminInfo = {
+  id: number;
+  email: string;
+  name: string;
+  is_active: boolean;
+};
+
 export type RestaurantSummary = {
   id: number;
   name: string;
   slug: string;
-  subscription_tier: SubscriptionTier;
+  // Palier réellement actif (`effective_tier()` côté serveur) — un palier
+  // payé en ligne expiré y apparaît déjà retombé à "essentiel".
+  effective_tier: SubscriptionTier;
   created_at: string;
   orders_count: number;
   revenue_tnd: number;
   last_order_at: string | null;
+  dashboard_views_last_7d: number;
 };
 
 export type WeeklyPoint = {
   week_start: string;
   restaurants_created: number;
-  orders_count: number;
-  revenue_tnd: number;
 };
 
+/**
+ * Les chiffres indispensables de l'opérateur — même discipline que
+ * `PeriodProof` (`lib/api.ts`) : volontairement pas un chiffre de plus.
+ */
 export type PlatformOverview = {
   generated_at: string;
+
   restaurants_total: number;
-  restaurants_by_tier: Record<SubscriptionTier, number>;
   restaurants_created_last_30d: number;
-  orders_total: number;
-  orders_last_30d: number;
-  revenue_total_tnd: number;
-  revenue_last_30d_tnd: number;
-  weekly: WeeklyPoint[];
+
+  restaurants_by_tier: Record<SubscriptionTier, number>;
+
+  // MRR réel : paliers payés en ligne et toujours actifs uniquement, jamais
+  // les pilotes fixés à la main par setup_restaurant.py.
+  mrr_tnd: number;
+  paying_restaurants_count: number;
+
+  // Rétention (signal anti-résiliation, ROADMAP.md Phase 24).
+  dashboard_views_last_7d: number;
+  restaurants_active_last_7d: number;
+
+  orders_last_7d: number;
+  gmv_last_7d_tnd: number;
+
+  // `null` = aucune commande sur la période, pas 0%.
+  lost_orders_rate_last_7d: number | null;
+
+  weekly_signups: WeeklyPoint[];
   restaurants: RestaurantSummary[];
 };
 
@@ -91,10 +117,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const platformAdminApi = {
-  login: (password: string) =>
-    request<{ access_token: string; token_type: string }>("/api/v1/platform-admin/login", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    }),
+  login: (email: string, password: string) =>
+    request<{ access_token: string; token_type: string; admin: PlatformAdminInfo }>(
+      "/api/v1/platform-admin/login",
+      { method: "POST", body: JSON.stringify({ email, password }) }
+    ),
   getOverview: () => request<PlatformOverview>("/api/v1/platform-admin/overview"),
 };

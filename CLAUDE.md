@@ -103,6 +103,11 @@ cd backend && python scripts/purge_donnees_personnelles.py [--appliquer]
 # une migration, sinon la colonne manque en prod.
 cd backend && alembic revision --autogenerate -m "description"
 cd backend && alembic upgrade head
+
+# Compte du dashboard plateforme (vue admin cross-tenant, /admin côté
+# frontend) — un seul canal de création, jamais une route d'inscription
+# publique. Mot de passe demandé en interactif, jamais en argument.
+cd backend && python scripts/create_platform_admin.py --email wassim@tawla.tn --name Wassim
 ```
 
 Comptes démo (fixes, mot de passe `tawla2026`) : `manager@tawla.tn` (manager),

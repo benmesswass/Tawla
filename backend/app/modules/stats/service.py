@@ -8,6 +8,7 @@ from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
 from app.modules.staff.models import Staff
 from app.modules.stats import schemas
+from app.modules.stats.models import DashboardView
 
 # Pas de config timezone par resto pour l'instant (MVP mono-pays) — décalage
 # fixe Tunisie (UTC+1, pas d'heure d'été) uniquement pour l'affichage des
@@ -17,15 +18,16 @@ from app.modules.stats import schemas
 TUNISIA_UTC_OFFSET_HOURS = 1
 
 
-def _lost_orders(orders: list[Order], now: datetime) -> list[Order]:
+def lost_orders(orders: list[Order], now: datetime) -> list[Order]:
     """
     Définition unique de « commande perdue » : annulée, ou jamais prise en
     charge au-delà du seuil d'abandon.
 
-    Partagée par le tableau de bord et la page de preuve. Les deux écrans
-    montrent le même jour au même patron : s'ils divergeaient d'une seule
-    commande, il cesserait de croire les deux — et c'est sur ce chiffre que
-    repose l'argument de vente.
+    Partagée par le tableau de bord et la page de preuve d'un restaurant, et
+    par le dashboard plateforme (`platform_admin/service.py`) pour son taux de
+    commandes perdues tous restaurants confondus — jamais une redéfinition :
+    un restaurant qui verrait un taux différent chez lui et sur l'agrégat de
+    Wassim cesserait de croire l'un des deux.
     """
     abandoned_before = now - ABANDONED_PENDING_AFTER
     return [
@@ -36,11 +38,12 @@ def _lost_orders(orders: list[Order], now: datetime) -> list[Order]:
     ]
 
 
-def _paid_orders(orders: list[Order]) -> list[Order]:
+def paid_orders(orders: list[Order]) -> list[Order]:
     """
     Commandes qui comptent dans la recette : celles **réellement réglées** —
     paiement carte abouti, ou espèces confirmées par le serveur. Même ensemble
-    que celui dont la page de preuve tire le panier moyen.
+    que celui dont la page de preuve tire le panier moyen, et que le dashboard
+    plateforme (`platform_admin/service.py`) utilise pour le GMV et le MRR.
 
     Longtemps c'était « tout sauf les annulées », et la recette additionnait
     donc des commandes que personne n'avait payées : le patron lisait chaque
@@ -63,6 +66,13 @@ def _average(values: list[float]) -> float | None:
 
 
 async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> schemas.DashboardStats:
+    # Instrumentation de rétention (ROADMAP.md Phase 24, voir stats/models.py)
+    # — une ligne par appel, donc par ouverture de /dashboard ou
+    # /dashboard/stats. Écrite en premier et indépendamment du reste : un
+    # signal d'usage ne doit jamais dépendre du succès du calcul de stats.
+    db.add(DashboardView(restaurant_id=restaurant_id))
+    db.commit()
+
     # Bornée par la journée de service (5h Tunis, Phase 19.5), pas par minuit
     # UTC : sinon une commande de sohour (2h Tunis) apparaît sous un jour
     # différent ici et sur les écrans de service (F-3, audit 2026-08-18).
@@ -142,8 +152,8 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
     # avec les mêmes règles que la page de preuve : les deux écrans parlent du
     # même jour au même homme, ils doivent dire la même chose.
     now = datetime.now(timezone.utc)
-    revenue_today = sum(o.total_amount for o in _paid_orders(orders_today))
-    lost_orders_today = len(_lost_orders(orders_today, now))
+    revenue_today = sum(o.total_amount for o in paid_orders(orders_today))
+    lost_orders_today = len(lost_orders(orders_today, now))
 
     return schemas.DashboardStats(
         date=day,
@@ -185,23 +195,23 @@ def _period_proof(
         .all()
     )
 
-    lost = _lost_orders(orders, now)
+    lost = lost_orders(orders, now)
     cancelled = [o for o in lost if o.status == OrderStatus.CANCELLED]
     abandoned = [o for o in lost if o.status != OrderStatus.CANCELLED]
 
     order_to_kitchen = [
         (o.sent_to_kitchen_at - o.created_at).total_seconds() for o in orders if o.sent_to_kitchen_at
     ]
-    paid_orders = _paid_orders(orders)
-    baskets = [o.total_amount for o in paid_orders]
+    restaurant_paid_orders = paid_orders(orders)
+    baskets = [o.total_amount for o in restaurant_paid_orders]
 
     # Une commande « avec suggestion » est une commande où le client a accepté
     # au moins une proposition. Comparer ces paniers aux autres est la seule
     # façon d'attribuer une hausse à la vente incitative plutôt qu'à une table
     # plus nombreuse.
-    with_suggestion = [o for o in paid_orders if any(line.from_suggestion for line in o.items)]
+    with_suggestion = [o for o in restaurant_paid_orders if any(line.from_suggestion for line in o.items)]
     boosted_ids = {o.id for o in with_suggestion}
-    without_suggestion = [o for o in paid_orders if o.id not in boosted_ids]
+    without_suggestion = [o for o in restaurant_paid_orders if o.id not in boosted_ids]
 
     return schemas.PeriodProof(
         start=start,

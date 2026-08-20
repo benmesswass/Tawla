@@ -8,7 +8,10 @@ import TawlaMark from "@/components/brand/TawlaMark";
 
 function errorMessage(err: unknown): string {
   if (err instanceof PlatformAdminApiError && err.code === "INVALID_CREDENTIALS") {
-    return "Mot de passe incorrect.";
+    return "E-mail ou mot de passe incorrect.";
+  }
+  if (err instanceof PlatformAdminApiError && err.code === "ACCOUNT_DISABLED") {
+    return "Ce compte a été désactivé.";
   }
   if (err instanceof PlatformAdminApiError && err.code === "RATE_LIMITED") {
     return "Trop de tentatives. Patientez une minute avant de réessayer.";
@@ -18,6 +21,7 @@ function errorMessage(err: unknown): string {
 
 export default function PlatformAdminLoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -27,7 +31,7 @@ export default function PlatformAdminLoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const { access_token } = await platformAdminApi.login(password);
+      const { access_token } = await platformAdminApi.login(email, password);
       setAdminToken(access_token);
       router.push("/admin");
     } catch (err) {
@@ -60,6 +64,22 @@ export default function PlatformAdminLoginPage() {
         {error && <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
 
         <div className="space-y-1">
+          <label htmlFor="email" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
+            E-mail
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[var(--harissa)]/40 focus:border-[var(--harissa)]"
+            style={{ border: "1px solid var(--line)", background: "white" }}
+          />
+        </div>
+
+        <div className="space-y-1">
           <label htmlFor="password" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
             Mot de passe
           </label>
@@ -67,7 +87,6 @@ export default function PlatformAdminLoginPage() {
             id="password"
             type="password"
             required
-            autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[var(--harissa)]/40 focus:border-[var(--harissa)]"

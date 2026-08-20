@@ -26,6 +26,10 @@ function formatMoney(amount: number): string {
   return `${amount.toFixed(2)} DT`;
 }
 
+function formatPercent(rate: number | null): string {
+  return rate === null ? "—" : `${(rate * 100).toFixed(0)} %`;
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
@@ -38,46 +42,16 @@ function errorMessage(): string {
   return "Une erreur est survenue. Réessayez dans un instant.";
 }
 
-function WeeklyBarChart({
-  title,
-  points,
-  valueOf,
-  color,
-  emptyMessage,
-}: {
-  title: string;
-  points: PlatformOverview["weekly"];
-  valueOf: (p: PlatformOverview["weekly"][number]) => number;
-  color: string;
-  emptyMessage: string;
-}) {
-  const max = Math.max(1, ...points.map(valueOf));
-  const isEmpty = points.every((p) => valueOf(p) === 0);
+function KpiTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <Card padding="md">
-      <h2 className="font-semibold mb-3">{title}</h2>
-      {isEmpty ? (
-        <EmptyState message={emptyMessage} />
-      ) : (
-        <div className="flex items-end gap-1 h-28">
-          {points.map((p) => {
-            const value = valueOf(p);
-            return (
-              <div
-                key={p.week_start}
-                className="flex-1 flex flex-col items-center justify-end h-full"
-                title={`Semaine du ${formatWeekLabel(p.week_start)} — ${value}`}
-              >
-                <div
-                  className="w-full rounded-t"
-                  style={{ height: value ? `${(value / max) * 100}%` : "1px", background: color }}
-                />
-                <span className="text-[10px] mt-1" style={{ color: "var(--ink-soft)" }}>
-                  {formatWeekLabel(p.week_start)}
-                </span>
-              </div>
-            );
-          })}
+      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
+        {label}
+      </div>
+      <div className="text-2xl font-semibold mt-1">{value}</div>
+      {sub && (
+        <div className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+          {sub}
         </div>
       )}
     </Card>
@@ -95,9 +69,9 @@ export default function PlatformAdminPage() {
       const data = await platformAdminApi.getOverview();
       setOverview(data);
     } catch (err) {
-      // Session invalide (jamais configurée, expirée après 12h) : le client
-      // a déjà effacé le token, il ne reste qu'à repartir sur l'écran de
-      // connexion — pas la peine d'afficher une erreur qui va disparaître.
+      // Session invalide (jamais configurée, expirée après 12h, compte
+      // désactivé) : le client a déjà effacé le token, il ne reste qu'à
+      // repartir sur l'écran de connexion.
       if (err instanceof PlatformAdminApiError && (err.code === "NOT_AUTHENTICATED" || err.code === "INVALID_TOKEN")) {
         router.replace("/admin/login");
         return;
@@ -124,14 +98,16 @@ export default function PlatformAdminPage() {
     return (
       <div className="p-4 max-w-5xl mx-auto space-y-3">
         <Skeleton className="h-8 w-72" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
       </div>
     );
   }
+
+  const maxWeeklySignups = Math.max(1, ...(overview?.weekly_signups.map((w) => w.restaurants_created) ?? [1]));
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
@@ -157,12 +133,17 @@ export default function PlatformAdminPage() {
 
       {overview && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <KpiTile
+              label="Restaurants clients"
+              value={String(overview.restaurants_total)}
+              sub={`${overview.restaurants_created_last_30d} nouveaux sur 30 jours`}
+            />
+
             <Card padding="md">
               <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
-                Restaurants clients
+                Répartition par palier
               </div>
-              <div className="text-2xl font-semibold mt-1">{overview.restaurants_total}</div>
               <div className="flex flex-wrap gap-1 mt-2">
                 {(Object.keys(TIER_LABELS) as SubscriptionTier[]).map((tier) => (
                   <Badge key={tier} tone="neutral">
@@ -172,49 +153,60 @@ export default function PlatformAdminPage() {
               </div>
             </Card>
 
-            <Card padding="md">
-              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
-                Nouveaux restaurants (30j)
-              </div>
-              <div className="text-2xl font-semibold mt-1">{overview.restaurants_created_last_30d}</div>
-            </Card>
+            <KpiTile
+              label="MRR réel"
+              value={formatMoney(overview.mrr_tnd)}
+              sub={`${overview.paying_restaurants_count} restaurant(s) payant(s) en ligne`}
+            />
 
-            <Card padding="md">
-              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
-                Commandes
-              </div>
-              <div className="text-2xl font-semibold mt-1">{overview.orders_total}</div>
-              <div className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
-                {overview.orders_last_30d} sur les 30 derniers jours
-              </div>
-            </Card>
+            <KpiTile
+              label="Rétention (7j)"
+              value={String(overview.dashboard_views_last_7d)}
+              sub={`${overview.restaurants_active_last_7d}/${overview.restaurants_total} restaurant(s) ont ouvert leur dashboard`}
+            />
 
-            <Card padding="md">
-              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
-                Recette totale
-              </div>
-              <div className="text-2xl font-semibold mt-1">{formatMoney(overview.revenue_total_tnd)}</div>
-              <div className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
-                {formatMoney(overview.revenue_last_30d_tnd)} sur les 30 derniers jours
-              </div>
-            </Card>
+            <KpiTile
+              label="Commandes (7j)"
+              value={String(overview.orders_last_7d)}
+              sub={`${formatMoney(overview.gmv_last_7d_tnd)} de GMV payé`}
+            />
+
+            <KpiTile
+              label="Commandes perdues (7j)"
+              value={formatPercent(overview.lost_orders_rate_last_7d)}
+              sub="Même définition que côté manager"
+            />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <WeeklyBarChart
-              title="Nouveaux restaurants par semaine"
-              points={overview.weekly}
-              valueOf={(p) => p.restaurants_created}
-              color="var(--menthe)"
-              emptyMessage="Aucune inscription sur les 12 dernières semaines."
-            />
-            <WeeklyBarChart
-              title="Commandes par semaine"
-              points={overview.weekly}
-              valueOf={(p) => p.orders_count}
-              color="var(--harissa)"
-              emptyMessage="Aucune commande sur les 12 dernières semaines."
-            />
+          <div className="mb-6">
+            <Card padding="md">
+              <h2 className="font-semibold mb-3">Nouveaux restaurants par semaine</h2>
+              {overview.weekly_signups.every((w) => w.restaurants_created === 0) ? (
+                <EmptyState message="Aucune inscription sur les 12 dernières semaines." />
+              ) : (
+                <div className="flex items-end gap-1 h-28">
+                  {overview.weekly_signups.map((w) => (
+                    <div
+                      key={w.week_start}
+                      className="flex-1 flex flex-col items-center justify-end h-full"
+                      title={`Semaine du ${formatWeekLabel(w.week_start)} — ${w.restaurants_created} restaurant(s)`}
+                    >
+                      <div
+                        className="w-full bg-[var(--menthe)] rounded-t"
+                        style={{
+                          height: w.restaurants_created
+                            ? `${(w.restaurants_created / maxWeeklySignups) * 100}%`
+                            : "1px",
+                        }}
+                      />
+                      <span className="text-[10px] mt-1" style={{ color: "var(--ink-soft)" }}>
+                        {formatWeekLabel(w.week_start)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
           </div>
 
           <Card padding="md">
@@ -231,7 +223,8 @@ export default function PlatformAdminPage() {
                       <th className="font-normal pb-2 pr-3">Inscrit le</th>
                       <th className="font-normal pb-2 pr-3">Commandes</th>
                       <th className="font-normal pb-2 pr-3">Recette</th>
-                      <th className="font-normal pb-2">Dernière commande</th>
+                      <th className="font-normal pb-2 pr-3">Dernière commande</th>
+                      <th className="font-normal pb-2">Ouvertures (7j)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -239,12 +232,19 @@ export default function PlatformAdminPage() {
                       <tr key={r.id} className="border-t" style={{ borderColor: "var(--line)" }}>
                         <td className="py-2 pr-3 font-medium">{r.name}</td>
                         <td className="py-2 pr-3">
-                          <Badge tone="neutral">{TIER_LABELS[r.subscription_tier]}</Badge>
+                          <Badge tone="neutral">{TIER_LABELS[r.effective_tier]}</Badge>
                         </td>
                         <td className="py-2 pr-3">{formatDate(r.created_at)}</td>
                         <td className="py-2 pr-3">{r.orders_count}</td>
                         <td className="py-2 pr-3">{formatMoney(r.revenue_tnd)}</td>
-                        <td className="py-2">{r.last_order_at ? formatDate(r.last_order_at) : "—"}</td>
+                        <td className="py-2 pr-3">{r.last_order_at ? formatDate(r.last_order_at) : "—"}</td>
+                        <td className="py-2">
+                          {r.dashboard_views_last_7d === 0 ? (
+                            <Badge tone="warning">Inactif</Badge>
+                          ) : (
+                            r.dashboard_views_last_7d
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
