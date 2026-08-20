@@ -11,6 +11,7 @@ from app.core.konnect import (
     KonnectError,
     init_konnect_payment,
     is_konnect_enabled,
+    is_subscription_konnect_enabled,
     sign_konnect_webhook,
     verify_konnect_webhook,
 )
@@ -219,14 +220,17 @@ def start_subscription_checkout(
             detail={"code": "NOT_AN_UPGRADE", "message": f"restaurant already has {current.value} or above"},
         )
 
-    if not is_konnect_enabled():
+    if not is_subscription_konnect_enabled():
         # Mode démonstration : aucune clé Konnect réelle pour Tawla elle-même
         # pour l'instant (voir app/core/konnect.py) — le palier est appliqué
         # immédiatement, comme pay_by_card_simulated pour le paiement d'une
         # commande. Même calcul de prolongation que le règlement réel
         # (settle_subscription_payment) : reproduire ce même comportement ici
         # en mode démo évite un abonnement qui se comporterait différemment
-        # le jour où Konnect devient réel.
+        # le jour où Konnect devient réel. `is_subscription_konnect_enabled`
+        # (pas `is_konnect_enabled` seule) : PAYMENT_MODE=konnect peut être
+        # posé pour le paiement carte du client sans que Tawla ait encore ses
+        # propres clés Konnect — rester en démo tant qu'elles manquent.
         now = datetime.now(timezone.utc)
         base = (
             as_utc(restaurant.subscription_period_end)
