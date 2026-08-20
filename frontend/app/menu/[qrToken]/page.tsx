@@ -28,7 +28,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
 import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
 import LoyaltyStampCard from "@/components/LoyaltyStampCard";
-import InvoiceQr from "@/components/InvoiceQr";
+import QrCode from "@/components/QrCode";
 import { CULTURAL_FACTS } from "@/lib/culturalFacts";
 import { generateShareCardBlob } from "@/lib/shareCard";
 
@@ -1099,8 +1099,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     >
                       {t.invoiceDownload}
                     </a>
-                    <InvoiceQr
+                    <QrCode
                       url={invoiceUrl(trackedOrder.id, orderToken)}
+                      alt="QR code de la facture"
                       caption={t.invoiceQrCaption}
                     />
                   </div>

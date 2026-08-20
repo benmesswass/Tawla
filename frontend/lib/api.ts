@@ -363,6 +363,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 /**
+ * Comme `request`, mais pour une réponse binaire (PDF) : pas de `res.json()`
+ * possible sur le succès, donc pas réutilisable telle quelle.
+ */
+async function requestBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body.detail;
+    if (detail && typeof detail === "object" && detail.code) {
+      throw new ApiError(detail.code, detail.message ?? `Erreur API (${res.status})`, detail);
+    }
+    throw new ApiError("UNKNOWN", typeof detail === "string" ? detail : `Erreur API (${res.status})`);
+  }
+  return res.blob();
+}
+
+/**
  * Résout une adresse d'image servie par l'API. Les photos déposées par le
  * manager sont renvoyées en chemin relatif (`/api/v1/...`) : tel quel, le
  * navigateur le résoudrait sur l'origine du frontend, où il n'y a rien. Les
@@ -397,6 +414,10 @@ export const api = {
     request<Table>("/api/v1/tables", { method: "POST", body: JSON.stringify(payload) }),
   updateTable: (tableId: number, payload: { label: string; zone?: string | null }) =>
     request<Table>(`/api/v1/tables/${tableId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  // Affiche QR en PDF pour les tables ajoutées en self-service, à imprimer et
+  // coller en salle — pas de chevalet fourni à l'installation dans ce cas,
+  // contrairement aux pilotes de setup_restaurant.py (2026-08-20).
+  downloadTablePoster: (tableId: number) => requestBlob(`/api/v1/tables/${tableId}/poster`),
   // Dashboard manager uniquement, sous JWT — la lecture par identifiant était
   // publique et incrémentale : la carte et les prix de n'importe quel
   // établissement se lisaient sans jeton (S-1, audit 2026-08-18).
