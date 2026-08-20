@@ -99,7 +99,19 @@ export default function PieceTable({
   const W = w + m * 2;
   const H = h + m * 2;
 
-  const tone = appelle ? "appelle" : etat.urgence === "en_cuisine" ? "cuisine" : "libre";
+  // La couleur suit le statut, pas seulement "il faut y aller" : harissa pour
+  // une prise en charge/un appel, laiton pour une addition, menthe pour un plat
+  // à servir — comme les boutons du panneau d'action juste en dessous.
+  const tone =
+    etat.urgence === "a_prendre" || etat.urgence === "appel"
+      ? "appelle"
+      : etat.urgence === "a_servir"
+        ? "servir"
+        : etat.urgence === "addition"
+          ? "addition"
+          : etat.urgence === "en_cuisine"
+            ? "cuisine"
+            : "libre";
 
   return (
     <button

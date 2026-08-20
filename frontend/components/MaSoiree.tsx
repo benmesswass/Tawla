@@ -1,5 +1,6 @@
 import { MyShift } from "@/lib/api";
 import { duree } from "@/lib/duree";
+import { lalezar } from "@/lib/fonts";
 
 /**
  * Les chiffres du serveur, sur l'écran du serveur (Phase 17.3).
@@ -14,36 +15,35 @@ import { duree } from "@/lib/duree";
  * n'envoie que ses chiffres à lui : ce qui n'est pas transmis ne peut pas
  * fuiter dans une évolution future de cet écran.
  */
-export default function MaSoiree({ shift }: { shift: MyShift | null }) {
+export default function MaSoiree({ shift, tablesEnCharge }: { shift: MyShift | null; tablesEnCharge: number }) {
   if (!shift) return null;
 
   // « 1min42 » et pas « 1,7 min » : le serveur ne convertit pas des dixièmes de
   // minute en tête, il lit un temps.
-  const delai = shift.avg_seconds_to_claim === null ? null : duree(shift.avg_seconds_to_claim);
+  const delai = shift.avg_seconds_to_claim === null ? "—" : duree(shift.avg_seconds_to_claim);
+
+  const tuiles = [
+    { valeur: String(tablesEnCharge), libelle: "Tables en charge" },
+    { valeur: String(shift.orders_taken), libelle: "Commandes servies" },
+    { valeur: `${shift.total_amount_handled.toFixed(3)} DT`, libelle: "Encaissé ce soir" },
+    { valeur: delai, libelle: "Attente moyenne" },
+  ];
 
   return (
-    <div className="mb-4 rounded-xl border border-[var(--line)] bg-white px-4 py-3">
-      <p className="text-xs text-[var(--ink-soft)] mb-2">Ma soirée</p>
-      <div className="flex flex-wrap gap-x-8 gap-y-2">
-        <div>
-          <p className="text-2xl font-semibold tabular-nums leading-none">{shift.orders_taken}</p>
-          <p className="text-xs text-[var(--ink-soft)] mt-1">
-            commande{shift.orders_taken > 1 ? "s" : ""} prise{shift.orders_taken > 1 ? "s" : ""}
+    <div className="flex flex-wrap gap-4 pb-1">
+      {tuiles.map((tuile) => (
+        <div
+          key={tuile.libelle}
+          className="flex-1 min-w-[150px] rounded-xl border border-[var(--line)] bg-[var(--semoule-raised)] px-[14px] py-3"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--laiton)]">
+            {tuile.libelle}
+          </p>
+          <p className={`${lalezar.className} text-[27px] leading-none tabular-nums text-[var(--encre)] mt-1.5`}>
+            {tuile.valeur}
           </p>
         </div>
-        <div>
-          <p className="text-2xl font-semibold tabular-nums leading-none">
-            {shift.total_amount_handled.toFixed(2)} DT
-          </p>
-          <p className="text-xs text-[var(--ink-soft)] mt-1">servis</p>
-        </div>
-        {delai !== null && (
-          <div>
-            <p className="text-2xl font-semibold tabular-nums leading-none">{delai}</p>
-            <p className="text-xs text-[var(--ink-soft)] mt-1">pour prendre une table</p>
-          </div>
-        )}
-      </div>
+      ))}
     </div>
   );
 }

@@ -166,7 +166,7 @@ export default function DashboardStatsPage() {
       </div>
 
       {error && (
-        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-[var(--harissa)]">
           {error}
         </Card>
       )}

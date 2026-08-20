@@ -52,20 +52,22 @@ export default function ActionTable({
     return () => clearInterval(t);
   }, []);
 
-  // Une seule action proposée, celle que l'état de la table appelle.
+  // Une seule action proposée, celle que l'état de la table appelle. La
+  // couleur suit le statut visé, pas une règle unique : Servie en menthe,
+  // Encaissé en laiton, le reste (prise en charge, appel) en harissa.
   const principale = (() => {
     if (etat.urgence === "appel" && actions.resoudreAppel)
-      return { texte: "Je m'en occupe", agir: actions.resoudreAppel };
+      return { texte: "Je m'en occupe", agir: actions.resoudreAppel, tone: "harissa" as const };
     if (etat.urgence === "a_prendre") {
       if (etat.aMoi && actions.envoyerEnCuisine)
-        return { texte: "Confirmé → cuisine", agir: actions.envoyerEnCuisine };
+        return { texte: "Confirmé → cuisine", agir: actions.envoyerEnCuisine, tone: "harissa" as const };
       if (actions.prendreEnCharge)
-        return { texte: "Prendre en charge", agir: actions.prendreEnCharge };
+        return { texte: "Prendre en charge", agir: actions.prendreEnCharge, tone: "harissa" as const };
     }
     if (etat.urgence === "a_servir" && actions.servir)
-      return { texte: "Servie", agir: actions.servir };
+      return { texte: "Servie", agir: actions.servir, tone: "menthe" as const };
     if (etat.urgence === "addition" && actions.encaisser)
-      return { texte: "Encaissé", agir: actions.encaisser };
+      return { texte: "Encaissé", agir: actions.encaisser, tone: "laiton" as const };
     return null;
   })();
 
@@ -96,7 +98,19 @@ export default function ActionTable({
       </span>
       <span className="boutons">
         {principale && (
-          <button type="button" onClick={principale.agir}>
+          <button
+            type="button"
+            onClick={principale.agir}
+            style={{
+              background:
+                principale.tone === "menthe"
+                  ? "var(--menthe)"
+                  : principale.tone === "laiton"
+                    ? "var(--laiton)"
+                    : "var(--harissa)",
+              color: principale.tone === "laiton" ? "var(--espresso)" : "#fff",
+            }}
+          >
             {principale.texte}
           </button>
         )}

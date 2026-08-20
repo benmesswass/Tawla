@@ -8,3 +8,4 @@ export { default as FlameIcon } from "./FlameIcon";
 export { default as WifiOffIcon } from "./WifiOffIcon";
 export { default as ShareIcon } from "./ShareIcon";
 export { default as TrayIcon } from "./TrayIcon";
+export { default as StampIcon } from "./StampIcon";

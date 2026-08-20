@@ -10,7 +10,7 @@ type Props = {
 export default function LoyaltyStampCard({ filled, total = 10, rewardAvailable = false }: Props) {
   return (
     <div
-      className="flex flex-wrap justify-center gap-1.5"
+      className="flex flex-wrap justify-center gap-[5px]"
       role="img"
       aria-label={`${filled} sur ${total} tampons de fidélité`}
     >
@@ -19,13 +19,11 @@ export default function LoyaltyStampCard({ filled, total = 10, rewardAvailable =
         return (
           <span
             key={i}
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${
-              isFilled ? "" : "border-2 border-dashed"
-            }`}
+            className="w-[23px] h-[23px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 border"
             style={{
-              backgroundColor: isFilled ? (rewardAvailable ? "var(--laiton)" : "var(--harissa)") : "transparent",
-              borderColor: isFilled ? undefined : "var(--line)",
-              color: isFilled ? "white" : "var(--ink-soft)",
+              backgroundColor: isFilled ? "var(--laiton)" : "var(--semoule-raised)",
+              borderColor: isFilled ? "var(--laiton)" : "var(--line-strong)",
+              color: isFilled ? (rewardAvailable ? "var(--espresso)" : "var(--semoule)") : "transparent",
             }}
           >
             {isFilled ? "✓" : ""}

@@ -676,12 +676,12 @@ export default function DashboardPage() {
       <RecetteDuJour stats={dayStats} />
 
       {error && (
-        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-[var(--harissa)]">
           {error}
         </Card>
       )}
       {message && (
-        <Card tone="success" padding="sm" className="mb-4 text-sm text-emerald-700">
+        <Card tone="success" padding="sm" className="mb-4 text-sm text-[var(--menthe)]">
           {message}
         </Card>
       )}
@@ -741,7 +741,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{item.name}</div>
                       <div className="text-xs text-neutral-500 truncate">
-                        {item.category} · {item.price.toFixed(2)} DT
+                        {item.category} · {item.price.toFixed(3)} DT
                       </div>
                     </div>
                     <Badge tone={item.is_available ? "success" : "danger"} className="shrink-0 hidden sm:inline-flex">
@@ -1223,14 +1223,14 @@ export default function DashboardPage() {
 
           {newCredentials && (
             <Card tone="success" padding="sm" className="mb-4">
-              <p className="font-medium text-emerald-900">Identifiants à transmettre maintenant</p>
-              <dl className="mt-2 text-sm grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-emerald-900">
-                <dt className="text-emerald-700">E-mail</dt>
+              <p className="font-medium text-[var(--menthe)]">Identifiants à transmettre maintenant</p>
+              <dl className="mt-2 text-sm grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[var(--menthe)]">
+                <dt className="text-[var(--menthe)]/80">E-mail</dt>
                 <dd className="font-mono break-all">{newCredentials.email}</dd>
-                <dt className="text-emerald-700">Mot de passe</dt>
+                <dt className="text-[var(--menthe)]/80">Mot de passe</dt>
                 <dd className="font-mono break-all">{newCredentials.password}</dd>
               </dl>
-              <p className="text-xs text-emerald-700 mt-2">
+              <p className="text-xs text-[var(--menthe)]/80 mt-2">
                 Notez-le ou dictez-le tout de suite : il n&apos;est pas conservé en clair et ne pourra plus être
                 réaffiché. Vous pourrez en générer un nouveau à tout moment.
               </p>
@@ -1346,7 +1346,7 @@ export default function DashboardPage() {
           {restaurant && (
             <Card tone="warning" padding="sm" className="mb-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <label className="flex items-center gap-2 font-medium text-amber-900">
+                <label className="flex items-center gap-2 font-medium text-[#8a6420]">
                   <input
                     type="checkbox"
                     checked={ramadanEnabled}
@@ -1360,7 +1360,7 @@ export default function DashboardPage() {
                 </label>
                 {ramadanEnabled && (
                   <div className="flex items-center gap-2 text-sm">
-                    <label htmlFor="iftar-time" className="text-amber-800">
+                    <label htmlFor="iftar-time" className="text-[#8a6420]">
                       Heure de l&apos;iftar aujourd&apos;hui
                     </label>
                     <input
@@ -1370,12 +1370,12 @@ export default function DashboardPage() {
                       onChange={(e) => setIftarInput(e.target.value)}
                       onBlur={() => saveRamadanMode(true)}
                       disabled={savingRamadan}
-                      className="border rounded px-2 py-1"
+                      className="bg-white border border-[var(--line)] rounded px-2 py-1"
                     />
                   </div>
                 )}
               </div>
-              <p className="text-xs text-amber-700 mt-2">
+              <p className="text-xs text-[#8a6420] mt-2">
                 Une fois activé, les clients peuvent pré-commander pour l&apos;iftar depuis le menu. Pensez à mettre
                 à jour l&apos;heure chaque jour (elle varie). Astuce : classez vos plats de rupture du jeûne dans la
                 catégorie « Ftour » pour qu&apos;ils ressortent bien sur le menu client.
@@ -1385,7 +1385,7 @@ export default function DashboardPage() {
 
           {restaurant && (
             <Card tone="info" padding="sm" className="mb-4">
-              <label className="flex items-center gap-2 font-medium text-sky-900">
+              <label className="flex items-center gap-2 font-medium text-[#8a6420]">
                 <input
                   type="checkbox"
                   checked={cafeModeEnabled}
@@ -1398,7 +1398,7 @@ export default function DashboardPage() {
                 <CoffeeIcon className="w-4 h-4 shrink-0" />
                 Mode café simplifié
               </label>
-              <p className="text-xs text-sky-700 mt-2">
+              <p className="text-xs text-[#8a6420] mt-2">
                 Pour un établissement qui ne sert que des boissons : le menu client s&apos;affiche en liste simple,
                 sans regrouper par catégorie (entrées/plats/desserts).
               </p>
