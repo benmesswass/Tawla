@@ -23,6 +23,13 @@ const PAGES = [
   { href: "/dashboard/stats", label: "Activité du jour" },
   { href: "/dashboard/preuve", label: "Preuve du pilote" },
   { href: "/dashboard/equipe", label: "Rapport d'équipe" },
+  // Le backend autorise un manager à confirmer une commande au même titre
+  // qu'un serveur (_WAITER_OR_MANAGER, app/modules/orders/router.py), mais
+  // /staff n'était lié depuis nulle part : un manager fraîchement inscrit
+  // (self-service, sans serveur dans son équipe) n'avait aucun moyen de
+  // découvrir cet écran pour confirmer sa toute première commande (audit
+  // pilote, 2026-08-20).
+  { href: "/staff", label: "Service en salle" },
 ] as const;
 
 export default function EnteteManager({ titre, sousTitre }: { titre: string; sousTitre?: string }) {
