@@ -138,9 +138,10 @@ pas construite. Le produit ne manque pas de fonctionnalité, il manque un client
 - `terrain/` — documents de terrain, pas du code. Point d'entrée :
   `terrain/PARCOURS.md`, qui ordonne les 31 tâches 🧑 de la roadmap et renvoie
   vers le mode d'emploi de chacune (`MISE_EN_LIGNE.md` pour la production,
-  `GUIDE_ENTRETIEN.md` pour obtenir et mener les entretiens, `RELEVE_AVANT.md`
-  pour la semaine de référence, `FORMATION_10MIN.md` et `PRISE_EN_MAIN.md` pour
-  l'installation, `ENTRETIENS.md` et `PILOTES.md` pour les relevés). Ils se
+  `GUIDE_ENTRETIEN.md` pour obtenir et mener les entretiens, `ACCORD_PILOTE.md`
+  pour la page signée qui cadre un pilote, `RELEVE_AVANT.md` pour la semaine de
+  référence, `FORMATION_10MIN.md` et `PRISE_EN_MAIN.md` pour l'installation,
+  `ENTRETIENS.md` et `PILOTES.md` pour les relevés). Ils se
   tiennent à jour à la main, sur place ; ne jamais les remplir depuis une
   session — un chiffre de terrain inventé détruit la seule chose que Tawla a à
   vendre.

@@ -91,7 +91,7 @@ pilote — pas avant, un bandeau qui n'annonce aucune suite ne sert à rien.
 
 ## Étape 4 — Choisir et cadrer trois pilotes
 
-**Deux semaines · trois profils : quartier, centre-ville, zone touristique**
+**Deux semaines · trois profils : quartier, centre-ville, zone touristique · [`ACCORD_PILOTE.md`](./ACCORD_PILOTE.md)**
 
 Choisir pour le **poids social**, pas pour la facilité. Le plus accueillant n'est
 pas le plus utile : cherche celui dont les autres patrons parlent, installé depuis
