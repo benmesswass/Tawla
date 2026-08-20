@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
+    # Hash bcrypt du mot de passe du dashboard plateforme (vue admin
+    # cross-tenant, `app/modules/platform_admin/`) — jamais le mot de passe en
+    # clair, même en variable d'environnement (contrairement à `jwt_secret`,
+    # qui est un secret de signature, pas un mot de passe saisi dans un
+    # formulaire). Vide par défaut = connexion toujours refusée (fail-closed),
+    # jamais un mot de passe par défaut qui donnerait accès au chiffre
+    # d'affaires de tous les restaurants clients. Générer avec :
+    # python -c "from app.modules.staff.security import hash_password; print(hash_password('...'))"
+    platform_admin_password_hash: str = ""
+
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:

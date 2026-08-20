@@ -10,7 +10,7 @@ import { clearToken, getToken } from "@/lib/auth";
  * quittait la machine de développement, et ça évite de recoder une adresse IP à
  * chaque changement de réseau.
  */
-const API_URL =
+export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:8000` : "http://localhost:8000");
 
