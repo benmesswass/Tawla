@@ -10,10 +10,31 @@
   --creme: #f3e9d8;
   --harissa: #d6401e;
   --harissa-dark: #b8341a;
+  --harissa-pressed: #a82d14;
   --menthe: #1f6b4f;
   --laiton: #b8862e;
   --line: #e3d7bd;
+  --line-strong: #c4b79c;
   --ink-soft: #6b5947;
+  --ink-faint: #8a7660;
+
+  /* Dérivés "sur espresso" — mêmes rôles que ci-dessus, contraste relevé pour
+     rester lisibles sur fond sombre (cuisine, tickets, badges de connexion). */
+  --espresso-card: #33241a;
+  --line-on-espresso: rgba(246, 239, 221, .14);
+  --line-on-espresso-strong: rgba(246, 239, 221, .2);
+  --ink-on-espresso: rgba(246, 239, 221, .6);
+  --ink-on-espresso-strong: rgba(246, 239, 221, .72);
+  --menthe-on-espresso-text: #7fc5a6;
+  --menthe-on-espresso-bg: rgba(31, 107, 79, .22);
+  --menthe-on-espresso-border: rgba(31, 107, 79, .7);
+  --laiton-on-espresso-text: #e0be79;
+  --laiton-on-espresso-bg: rgba(184, 134, 46, .2);
+  --laiton-on-espresso-border: rgba(184, 134, 46, .75);
+  --harissa-on-espresso-text: #f0a48c;
+  --harissa-on-espresso-bg: rgba(214, 64, 30, .24);
+  --harissa-on-espresso-border: var(--harissa);
+  --note-cuisine: #e7b54a;
 }
 
 @keyframes celebration-pop {
@@ -71,6 +92,34 @@
   100% {
     box-shadow: 0 0 0 8px rgba(31, 107, 79, 0);
   }
+}
+
+/* Refonte visuelle (harissa/menthe) : l'étape de suivi en cours, la table qui
+   demande une action sur le plan, et les points des badges de connexion. */
+@keyframes tw-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(214, 64, 30, .45);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(214, 64, 30, 0);
+  }
+}
+
+@keyframes tw-pulse-v {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(31, 107, 79, .45);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(31, 107, 79, 0);
+  }
+}
+
+.animate-tw-pulse {
+  animation: tw-pulse 2s ease-out infinite;
+}
+
+.animate-tw-pulse-v {
+  animation: tw-pulse-v 2.4s ease-out infinite;
 }
 
 .animate-celebration-pop {
@@ -193,7 +242,7 @@
 }
 .piece:hover { transform: scale(1.05); }
 .piece:active { transform: scale(.97); }
-.piece:focus-visible { outline: 2px solid #ff8a5c; outline-offset: 4px; border-radius: 10px; }
+.piece:focus-visible { outline: 2px solid var(--harissa); outline-offset: 4px; border-radius: 10px; }
 .plan-surface[data-editable] .piece { cursor: grab; }
 .piece[data-deplacement] { transform: scale(1.08); cursor: grabbing; }
 
@@ -236,11 +285,33 @@
   border-color: #fff;
 }
 
+/* Libre : la seule table qu'on ne remarque pas doit le rester — un pointillé
+   discret sur le sol plutôt qu'un plateau plein. */
+.piece[data-tone="libre"] .plateau {
+  fill: rgba(246, 239, 221, .14);
+  stroke: rgba(246, 239, 221, .34);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+.piece[data-tone="libre"] .etiquette { color: rgba(246, 239, 221, .7); }
+
 .piece[data-tone="cuisine"] .plateau { fill: #cdc2ae; stroke: #8fb0c4; stroke-width: 2.5; }
 .piece[data-tone="appelle"] .plateau { fill: #d6401e; stroke: #b8341a; }
 .piece[data-tone="appelle"] .chaise { fill: rgba(255, 180, 150, .45); }
+/* Prête à servir : menthe, jamais harissa — ce n'est pas une urgence, c'est un
+   plat qui attend au passe. */
+.piece[data-tone="servir"] .plateau { fill: var(--menthe); stroke: #143f2f; }
+.piece[data-tone="servir"] .chaise { fill: rgba(180, 225, 205, .45); }
+.piece[data-tone="servir"] .etiquette { color: #fff; }
+.piece[data-tone="servir"] .minutes { color: rgba(255, 255, 255, .88); }
+/* Addition à encaisser : laiton, texte espresso pour rester lisible sur un
+   fond doré — même logique que la pastille de fidélité complète. */
+.piece[data-tone="addition"] .plateau { fill: var(--laiton); stroke: #8a6420; }
+.piece[data-tone="addition"] .chaise { fill: rgba(230, 208, 165, .5); }
+.piece[data-tone="addition"] .etiquette { color: var(--espresso); }
+.piece[data-tone="addition"] .minutes { color: rgba(36, 24, 17, .7); }
 
-.piece[data-selectionnee] .plateau { stroke: #ff8a5c; stroke-width: 3; }
+.piece[data-selectionnee] .plateau { stroke: var(--harissa); stroke-width: 3; }
 
 .contenu {
   position: relative;
@@ -290,8 +361,8 @@
 
 /* Une seule table respire, la plus urgente. Trois en feraient un sapin. */
 @keyframes plan-respire {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 92, .45); }
-  50% { box-shadow: 0 0 0 14px rgba(255, 138, 92, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 64, 30, .45); }
+  50% { box-shadow: 0 0 0 14px rgba(214, 64, 30, 0); }
 }
 .piece[data-urgente] {
   border-radius: 999px;
@@ -335,7 +406,7 @@
   color: #f3ead8;
   font-weight: 500;
 }
-.plan-action button:focus-visible { outline: 2px solid #ff8a5c; outline-offset: 2px; }
+.plan-action button:focus-visible { outline: 2px solid var(--harissa); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .piece[data-urgente] { animation: none; }

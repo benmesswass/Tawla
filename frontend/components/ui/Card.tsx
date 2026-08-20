@@ -9,22 +9,25 @@ type Props = HTMLAttributes<HTMLDivElement> & {
   dark?: boolean;
 };
 
+// info et warning partagent le laiton (fidélité, état transitoire) ; danger et
+// urgent partagent le harissa (action requise) — le système n'a que trois
+// accents, pas un par tonalité.
 const LIGHT_TONES: Record<Tone, string> = {
-  default: "border border-[var(--line)] bg-white",
-  info: "border border-sky-200 bg-sky-50",
-  warning: "border border-amber-200 bg-amber-50",
-  success: "border border-emerald-200 bg-emerald-50",
-  danger: "border border-red-200 bg-red-50",
-  urgent: "border border-rose-200 bg-rose-50",
+  default: "border border-[var(--line)] bg-[var(--semoule-raised)]",
+  info: "border border-[rgba(184,134,46,.5)] bg-[rgba(184,134,46,.12)]",
+  warning: "border border-[rgba(184,134,46,.5)] bg-[rgba(184,134,46,.12)]",
+  success: "border border-[rgba(31,107,79,.45)] bg-[rgba(31,107,79,.1)]",
+  danger: "border border-[rgba(214,64,30,.55)] bg-[rgba(214,64,30,.1)]",
+  urgent: "border border-[rgba(214,64,30,.55)] bg-[rgba(214,64,30,.1)]",
 };
 
 const DARK_TONES: Record<Tone, string> = {
-  default: "border border-neutral-800 bg-neutral-900",
-  info: "border border-indigo-800 bg-indigo-950",
-  warning: "border border-amber-800 bg-amber-950",
-  success: "border border-emerald-800 bg-emerald-950",
-  danger: "border border-red-800 bg-red-950",
-  urgent: "border border-rose-800 bg-rose-950",
+  default: "border border-[var(--line-on-espresso)] bg-[var(--espresso-card)]",
+  info: "border border-[var(--laiton-on-espresso-border)] bg-[var(--laiton-on-espresso-bg)]",
+  warning: "border border-[var(--laiton-on-espresso-border)] bg-[var(--laiton-on-espresso-bg)]",
+  success: "border border-[var(--menthe-on-espresso-border)] bg-[var(--menthe-on-espresso-bg)]",
+  danger: "border border-[var(--harissa-on-espresso-border)] bg-[var(--harissa-on-espresso-bg)]",
+  urgent: "border border-[var(--harissa-on-espresso-border)] bg-[var(--harissa-on-espresso-bg)]",
 };
 
 const PADDINGS: Record<Padding, string> = { sm: "p-3", md: "p-4" };

@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "danger" | "success";
+type Variant = "primary" | "secondary" | "danger" | "success" | "laiton";
 type Size = "sm" | "md";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -9,18 +9,29 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   dark?: boolean;
 };
 
+// primary = harissa, seule couleur d'action cliquable par défaut ; success est
+// réservé aux validations terminales cuisine (Marquer prête) ; laiton sert aux
+// actions d'encaissement en salle. Le bouton primaire porte l'ombre basse
+// harissa-pressed et s'enfonce visuellement au clic (règle : un seul harissa
+// cliquable par zone de décision, jamais un simple hover de teinte).
 const LIGHT_VARIANTS: Record<Variant, string> = {
-  primary: "bg-[var(--harissa)] hover:bg-[var(--harissa-dark)] text-white",
+  primary:
+    "bg-[var(--harissa)] text-[var(--semoule)] shadow-[0_2px_0_var(--harissa-pressed)] hover:brightness-95 active:shadow-none active:translate-y-[2px]",
   secondary: "border border-[var(--line)] text-[var(--encre)] bg-white hover:bg-[var(--semoule)]",
-  danger: "border border-red-200 text-red-600 hover:bg-red-50",
-  success: "bg-[var(--menthe)] hover:bg-emerald-800 text-white",
+  danger: "border border-[var(--harissa)] text-[var(--harissa)] bg-transparent hover:bg-[rgba(214,64,30,.08)]",
+  success: "bg-[var(--menthe)] text-[var(--semoule)] hover:brightness-95",
+  laiton: "bg-[var(--laiton)] text-[var(--espresso)] hover:brightness-95",
 };
 
 const DARK_VARIANTS: Record<Variant, string> = {
-  primary: "bg-[var(--harissa)] hover:bg-[var(--harissa-dark)] text-white",
-  secondary: "border border-neutral-700 text-neutral-200 bg-neutral-800 hover:bg-neutral-700",
-  danger: "border border-red-800 text-red-300 hover:bg-red-950",
-  success: "bg-[var(--menthe)] hover:bg-emerald-800 text-white",
+  primary:
+    "bg-[var(--harissa)] text-[var(--semoule)] shadow-[0_2px_0_var(--harissa-pressed)] hover:brightness-95 active:shadow-none active:translate-y-[2px]",
+  secondary:
+    "border border-[var(--line-on-espresso-strong)] text-[var(--ink-on-espresso-strong)] bg-[var(--line-on-espresso)] hover:bg-[var(--line-on-espresso-strong)]",
+  danger:
+    "border border-[var(--harissa-on-espresso-border)] text-[var(--harissa-on-espresso-text)] bg-[var(--harissa-on-espresso-bg)]",
+  success: "bg-[var(--menthe)] text-[var(--semoule)] hover:brightness-95",
+  laiton: "bg-[var(--laiton)] text-[var(--espresso)] hover:brightness-95",
 };
 
 const SIZES: Record<Size, string> = {

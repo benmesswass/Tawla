@@ -34,7 +34,7 @@ function isoDaysAgo(days: number): string {
 const formatDuration = duree;
 
 function formatAmount(amount: number | null): string {
-  return amount === null ? "—" : `${amount.toFixed(2)} DT`;
+  return amount === null ? "—" : `${amount.toFixed(3)} DT`;
 }
 
 function formatDate(iso: string): string {
@@ -74,7 +74,7 @@ function DeltaBadge({
   return (
     <span
       className={`text-xs font-medium px-2 py-1 rounded-full ${
-        improved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+        improved ? "bg-[rgba(31,107,79,.12)] text-[var(--menthe)]" : "bg-[rgba(184,134,46,.12)] text-[#8a6420]"
       }`}
     >
       {sign}
@@ -256,7 +256,7 @@ export default function ProofPage() {
       </div>
 
       {error && (
-        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-[var(--harissa)]">
           {error}
         </Card>
       )}
@@ -301,11 +301,11 @@ export default function ProofPage() {
 
           {proof.current.orders_with_suggestion_count > 0 && (
             <Card tone="success" padding="sm" className="mt-4">
-              <p className="text-sm font-medium text-emerald-900">Effet des suggestions « avec ce plat »</p>
+              <p className="text-sm font-medium text-[var(--menthe)]">Effet des suggestions « avec ce plat »</p>
               {proof.current.avg_basket_with_suggestion !== null &&
               proof.current.avg_basket_without_suggestion !== null ? (
                 <>
-                  <p className="text-sm text-emerald-900 mt-1">
+                  <p className="text-sm text-[var(--menthe)] mt-1">
                     Panier moyen <strong>{formatAmount(proof.current.avg_basket_with_suggestion)}</strong>{" "}
                     quand le client accepte une suggestion, contre{" "}
                     <strong>{formatAmount(proof.current.avg_basket_without_suggestion)}</strong> sinon —{" "}
@@ -320,7 +320,7 @@ export default function ProofPage() {
                     </strong>
                     .
                   </p>
-                  <p className="text-xs text-emerald-700 mt-2">
+                  <p className="text-xs text-[var(--menthe)] mt-2">
                     Sur {proof.current.orders_with_suggestion_count} commande(s) où une suggestion a été
                     acceptée. C&apos;est le chiffre à citer en rendez-vous : il compare des commandes du même
                     établissement sur la même période, donc il n&apos;attribue pas à Tawla une hausse due à
@@ -331,7 +331,7 @@ export default function ProofPage() {
                 // Toutes les commandes de la période comportent une suggestion :
                 // il n'y a donc rien à quoi les comparer. Le dire vaut mieux que
                 // masquer le bloc — sinon le manager croit que rien n'est mesuré.
-                <p className="text-sm text-emerald-900 mt-1">
+                <p className="text-sm text-[var(--menthe)] mt-1">
                   {proof.current.orders_with_suggestion_count} commande(s) avec une suggestion acceptée, pour
                   un panier moyen de{" "}
                   <strong>{formatAmount(proof.current.avg_basket_with_suggestion)}</strong>. La comparaison

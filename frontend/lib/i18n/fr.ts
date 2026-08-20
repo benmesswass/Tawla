@@ -13,8 +13,9 @@ export const fr = {
   loadingMenu: "Chargement du menu...",
   closeErrorAria: "Fermer le message d'erreur",
 
-  ramadanBanner: (time: string) =>
-    `Ramadan Moubarak — rupture du jeûne à ${time}. Vous pouvez commander maintenant pour l'iftar, votre plat sera prêt à l'heure.`,
+  ramadanBannerPrefix: "Ramadan Moubarak",
+  ramadanBannerRest: (time: string) =>
+    ` — rupture du jeûne à ${time}. Vous pouvez commander maintenant pour l'iftar, votre plat sera prêt à l'heure.`,
   addToCartAria: (name: string) => `Ajouter ${name} au panier`,
   removeFromCartAria: (name: string) => `Retirer un ${name} du panier`,
   allergensLabel: (allergens: string) => `Allergènes : ${allergens}`,
@@ -26,6 +27,7 @@ export const fr = {
   preorderCheckboxLabel: (time: string) => `Commander pour l'iftar (${time}) plutôt que maintenant`,
   sending: "Envoi...",
   validateOrder: "Valider la commande",
+  cartItemsCount: (n: number) => `${n} article${n > 1 ? "s" : ""}`,
 
   orderCancelledTitle: "Commande annulée",
   orderSentTitle: "Commande envoyée 🎉",
@@ -33,12 +35,11 @@ export const fr = {
   preorderBadge: (time: string) => `Pré-commande pour l'iftar — préparation prévue pour ${time}.`,
   dedicatedServer: (staffName: string) => `${staffName} est votre serveur dédié pour cette commande.`,
 
-  steps: {
-    pending_confirmation: "Envoyée",
-    confirmed: "Confirmée",
-    sent_to_kitchen: "En cuisine",
-    in_preparation: "En préparation",
-    ready: "Prête",
+  trackingSteps: {
+    received: "Commande reçue",
+    confirmed: "Confirmée par le serveur",
+    in_kitchen: "En cuisine",
+    ready: "Prête à servir",
     served: "Servie",
   },
   kitchenWaitHint: "Généralement 10 à 20 minutes selon l'affluence.",
@@ -50,18 +51,19 @@ export const fr = {
   paymentTitle: "Paiement",
   paidMessage: (method: "card" | "card_terminal" | "cash", tipAmount: number) =>
     `Payé ✓ ${method === "cash" ? "en espèces" : "par carte"}` +
-    (tipAmount > 0 ? ` (dont ${tipAmount.toFixed(2)} DT de pourboire)` : ""),
+    (tipAmount > 0 ? ` (dont ${tipAmount.toFixed(3)} DT de pourboire)` : ""),
   cashPendingMessage: (amount: number) =>
-    `Paiement en espèces demandé — un serveur va passer encaisser ${amount.toFixed(2)} DT.`,
+    `Paiement en espèces demandé — un serveur va passer encaisser ${amount.toFixed(3)} DT.`,
   cardTerminalPendingMessage: (amount: number) =>
-    `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${amount.toFixed(2)} DT.`,
+    `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${amount.toFixed(3)} DT.`,
   tipLabel: "Pourboire (facultatif, pour un paiement par carte)",
+  tipNone: "Sans",
   tipPlaceholder: "0.00 DT",
   emailLabel: "E-mail (facultatif, pour recevoir votre facture)",
   emailPlaceholder: "vous@exemple.com",
-  payByCard: "Payer en ligne",
-  payByCardTerminal: "Payer par carte (le serveur apporte le terminal)",
-  payByCash: "Payer en espèces (le serveur passera encaisser)",
+  payByCard: "Payer en ligne — Konnect",
+  payByCardTerminal: "Carte à table (terminal serveur)",
+  payByCash: "Espèces (le serveur passe encaisser)",
   paymentFailedRetry: "Le paiement n'a pas abouti. Vous pouvez réessayer.",
   invoiceDownload: "Télécharger la facture (PDF)",
   invoiceQrCaption: "Scannez pour la retrouver sur un autre appareil",
@@ -78,11 +80,14 @@ export const fr = {
   unassignedSharedNote: "Les plats non attribués sont partagés équitablement.",
   splitBillDisclaimer: "Indicatif — le paiement se fait pour l'addition complète, une seule fois pour la table.",
 
-  offlineQueuedTitle: "Pas de connexion",
-  offlineQueuedMessage: "Votre commande est enregistrée sur votre téléphone et sera envoyée automatiquement dès que la connexion revient.",
+  offlineQueuedTitle: "Connexion perdue",
+  offlineQueuedMessage: "Votre commande est enregistrée sur ce téléphone. Elle partira dès le retour du réseau — n'actualisez pas la page.",
+  offlineRetryCountdown: (seconds: number) => `Nouvel essai dans ${seconds} s…`,
   retryNow: "Réessayer maintenant",
 
   loyaltyToggle: "Programme fidélité (facultatif)",
+  loyaltyCardTitle: "Carte de fidélité",
+  loyaltyCompleteTitle: "Carte complète",
   loyaltyPhoneLabel: "Numéro de téléphone",
   loyaltyPhonePlaceholder: "Ex : 20 123 456",
   loyaltyBirthDateLabel: "Date de naissance (facultatif, pour votre réduction anniversaire)",
@@ -103,11 +108,12 @@ export const fr = {
     "Le paiement ci-dessous règle uniquement la commande affichée. Revenez sur les autres pour les régler à leur tour, ou demandez au serveur de tout encaisser en une fois.",
   sharedWithLabel: "Partagé entre :",
   sharedWithEveryone: "Personne de sélectionnée : partagé par toute la table.",
+  sharedPerPersonAmount: (amount: number) => `${amount.toFixed(3)} DT par personne`,
   dinersLabel: "Personnes à table",
   openOrdersTitle: (count: number, reste: number) =>
     count > 1
-      ? `${count} commandes en cours — ${reste.toFixed(2)} DT restent à régler`
-      : `Une commande en cours — ${reste.toFixed(2)} DT restent à régler`,
+      ? `${count} commandes en cours — ${reste.toFixed(3)} DT restent à régler`
+      : `Une commande en cours — ${reste.toFixed(3)} DT restent à régler`,
   openOrderLine: (id: number, lines: number) =>
     `Commande #${id} — ${lines} article${lines > 1 ? "s" : ""}`,
   loyaltyFirstVisit: "Première visite — votre carte démarre avec cette commande.",

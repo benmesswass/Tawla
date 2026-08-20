@@ -13,8 +13,9 @@ export const ar = {
   loadingMenu: "قاعد يحمّل المينيو...",
   closeErrorAria: "غلق رسالة الخطأ",
 
-  ramadanBanner: (time) =>
-    `رمضان مبارك — الفطور على الساعة ${time}. تنجم تطلب دلوقتي للفطور، الأكلة تكون لاهية وقتها.`,
+  ramadanBannerPrefix: "رمضان مبارك",
+  ramadanBannerRest: (time) =>
+    ` — الفطور على الساعة ${time}. تنجم تطلب دلوقتي للفطور، الأكلة تكون لاهية وقتها.`,
   addToCartAria: (name) => `زيد ${name} للقفة`,
   removeFromCartAria: (name) => `نقّص ${name} من القفة`,
   allergensLabel: (allergens) => `مسببات الحساسية: ${allergens}`,
@@ -26,6 +27,7 @@ export const ar = {
   preorderCheckboxLabel: (time) => `نطلب للفطور (${time}) بدل دلوقتي`,
   sending: "قاعد يتبعث...",
   validateOrder: "أكد الطلبية",
+  cartItemsCount: (n) => `${n} حاجة`,
 
   orderCancelledTitle: "الطلبية تلغات",
   orderSentTitle: "الطلبية تبعثت 🎉",
@@ -33,11 +35,10 @@ export const ar = {
   preorderBadge: (time) => `طلبية مسبقة للفطور — التحضير مبرمج للساعة ${time}.`,
   dedicatedServer: (staffName) => `${staffName} باش يكون الجرسون تاعك لهاذي الطلبية.`,
 
-  steps: {
-    pending_confirmation: "تبعثت",
-    confirmed: "تأكدت",
-    sent_to_kitchen: "فالكوجينة",
-    in_preparation: "قاعدة تتحضر",
+  trackingSteps: {
+    received: "تبعثت",
+    confirmed: "تأكدت من الجرسون",
+    in_kitchen: "فالكوجينة",
     ready: "لاهية",
     served: "تقدمت",
   },
@@ -50,11 +51,12 @@ export const ar = {
   paymentTitle: "الخلاص",
   paidMessage: (method, tipAmount) =>
     `الخلاص تم ✓ ${method === "cash" ? "كاش" : "بالكارت"}` +
-    (tipAmount > 0 ? ` (فيها ${tipAmount.toFixed(2)} د.ت إكرامية)` : ""),
-  cashPendingMessage: (amount) => `طلبت تخلص كاش — جرسون باش يجي يقبض ${amount.toFixed(2)} د.ت.`,
+    (tipAmount > 0 ? ` (فيها ${tipAmount.toFixed(3)} د.ت إكرامية)` : ""),
+  cashPendingMessage: (amount) => `طلبت تخلص كاش — جرسون باش يجي يقبض ${amount.toFixed(3)} د.ت.`,
   cardTerminalPendingMessage: (amount) =>
-    `طلبت تخلص بالكارت — جرسون باش يجي بالماكينة يقبض ${amount.toFixed(2)} د.ت.`,
+    `طلبت تخلص بالكارت — جرسون باش يجي بالماكينة يقبض ${amount.toFixed(3)} د.ت.`,
   tipLabel: "الإكرامية (إختياري، للخلاص بالكارت)",
+  tipNone: "بلا",
   tipPlaceholder: "0.00 د.ت",
   emailLabel: "الإيميل (إختياري، باش توصلك الفاتورة)",
   emailPlaceholder: "انت@مثال.com",
@@ -79,9 +81,12 @@ export const ar = {
 
   offlineQueuedTitle: "ما فماش نات",
   offlineQueuedMessage: "الطلبية تسجلت في تليفونك وباش تتبعث وحدها كي ترجع النات.",
+  offlineRetryCountdown: (seconds) => `عاود المحاولة من بعد ${seconds} ثواني…`,
   retryNow: "عاود جرب دلوقتي",
 
   loyaltyToggle: "بطاقة الولاء (إختياري)",
+  loyaltyCardTitle: "بطاقة الولاء",
+  loyaltyCompleteTitle: "بطاقة كاملة",
   loyaltyPhoneLabel: "رقم التليفون",
   loyaltyPhonePlaceholder: "مثال : 20 123 456",
   loyaltyBirthDateLabel: "تاريخ الميلاد (إختياري، للتخفيض تاع عيد ميلادك)",
@@ -99,11 +104,12 @@ export const ar = {
     "الخلاص إلي تحت يخلص كان الطلبية المعروضة. ارجع للأخرين باش تخلصهم، ولا اطلب من الجرسون يخلصهم الكل مرة وحدة.",
   sharedWithLabel: "مقسوم بين :",
   sharedWithEveryone: "ما اخترت حتى واحد : مقسوم على الطاولة الكل.",
+  sharedPerPersonAmount: (amount) => `${amount.toFixed(3)} د.ت للشخص`,
   dinersLabel: "قداش عباد عالطاولة",
   openOrdersTitle: (count, reste) =>
     count > 1
-      ? `${count} طلبيات مازالوا — باقي ${reste.toFixed(2)} د تتخلص`
-      : `طلبية مازالت — باقي ${reste.toFixed(2)} د تتخلص`,
+      ? `${count} طلبيات مازالوا — باقي ${reste.toFixed(3)} د تتخلص`
+      : `طلبية مازالت — باقي ${reste.toFixed(3)} د تتخلص`,
   openOrderLine: (id, lines) => `طلبية #${id} — ${lines} حاجة`,
   loyaltyFirstVisit: "أول مرة — بطاقتك تبدا مع هذي الطلبية.",
   loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",
