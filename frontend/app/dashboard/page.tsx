@@ -30,6 +30,7 @@ import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPl
 import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
 import UpgradeModal from "@/components/UpgradeModal";
+import QrCode from "@/components/QrCode";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -1103,6 +1104,8 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {tables.map((table) => {
               const draft = tableDrafts[table.id] ?? tableToDraft(table);
+              const clientLink =
+                typeof window !== "undefined" ? `${window.location.origin}/menu/${table.qr_token}` : null;
               return (
                 <Card
                   key={table.id}
@@ -1150,6 +1153,11 @@ export default function DashboardPage() {
                       {copiedTableId === table.id ? "Copié !" : "Copier le lien"}
                     </Button>
                   </div>
+                  {clientLink && (
+                    <div className="sm:col-span-3">
+                      <QrCode url={clientLink} alt={`QR code — ${table.label}`} caption={table.label} />
+                    </div>
+                  )}
                 </Card>
               );
             })}
