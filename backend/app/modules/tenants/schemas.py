@@ -44,10 +44,12 @@ class RestaurantOut(RestaurantPublicOut):
     # vrai — voir Restaurant.is_usable.
     is_active: bool
     promo_gratuit: bool
-    # Offre de lancement (2026-08-21) — le frontend s'en sert pour afficher le
-    # rappel de paiement tant que has_paid_for_subscription est faux, avec le
-    # compte à rebours dérivé de subscription_period_end ci-dessus.
-    launch_promo_granted: bool
+    # Offre de lancement (2026-08-21, réglages configurables — voir
+    # platform_admin) — le frontend s'en sert pour afficher le prix réduit
+    # (ActivationRequired) et le rappel de paiement tant que
+    # has_paid_for_subscription est faux, avec le compte à rebours dérivé de
+    # subscription_period_end ci-dessus.
+    launch_promo_discount_percent: int | None
     has_paid_for_subscription: bool
     # Jamais la clé API elle-même (voir Restaurant.konnect_credentials) —
     # juste de quoi afficher "connecté" et le wallet, qui n'est pas un secret.

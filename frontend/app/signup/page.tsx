@@ -3,11 +3,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type LaunchPromoStatus } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { toFrenchMessage } from "@/lib/errors";
 import { hankenGrotesk, lalezar } from "@/lib/fonts";
 import TawlaMark from "@/components/brand/TawlaMark";
+import { TIERS } from "@/lib/offer";
+
+const ESSENTIEL_PRICE_DT = TIERS.find((t) => t.id === "essentiel")?.priceDT ?? 50;
 
 export default function SignupPage() {
   const router = useRouter();
@@ -17,16 +20,17 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // Offre de lancement (2026-08-21) : `null` tant que la disponibilité n'a
-  // pas été vérifiée — on n'affiche jamais la bannière par optimisme avant
-  // de savoir, elle apparaîtrait puis disparaîtrait au premier rendu.
-  const [promoAvailable, setPromoAvailable] = useState<boolean | null>(null);
+  // Offre de lancement (2026-08-21, réglages configurables — voir
+  // dashboard plateforme) : `null` tant que la disponibilité n'a pas été
+  // vérifiée — on n'affiche jamais la bannière par optimisme avant de
+  // savoir, elle apparaîtrait puis disparaîtrait au premier rendu.
+  const [promo, setPromo] = useState<LaunchPromoStatus | null>(null);
 
   useEffect(() => {
     api
       .getLaunchPromoStatus()
-      .then((s) => setPromoAvailable(s.available))
-      .catch(() => setPromoAvailable(false));
+      .then(setPromo)
+      .catch(() => setPromo(null));
   }, []);
 
   async function handleSubmit(e: FormEvent) {
@@ -75,20 +79,22 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {promoAvailable && (
+        {promo?.available && (
           <div
             className="rounded-lg p-3 text-center"
             style={{ background: "var(--semoule)", border: "1px solid var(--harissa)" }}
           >
             <p className={`${lalezar.className} text-sm tracking-wide`} style={{ color: "var(--harissa)" }}>
-              Offre de lancement — les 20 premières inscriptions
+              Offre de lancement — les {promo.max_grants} premières inscriptions
             </p>
             <p className="mt-1">
               <span className="text-sm line-through" style={{ color: "var(--ink-soft)" }}>
-                50 DT
+                {ESSENTIEL_PRICE_DT} DT
               </span>{" "}
               <span className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
-                Gratuit
+                {promo.discount_percent >= 100
+                  ? "Gratuit"
+                  : `${Math.round((ESSENTIEL_PRICE_DT * (100 - promo.discount_percent)) / 100)} DT`}
               </span>
               <span className="text-sm" style={{ color: "var(--ink-soft)" }}> le premier mois</span>
             </p>

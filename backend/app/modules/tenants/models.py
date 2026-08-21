@@ -106,14 +106,19 @@ class Restaurant(Base):
     # ne jamais perdre la trace de "a réellement payé" sous la dérogation.
     promo_gratuit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    # Offre de lancement (2026-08-21, décidée par Wassim) : le premier mois
-    # Essentiel gratuit, accordé AUTOMATIQUEMENT (pas une action admin, voir
-    # promo_gratuit ci-dessus) aux 20 premiers établissements inscrits en
-    # self-service — voir staff/router.py::register. Marqueur PERMANENT,
-    # jamais remis à `False` (même après un vrai paiement) : c'est le
-    # décompte des 20 places qui en dépend (`COUNT(*) WHERE
-    # launch_promo_granted`), un historique, pas un état courant.
-    launch_promo_granted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Offre de lancement (2026-08-21, décidée par Wassim, rendue configurable
+    # le même jour — voir LaunchCampaignConfig) : réduction (0-100 %) sur le
+    # premier mois Essentiel, accordée AUTOMATIQUEMENT (pas une action admin
+    # au cas par cas, voir promo_gratuit ci-dessus) aux N premiers
+    # établissements inscrits en self-service — voir staff/router.py::register.
+    # `None` = jamais dans la campagne. Sinon, POSÉ UNE FOIS à l'inscription
+    # (jamais remis à jour si la campagne change ensuite — la promesse faite à
+    # l'inscription ne bouge pas) : un historique, pas une config courante.
+    # Consommé au premier paiement/activation (`is_active` passe à `True`, que
+    # ce soit via l'octroi automatique à 100 % ou via un checkout réglé à un
+    # taux partiel) — jamais réappliqué à un renouvellement, voir
+    # `core/subscription.py::essentiel_price_tnd`.
+    launch_promo_discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # A-t-il payé pour de vrai au moins une fois (Konnect réel OU mode démo,
     # peu importe — voir settle_subscription_payment et
@@ -180,3 +185,25 @@ class Restaurant(Base):
         if not api_key:
             return None
         return api_key, self.konnect_wallet_id
+
+
+# Réglages de l'offre de lancement (2026-08-21) : configurable par Wassim
+# depuis le dashboard plateforme (`/admin`, section Promo), jamais en dur
+# dans le code — voir platform_admin/router.py. Ligne UNIQUE (id=1), pas une
+# table d'historique de campagnes successives : YAGNI tant qu'il n'y a qu'un
+# seul lancement à la fois. Voir core/subscription.py::get_launch_campaign
+# pour la lecture (crée la ligne avec les valeurs par défaut au premier
+# accès si elle n'existe pas encore).
+class LaunchCampaignConfig(Base):
+    __tablename__ = "launch_campaign_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 100 = gratuit (comme le lancement d'origine, 2026-08-21) ; 0 = campagne
+    # inactive dans les faits (aucune réduction) sans avoir à la désactiver
+    # autrement. Toujours 0-100, contrôlé côté serveur (jamais confiance au
+    # client) — voir platform_admin/schemas.py::LaunchCampaignUpdate.
+    discount_percent: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    # Combien d'établissements au total peuvent bénéficier de la campagne
+    # actuelle — voir staff/router.py::register (octroi) et is compté via
+    # Restaurant.launch_promo_discount_percent IS NOT NULL.
+    max_grants: Mapped[int] = mapped_column(Integer, default=20, nullable=False)

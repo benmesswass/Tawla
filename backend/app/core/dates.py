@@ -25,7 +25,7 @@ def service_day_start(now: datetime | None = None) -> datetime:
 
     Sert à cesser d'**afficher** les commandes de la veille sur les écrans de
     service — jamais à changer leur statut : elles restent « perdues » pour
-    `stats/service.py::_lost_orders`, et c'est ce chiffre qui porte l'argument
+    `stats/service.py::lost_orders`, et c'est ce chiffre qui porte l'argument
     de vente. On arrête de les montrer, on ne les efface pas.
     """
     local = (now or datetime.now(timezone.utc)).astimezone(TUNIS)

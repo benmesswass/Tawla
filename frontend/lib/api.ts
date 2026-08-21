@@ -10,7 +10,7 @@ import { clearToken, getToken } from "@/lib/auth";
  * quittait la machine de développement, et ça évite de recoder une adresse IP à
  * chaque changement de réseau.
  */
-const API_URL =
+export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:8000` : "http://localhost:8000");
 
@@ -79,11 +79,13 @@ export type Restaurant = RestaurantPublic & {
   // que ni l'un ni l'autre n'est vrai.
   is_active: boolean;
   promo_gratuit: boolean;
-  // Offre de lancement (2026-08-21) — has_paid_for_subscription à false tant
-  // qu'aucun vrai paiement n'a eu lieu : c'est ce qui déclenche le rappel de
-  // paiement sur le dashboard, avec le compte à rebours dérivé de
-  // subscription_period_end ci-dessus.
-  launch_promo_granted: boolean;
+  // Offre de lancement (2026-08-21, réglages configurables depuis le
+  // dashboard plateforme — voir lib/platformAdmin.ts) : réduction figée à
+  // l'inscription, `null` si ce restaurant n'en a jamais bénéficié.
+  // has_paid_for_subscription à false tant qu'aucun vrai paiement n'a eu
+  // lieu : c'est ce qui déclenche le rappel de paiement sur le dashboard,
+  // avec le compte à rebours dérivé de subscription_period_end ci-dessus.
+  launch_promo_discount_percent: number | null;
   has_paid_for_subscription: boolean;
 };
 
@@ -99,19 +101,13 @@ export type SubscriptionCheckoutResult = {
   pay_url: string | null;
 };
 
-/** Vue admin d'un restaurant (écran /admin, 2026-08-20) — jamais servie
- * ailleurs que sous le secret admin, voir lib/adminAuth.ts. */
-export type AdminRestaurant = {
-  id: number;
-  name: string;
-  slug: string;
-  created_at: string;
-  subscription_tier: SubscriptionTier;
-  subscription_period_end: string | null;
-  is_active: boolean;
-  promo_gratuit: boolean;
-  launch_promo_granted: boolean;
-  has_paid_for_subscription: boolean;
+/** Offre de lancement (2026-08-21) — voir GET /auth/launch-promo. Termes de
+ * la campagne EN COURS, pas ce qu'un restaurant déjà inscrit a obtenu (voir
+ * Restaurant.launch_promo_discount_percent, figé à l'inscription). */
+export type LaunchPromoStatus = {
+  available: boolean;
+  discount_percent: number;
+  max_grants: number;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -389,6 +385,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 /**
+ * Comme `request`, mais pour une réponse binaire (PDF) : pas de `res.json()`
+ * possible sur le succès, donc pas réutilisable telle quelle.
+ */
+async function requestBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body.detail;
+    if (detail && typeof detail === "object" && detail.code) {
+      throw new ApiError(detail.code, detail.message ?? `Erreur API (${res.status})`, detail);
+    }
+    throw new ApiError("UNKNOWN", typeof detail === "string" ? detail : `Erreur API (${res.status})`);
+  }
+  return res.blob();
+}
+
+/**
  * Résout une adresse d'image servie par l'API. Les photos déposées par le
  * manager sont renvoyées en chemin relatif (`/api/v1/...`) : tel quel, le
  * navigateur le résoudrait sur l'origine du frontend, où il n'y a rien. Les
@@ -423,6 +436,10 @@ export const api = {
     request<Table>("/api/v1/tables", { method: "POST", body: JSON.stringify(payload) }),
   updateTable: (tableId: number, payload: { label: string; zone?: string | null }) =>
     request<Table>(`/api/v1/tables/${tableId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  // Affiche QR en PDF pour les tables ajoutées en self-service, à imprimer et
+  // coller en salle — pas de chevalet fourni à l'installation dans ce cas,
+  // contrairement aux pilotes de setup_restaurant.py (2026-08-20).
+  downloadTablePoster: (tableId: number) => requestBlob(`/api/v1/tables/${tableId}/poster`),
   // Dashboard manager uniquement, sous JWT — la lecture par identifiant était
   // publique et incrémentale : la carte et les prix de n'importe quel
   // établissement se lisaient sans jeton (S-1, audit 2026-08-18).
@@ -446,7 +463,7 @@ export const api = {
     request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   // Offre de lancement (2026-08-21) : public, interrogé par /signup avant
   // même l'inscription pour savoir s'il faut afficher la bannière.
-  getLaunchPromoStatus: () => request<{ available: boolean }>("/api/v1/auth/launch-promo"),
+  getLaunchPromoStatus: () => request<LaunchPromoStatus>("/api/v1/auth/launch-promo"),
   me: () => request<Staff>("/api/v1/auth/me"),
   listStaff: (restaurantId: number) => request<Staff[]>(`/api/v1/staff/by-restaurant/${restaurantId}`),
   createStaff: (payload: { name: string; email: string; role: StaffRole; password?: string }) =>
@@ -647,16 +664,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(subscription),
       headers: orderHeaders(orderToken),
-    }),
-  // Écran admin (2026-08-20) : secret partagé en en-tête, jamais le JWT staff
-  // (authHeaders()) — voir backend app/modules/admin/router.py::require_admin.
-  adminListRestaurants: (secret: string) =>
-    request<AdminRestaurant[]>("/api/v1/admin/restaurants", { headers: { "X-Admin-Secret": secret } }),
-  adminSetPromo: (secret: string, restaurantId: number, promoGratuit: boolean) =>
-    request<AdminRestaurant>(`/api/v1/admin/restaurants/${restaurantId}/promo`, {
-      method: "PATCH",
-      body: JSON.stringify({ promo_gratuit: promoGratuit }),
-      headers: { "X-Admin-Secret": secret },
     }),
 };
 

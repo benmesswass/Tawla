@@ -233,6 +233,116 @@ def test_demo_checkout_used_even_with_payment_mode_konnect_if_tawlas_own_keys_ar
     assert body["restaurant"]["subscription_tier"] == "pro"
 
 
+# --- Offre de lancement : prix réduit répercuté sur le vrai paiement -------
+
+
+def test_konnect_checkout_uses_the_discounted_essentiel_price(client, monkeypatch):
+    """La réduction figée à l'inscription (2026-08-21,
+    Restaurant.launch_promo_discount_percent) doit se refléter dans le
+    montant réellement envoyé à Konnect, pas seulement dans l'affichage
+    frontend — voir essentiel_price_tnd()."""
+    monkeypatch.setenv("PAYMENT_MODE", "konnect")
+    monkeypatch.setenv("KONNECT_API_KEY", "tawla-test-key")
+    monkeypatch.setenv("KONNECT_RECEIVER_WALLET_ID", "tawla-test-wallet")
+    restaurant = create_restaurant(
+        slug="konnect-checkout-discounted", subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=False, launch_promo_discount_percent=50,
+    )
+    headers = _manager_headers(restaurant.id)
+
+    captured = {}
+
+    def _fake_init(**kwargs):
+        captured.update(kwargs)
+        return "https://pay.konnect.example/x", "ref-discounted"
+
+    monkeypatch.setattr(tenants_router, "init_konnect_payment", _fake_init)
+
+    res = client.post(
+        f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "essentiel"}, headers=headers
+    )
+
+    assert res.status_code == 200
+    assert captured["amount_tnd"] == 25
+
+
+def test_konnect_checkout_uses_the_full_price_once_already_active(client, monkeypatch):
+    """La réduction ne s'applique qu'à la toute première activation
+    (essentiel_price_tnd() : `not restaurant.is_active`) — un renouvellement
+    après le mois gratuit se paie plein tarif, même si la réduction reste
+    encore posée en base comme historique."""
+    monkeypatch.setenv("PAYMENT_MODE", "konnect")
+    monkeypatch.setenv("KONNECT_API_KEY", "tawla-test-key")
+    monkeypatch.setenv("KONNECT_RECEIVER_WALLET_ID", "tawla-test-wallet")
+    restaurant = create_restaurant(
+        slug="konnect-checkout-already-active", subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=True, launch_promo_discount_percent=100,
+    )
+    headers = _manager_headers(restaurant.id)
+
+    captured = {}
+
+    def _fake_init(**kwargs):
+        captured.update(kwargs)
+        return "https://pay.konnect.example/x", "ref-full-price"
+
+    monkeypatch.setattr(tenants_router, "init_konnect_payment", _fake_init)
+
+    res = client.post(
+        f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "essentiel"}, headers=headers
+    )
+
+    assert res.status_code == 200
+    assert captured["amount_tnd"] == 50
+
+
+def test_settle_accepts_the_discounted_essentiel_amount(db_session, monkeypatch):
+    """Le règlement recalcule le prix attendu via essentiel_price_tnd() : un
+    restaurant avec une réduction de lancement figée à 50 % ne doit pas se
+    faire rejeter pour n'avoir payé "que" 25 DT."""
+    restaurant = create_restaurant(
+        slug="settle-essentiel-discounted", subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=False, has_paid_for_subscription=False, launch_promo_discount_percent=50,
+    )
+    restaurant.subscription_payment_ref = "ref-discounted"
+    restaurant.subscription_pending_tier = SubscriptionTier.ESSENTIEL
+    db_session.add(restaurant)
+    db_session.commit()
+    monkeypatch.setattr(
+        subscription_payments_module, "get_konnect_payment",
+        lambda ref: KonnectPayment(id=ref, status="completed", amount=25_000, reached_amount=25_000),
+    )
+
+    result = settle_subscription_payment(db_session, restaurant.id)
+
+    assert result == "active"
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    assert restaurant.is_active is True
+    assert restaurant.has_paid_for_subscription is True
+
+
+def test_settle_rejects_less_than_the_discounted_essentiel_amount(db_session, monkeypatch):
+    restaurant = create_restaurant(
+        slug="settle-essentiel-discounted-mismatch", subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=False, has_paid_for_subscription=False, launch_promo_discount_percent=50,
+    )
+    restaurant.subscription_payment_ref = "ref-discounted-low"
+    restaurant.subscription_pending_tier = SubscriptionTier.ESSENTIEL
+    db_session.add(restaurant)
+    db_session.commit()
+    monkeypatch.setattr(
+        subscription_payments_module, "get_konnect_payment",
+        lambda ref: KonnectPayment(id=ref, status="completed", amount=25_000, reached_amount=1_000),
+    )
+
+    result = settle_subscription_payment(db_session, restaurant.id)
+
+    assert result == "error"
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    assert restaurant.is_active is False
+    assert restaurant.subscription_payment_ref == "ref-discounted-low"  # rien consommé
+
+
 # --- Chemin Konnect réel (dormant, simulé via monkeypatch) ------------------
 
 

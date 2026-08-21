@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Cairo } from "next/font/google";
+import { cairo, lalezar } from "@/lib/fonts";
 import {
   api,
   mediaUrl,
@@ -23,16 +23,24 @@ import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
-import { MoonIcon, UtensilsIcon, GiftIcon, CakeIcon, BellIcon, FlameIcon, WifiOffIcon, ShareIcon } from "@/components/icons";
+import {
+  MoonIcon,
+  UtensilsIcon,
+  GiftIcon,
+  CakeIcon,
+  BellIcon,
+  FlameIcon,
+  WifiOffIcon,
+  ShareIcon,
+  StampIcon,
+} from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
 import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
 import LoyaltyStampCard from "@/components/LoyaltyStampCard";
-import InvoiceQr from "@/components/InvoiceQr";
+import QrCode from "@/components/QrCode";
 import { CULTURAL_FACTS } from "@/lib/culturalFacts";
 import { generateShareCardBlob } from "@/lib/shareCard";
-
-const cairo = Cairo({ subsets: ["arabic", "latin"], weight: ["400", "600", "700"] });
 
 type CartLine = {
   item: MenuItem;
@@ -50,14 +58,28 @@ type CartLine = {
 
 type StepStatus = Exclude<OrderStatus, "cancelled">;
 
-const STEP_STATUSES: StepStatus[] = [
-  "pending_confirmation",
-  "confirmed",
-  "sent_to_kitchen",
-  "in_preparation",
-  "ready",
-  "served",
-];
+// La frise côté client regroupe "envoyée en cuisine" et "en préparation" en une
+// seule étape "En cuisine" — une distinction utile au serveur, pas au client
+// qui attend son plat.
+type DisplayStep = "received" | "confirmed" | "in_kitchen" | "ready" | "served";
+
+const DISPLAY_STEPS: DisplayStep[] = ["received", "confirmed", "in_kitchen", "ready", "served"];
+
+function displayStepIndex(status: StepStatus): number {
+  switch (status) {
+    case "pending_confirmation":
+      return 0;
+    case "confirmed":
+      return 1;
+    case "sent_to_kitchen":
+    case "in_preparation":
+      return 2;
+    case "ready":
+      return 3;
+    case "served":
+      return 4;
+  }
+}
 
 function lastOrderStorageKey(qrToken: string): string {
   return `resto-qr-menu:last-order:${qrToken}`;
@@ -180,6 +202,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
+  const [offlineRetryCountdown, setOfflineRetryCountdown] = useState(5);
   const [loyaltySectionOpen, setLoyaltySectionOpen] = useState(false);
   const [loyaltyPhone, setLoyaltyPhone] = useState("");
   const [loyaltyBirthDate, setLoyaltyBirthDate] = useState("");
@@ -208,6 +231,51 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   function loyaltyStampsFilled(status: LoyaltyMember): number {
     if (status.reward_available) return 10;
     return status.order_count % 10;
+  }
+
+  function renderLoyaltyCard(status: LoyaltyMember) {
+    const complete = status.reward_available;
+    return (
+      <div
+        className={`rounded-2xl p-3 ${
+          complete
+            ? "bg-[var(--espresso)] border border-[var(--laiton)]"
+            : "bg-[var(--creme)] border border-[rgba(184,134,46,.5)]"
+        }`}
+      >
+        <div className="flex items-center gap-1.5">
+          <StampIcon className={`w-4 h-4 shrink-0 ${complete ? "text-[var(--laiton-on-espresso-text)]" : "text-[var(--laiton)]"}`} />
+          {complete ? (
+            <h3 className={`${lalezar.className} text-[21px] leading-none text-[var(--laiton)]`}>
+              {t.loyaltyCompleteTitle}
+            </h3>
+          ) : (
+            <h3 className="text-[13px] font-semibold text-[var(--encre)]">{t.loyaltyCardTitle}</h3>
+          )}
+        </div>
+        <div className="mt-2.5">
+          <LoyaltyStampCard filled={loyaltyStampsFilled(status)} rewardAvailable={complete} />
+        </div>
+        {complete ? (
+          <p className="mt-3 w-full text-center bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-[13px] text-[14.5px] font-bold">
+            {t.loyaltyRewardAvailable}
+          </p>
+        ) : (
+          <p className="mt-2 text-center text-xs text-[var(--ink-soft)]">
+            {t.loyaltyProgress(status.order_count, status.orders_until_reward)}
+          </p>
+        )}
+        {status.is_birthday_today && (
+          <p
+            className={`mt-1.5 flex items-center justify-center gap-1.5 text-xs ${
+              complete ? "text-[var(--laiton-on-espresso-text)]" : "text-[var(--laiton)]"
+            }`}
+          >
+            <CakeIcon className="w-4 h-4 shrink-0" /> {t.loyaltyBirthdayBanner}
+          </p>
+        )}
+      </div>
+    );
   }
 
   const load = useCallback(() => {
@@ -343,6 +411,20 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     window.addEventListener("online", flushOfflineQueue);
     return () => window.removeEventListener("online", flushOfflineQueue);
   }, [flushOfflineQueue]);
+
+  // Compte à rebours affiché sur l'écran hors ligne : retente aussi toutes les
+  // 5s pendant que la commande patiente, sans attendre l'évènement "online" du
+  // navigateur qui ne se déclenche pas toujours sur une connexion instable.
+  useEffect(() => {
+    if (!offlineQueuedPayload) return;
+    setOfflineRetryCountdown(5);
+    const tick = setInterval(() => setOfflineRetryCountdown((c) => (c <= 1 ? 5 : c - 1)), 1000);
+    const retry = setInterval(() => flushOfflineQueue(), 5000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(retry);
+    };
+  }, [offlineQueuedPayload, flushOfflineQueue]);
 
   useEffect(() => {
     if (!showCelebration) return;
@@ -819,9 +901,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   if (loadError) {
     return (
-      <div dir={dir} className={`p-6 max-w-md mx-auto text-center ${wrapperClassName ?? ""}`}>
-        <p className="text-red-600 mb-4">{loadError}</p>
-        <button onClick={load} className="bg-neutral-900 text-white px-4 py-2 rounded-lg">
+      <div dir={dir} className={`min-h-screen bg-[var(--semoule)] p-6 max-w-md mx-auto text-center ${wrapperClassName ?? ""}`}>
+        <p className="text-[var(--harissa)] mb-4">{loadError}</p>
+        <button
+          onClick={load}
+          className="bg-[var(--harissa)] text-[var(--semoule)] px-5 py-3 rounded-xl font-bold text-[14.5px] shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px]"
+        >
           {t.retry}
         </button>
       </div>
@@ -829,7 +914,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
   if (!table || !restaurant) {
     return (
-      <div dir={dir} className={`${wrapperClassName ?? ""}`}>
+      <div dir={dir} className={`min-h-screen bg-[var(--semoule)] ${wrapperClassName ?? ""}`}>
         <span className="sr-only">{t.loadingMenu}</span>
         <Skeleton className="h-24 w-full" />
         <div className="p-4 max-w-md mx-auto space-y-4">
@@ -844,16 +929,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   if (offlineQueuedPayload) {
     return (
-      <div dir={dir} className={`p-6 max-w-md mx-auto text-center ${wrapperClassName ?? ""}`}>
-        <h1 className="text-xl font-semibold flex items-center justify-center gap-2">
-          <WifiOffIcon className="w-5 h-5 shrink-0" />
-          {t.offlineQueuedTitle}
-        </h1>
-        <p className="mt-4 text-neutral-600">{t.offlineQueuedMessage}</p>
+      <div dir={dir} className={`min-h-screen bg-[var(--semoule)] p-6 max-w-md mx-auto ${wrapperClassName ?? ""}`}>
+        <div className="rounded-2xl border border-[var(--laiton)] bg-[var(--creme)] p-[14px]">
+          <div className="flex items-center gap-2">
+            <WifiOffIcon className="w-[18px] h-[18px] shrink-0 text-[var(--laiton)]" />
+            <h1 className="text-[13.5px] font-bold text-[var(--encre)]">{t.offlineQueuedTitle}</h1>
+          </div>
+          <p className="mt-2 text-[12.5px] leading-[1.5] text-[var(--ink-soft)]">{t.offlineQueuedMessage}</p>
+          <div className="mt-3 rounded-xl border border-[var(--line-strong)] bg-[var(--semoule-raised)] py-[13px] text-center">
+            <p className="text-sm font-semibold text-[var(--ink-soft)] tabular-nums">
+              {retryingOffline ? t.sending : t.offlineRetryCountdown(offlineRetryCountdown)}
+            </p>
+          </div>
+        </div>
         <button
           onClick={flushOfflineQueue}
           disabled={retryingOffline}
-          className="mt-8 w-full bg-neutral-900 text-white rounded-lg py-2.5 disabled:opacity-50"
+          className="mt-4 w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-3 font-bold text-[14.5px] shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
         >
           {retryingOffline ? t.sending : t.retryNow}
         </button>
@@ -862,16 +954,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   if (trackedOrder) {
-    const currentStepIndex = STEP_STATUSES.indexOf(trackedOrder.status as StepStatus);
+    const currentDisplayIndex = displayStepIndex(trackedOrder.status as StepStatus);
     const cancelled = trackedOrder.status === "cancelled";
     return (
       <>
         {showCelebration && <CelebrationOverlay />}
-        <div dir={dir} className={`p-6 max-w-md mx-auto ${wrapperClassName ?? ""}`}>
-        <h1 className="text-xl font-semibold text-center">
+        <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pt-[22px] px-[18px] pb-[30px] max-w-md mx-auto ${wrapperClassName ?? ""}`}>
+        <h1 className={`${lalezar.className} text-[27px] leading-tight text-center text-[var(--encre)]`}>
           {cancelled ? t.orderCancelledTitle : t.orderSentTitle}
         </h1>
-        <p className="mt-2 text-neutral-600 text-center">{t.orderSubtitle(table.label, trackedOrder.id)}</p>
+        <p className="mt-2 text-[13px] text-[var(--ink-soft)] text-center">{t.orderSubtitle(table.label, trackedOrder.id)}</p>
 
         {/* Le client voyait « Envoyé » sans savoir depuis combien de temps.
             Une attente qu'on peut lire se supporte ; une attente muette fait
@@ -881,7 +973,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             const secondes = elapsedSeconds(trackedOrder.created_at, maintenant);
             if (secondes === null) return null;
             return (
-              <p className="mt-1 text-sm text-center text-[var(--ink-soft)] tabular-nums">
+              <p className="mt-1 text-[12.5px] font-semibold text-center text-[var(--laiton)] tabular-nums">
                 {t.orderElapsed(duree(secondes))}
               </p>
             );
@@ -891,29 +983,29 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           <button
             onClick={callWaiter}
             disabled={waiterCallState !== "idle"}
-            className="text-sm border border-neutral-300 rounded-lg px-3 py-1.5 disabled:opacity-70"
+            className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-[11px] disabled:opacity-70"
           >
             {waiterCallState === "called" ? (
               t.callWaiterSent
             ) : (
-              <span className="inline-flex items-center gap-1.5">
-                <BellIcon className="w-4 h-4 shrink-0" />
+              <>
+                <BellIcon className="w-[14px] h-[14px] shrink-0" />
                 {t.callWaiterButton}
-              </span>
+              </>
             )}
           </button>
-          {waiterCallError && <p className="mt-2 text-sm text-red-600">{waiterCallError}</p>}
+          {waiterCallError && <p className="mt-2 text-sm text-[var(--harissa)]">{waiterCallError}</p>}
         </div>
 
         {!cancelled && trackedOrder.scheduled_for && (
-          <p className="mt-4 text-sm text-center bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg py-2 px-3 flex items-center justify-center gap-1.5">
-            <MoonIcon className="w-4 h-4 shrink-0" />
+          <p className="mt-4 text-sm text-center bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)] rounded-xl py-2 px-3 flex items-center justify-center gap-1.5">
+            <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
             {t.preorderBadge(formatTime(trackedOrder.scheduled_for))}
           </p>
         )}
 
         {!cancelled && trackedOrder.taken_by_staff_name && (
-          <p className="mt-4 text-sm text-center bg-amber-50 text-amber-800 border border-amber-200 rounded-lg py-2 px-3">
+          <p className="mt-4 text-sm text-center bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)] rounded-xl py-2 px-3">
             {t.dedicatedServer(trackedOrder.taken_by_staff_name)}
           </p>
         )}
@@ -924,17 +1016,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           pushState !== "unsupported" && (
             <div className="mt-4 text-center">
               {pushState === "subscribed" ? (
-                <p className="text-sm text-emerald-700 flex items-center justify-center gap-1.5">
+                <p className="text-sm text-[var(--menthe)] flex items-center justify-center gap-1.5">
                   <BellIcon className="w-4 h-4 shrink-0" />
                   {t.pushSubscribed}
                 </p>
               ) : pushState === "denied" ? (
-                <p className="text-sm text-neutral-500">{t.pushDenied}</p>
+                <p className="text-sm text-[var(--ink-faint)]">{t.pushDenied}</p>
               ) : (
                 <button
                   onClick={subscribeToPush}
                   disabled={pushState === "subscribing"}
-                  className="text-sm border border-neutral-300 rounded-lg px-3 py-1.5 disabled:opacity-70"
+                  className="text-sm border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-1.5 disabled:opacity-70"
                 >
                   {pushState === "subscribing" ? (
                     t.sending
@@ -950,66 +1042,45 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           )}
 
         {!cancelled && trackedOrder.loyalty_phone && loyaltyStatus && (
-          <div className="mt-4 text-sm text-center bg-orange-50 text-orange-900 border border-orange-200 rounded-lg py-3 px-3">
-            <LoyaltyStampCard
-              filled={loyaltyStampsFilled(loyaltyStatus)}
-              rewardAvailable={loyaltyStatus.reward_available}
-            />
-            {loyaltyStatus.reward_available ? (
-              <p className="font-medium mt-2">{t.loyaltyRewardAvailable}</p>
-            ) : (
-              <p className="flex items-center justify-center gap-1.5 mt-2">
-                <GiftIcon className="w-4 h-4 shrink-0" />
-                {t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}
-              </p>
-            )}
-            {loyaltyStatus.is_birthday_today && (
-              <p className="mt-1 flex items-center justify-center gap-1.5">
-                <CakeIcon className="w-4 h-4 shrink-0" />
-                {t.loyaltyBirthdayBanner}
-              </p>
-            )}
-          </div>
+          <div className="mt-4">{renderLoyaltyCard(loyaltyStatus)}</div>
         )}
 
         {!cancelled && (
           <ol className="mt-8">
-            {STEP_STATUSES.map((status, i) => {
-              const done = i < currentStepIndex;
-              const current = i === currentStepIndex;
-              const isLast = i === STEP_STATUSES.length - 1;
-              const showWaitHint = current && (status === "sent_to_kitchen" || status === "in_preparation");
+            {DISPLAY_STEPS.map((step, i) => {
+              const done = i < currentDisplayIndex;
+              const current = i === currentDisplayIndex;
+              const isLast = i === DISPLAY_STEPS.length - 1;
+              const showWaitHint = current && step === "in_kitchen";
               return (
-                <li key={status} className="relative ps-10 pb-6 last:pb-0">
+                <li key={step} className="relative ps-[46px] pb-5 last:pb-0">
                   {!isLast && (
                     <span
-                      className="absolute top-7 bottom-0 w-0.5 start-[15px]"
+                      className="absolute top-[34px] bottom-0 w-0.5 start-[17px]"
                       style={{ backgroundColor: done ? "var(--menthe)" : "var(--line)" }}
                     />
                   )}
                   <span
-                    className={`absolute top-0 start-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${
-                      current ? "animate-pulse-ring" : ""
+                    className={`absolute top-0 start-0 w-[34px] h-[34px] rounded-full flex items-center justify-center text-[12.5px] font-bold ${
+                      current ? "animate-tw-pulse" : ""
                     }`}
                     style={{
-                      backgroundColor: done || current ? "var(--menthe)" : "var(--semoule-raised)",
-                      color: done || current ? "white" : "var(--ink-soft)",
-                      border: done || current ? "none" : "1px solid var(--line)",
+                      backgroundColor: done ? "var(--menthe)" : current ? "var(--harissa)" : "var(--creme)",
+                      color: done || current ? "var(--semoule)" : "var(--ink-faint)",
+                      border: done ? "1px solid var(--menthe)" : current ? "1px solid var(--harissa)" : "1px solid var(--line)",
                     }}
                   >
                     {done ? "✓" : i + 1}
                   </span>
                   <div className="pt-1">
                     <span
-                      className={current || done ? "font-semibold" : "text-neutral-400"}
-                      style={{ color: current ? "var(--encre)" : done ? "var(--menthe)" : undefined }}
+                      className={current ? "font-bold" : done ? "font-semibold" : "font-normal"}
+                      style={{ color: current || done ? "var(--encre)" : "var(--ink-faint)" }}
                     >
-                      {t.steps[status]}
+                      {t.trackingSteps[step]}
                     </span>
                     {showWaitHint && (
-                      <p className="text-xs mt-0.5" style={{ color: "var(--ink-soft)" }}>
-                        {t.kitchenWaitHint}
-                      </p>
+                      <p className="text-[11.5px] mt-0.5 text-[var(--ink-soft)]">{t.kitchenWaitHint}</p>
                     )}
                   </div>
                 </li>
@@ -1019,34 +1090,33 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
 
         {!cancelled && inKitchenWait && (
-          <div
-            className="mt-4 text-sm rounded-lg py-2.5 px-3 flex items-start gap-2"
-            style={{ backgroundColor: "var(--semoule)", border: "1px solid var(--line)", color: "var(--encre)" }}
-          >
-            <FlameIcon className="w-4 h-4 shrink-0 mt-0.5 text-[var(--laiton)]" />
+          <div className="mt-4 text-[12.5px] leading-[1.5] rounded-xl py-[11px] px-3 flex items-start gap-2 bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--encre)]">
+            <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton)]" />
             <span>{CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"][culturalFactIndex]}</span>
           </div>
         )}
 
-        <div className="mt-8 border-t pt-4">
-          <p className="text-sm font-medium mb-2">{t.orderDetailsTitle}</p>
-          <ul className="text-sm text-neutral-600 space-y-1">
+        <div className="mt-8 border-t border-[var(--line)] pt-[14px]">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)] mb-2">
+            {t.orderDetailsTitle}
+          </p>
+          <ul className="text-[13px] leading-[1.75] text-[var(--ink-soft)] space-y-0">
             {trackedOrder.items.map((it) => (
               <li key={it.id}>
                 {it.quantity}× {it.menu_item_name}
                 {it.is_shared && (
-                  <span className="text-amber-700 inline-flex items-center gap-1 align-middle">
+                  <span className="text-[var(--laiton)] inline-flex items-center gap-1 align-middle">
                     · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
                   </span>
                 )}
-                {it.notes && <span className="text-neutral-400"> — {it.notes}</span>}
+                {it.notes && <span className="text-[var(--ink-faint)]"> — {it.notes}</span>}
               </li>
             ))}
           </ul>
-          <div className="flex justify-between font-medium mt-2 pt-2 border-t">
+          <div className="flex justify-between text-[15px] font-bold text-[var(--encre)] mt-2 pt-2 border-t border-[var(--line)]">
             <span>{t.total}</span>
-            <span>
-              {trackedOrder.total_amount.toFixed(2)} {t.currency}
+            <span className="tabular-nums">
+              {trackedOrder.total_amount.toFixed(3)} {t.currency}
             </span>
           </div>
         </div>
@@ -1055,9 +1125,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             client voulait savoir ce qu'il doit **en tout** — l'addition de sa
             deuxième tournée seule ne veut rien dire au moment de régler. */}
         {!cancelled && ardoise.length > 1 && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <p className="text-sm font-medium text-amber-900">{t.tableTotalTitle}</p>
-            <ul className="mt-2 space-y-1 text-sm text-amber-900">
+          <div className="mt-4 rounded-xl border border-[rgba(184,134,46,.5)] bg-[var(--creme)] p-3">
+            <p className="text-sm font-semibold text-[var(--encre)]">{t.tableTotalTitle}</p>
+            <ul className="mt-2 space-y-1 text-sm text-[var(--ink-soft)]">
               {ardoise.map((r) => (
                 <li key={r.order.id} className="flex justify-between gap-2">
                   <span>
@@ -1065,29 +1135,39 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {r.order.id === trackedOrder.id && ` — ${t.thisOrder}`}
                   </span>
                   <span className="tabular-nums">
-                    {r.order.total_amount.toFixed(2)} {t.currency}
+                    {r.order.total_amount.toFixed(3)} {t.currency}
                   </span>
                 </li>
               ))}
             </ul>
-            <div className="mt-2 pt-2 border-t border-amber-200 flex justify-between font-semibold text-amber-900">
+            <div className="mt-2 pt-2 border-t border-[rgba(184,134,46,.35)] flex justify-between font-semibold text-[var(--encre)]">
               <span>{t.tableTotal}</span>
               <span className="tabular-nums">
-                {totalArdoise.toFixed(2)} {t.currency}
+                {totalArdoise.toFixed(3)} {t.currency}
               </span>
             </div>
-            <p className="mt-1.5 text-xs text-amber-900/80">{t.tableTotalNote}</p>
+            <p className="mt-1.5 text-xs text-[var(--ink-soft)]">{t.tableTotalNote}</p>
           </div>
         )}
 
         {!cancelled && (
-          <div className="mt-6 border-t pt-4">
-            <p className="text-sm font-medium mb-3">{t.paymentTitle}</p>
+          <div className="mt-6 border-t border-[var(--line)] pt-[14px]">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)] mb-3">
+              {t.paymentTitle}
+            </p>
 
             {trackedOrder.payment_status === "paid" && (
               <>
-                <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                  {t.paidMessage(trackedOrder.payment_method ?? "card", trackedOrder.tip_amount)}
+                <div className="rounded-xl p-[13px] bg-[rgba(31,107,79,.1)] border border-[rgba(31,107,79,.45)] flex items-center gap-3">
+                  <span className="w-[26px] h-[26px] rounded-full bg-[var(--menthe)] text-[var(--semoule)] flex items-center justify-center shrink-0 text-sm font-bold">
+                    ✓
+                  </span>
+                  <p className="text-[13.5px] font-semibold text-[var(--menthe)]">
+                    {t.paidMessage(trackedOrder.payment_method ?? "card", trackedOrder.tip_amount)}
+                  </p>
+                </div>
+                <p className="mt-2 text-[12.5px] text-[var(--ink-soft)] text-center">
+                  {t.orderSubtitle(table.label, trackedOrder.id)}
                 </p>
                 {orderToken && (
                   <div className="mt-3 text-center">
@@ -1095,12 +1175,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       href={invoiceUrl(trackedOrder.id, orderToken)}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm underline text-neutral-700"
+                      className="inline-block w-full text-sm font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-2.5"
                     >
                       {t.invoiceDownload}
                     </a>
-                    <InvoiceQr
+                    <QrCode
                       url={invoiceUrl(trackedOrder.id, orderToken)}
+                      alt="QR code de la facture"
                       caption={t.invoiceQrCaption}
                     />
                   </div>
@@ -1109,7 +1190,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             )}
 
             {trackedOrder.payment_status === "pending" && (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-sm text-[#8a6420] bg-[rgba(184,134,46,.12)] border border-[rgba(184,134,46,.55)] rounded-xl p-3">
                 {trackedOrder.payment_method === "card_terminal"
                   ? t.cardTerminalPendingMessage(trackedOrder.total_amount)
                   : t.cashPendingMessage(trackedOrder.total_amount)}
@@ -1119,27 +1200,36 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {trackedOrder.payment_status === "unpaid" && (
               <div className="space-y-3">
                 {paymentError && (
-                  <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">
+                  <div className="text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
                     {paymentError}
                   </div>
                 )}
                 <SplitBill order={trackedOrder} t={t} />
                 <div>
-                  <label htmlFor="tip" className="text-sm text-neutral-500">
-                    {t.tipLabel}
-                  </label>
-                  <input
-                    id="tip"
-                    type="text"
-                    inputMode="decimal"
-                    value={tipInput}
-                    onChange={(e) => setTipInput(e.target.value)}
-                    placeholder={t.tipPlaceholder}
-                    className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
-                  />
+                  <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
+                  <div className="flex gap-2">
+                    {[0, 0.05, 0.1].map((pct) => {
+                      const amount = Number((trackedOrder.total_amount * pct).toFixed(3));
+                      const selected = (tipInput === "" && pct === 0) || Number(tipInput) === amount;
+                      return (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setTipInput(pct === 0 ? "" : String(amount))}
+                          className={`flex-1 rounded-[10px] py-[9px] text-center ${
+                            selected
+                              ? "border border-[var(--harissa)] bg-[var(--creme)] text-[var(--harissa)] text-[12.5px] font-bold"
+                              : "border border-[var(--line)] bg-white text-[var(--encre)] text-[12.5px] font-semibold"
+                          }`}
+                        >
+                          {pct === 0 ? t.tipNone : `${Math.round(pct * 100)}%`}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
-                  <label htmlFor="customer-email" className="text-sm text-neutral-500">
+                  <label htmlFor="customer-email" className="text-sm text-[var(--ink-soft)]">
                     {t.emailLabel}
                   </label>
                   <input
@@ -1148,27 +1238,27 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     value={customerEmail}
                     onChange={(e) => setCustomerEmail(e.target.value)}
                     placeholder={t.emailPlaceholder}
-                    className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
+                    className="mt-1 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
                   />
                 </div>
                 <button
                   onClick={payByCard}
                   disabled={paying}
-                  className="w-full bg-neutral-900 text-white rounded-lg py-2.5 disabled:opacity-50"
+                  className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-[15px] text-[15px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
                 >
                   {t.payByCard}
                 </button>
                 <button
                   onClick={payByCardTerminal}
                   disabled={paying}
-                  className="w-full border border-neutral-300 rounded-lg py-2.5 disabled:opacity-50"
+                  className="w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-[13px] text-sm font-semibold disabled:opacity-50"
                 >
                   {t.payByCardTerminal}
                 </button>
                 <button
                   onClick={payByCash}
                   disabled={paying}
-                  className="w-full border border-neutral-300 rounded-lg py-2.5 disabled:opacity-50"
+                  className="w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-[13px] text-sm font-semibold disabled:opacity-50"
                 >
                   {t.payByCash}
                 </button>
@@ -1180,13 +1270,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         <button
           onClick={shareOrder}
           disabled={sharingOrder}
-          className="mt-8 w-full border border-neutral-300 rounded-lg py-2.5 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+          className="mt-8 w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
         >
           <ShareIcon className="w-4 h-4 shrink-0" />
           {t.shareOrderButton}
         </button>
 
-        <button onClick={orderAgain} className="mt-3 w-full border border-neutral-300 rounded-lg py-2.5">
+        <button
+          onClick={orderAgain}
+          className="mt-3 w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-2.5 text-sm font-semibold"
+        >
           {t.orderAgain}
         </button>
         </div>
@@ -1213,62 +1306,70 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // que l'escamoter (retour du premier service).
     const rupture = !item.is_available;
     const photo = mediaUrl(item.image_url);
+    const ligne = cart[item.id];
+    const perPerson = ligne
+      ? (ligne.item.price * ligne.quantity) / (ligne.sharedWith.length > 0 ? ligne.sharedWith.length : convives)
+      : 0;
     return (
       <div
         key={item.id}
         // Décalage plafonné à 6 plats : au-delà, l'attente se verrait plus que
         // l'effet. Le style inline est le seul moyen d'indexer un délai.
         style={{ animationDelay: `${Math.min(index, 6) * 35}ms` }}
-        className={`plat-apparait mb-3 rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] p-3 shadow-sm transition-shadow ${
-          rupture ? "opacity-60" : ""
-        }`}
+        className="plat-apparait mb-[10px] rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-[11px] transition-shadow"
       >
         <div className="flex items-start gap-3">
-          {/* La photo d'abord, et visible sur téléphone : elle était masquée
-              en dessous de `sm`, c'est-à-dire précisément là où le client
-              commande. Une carte de restaurant sans photos ne donne pas faim. */}
-          {photo && (
-            <div className="relative shrink-0 w-20 h-20">
-              {/* La même image, floutée derrière la vignette : elle projette la
-                  couleur du plat sur le fond crème et fait ressortir la photo
-                  sans ajouter le moindre octet. */}
-              <div
-                aria-hidden
-                className="absolute inset-0 rounded-xl bg-cover bg-center blur-md opacity-40 scale-95"
-                style={{ backgroundImage: `url(${photo})` }}
-              />
-              <img
-                src={photo}
-                alt={item.name}
-                loading="lazy"
-                className="relative w-20 h-20 rounded-xl object-cover border-2 border-white shadow-md"
-              />
-            </div>
-          )}
+          {/* La vignette est toujours présente, même sans photo : une carte de
+              restaurant garde la même grille de lecture plat après plat. Un
+              emplacement "PHOTO" en attendant photos_demo.py plutôt qu'un vide. */}
+          <div className={`relative shrink-0 w-[72px] h-[72px] ${rupture ? "opacity-45" : ""}`}>
+            {photo ? (
+              <>
+                {/* La même image, floutée derrière la vignette : elle projette la
+                    couleur du plat sur le fond crème et fait ressortir la photo
+                    sans ajouter le moindre octet. */}
+                <div
+                  aria-hidden
+                  className="absolute inset-0 rounded-xl bg-cover bg-center blur-md opacity-40 scale-95"
+                  style={{ backgroundImage: `url(${photo})` }}
+                />
+                <img
+                  src={photo}
+                  alt={item.name}
+                  loading="lazy"
+                  className="relative w-[72px] h-[72px] rounded-xl object-cover border-2 border-white shadow-md"
+                />
+              </>
+            ) : (
+              <div className="w-[72px] h-[72px] rounded-xl bg-[var(--creme)] border border-[var(--line)] flex items-center justify-center">
+                <span className="text-[8px] font-semibold tracking-[0.14em] text-[var(--ink-faint)]">PHOTO</span>
+              </div>
+            )}
+          </div>
           <div className="min-w-0 flex-1">
-            <div className={`font-medium ${rupture ? "line-through" : ""}`}>
+            <div className={`text-[14.5px] font-semibold leading-[1.25] ${rupture ? "line-through opacity-45" : ""}`}>
               {item.name}
               {item.spice_level > 0 && (
                 <span className="ms-1 inline-flex items-center gap-0.5 align-middle text-[var(--harissa)]">
                   {Array.from({ length: item.spice_level }).map((_, i) => (
-                    <FlameIcon key={i} className="w-3.5 h-3.5 shrink-0" />
+                    <FlameIcon key={i} className="w-[13px] h-[13px] shrink-0" />
                   ))}
                 </span>
               )}
               {!item.is_halal && (
-                <span className="ms-1 text-xs font-normal text-red-600 border border-red-200 rounded px-1 align-middle">
+                <span className="ms-1 text-xs font-normal text-[var(--harissa)] border border-[var(--harissa)] rounded px-1 align-middle">
                   {t.notHalalBadge}
                 </span>
               )}
             </div>
             {item.description && (
-              <div className="text-sm text-[var(--ink-soft)] mt-0.5 leading-snug">{item.description}</div>
+              <div className="text-[12.5px] leading-[1.35] text-[var(--ink-soft)] mt-[3px]">{item.description}</div>
             )}
             {item.allergens && (
               <div className="text-xs text-[var(--ink-soft)]/70 mt-0.5">{t.allergensLabel(item.allergens)}</div>
             )}
             {rupture && (
-              <div className="text-xs font-medium text-[var(--harissa)] mt-1">{t.itemOutOfStock}</div>
+              <div className="text-[11.5px] font-semibold text-[var(--harissa)] mt-1">{t.itemOutOfStock}</div>
             )}
 
             {/* Prix et boutons sur la même ligne, au bas de la carte : le prix
@@ -1276,26 +1377,28 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 part et d'autre les rendait tous les deux difficiles à trouver. */}
             <div className="flex items-center justify-between gap-2 mt-2">
               <span
-                className={`font-semibold tabular-nums text-[var(--harissa)] ${rupture ? "line-through" : ""}`}
+                className={`text-[14.5px] font-bold tabular-nums text-[var(--harissa)] ${
+                  rupture ? "line-through opacity-45" : ""
+                }`}
               >
-                {item.price.toFixed(2)} {t.currency}
+                {item.price.toFixed(3)} {t.currency}
               </span>
               <div className="flex items-center gap-2 shrink-0">
-                {cart[item.id] && (
+                {ligne && (
                   <>
                     <button
                       onClick={() => removeFromCart(item.id)}
                       aria-label={t.removeFromCartAria(item.name)}
-                      className="w-9 h-9 rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                      className="w-[34px] h-[34px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
                     >
                       −
                     </button>
                     <span
-                      className={`inline-block min-w-[1.5rem] text-center font-medium tabular-nums ${
+                      className={`inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums ${
                         bumpedItemId === item.id ? "animate-cart-bump" : ""
                       }`}
                     >
-                      {cart[item.id].quantity}
+                      {ligne.quantity}
                     </span>
                   </>
                 )}
@@ -1303,7 +1406,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   onClick={() => addToCart(item)}
                   disabled={rupture}
                   aria-label={t.addToCartAria(item.name)}
-                  className="w-9 h-9 rounded-full bg-[var(--harissa)] text-white text-lg leading-none shadow-sm transition-transform active:scale-90 disabled:opacity-30 disabled:active:scale-100"
+                  className={`w-[34px] h-[34px] rounded-full text-[19px] leading-none shadow-sm transition-transform active:scale-90 disabled:cursor-not-allowed disabled:active:scale-100 ${
+                    rupture
+                      ? "bg-[var(--line-strong)] text-[var(--semoule)]"
+                      : "bg-[var(--harissa)] text-[var(--semoule)]"
+                  }`}
                 >
                   +
                 </button>
@@ -1311,39 +1418,61 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </div>
           </div>
         </div>
-        {cart[item.id] && (
-          <>
+        {ligne && (
+          <div className="mt-[10px] pt-[10px] border-t border-[var(--line)]">
             <input
               type="text"
-              value={cart[item.id].note}
+              value={ligne.note}
               onChange={(e) => setNote(item.id, e.target.value)}
               placeholder={t.notePlaceholder}
-              className="mt-2 w-full text-sm border rounded-lg px-3 py-1.5"
+              className="w-full text-xs bg-white border border-[var(--line)] rounded-[10px] px-[10px] py-2 placeholder:text-[var(--ink-soft)]"
             />
-            <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+            <label className="mt-2 flex items-center gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
-                checked={cart[item.id].shared}
+                checked={ligne.shared}
                 onChange={(e) => setShared(item.id, e.target.checked)}
+                className="sr-only"
               />
-              <UtensilsIcon className="w-4 h-4 shrink-0" />
-              {t.sharedCheckboxLabel}
+              <span
+                className="w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0"
+                style={{
+                  backgroundColor: ligne.shared ? "var(--menthe)" : "#fff",
+                  borderColor: ligne.shared ? "var(--menthe)" : "var(--line-strong)",
+                }}
+              >
+                {ligne.shared && (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-[11px] h-[11px]"
+                    fill="none"
+                    stroke="var(--semoule)"
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M4 12l5 5L20 6" />
+                  </svg>
+                )}
+              </span>
+              <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
+              <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
             </label>
-            {cart[item.id].shared && (
+            {ligne.shared && (
               <div className="mt-2">
                 <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
-                <div className="mt-1 flex flex-wrap gap-1.5">
+                <div className="mt-1 flex flex-wrap gap-[6px]">
                   {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
-                    const choisi = cart[item.id].sharedWith.includes(place);
+                    const choisi = ligne.sharedWith.includes(place);
                     return (
                       <button
                         key={place}
                         type="button"
                         onClick={() => toggleConvive(item.id, place)}
                         aria-pressed={choisi}
-                        className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                        className={`rounded-full border px-[12px] py-[5px] text-sm transition-colors ${
                           choisi
-                            ? "bg-[var(--harissa)] text-white border-[var(--harissa)]"
+                            ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
                             : "border-[var(--line)] bg-white text-[var(--encre)]"
                         }`}
                       >
@@ -1352,52 +1481,59 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     );
                   })}
                 </div>
-                {cart[item.id].sharedWith.length === 0 && (
+                {ligne.sharedWith.length === 0 ? (
                   <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
+                ) : (
+                  <p className="mt-1 text-[11.5px] text-[var(--ink-soft)]">
+                    {t.sharedPerPersonAmount(perPerson)}
+                  </p>
                 )}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     );
   }
 
   return (
-    <div dir={dir} className={`pb-32 ${wrapperClassName ?? ""}`}>
-      <header className="bg-[var(--harissa)] text-white px-4 py-5 flex items-start justify-between gap-3">
+    <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pb-[132px] ${wrapperClassName ?? ""}`}>
+      <header className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-[10px] pb-[14px] flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-balance">{restaurant.name}</h1>
-          <p className="text-white/80 text-sm">{table.label}</p>
+          <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
+          <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
         </div>
-        <div className="flex flex-col items-end gap-2 shrink-0">
+        <div className="flex flex-col items-end gap-[7px] shrink-0">
           <button
             onClick={toggleLocale}
-            className="text-sm border border-white/40 rounded-lg px-3 py-1.5 text-white/90"
+            className="min-h-[44px] inline-flex items-center text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] whitespace-nowrap"
           >
             {t.localeSwitchLabel}
           </button>
           <button
             onClick={callWaiter}
             disabled={waiterCallState !== "idle"}
-            className="text-sm border border-white/40 rounded-lg px-3 py-1.5 text-white/90 disabled:opacity-70 whitespace-nowrap"
+            className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] disabled:opacity-70 whitespace-nowrap"
           >
             {waiterCallState === "called" ? (
               t.callWaiterSent
             ) : (
-              <span className="inline-flex items-center gap-1.5">
-                <BellIcon className="w-4 h-4 shrink-0" />
+              <>
+                <BellIcon className="w-[14px] h-[14px] shrink-0" />
                 {t.callWaiterButton}
-              </span>
+              </>
             )}
           </button>
         </div>
       </header>
 
       {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
-        <div className="bg-indigo-950 text-indigo-100 px-4 py-3 text-sm flex items-center justify-center gap-1.5">
-          <MoonIcon className="w-4 h-4 shrink-0" />
-          {t.ramadanBanner(formatTime(restaurant.iftar_time))}
+        <div className="bg-[var(--espresso)] px-4 py-[11px] flex items-start gap-2 text-[12.5px] leading-[1.45] text-[rgba(246,239,221,.88)]">
+          <MoonIcon className="w-4 h-4 shrink-0 mt-0.5 text-[var(--laiton)]" />
+          <p>
+            <b className="text-[var(--laiton)]">{t.ramadanBannerPrefix}</b>
+            {t.ramadanBannerRest(formatTime(restaurant.iftar_time))}
+          </p>
         </div>
       )}
 
@@ -1406,13 +1542,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           toute la carte — et le client qui cherche renonce avant de trouver.
           Masquée en mode café, dont la carte est justement sans catégories. */}
       {!restaurant.cafe_mode_enabled && categories.length > 1 && (
-        <nav className="sticky top-0 z-30 bg-[var(--semoule)]/95 backdrop-blur border-b border-[var(--line)]">
-          <ul className="flex gap-2 overflow-x-auto px-4 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav className="sticky top-0 z-30 bg-[rgba(246,239,221,.95)] backdrop-blur border-b border-[var(--line)]">
+          <ul className="flex gap-2 overflow-x-auto px-4 py-[11px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {categories.map((category) => (
               <li key={category}>
                 <a
                   href={`#${categoryAnchor(category)}`}
-                  className="inline-block whitespace-nowrap rounded-full border border-[var(--line)] bg-white px-3.5 py-1.5 text-sm font-medium text-[var(--encre)] transition-colors active:bg-[var(--harissa)] active:text-white"
+                  className="inline-block whitespace-nowrap rounded-full border border-[var(--line)] bg-[var(--semoule-raised)] px-[13px] py-[6px] text-[12.5px] font-semibold text-[var(--encre)] transition-colors active:bg-[var(--harissa)] active:text-[var(--semoule)] active:border-[var(--harissa)]"
                 >
                   {menuCategoryLabel(category, locale)}
                 </a>
@@ -1427,8 +1563,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             première tournée s'oubliait dès qu'on retournait au menu, et le
             client repartait sans avoir payé. */}
         {autresCommandesOuvertes.length > 0 && (
-          <div className="mb-4 border rounded-lg p-3 bg-amber-50 border-amber-200">
-            <p className="text-sm font-medium text-amber-900">
+          <div className="mb-4 rounded-2xl border border-[rgba(184,134,46,.5)] bg-[var(--creme)] p-3">
+            <p className="text-sm font-semibold text-[var(--encre)]">
               {t.openOrdersTitle(autresCommandesOuvertes.length, resteAPayer)}
             </p>
             <ul className="mt-2 space-y-1.5">
@@ -1436,11 +1572,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 <li key={ref.order.id}>
                   <button
                     onClick={() => suivreCommande(ref)}
-                    className="w-full text-start text-sm underline text-amber-900 flex justify-between gap-2"
+                    className="w-full text-start text-sm underline text-[var(--laiton)] flex justify-between gap-2"
                   >
                     <span>{t.openOrderLine(ref.order.id, ref.order.items.length)}</span>
                     <span className="tabular-nums shrink-0">
-                      {ref.order.total_amount.toFixed(2)} {t.currency}
+                      {ref.order.total_amount.toFixed(3)} {t.currency}
                     </span>
                   </button>
                 </li>
@@ -1449,39 +1585,39 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
         )}
         {waiterCallError && (
-          <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">
+          <div className="mb-4 text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3">
             {waiterCallError}
           </div>
         )}
         {orderError && (
-          <div className="mb-4 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 flex justify-between items-start gap-2">
+          <div className="mb-4 text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3 flex justify-between items-start gap-2">
             <span>{orderError}</span>
-            <button onClick={() => setOrderError(null)} aria-label={t.closeErrorAria} className="text-red-500">
+            <button onClick={() => setOrderError(null)} aria-label={t.closeErrorAria} className="text-[var(--harissa)]">
               ✕
             </button>
           </div>
         )}
 
-        <div className="mb-4 border rounded-lg p-3 bg-orange-50 border-orange-200">
+        <div className="mb-4 rounded-2xl border border-[rgba(184,134,46,.5)] bg-[var(--creme)] p-3">
           {!loyaltySectionOpen ? (
             <button
               onClick={() => setLoyaltySectionOpen(true)}
-              className="text-sm underline text-orange-800 inline-flex items-center gap-1.5"
+              className="text-[13px] font-semibold text-[var(--laiton)] inline-flex items-center gap-1.5"
             >
-              <GiftIcon className="w-4 h-4 shrink-0" />
+              <StampIcon className="w-4 h-4 shrink-0" />
               {t.loyaltyToggle}
             </button>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {/* Le client doit savoir à quoi sert son numéro avant de le
                   taper — pas dans une page qu'il n'ouvrira jamais (Phase 16). */}
-              <p className="text-xs text-orange-900/80 leading-relaxed">
+              <p className="text-xs text-[var(--ink-soft)] leading-relaxed">
                 {t.loyaltyConsentNotice}{" "}
-                <Link href="/confidentialite" className="underline">
+                <Link href="/confidentialite" className="underline text-[var(--laiton)]">
                   {t.loyaltyPrivacyLink}
                 </Link>
               </p>
-              <label className="block text-sm text-orange-900">
+              <label className="block text-sm text-[var(--encre)]">
                 {t.loyaltyPhoneLabel}
                 <input
                   type="tel"
@@ -1489,47 +1625,26 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   onChange={(e) => setLoyaltyPhone(e.target.value)}
                   onBlur={() => checkLoyaltyStatus(loyaltyPhone)}
                   placeholder={t.loyaltyPhonePlaceholder}
-                  className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
+                  className="mt-1 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
                 />
               </label>
-              <label className="block text-sm text-orange-900">
+              <label className="block text-sm text-[var(--encre)]">
                 {t.loyaltyBirthDateLabel}
                 <input
                   type="date"
                   value={loyaltyBirthDate}
                   onChange={(e) => setLoyaltyBirthDate(e.target.value)}
                   onBlur={() => checkLoyaltyStatus(loyaltyPhone)}
-                  className="mt-1 w-full text-sm border rounded-lg px-3 py-1.5"
+                  className="mt-1 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
                 />
               </label>
               {loyaltyFirstVisit && (
-                <p className="text-sm text-orange-900 pt-1 flex items-center gap-1.5">
+                <p className="text-sm text-[var(--laiton)] pt-1 flex items-center gap-1.5">
                   <GiftIcon className="w-4 h-4 shrink-0" />
                   {t.loyaltyFirstVisit}
                 </p>
               )}
-              {loyaltyStatus && (
-                <div className="text-sm text-orange-900 pt-1">
-                  <LoyaltyStampCard
-                    filled={loyaltyStampsFilled(loyaltyStatus)}
-                    rewardAvailable={loyaltyStatus.reward_available}
-                  />
-                  {loyaltyStatus.reward_available ? (
-                    <p className="font-medium mt-2">{t.loyaltyRewardAvailable}</p>
-                  ) : (
-                    <p className="flex items-center gap-1.5 mt-2">
-                      <GiftIcon className="w-4 h-4 shrink-0" />
-                      {t.loyaltyProgress(loyaltyStatus.order_count, loyaltyStatus.orders_until_reward)}
-                    </p>
-                  )}
-                  {loyaltyStatus.is_birthday_today && (
-                    <p className="mt-1 flex items-center gap-1.5">
-                      <CakeIcon className="w-4 h-4 shrink-0" />
-                      {t.loyaltyBirthdayBanner}
-                    </p>
-                  )}
-                </div>
-              )}
+              {loyaltyStatus && <div className="pt-1">{renderLoyaltyCard(loyaltyStatus)}</div>}
             </div>
           )}
         </div>
@@ -1544,7 +1659,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   défiler, sans avoir à lire. */}
               <h2 className="flex items-center gap-3 mb-3">
                 <span className="h-px flex-1 bg-[var(--line)]" />
-                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--laiton)] whitespace-nowrap">
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-[var(--laiton)] whitespace-nowrap">
                   {menuCategoryLabel(category, locale)}
                 </span>
                 <span className="h-px flex-1 bg-[var(--line)]" />
@@ -1555,12 +1670,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
 
         {cartLines.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+          <div className="fixed bottom-0 left-0 right-0 bg-[var(--espresso)] pt-[14px] px-4 pb-[18px]">
             <div className="max-w-md mx-auto">
               {/* Posé seulement quand un plat est à partager : sinon c'est une
                   question de plus entre le client et sa commande. */}
               {cartLines.some((l) => l.shared) && (
-                <label className="flex items-center gap-2 text-sm text-[var(--ink-soft)] mb-3">
+                <label className="flex items-center justify-between gap-2 text-sm text-[rgba(246,239,221,.85)] mb-3">
                   {t.dinersLabel}
                   <input
                     type="number"
@@ -1568,29 +1683,35 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     max={12}
                     value={convives}
                     onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
-                    className="w-16 border border-[var(--line)] rounded px-2 py-1"
+                    className="w-12 bg-transparent border border-[rgba(246,239,221,.28)] rounded-lg px-[10px] py-[3px] text-center tabular-nums text-[rgba(246,239,221,.9)]"
                   />
                 </label>
               )}
               {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
-                <label className="flex items-center gap-2 text-sm text-indigo-900 mb-3">
+                <label className="flex items-center gap-2 text-sm text-[rgba(246,239,221,.85)] mb-3">
                   <input
                     type="checkbox"
                     checked={preOrderForIftar}
                     onChange={(e) => setPreOrderForIftar(e.target.checked)}
+                    className="accent-[var(--laiton)]"
                   />
-                  <MoonIcon className="w-4 h-4 shrink-0" />
+                  <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
                   {t.preorderCheckboxLabel(formatTime(restaurant.iftar_time))}
                 </label>
               )}
-              <div className="flex justify-between items-center">
-                <span className="font-medium">
-                  {total.toFixed(2)} {t.currency}
-                </span>
+              <div className="flex justify-between items-center gap-3">
+                <div>
+                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.6)]">
+                    {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}
+                  </p>
+                  <p className={`${lalezar.className} text-[26px] leading-none tabular-nums text-[var(--semoule)] mt-0.5`}>
+                    {total.toFixed(3)} {t.currency}
+                  </p>
+                </div>
                 <button
                   onClick={validateOrder}
                   disabled={sending}
-                  className="bg-neutral-900 text-white px-4 py-2 rounded-lg"
+                  className="shrink-0 bg-[var(--harissa)] text-[var(--semoule)] rounded-full px-[22px] py-[14px] text-[14.5px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
                 >
                   {sending ? t.sending : t.validateOrder}
                 </button>
@@ -1601,20 +1722,20 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
         {suggestFor && (
           <div
-            className={`fixed left-0 right-0 bg-white border-t p-4 shadow-lg ${
+            className={`fixed left-0 right-0 bg-[var(--semoule-raised)] border-t border-[var(--line)] p-[14px] shadow-[0_-8px_20px_rgba(36,24,17,.06)] ${
               cartLines.length > 0 ? "bottom-[132px]" : "bottom-0"
             }`}
           >
             <div className="max-w-md mx-auto">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold">{t.suggestionTitle(suggestFor.name)}</p>
-                  <p className="text-xs text-neutral-500">{t.suggestionHint}</p>
+                  <p className="text-sm font-bold text-[var(--encre)]">{t.suggestionTitle(suggestFor.name)}</p>
+                  <p className="text-[11.5px] text-[var(--ink-soft)]">{t.suggestionHint}</p>
                 </div>
                 <button
                   onClick={() => setSuggestFor(null)}
                   aria-label={t.closeErrorAria}
-                  className="text-neutral-400 shrink-0"
+                  className="text-[var(--ink-soft)] shrink-0"
                 >
                   ✕
                 </button>
@@ -1625,13 +1746,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   .filter((item): item is MenuItem => !!item && item.is_available && !cart[item.id])
                   .map((item) => (
                     <li key={item.id} className="flex items-center gap-3">
-                      <span className="flex-1 text-sm">
-                        {item.name}
-                        <span className="text-neutral-500"> · {item.price.toFixed(2)} DT</span>
+                      <span className="flex-1 text-sm text-[var(--ink-soft)]">
+                        <span className="text-[var(--encre)]">{item.name}</span> · {item.price.toFixed(3)} DT
                       </span>
                       <button
                         onClick={() => addToCart(item, true)}
-                        className="text-sm font-medium px-3 py-1.5 rounded-lg bg-[var(--harissa)] text-white"
+                        className="text-[12.5px] font-semibold px-[14px] py-2 rounded-[10px] bg-[var(--harissa)] text-[var(--semoule)]"
                       >
                         {t.suggestionAdd}
                       </button>
@@ -1640,7 +1760,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </ul>
               <button
                 onClick={() => setSuggestFor(null)}
-                className="mt-3 text-sm text-neutral-500 underline"
+                className="mt-3 text-sm text-[var(--ink-soft)] underline"
               >
                 {t.suggestionDismiss}
               </button>
@@ -1649,14 +1769,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
 
         {cartLines.length === 0 && cartClearedNotice && (
-          <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+          <div className="fixed bottom-0 left-0 right-0 bg-[var(--semoule-raised)] border-t border-[var(--line)] p-4">
             <div className="max-w-md mx-auto flex items-center gap-3">
-              <EmptyCartIllustration className="w-10 h-10 shrink-0 text-neutral-400" />
-              <p className="text-sm text-neutral-600 flex-1">{t.cartClearedNotice}</p>
+              <EmptyCartIllustration className="w-10 h-10 shrink-0 text-[var(--ink-faint)]" />
+              <p className="text-sm text-[var(--ink-soft)] flex-1">{t.cartClearedNotice}</p>
               <button
                 onClick={() => setCartClearedNotice(false)}
                 aria-label={t.closeErrorAria}
-                className="text-neutral-400 shrink-0"
+                className="text-[var(--ink-faint)] shrink-0"
               >
                 ✕
               </button>

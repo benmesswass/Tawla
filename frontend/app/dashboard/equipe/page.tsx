@@ -59,7 +59,7 @@ function reportToCsv(report: TeamReport): string {
       ROLE_LABELS[member.role],
       member.orders_taken,
       member.avg_seconds_to_claim === null ? "" : Math.round(member.avg_seconds_to_claim),
-      member.total_amount_handled.toFixed(2)
+      member.total_amount_handled.toFixed(3)
     );
   }
   return lines.join("\n");
@@ -171,7 +171,7 @@ export default function TeamReportPage() {
       </div>
 
       {error && (
-        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-[var(--harissa)]">
           {error}
         </Card>
       )}
@@ -204,7 +204,7 @@ export default function TeamReportPage() {
                       {formatDelay(member.avg_seconds_to_claim)}
                     </td>
                     <td className="py-2 text-right tabular-nums">
-                      {member.total_amount_handled.toFixed(2)} DT
+                      {member.total_amount_handled.toFixed(3)} DT
                     </td>
                   </tr>
                 ))}

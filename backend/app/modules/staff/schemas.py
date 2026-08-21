@@ -19,6 +19,8 @@ class LaunchPromoStatus(BaseModel):
     """Offre de lancement (2026-08-21) : voir GET /auth/launch-promo."""
 
     available: bool
+    discount_percent: int
+    max_grants: int
 
 
 class StaffOut(BaseModel):

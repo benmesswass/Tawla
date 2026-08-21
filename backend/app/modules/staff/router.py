@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
-from app.core.subscription import LAUNCH_PROMO_MAX_GRANTS, SUBSCRIPTION_DURATION_DAYS
+from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, get_launch_campaign, launch_promo_grants_used
 from app.modules.staff import schemas, security, service
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -49,13 +49,18 @@ def launch_promo_status(db: Session = Depends(get_db)):
     """
     Public, sans authentification : la page `/signup` l'interroge AVANT même
     que le visiteur ne s'inscrive, pour savoir s'il faut afficher la bannière
-    « 50 DT barré, Gratuit — offre pour les 20 premières inscriptions »
-    (2026-08-21). Ne renvoie jamais le nombre de places restantes ni le total
-    déjà accordé — un booléen seul, pour ne pas exposer la vitesse
-    d'inscription de Tawla à qui regarde cette route.
+    de campagne et avec quels termes (2026-08-21, réglages configurables
+    depuis l'écran admin — voir platform_admin/router.py). `max_grants` est
+    la taille TOTALE de la campagne (une donnée marketing, pas un signal
+    sensible) ; le nombre de places déjà prises, lui, n'est volontairement
+    jamais exposé publiquement — il révélerait la vitesse d'inscription de
+    Tawla à qui regarde cette route.
     """
-    granted_so_far = db.query(Restaurant).filter(Restaurant.launch_promo_granted.is_(True)).count()
-    return schemas.LaunchPromoStatus(available=granted_so_far < LAUNCH_PROMO_MAX_GRANTS)
+    campaign = get_launch_campaign(db)
+    available = launch_promo_grants_used(db) < campaign.max_grants
+    return schemas.LaunchPromoStatus(
+        available=available, discount_percent=campaign.discount_percent, max_grants=campaign.max_grants
+    )
 
 
 @router.post("/register", response_model=schemas.LoginResponse, status_code=201, dependencies=[Depends(rate_limit())])
@@ -74,16 +79,21 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     promo n'est posée (écran admin). Les restaurants créés par
     setup_restaurant.py (pilotes facturés à la main) gardent le défaut `True`.
 
-    Offre de lancement (2026-08-21) : les `LAUNCH_PROMO_MAX_GRANTS` premiers
-    inscrits reçoivent immédiatement un mois Essentiel gratuit (même
-    mécanique qu'un paiement — `subscription_period_end` à 30 jours — sauf
-    que `has_paid_for_subscription` reste `False` : ce n'est pas un vrai
-    paiement, voir Restaurant.has_paid_for_subscription). `launch_promo_granted`
-    ne se remet jamais à `False` ensuite, y compris après un vrai paiement :
-    c'est un historique, pas un état courant — le compteur des 20 places en
-    dépend. Décompte non verrouillé (pas de `SELECT ... FOR UPDATE`) : au pire
-    quelques inscriptions simultanées dépassent 20 de peu, acceptable pour une
-    offre marketing, pas une garantie financière.
+    Offre de lancement (2026-08-21, réglages configurables depuis l'écran
+    admin — voir platform_admin/router.py) : tant que la campagne en cours a
+    des places, l'inscrit reçoit `launch_promo_discount_percent` figé à la
+    réduction actuelle de la campagne — un historique, jamais recalculé si la
+    campagne change ensuite (voir Restaurant.launch_promo_discount_percent).
+    Seule une réduction de 100 % active le compte immédiatement (0 DT ne se
+    facture pas via Konnect, voir core/subscription.py::essentiel_price_tnd) —
+    même mécanique qu'un paiement (`subscription_period_end` à 30 jours) sauf
+    que `has_paid_for_subscription` reste `False`, ce n'est pas un vrai
+    paiement. En dessous de 100 %, le compte reste inactif comme d'habitude :
+    le manager verra l'écran d'activation, au tarif réduit (voir
+    `start_subscription_checkout`). Décompte non verrouillé (pas de
+    `SELECT ... FOR UPDATE`) : au pire quelques inscriptions simultanées
+    dépassent le plafond de peu, acceptable pour une offre marketing, pas une
+    garantie financière.
     """
     email = payload.email.lower()
     if db.query(Staff).filter(Staff.email == email).first():
@@ -97,11 +107,14 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
         is_active=False,
         has_paid_for_subscription=False,
     )
-    granted_so_far = db.query(Restaurant).filter(Restaurant.launch_promo_granted.is_(True)).count()
-    if granted_so_far < LAUNCH_PROMO_MAX_GRANTS:
-        restaurant.is_active = True
-        restaurant.launch_promo_granted = True
-        restaurant.subscription_period_end = datetime.now(timezone.utc) + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
+    campaign = get_launch_campaign(db)
+    if launch_promo_grants_used(db) < campaign.max_grants:
+        restaurant.launch_promo_discount_percent = campaign.discount_percent
+        if campaign.discount_percent >= 100:
+            restaurant.is_active = True
+            restaurant.subscription_period_end = datetime.now(timezone.utc) + timedelta(
+                days=SUBSCRIPTION_DURATION_DAYS
+            )
     db.add(restaurant)
     db.flush()
 

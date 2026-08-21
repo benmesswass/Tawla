@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.dates import as_utc
 from app.modules.staff.dependencies import require_active_restaurant
 from app.modules.staff.models import Staff
-from app.modules.tenants.models import Restaurant, SubscriptionTier
+from app.modules.tenants.models import LaunchCampaignConfig, Restaurant, SubscriptionTier
 
 # Chaque palier inclut tout ce qu'offre le précédent — Business a accès à
 # tout ce que Pro a, Pro à tout ce qu'Essentiel a.
@@ -43,12 +43,64 @@ TIER_PRICES_TND = {
 # limite — voir Restaurant.subscription_period_end.
 SUBSCRIPTION_DURATION_DAYS = 30
 
-# Offre de lancement (2026-08-21, décidée par Wassim) : premier mois Essentiel
-# gratuit accordé automatiquement aux N premiers établissements inscrits en
-# self-service — voir staff/router.py::register (octroi) et
-# GET /api/v1/auth/launch-promo (même compte, affiché sur /signup avant même
-# l'inscription). Une seule constante, jamais dupliquée.
-LAUNCH_PROMO_MAX_GRANTS = 20
+# Offre de lancement (2026-08-21, décidée par Wassim, rendue configurable le
+# même jour) : réduction sur le premier mois Essentiel, accordée
+# automatiquement aux N premiers établissements inscrits en self-service —
+# voir staff/router.py::register (octroi), GET /api/v1/auth/launch-promo
+# (affiché sur /signup) et platform_admin/router.py (réglages, écran admin).
+# Valeurs par défaut = le lancement d'origine (100 %, 20 places), reproduites
+# telles quelles par la migration qui a créé la table.
+LAUNCH_CAMPAIGN_DEFAULT_DISCOUNT_PERCENT = 100
+LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS = 20
+
+# Id fixe de la ligne singleton — jamais qu'une seule campagne active à la
+# fois (YAGNI, voir LaunchCampaignConfig).
+_LAUNCH_CAMPAIGN_ID = 1
+
+
+def get_launch_campaign(db: Session) -> LaunchCampaignConfig:
+    """
+    Toujours cette fonction pour lire la campagne en cours, jamais une requête
+    directe : crée la ligne singleton avec les valeurs par défaut si elle
+    n'existe pas encore (ne devrait arriver qu'en tout premier démarrage,
+    la migration l'insère déjà — filet de sécurité, pas le chemin normal).
+    """
+    config = db.get(LaunchCampaignConfig, _LAUNCH_CAMPAIGN_ID)
+    if config is None:
+        config = LaunchCampaignConfig(
+            id=_LAUNCH_CAMPAIGN_ID,
+            discount_percent=LAUNCH_CAMPAIGN_DEFAULT_DISCOUNT_PERCENT,
+            max_grants=LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS,
+        )
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+    return config
+
+
+def launch_promo_grants_used(db: Session) -> int:
+    return db.query(Restaurant).filter(Restaurant.launch_promo_discount_percent.is_not(None)).count()
+
+
+def essentiel_price_tnd(restaurant: Restaurant) -> int:
+    """
+    Le prix RÉEL à payer pour Essentiel, réduction de lancement comprise —
+    toujours cette fonction pour calculer un montant, jamais
+    `TIER_PRICES_TND[ESSENTIEL]` en lecture directe dès qu'un restaurant est
+    en jeu (checkout, vérification de règlement).
+
+    La réduction, si elle existe, a été FIGÉE à l'inscription
+    (`Restaurant.launch_promo_discount_percent`) — jamais recalculée depuis la
+    campagne en cours, qui a pu changer depuis. Elle ne s'applique qu'une
+    fois : `is_active` passe à `True` dès la première activation (gratuite à
+    100 %, ou réglée à un taux partiel), donc `not restaurant.is_active`
+    protège naturellement contre un rachat "à prix cassé" lors d'un
+    renouvellement — voir Restaurant.is_active/launch_promo_discount_percent.
+    """
+    base = TIER_PRICES_TND[SubscriptionTier.ESSENTIEL]
+    if restaurant.launch_promo_discount_percent is not None and not restaurant.is_active:
+        return round(base * (100 - restaurant.launch_promo_discount_percent) / 100)
+    return base
 
 
 def tier_includes(tier: SubscriptionTier, minimum: SubscriptionTier) -> bool:

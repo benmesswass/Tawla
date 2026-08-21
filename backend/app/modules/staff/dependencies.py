@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.staff.models import Staff, StaffRole
-from app.modules.staff.security import decode_access_token
+from app.modules.staff.security import TOKEN_TYPE, decode_access_token
 from app.modules.tenants.models import Restaurant
 
 
@@ -25,6 +25,16 @@ def get_current_staff(
         raise HTTPException(
             status_code=401, detail={"code": "INVALID_TOKEN", "message": "invalid or expired token"}
         ) from exc
+
+    # Défense en profondeur : `settings.jwt_secret` signe aussi les tokens
+    # `platform_admin` (même secret, voir platform_admin/security.py) — sans
+    # cette vérification, un token admin valide se déchiffrerait quand même
+    # ici et ferait planter `int(payload["sub"])` sur un ID hors de l'espace
+    # Staff (exception non rattrapée, 500 au lieu d'un 401 propre).
+    if payload.get("type") != TOKEN_TYPE:
+        raise HTTPException(
+            status_code=401, detail={"code": "INVALID_TOKEN", "message": "invalid or expired token"}
+        )
 
     staff = db.get(Staff, int(payload["sub"]))
     if not staff:

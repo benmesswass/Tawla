@@ -10,7 +10,9 @@ une fois, d'où ce fichier explicite plutôt qu'un import implicite fragile.
 from app.modules.loyalty import models as _loyalty_models  # noqa: F401
 from app.modules.menu import models as _menu_models  # noqa: F401
 from app.modules.orders import models as _orders_models  # noqa: F401
+from app.modules.platform_admin import models as _platform_admin_models  # noqa: F401
 from app.modules.staff import models as _staff_models  # noqa: F401
+from app.modules.stats import models as _stats_models  # noqa: F401
 from app.modules.tables import models as _tables_models  # noqa: F401
 from app.modules.tenants import models as _tenants_models  # noqa: F401
 from app.modules.waiter_calls import models as _waiter_calls_models  # noqa: F401

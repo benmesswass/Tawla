@@ -73,9 +73,10 @@ def create_restaurant(
     name: str = "Resto de test",
     slug: str | None = None,
     subscription_tier: SubscriptionTier = SubscriptionTier.BUSINESS,
+    subscription_period_end=None,
     is_active: bool = True,
     promo_gratuit: bool = False,
-    launch_promo_granted: bool = False,
+    launch_promo_discount_percent: int | None = None,
     has_paid_for_subscription: bool = True,
 ) -> Restaurant:
     """
@@ -89,20 +90,24 @@ def create_restaurant(
     produit, pas le gating par palier (offre à trois paliers, 2026-08-18) —
     les tests qui testent justement ce gating passent leur propre palier.
 
-    Tous les défauts ci-dessous suivent le modèle (voir Restaurant.is_active/
-    promo_gratuit/launch_promo_granted/has_paid_for_subscription) : la
-    quasi-totalité des tests exercent le produit, pas l'activation ou l'offre
-    de lancement (2026-08-20/21) — les tests qui testent justement ça passent
-    leurs propres valeurs.
+    `subscription_period_end` : None par défaut (pilote fixé à la main, sans
+    expiration) — les tests qui distinguent un palier payé en ligne d'un
+    pilote gratuit (dashboard plateforme) passent leur propre échéance. Tous
+    les autres défauts suivent le modèle (voir Restaurant.is_active/
+    promo_gratuit/launch_promo_discount_percent/has_paid_for_subscription) :
+    la quasi-totalité des tests exercent le produit, pas l'activation ou
+    l'offre de lancement (2026-08-20/21) — les tests qui testent justement ça
+    passent leurs propres valeurs.
     """
     db = _TestingSessionLocal()
     restaurant = Restaurant(
         name=name,
         slug=slug or f"resto-{uuid.uuid4().hex[:8]}",
         subscription_tier=subscription_tier,
+        subscription_period_end=subscription_period_end,
         is_active=is_active,
         promo_gratuit=promo_gratuit,
-        launch_promo_granted=launch_promo_granted,
+        launch_promo_discount_percent=launch_promo_discount_percent,
         has_paid_for_subscription=has_paid_for_subscription,
     )
     db.add(restaurant)

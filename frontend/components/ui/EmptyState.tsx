@@ -7,7 +7,7 @@ type Props = {
 };
 
 export default function EmptyState({ message, dark = false, className = "" }: Props) {
-  const tone = dark ? "text-neutral-500" : "text-[var(--ink-soft)]";
+  const tone = dark ? "text-[rgba(246,239,221,.5)]" : "text-[var(--ink-faint)]";
   return (
     <div className={`flex flex-col items-center gap-2 text-center py-6 ${tone} ${className}`}>
       <TrayIcon className="w-8 h-8 opacity-60" />

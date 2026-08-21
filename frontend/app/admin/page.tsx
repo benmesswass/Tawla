@@ -1,197 +1,374 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, ApiError, type AdminRestaurant } from "@/lib/api";
-import { getAdminSecret, setAdminSecret, clearAdminSecret } from "@/lib/adminAuth";
-import { toFrenchMessage } from "@/lib/errors";
-import Button from "@/components/ui/Button";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import TawlaMark from "@/components/brand/TawlaMark";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
+import Skeleton from "@/components/ui/Skeleton";
+import {
+  clearAdminToken,
+  getAdminToken,
+  platformAdminApi,
+  PlatformAdminApiError,
+  type LaunchCampaign,
+  type PlatformOverview,
+  type SubscriptionTier,
+} from "@/lib/platformAdmin";
 
-const TIER_LABELS: Record<string, string> = { essentiel: "Essentiel", pro: "Pro", business: "Business" };
+const TIER_LABELS: Record<SubscriptionTier, string> = {
+  essentiel: "Essentiel",
+  pro: "Pro",
+  business: "Business",
+};
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+function formatMoney(amount: number): string {
+  return `${amount.toFixed(2)} DT`;
 }
 
-/**
- * Écran admin (2026-08-20) : Wassim seul, secret unique partagé (voir
- * lib/adminAuth.ts et backend app/modules/admin/router.py). Pas un compte,
- * pas un rôle — juste un mot de passe qu'il garde pour lui. Sert à poser une
- * dérogation `promo_gratuit` sur un restaurant précis, le seul moyen d'avoir
- * un accès gratuit à Tawla maintenant qu'Essentiel n'est plus jamais offert
- * par défaut à l'inscription.
- */
-export default function AdminPage() {
-  const [secretInput, setSecretInput] = useState("");
-  const [secret, setSecret] = useState<string | null>(null);
-  const [restaurants, setRestaurants] = useState<AdminRestaurant[]>([]);
-  const [loading, setLoading] = useState(false);
+function formatPercent(rate: number | null): string {
+  return rate === null ? "—" : `${(rate * 100).toFixed(0)} %`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function formatWeekLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+}
+
+function errorMessage(): string {
+  return "Une erreur est survenue. Réessayez dans un instant.";
+}
+
+function KpiTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <Card padding="md">
+      <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
+        {label}
+      </div>
+      <div className="text-2xl font-semibold mt-1">{value}</div>
+      {sub && (
+        <div className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+          {sub}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+export default function PlatformAdminPage() {
+  const router = useRouter();
+  const [overview, setOverview] = useState<PlatformOverview | null>(null);
+  const [campaign, setCampaign] = useState<LaunchCampaign | null>(null);
+  const [discountInput, setDiscountInput] = useState("");
+  const [maxGrantsInput, setMaxGrantsInput] = useState("");
+  const [savingCampaign, setSavingCampaign] = useState(false);
+  const [savingPromoId, setSavingPromoId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const [checkedAuth, setCheckedAuth] = useState(false);
 
-  useEffect(() => {
-    setSecret(getAdminSecret());
-  }, []);
-
-  const load = useCallback(async (s: string) => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async () => {
     try {
-      const list = await api.adminListRestaurants(s);
-      setRestaurants(list);
-    } catch (e) {
-      if (e instanceof ApiError && e.code === "INVALID_ADMIN_SECRET") {
-        clearAdminSecret();
-        setSecret(null);
-        setError("Secret incorrect.");
-      } else {
-        setError(toFrenchMessage(e));
+      const [data, campaignData] = await Promise.all([
+        platformAdminApi.getOverview(),
+        platformAdminApi.getLaunchCampaign(),
+      ]);
+      setOverview(data);
+      setCampaign(campaignData);
+      setDiscountInput(String(campaignData.discount_percent));
+      setMaxGrantsInput(String(campaignData.max_grants));
+    } catch (err) {
+      // Session invalide (jamais configurée, expirée après 12h, compte
+      // désactivé) : le client a déjà effacé le token, il ne reste qu'à
+      // repartir sur l'écran de connexion.
+      if (err instanceof PlatformAdminApiError && (err.code === "NOT_AUTHENTICATED" || err.code === "INVALID_TOKEN")) {
+        router.replace("/admin/login");
+        return;
       }
-    } finally {
-      setLoading(false);
+      setError(errorMessage());
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
-    if (secret) load(secret);
-  }, [secret, load]);
+    if (!getAdminToken()) {
+      router.replace("/admin/login");
+      return;
+    }
+    setCheckedAuth(true);
+    load();
+  }, [router, load]);
 
-  function handleSubmitSecret(e: FormEvent) {
-    e.preventDefault();
-    const trimmed = secretInput.trim();
-    if (!trimmed) return;
-    setAdminSecret(trimmed);
-    setSecret(trimmed);
-  }
-
-  async function togglePromo(restaurant: AdminRestaurant) {
-    if (!secret) return;
-    setSavingId(restaurant.id);
+  async function handleSaveCampaign() {
+    const discount = Number(discountInput);
+    const maxGrants = Number(maxGrantsInput);
+    if (!Number.isInteger(discount) || discount < 0 || discount > 100) return;
+    if (!Number.isInteger(maxGrants) || maxGrants < 0) return;
+    setSavingCampaign(true);
     setError(null);
     try {
-      const updated = await api.adminSetPromo(secret, restaurant.id, !restaurant.promo_gratuit);
-      setRestaurants((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-    } catch (e) {
-      setError(toFrenchMessage(e));
+      const updated = await platformAdminApi.setLaunchCampaign(discount, maxGrants);
+      setCampaign(updated);
+    } catch {
+      setError(errorMessage());
     } finally {
-      setSavingId(null);
+      setSavingCampaign(false);
     }
   }
 
-  if (!secret) {
+  async function handleTogglePromo(restaurantId: number, next: boolean) {
+    setSavingPromoId(restaurantId);
+    setError(null);
+    try {
+      await platformAdminApi.setRestaurantPromo(restaurantId, next);
+      await load();
+    } catch {
+      setError(errorMessage());
+    } finally {
+      setSavingPromoId(null);
+    }
+  }
+
+  function handleLogout() {
+    clearAdminToken();
+    router.replace("/admin/login");
+  }
+
+  if (!checkedAuth || (!overview && !error)) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "var(--semoule)" }}>
-        <form
-          onSubmit={handleSubmitSecret}
-          className="w-full max-w-sm rounded-xl p-6 space-y-3"
-          style={{ background: "var(--semoule-raised)", border: "1px solid var(--line)" }}
-        >
-          <div className="flex flex-col items-center gap-2 pb-1">
-            <TawlaMark size={36} />
-            <h1 className="text-base font-semibold" style={{ color: "var(--encre)" }}>
-              Admin Tawla
-            </h1>
-          </div>
-          {error && <p className="text-sm text-red-600 text-center">{error}</p>}
-          <input
-            type="password"
-            required
-            autoFocus
-            value={secretInput}
-            onChange={(e) => setSecretInput(e.target.value)}
-            placeholder="Secret admin"
-            className="w-full rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[var(--harissa)]/40"
-            style={{ border: "1px solid var(--line)", background: "white" }}
-          />
-          <Button type="submit" className="w-full">
-            Entrer
-          </Button>
-        </form>
+      <div className="p-4 max-w-5xl mx-auto space-y-3">
+        <Skeleton className="h-8 w-72" />
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
       </div>
     );
   }
 
+  const maxWeeklySignups = Math.max(1, ...(overview?.weekly_signups.map((w) => w.restaurants_created) ?? [1]));
+
   return (
-    <div className="p-4 max-w-4xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
-          Restaurants
-        </h1>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            clearAdminSecret();
-            setSecret(null);
-          }}
-        >
+    <div className="p-4 max-w-5xl mx-auto">
+      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--encre)" }}>
+            Tableau de bord plateforme
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+            Tous les restaurants clients, vue d&apos;ensemble.
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={handleLogout}>
           Se déconnecter
         </Button>
       </div>
 
       {error && (
-        <Card tone="danger" padding="sm" className="text-sm text-red-700">
+        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700">
           {error}
         </Card>
       )}
 
-      {loading && restaurants.length === 0 ? (
-        <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
-          Chargement…
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="text-left border-b" style={{ borderColor: "var(--line)" }}>
-                <th className="py-2 pe-3">Établissement</th>
-                <th className="py-2 pe-3">Palier</th>
-                <th className="py-2 pe-3">Échéance</th>
-                <th className="py-2 pe-3">Statut</th>
-                <th className="py-2 pe-3">Promo</th>
-                <th className="py-2 pe-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {restaurants.map((r) => (
-                <tr key={r.id} className="border-b" style={{ borderColor: "var(--line)" }}>
-                  <td className="py-2 pe-3">
-                    <div className="font-medium" style={{ color: "var(--encre)" }}>
-                      {r.name}
-                    </div>
-                    <div className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                      {r.slug}
-                    </div>
-                  </td>
-                  <td className="py-2 pe-3">{TIER_LABELS[r.subscription_tier] ?? r.subscription_tier}</td>
-                  <td className="py-2 pe-3">
-                    {r.subscription_period_end ? formatDate(r.subscription_period_end) : "—"}
-                  </td>
-                  <td className="py-2 pe-3">
-                    <Badge tone={r.is_active || r.promo_gratuit ? "success" : "danger"}>
-                      {r.is_active || r.promo_gratuit ? "Actif" : "Bloqué"}
-                    </Badge>
-                  </td>
-                  <td className="py-2 pe-3">
-                    <Badge tone={r.promo_gratuit ? "info" : "neutral"}>{r.promo_gratuit ? "Oui" : "Non"}</Badge>
-                  </td>
-                  <td className="py-2 pe-3">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={savingId === r.id}
-                      onClick={() => togglePromo(r)}
+      {overview && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <KpiTile
+              label="Restaurants clients"
+              value={String(overview.restaurants_total)}
+              sub={`${overview.restaurants_created_last_30d} nouveaux sur 30 jours`}
+            />
+
+            <Card padding="md">
+              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-soft)" }}>
+                Répartition par palier
+              </div>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {(Object.keys(TIER_LABELS) as SubscriptionTier[]).map((tier) => (
+                  <Badge key={tier} tone="neutral">
+                    {TIER_LABELS[tier]} · {overview.restaurants_by_tier[tier] ?? 0}
+                  </Badge>
+                ))}
+              </div>
+            </Card>
+
+            <KpiTile
+              label="MRR réel"
+              value={formatMoney(overview.mrr_tnd)}
+              sub={`${overview.paying_restaurants_count} restaurant(s) payant(s) en ligne`}
+            />
+
+            <KpiTile
+              label="Rétention (7j)"
+              value={String(overview.dashboard_views_last_7d)}
+              sub={`${overview.restaurants_active_last_7d}/${overview.restaurants_total} restaurant(s) ont ouvert leur dashboard`}
+            />
+
+            <KpiTile
+              label="Commandes (7j)"
+              value={String(overview.orders_last_7d)}
+              sub={`${formatMoney(overview.gmv_last_7d_tnd)} de GMV payé`}
+            />
+
+            <KpiTile
+              label="Commandes perdues (7j)"
+              value={formatPercent(overview.lost_orders_rate_last_7d)}
+              sub="Même définition que côté manager"
+            />
+          </div>
+
+          {campaign && (
+            <div className="mb-6">
+              <Card padding="md">
+                <div className="flex items-start justify-between gap-4 flex-wrap mb-3">
+                  <div>
+                    <h2 className="font-semibold">Offre de lancement</h2>
+                    <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+                      Réduction automatique sur le premier mois Essentiel, pour les N premières inscriptions.
+                    </p>
+                  </div>
+                  <Badge tone="neutral">{campaign.grants_used}/{campaign.max_grants} déjà utilisés</Badge>
+                </div>
+                <div className="flex items-end gap-4 flex-wrap">
+                  <div className="space-y-1">
+                    <label htmlFor="discountPercent" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                      Réduction (%)
+                    </label>
+                    <input
+                      id="discountPercent"
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={discountInput}
+                      onChange={(e) => setDiscountInput(e.target.value)}
+                      className="w-40 align-middle"
+                    />
+                    <span className="ms-2 text-sm font-medium tabular-nums">{discountInput}%</span>
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="maxGrants" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                      Nombre de restaurants
+                    </label>
+                    <input
+                      id="maxGrants"
+                      type="number"
+                      min={0}
+                      value={maxGrantsInput}
+                      onChange={(e) => setMaxGrantsInput(e.target.value)}
+                      className="w-24 rounded-lg px-2 py-1 text-sm"
+                      style={{ border: "1px solid var(--line)" }}
+                    />
+                  </div>
+                  <Button size="sm" onClick={handleSaveCampaign} disabled={savingCampaign}>
+                    {savingCampaign ? "Enregistrement…" : "Enregistrer"}
+                  </Button>
+                </div>
+                <p className="text-xs mt-3" style={{ color: "var(--ink-soft)" }}>
+                  S&apos;applique aux prochaines inscriptions — n&apos;affecte jamais un restaurant déjà inscrit.
+                </p>
+              </Card>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <Card padding="md">
+              <h2 className="font-semibold mb-3">Nouveaux restaurants par semaine</h2>
+              {overview.weekly_signups.every((w) => w.restaurants_created === 0) ? (
+                <EmptyState message="Aucune inscription sur les 12 dernières semaines." />
+              ) : (
+                <div className="flex items-end gap-1 h-28">
+                  {overview.weekly_signups.map((w) => (
+                    <div
+                      key={w.week_start}
+                      className="flex-1 flex flex-col items-center justify-end h-full"
+                      title={`Semaine du ${formatWeekLabel(w.week_start)} — ${w.restaurants_created} restaurant(s)`}
                     >
-                      {r.promo_gratuit ? "Retirer la promo" : "Offrir"}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      <div
+                        className="w-full bg-[var(--menthe)] rounded-t"
+                        style={{
+                          height: w.restaurants_created
+                            ? `${(w.restaurants_created / maxWeeklySignups) * 100}%`
+                            : "1px",
+                        }}
+                      />
+                      <span className="text-[10px] mt-1" style={{ color: "var(--ink-soft)" }}>
+                        {formatWeekLabel(w.week_start)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <Card padding="md">
+            <h2 className="font-semibold mb-3">Par restaurant</h2>
+            {overview.restaurants.length === 0 ? (
+              <EmptyState message="Aucun restaurant client pour l'instant." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left" style={{ color: "var(--ink-soft)" }}>
+                      <th className="font-normal pb-2 pr-3">Restaurant</th>
+                      <th className="font-normal pb-2 pr-3">Palier</th>
+                      <th className="font-normal pb-2 pr-3">Statut</th>
+                      <th className="font-normal pb-2 pr-3">Inscrit le</th>
+                      <th className="font-normal pb-2 pr-3">Commandes</th>
+                      <th className="font-normal pb-2 pr-3">Recette</th>
+                      <th className="font-normal pb-2 pr-3">Dernière commande</th>
+                      <th className="font-normal pb-2 pr-3">Ouvertures (7j)</th>
+                      <th className="font-normal pb-2">Promo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overview.restaurants.map((r) => (
+                      <tr key={r.id} className="border-t" style={{ borderColor: "var(--line)" }}>
+                        <td className="py-2 pr-3 font-medium">{r.name}</td>
+                        <td className="py-2 pr-3">
+                          <Badge tone="neutral">{TIER_LABELS[r.effective_tier]}</Badge>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <div className="flex flex-wrap gap-1">
+                            <Badge tone={r.is_active || r.promo_gratuit ? "success" : "danger"}>
+                              {r.is_active || r.promo_gratuit ? "Actif" : "Bloqué"}
+                            </Badge>
+                            {!r.has_paid_for_subscription && <Badge tone="info">Jamais payé</Badge>}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-3">{formatDate(r.created_at)}</td>
+                        <td className="py-2 pr-3">{r.orders_count}</td>
+                        <td className="py-2 pr-3">{formatMoney(r.revenue_tnd)}</td>
+                        <td className="py-2 pr-3">{r.last_order_at ? formatDate(r.last_order_at) : "—"}</td>
+                        <td className="py-2 pr-3">
+                          {r.dashboard_views_last_7d === 0 ? (
+                            <Badge tone="warning">Inactif</Badge>
+                          ) : (
+                            r.dashboard_views_last_7d
+                          )}
+                        </td>
+                        <td className="py-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={savingPromoId === r.id}
+                            onClick={() => handleTogglePromo(r.id, !r.promo_gratuit)}
+                          >
+                            {r.promo_gratuit ? "Retirer" : "Offrir"}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
       )}
     </div>
   );

@@ -142,7 +142,7 @@ export async function generateShareCardBlob(params: ShareCardParams): Promise<Bl
 }
 
 function montant(valeur: number): string {
-  return `${valeur.toFixed(2)} DT`;
+  return `${valeur.toFixed(3)} DT`;
 }
 
 function ligne(ctx: CanvasRenderingContext2D, y: number, largeur: number) {

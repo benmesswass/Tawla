@@ -29,6 +29,16 @@ export default function ActivationRequired({
   const [error, setError] = useState<string | null>(null);
 
   const tier = TIERS.find((t) => t.id === "essentiel");
+  // Offre de lancement (2026-08-21) : réduction figée à l'inscription de ce
+  // restaurant (voir Restaurant.launch_promo_discount_percent) — jamais la
+  // campagne en cours, qui a pu changer depuis. `is_active` est déjà faux
+  // ici (sinon cet écran ne s'afficherait pas), donc la réduction s'applique
+  // encore — même règle que essentiel_price_tnd() côté backend.
+  const basePrice = tier?.priceDT ?? 50;
+  const price =
+    restaurant.launch_promo_discount_percent != null
+      ? Math.round((basePrice * (100 - restaurant.launch_promo_discount_percent)) / 100)
+      : basePrice;
 
   async function handlePay() {
     setSubmitting(true);
@@ -69,8 +79,13 @@ export default function ActivationRequired({
         {tier && (
           <>
             <p className="mt-4">
+              {price < basePrice && (
+                <span className="text-sm line-through me-2" style={{ color: "var(--ink-soft)" }}>
+                  {basePrice} DT
+                </span>
+              )}
               <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--encre)" }}>
-                {tier.priceDT} DT
+                {price} DT
               </span>
               <span className="text-sm" style={{ color: "var(--ink-soft)" }}> / mois</span>
             </p>
@@ -86,7 +101,7 @@ export default function ActivationRequired({
 
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={handlePay} disabled={submitting}>
-            {submitting ? "Paiement en cours…" : `Payer ${tier?.priceDT ?? 50} DT pour activer`}
+            {submitting ? "Paiement en cours…" : `Payer ${price} DT pour activer`}
           </Button>
           <Button variant="secondary" onClick={handleLogout} disabled={submitting}>
             Se déconnecter

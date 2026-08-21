@@ -105,3 +105,37 @@ def test_update_table_from_another_restaurant_is_not_found(client):
 
     res = client.patch(f"/api/v1/tables/{table_b['id']}", json={"label": "Hack", "zone": "Plage"}, headers=headers_a)
     assert res.status_code == 404
+
+
+def test_get_table_poster_returns_a_pdf(client):
+    restaurant, headers = _setup_restaurant(client)
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
+    ).json()
+
+    res = client.get(f"/api/v1/tables/{table['id']}/poster", headers=headers)
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+    assert res.content.startswith(b"%PDF-")
+
+
+def test_get_table_poster_requires_manager_role(client):
+    restaurant, headers = _setup_restaurant(client)
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
+    ).json()
+    waiter = create_staff(restaurant.id, role=StaffRole.WAITER)
+
+    res = client.get(f"/api/v1/tables/{table['id']}/poster", headers=auth_headers(waiter))
+    assert res.status_code == 403
+
+
+def test_get_table_poster_from_another_restaurant_is_not_found(client):
+    _restaurant_a, headers_a = _setup_restaurant(client)
+    restaurant_b, headers_b = _setup_restaurant(client)
+    table_b = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant_b.id, "label": "Table B"}, headers=headers_b
+    ).json()
+
+    res = client.get(f"/api/v1/tables/{table_b['id']}/poster", headers=headers_a)
+    assert res.status_code == 404

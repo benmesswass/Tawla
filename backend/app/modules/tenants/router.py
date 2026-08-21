@@ -21,6 +21,7 @@ from app.core.subscription import (
     SUBSCRIPTION_DURATION_DAYS,
     TIER_PRICES_TND,
     effective_tier,
+    essentiel_price_tnd,
     require_tier,
     tier_includes,
 )
@@ -267,9 +268,10 @@ def start_subscription_checkout(
         )
         return schemas.SubscriptionCheckoutOut(mode="demo", restaurant=schemas.serialize_restaurant(restaurant))
 
+    price = essentiel_price_tnd(restaurant) if target == SubscriptionTier.ESSENTIEL else TIER_PRICES_TND[target]
     try:
         pay_url, payment_ref = init_konnect_payment(
-            amount_tnd=TIER_PRICES_TND[target],
+            amount_tnd=price,
             order_id=str(restaurant.id),
             description=f"Tawla — abonnement {target.value}",
             webhook=(

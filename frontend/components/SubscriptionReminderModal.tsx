@@ -4,6 +4,9 @@ import { useState } from "react";
 import { api, type Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import Button from "@/components/ui/Button";
+import { TIERS } from "@/lib/offer";
+
+const ESSENTIEL_PRICE_DT = TIERS.find((t) => t.id === "essentiel")?.priceDT ?? 50;
 
 function daysRemaining(periodEnd: string): number {
   const ms = new Date(periodEnd).getTime() - Date.now();
@@ -65,7 +68,7 @@ export default function SubscriptionReminderModal({
           commandes.
         </p>
         <p className="mt-3">
-          <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">50 DT</span>
+          <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">{ESSENTIEL_PRICE_DT} DT</span>
           <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
         </p>
 

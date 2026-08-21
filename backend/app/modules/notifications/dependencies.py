@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.orders.models import Order
 from app.modules.staff.models import Staff, StaffRole
-from app.modules.staff.security import decode_access_token
+from app.modules.staff.security import TOKEN_TYPE, decode_access_token
 from app.modules.tables.models import Table
 from app.modules.tenants.models import Restaurant
 
@@ -49,6 +49,15 @@ async def authenticate_staff_socket(
     try:
         payload = decode_access_token(token)
     except Exception:
+        await _reject(websocket)
+        return False
+
+    # Défense en profondeur, même motif que `get_current_staff` : `sub` d'un
+    # token `platform_admin` (même secret de signature) est aussi un entier,
+    # donc `int(payload["sub"])` réussirait quand même — sans ce contrôle, un
+    # token admin dont l'ID coïncide avec celui d'un Staff authentifierait
+    # silencieusement ce canal comme CE membre du personnel.
+    if payload.get("type") != TOKEN_TYPE:
         await _reject(websocket)
         return False
 

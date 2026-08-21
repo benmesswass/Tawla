@@ -73,6 +73,28 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
 
+// Chrome commun à toutes les files de la colonne de droite : liseré vertical à
+// la couleur de la file, titre, compteur plein, précision optionnelle.
+function EntetePanneau({ titre, couleur, count, precision }: { titre: string; couleur: string; count: number; precision?: string }) {
+  return (
+    <div className="px-[14px] py-[11px] border-b border-[var(--line)] flex items-center gap-2.5">
+      <span className="w-[9px] h-[22px] rounded-[3px] shrink-0" style={{ backgroundColor: couleur }} />
+      <span className="text-[13.5px] font-bold text-[var(--encre)]">{titre}</span>
+      <span
+        className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[12px] font-bold text-[var(--semoule)]"
+        style={{ backgroundColor: couleur }}
+      >
+        {count}
+      </span>
+      {precision && <span className="ms-auto text-xs text-[var(--ink-soft)]">{precision}</span>}
+    </div>
+  );
+}
+
+function FileVide({ message }: { message: string }) {
+  return <p className="py-5 px-[14px] text-center text-[12.5px] text-[var(--ink-faint)]">{message}</p>;
+}
+
 export default function StaffPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["waiter", "manager"]);
@@ -92,6 +114,12 @@ export default function StaffPage() {
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, []);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -505,7 +533,7 @@ export default function StaffPage() {
       .join("");
     const cash = cashRequests
       .map(
-        (c) => `<div>${escapeHtml(c.table_label)} — addition ${c.amount.toFixed(2)} DT (espèces)</div>`
+        (c) => `<div>${escapeHtml(c.table_label)} — addition ${c.amount.toFixed(3)} DT (espèces)</div>`
       )
       .join("");
     win.document.write(
@@ -538,307 +566,318 @@ export default function StaffPage() {
     staff.role === "manager"
       ? cardTerminalRequests
       : cardTerminalRequests.filter((o) => o.taken_by_staff_id === staff.id);
+  const encaissementRequests = [
+    ...myCashRequests.map((o) => ({ ...o, methode: "espèces" as const, confirmer: () => confirmCash(o.order_id) })),
+    ...myCardTerminalRequests.map((o) => ({ ...o, methode: "carte" as const, confirmer: () => confirmCardTerminal(o.order_id) })),
+  ].sort((a, b) => a.order_id - b.order_id);
+
+  // Tables où ce serveur a au moins une action en cours (commande ou
+  // encaissement pris en charge) — le "prêt à servir" n'a pas de propriétaire
+  // (premier arrivé), il ne compte donc pas ici.
+  const mesTables = new Set<number>();
+  pending.forEach((o) => {
+    if (o.taken_by_staff_id === staff.id) mesTables.add(o.table_id);
+  });
+  cashRequests.forEach((o) => {
+    if (o.taken_by_staff_id === staff.id) mesTables.add(o.table_id);
+  });
+  cardTerminalRequests.forEach((o) => {
+    if (o.taken_by_staff_id === staff.id) mesTables.add(o.table_id);
+  });
 
   const scheduledCount = pending.filter((o) => o.scheduled_for).length;
+  const clock = new Date(now).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
   return (
-    // D-1 (audit 2026-08-18) : cet écran, décrit comme partagé toute la
-    // soirée, restait à max-w-md (448 px) même sur l'écran large de la
-    // cuisine — défilement dès une seule commande. `md:max-w-none` le
-    // laisse s'étaler au-delà d'une largeur de tablette ; les trois listes
-    // de commandes passent alors en colonnes (voir plus bas), comme l'écran
-    // cuisine. En dessous, sur le téléphone d'un serveur en salle, rien ne
-    // change.
-    <div className="p-4 max-w-md mx-auto md:max-w-none md:mx-0 md:px-8">
-      <div className="flex items-center justify-between mb-1">
-        {/* Titre de page générique : les trois listes ci-dessous (dont
-            "Commandes à confirmer") ont chacune leur propre en-tête depuis
-            le passage en colonnes (D-1). */}
-        <h1 className={`${lalezar.className} text-xl`}>Service en cours</h1>
-        <ConnectionBadge status={status} />
-      </div>
-      <div className="flex items-center justify-between mb-4 text-sm text-neutral-500 gap-2 flex-wrap">
-        <span>{staff.name}</span>
-        <div className="flex items-center gap-3">
-          <button onClick={printPending} className="underline">
+    <div className="min-h-screen bg-[var(--semoule)]">
+      <header className="bg-[var(--espresso)] px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className={`${lalezar.className} text-[26px] leading-none text-[var(--semoule)]`}>Service</h1>
+          <p className="text-[14px] font-semibold text-[rgba(246,239,221,.62)] mt-1">
+            {staff.name} — {mesTables.size} table{mesTables.size > 1 ? "s" : ""} en charge
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <ConnectionBadge status={status} dark />
+          <span className="text-[18px] font-semibold tabular-nums text-[var(--semoule)]">{clock}</span>
+          <button onClick={printPending} className="text-sm text-[var(--ink-on-espresso)] underline">
             Imprimer (filet de secours)
           </button>
-          <button onClick={logout} className="underline">
+          <button onClick={logout} className="text-sm text-[var(--ink-on-espresso)] underline">
             Se déconnecter
           </button>
         </div>
-      </div>
+      </header>
 
-      {error && (
-        <Card tone="danger" padding="sm" className="mb-4 text-sm text-red-700 flex justify-between items-start gap-2">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} aria-label="Fermer le message d'erreur" className="text-red-500">
-            ✕
-          </button>
-        </Card>
-      )}
-
-      <MaSoiree shift={myShift} />
-
-      {salleDessinee && (
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold">Ma salle</h2>
-            <button
-              onClick={() => setVuePlan((v) => !v)}
-              className="text-sm underline text-neutral-500"
-            >
-              {vuePlan ? "Voir la liste" : "Voir le plan"}
+      <div className="p-4 max-w-md mx-auto md:max-w-none md:mx-0 md:px-6">
+        {error && (
+          <Card tone="danger" padding="sm" className="mb-4 text-sm text-[var(--harissa)] flex justify-between items-start gap-2">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} aria-label="Fermer le message d'erreur" className="text-[var(--harissa)]">
+              ✕
             </button>
-          </div>
+          </Card>
+        )}
+
+        <div className="mb-5">
+          <MaSoiree shift={myShift} tablesEnCharge={mesTables.size} />
+        </div>
+
+        {scheduledCount > 0 && (
+          <Card tone="info" padding="sm" className="mb-4 text-sm text-[#8a6420] flex items-center gap-1.5">
+            <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
+            {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} pour l&apos;iftar à anticiper en cuisine.
+          </Card>
+        )}
+
+        <div className={`grid grid-cols-1 gap-[18px] items-start ${vuePlan ? "xl:grid-cols-[588px_1fr]" : ""}`}>
           {vuePlan && (
-            <>
-              <PlanDeSalle
-                tables={plan}
-                etats={etatsDesTables}
-                onTableActivee={(t) => setTableOuverte((ouverte) => (ouverte === t.id ? null : t.id))}
-                tableSelectionnee={tableOuverte}
-                action={
-                  tableActive && (
-                    <ActionTable
-                      table={tableActive}
-                      etat={etatsDesTables[tableActive.id] ?? ETAT_LIBRE}
-                      rang={rangs[tableActive.id] ?? null}
-                      actions={actionsPourTable(tableActive.id)}
-                      onFermer={() => setTableOuverte(null)}
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
+              <div className="px-[14px] py-[11px] border-b border-[var(--line)] flex items-baseline gap-2 flex-wrap">
+                <span className="text-[13.5px] font-bold text-[var(--encre)]">Plan de salle</span>
+                <span className="text-xs text-[var(--ink-soft)]">Salle principale · {plan.length} tables</span>
+                <button onClick={() => setVuePlan(false)} className="ms-auto text-sm underline text-[var(--laiton)]">
+                  Voir la liste
+                </button>
+              </div>
+              <div className="p-3">
+                {salleDessinee ? (
+                  <>
+                    <PlanDeSalle
+                      tables={plan}
+                      etats={etatsDesTables}
+                      onTableActivee={(t) => setTableOuverte((ouverte) => (ouverte === t.id ? null : t.id))}
+                      tableSelectionnee={tableOuverte}
+                      action={
+                        tableActive && (
+                          <ActionTable
+                            table={tableActive}
+                            etat={etatsDesTables[tableActive.id] ?? ETAT_LIBRE}
+                            rang={rangs[tableActive.id] ?? null}
+                            actions={actionsPourTable(tableActive.id)}
+                            onFermer={() => setTableOuverte(null)}
+                          />
+                        )
+                      }
                     />
-                  )
-                }
-              />
-              <p className="text-xs text-neutral-500 mt-2">
-                Touchez une table pour agir dessus. Quand plusieurs tables commandent en même
-                temps, le chiffre posé dessus donne l&apos;ordre d&apos;arrivée : la 1 attend
-                depuis le plus longtemps.
-              </p>
-            </>
-          )}
-        </div>
-      )}
-
-      {waiterCalls.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold mb-2 flex items-center gap-1.5">
-            <BellIcon className="w-5 h-5 shrink-0" />
-            Appels en attente
-          </h2>
-          {waiterCalls.map((c) => (
-            <Card key={c.call_id} tone="urgent" className="mb-3 flex justify-between items-center">
-              <div className="font-medium">{c.table_label}</div>
-              <Button variant="success" onClick={() => resolveWaiterCall(c.call_id)}>
-                Résolu
-              </Button>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {scheduledCount > 0 && (
-        <Card tone="info" padding="sm" className="mb-3 text-sm text-indigo-800 flex items-center gap-1.5">
-          <MoonIcon className="w-4 h-4 shrink-0" />
-          {scheduledCount} pré-commande{scheduledCount > 1 ? "s" : ""} pour l&apos;iftar à anticiper en cuisine.
-        </Card>
-      )}
-
-      {/* D-1 : les trois listes de commandes en colonnes au-delà d'une
-          largeur de tablette, comme l'écran cuisine — sinon chacune force
-          un défilement dès sa première carte, sur un écran par ailleurs
-          large. */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div>
-      <h2 className="text-lg font-semibold mb-4">Commandes à confirmer</h2>
-      {pending.length === 0 && <EmptyState message="Aucune commande en attente." />}
-      {pending.map((o) => {
-        const takenByMe = o.taken_by_staff_id === staff.id;
-        const takenByOther = o.taken_by_staff_id !== null && !takenByMe;
-        return (
-          <Card key={o.order_id} tone="info" className="mb-3">
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="font-medium">{o.table_label}</div>
-                <div className="text-sm text-neutral-500">Commande #{o.order_id}</div>
-                {/* Depuis combien de temps la table attend. C'est le seul
-                    chiffre qui dit laquelle prendre en premier — et au-delà de
-                    dix minutes, cette commande est déjà comptée perdue. */}
-                {(() => {
-                  const secondes = elapsedSeconds(o.created_at, maintenant);
-                  if (secondes === null) return null;
-                  const tardive = secondes >= ATTENTE_ALERTE_MINUTES * 60;
-                  return (
-                    <div
-                      className={`text-xs mt-1 tabular-nums ${
-                        tardive ? "font-semibold text-[var(--harissa)]" : "text-[var(--ink-soft)]"
-                      }`}
-                    >
-                      en attente depuis {duree(secondes)}
-                    </div>
-                  );
-                })()}
-                {o.scheduled_for && (
-                  <div className="text-xs text-indigo-700 mt-1 flex items-center gap-1">
-                    <MoonIcon className="w-3.5 h-3.5 shrink-0" />
-                    Pré-commande iftar {formatTime(o.scheduled_for)}
-                  </div>
+                    <p className="text-xs text-[var(--ink-soft)] mt-2">
+                      Touchez une table pour agir dessus. Quand plusieurs tables commandent en même
+                      temps, le chiffre posé dessus donne l&apos;ordre d&apos;arrivée : la 1 attend
+                      depuis le plus longtemps.
+                    </p>
+                  </>
+                ) : (
+                  <EmptyState message="Votre salle n'est pas encore dessinée." />
                 )}
               </div>
-              {!takenByOther && (
-                <Button onClick={() => (takenByMe ? confirmAndSend(o.order_id) : claim(o.order_id))}>
-                  {takenByMe ? "Confirmé avec la table → cuisine" : "Prendre en charge"}
+            </div>
+          )}
+
+          {!vuePlan && salleDessinee && (
+            <button
+              onClick={() => setVuePlan(true)}
+              className="text-sm underline text-[var(--laiton)] justify-self-start"
+            >
+              Voir le plan
+            </button>
+          )}
+
+          {/* Colonne de droite : les quatre files, dans l'ordre où un serveur
+              doit les regarder — ce qui attend d'être confirmé et les appels
+              (harissa, action requise) d'abord, puis ce qui est prêt et les
+              encaissements. */}
+          <div className="flex flex-col gap-[14px]">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
+              <EntetePanneau titre="Commandes à confirmer" couleur="var(--harissa)" count={pending.length} />
+              {pending.length === 0 && <FileVide message="Rien en attente" />}
+              {pending.map((o) => {
+                const takenByMe = o.taken_by_staff_id === staff.id;
+                const takenByOther = o.taken_by_staff_id !== null && !takenByMe;
+                const secondes = elapsedSeconds(o.created_at, maintenant);
+                const tardive = secondes !== null && secondes >= ATTENTE_ALERTE_MINUTES * 60;
+                return (
+                  <div
+                    key={o.order_id}
+                    className="flex items-center gap-[14px] px-[14px] py-[11px] border-b border-[#efe6d2] last:border-b-0"
+                    style={{ backgroundColor: tardive ? "rgba(214,64,30,.06)" : "transparent" }}
+                  >
+                    <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                      {o.table_label}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13.5px] font-semibold text-[var(--encre)]">Commande #{o.order_id}</div>
+                      {o.scheduled_for && (
+                        <div className="text-xs text-[var(--laiton)] mt-0.5 flex items-center gap-1">
+                          <MoonIcon className="w-3.5 h-3.5 shrink-0" />
+                          Iftar {formatTime(o.scheduled_for)}
+                        </div>
+                      )}
+                      {takenByOther && (
+                        <p className="text-xs text-[var(--ink-soft)] mt-0.5">Pris en charge par {o.taken_by_staff_name}</p>
+                      )}
+                    </div>
+                    {secondes !== null && (
+                      <span
+                        className="text-[12.5px] font-semibold tabular-nums min-w-[60px] text-end shrink-0"
+                        style={{ color: tardive ? "var(--harissa)" : "var(--ink-soft)" }}
+                      >
+                        {duree(secondes)}
+                      </span>
+                    )}
+                    {!takenByOther && (
+                      <button
+                        onClick={() => (takenByMe ? confirmAndSend(o.order_id) : claim(o.order_id))}
+                        className="shrink-0 whitespace-nowrap rounded-[10px] px-[15px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)]"
+                      >
+                        {takenByMe ? "Confirmer" : "Prendre en charge"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
+              <EntetePanneau titre="Appels serveur" couleur="var(--harissa)" count={waiterCalls.length} />
+              {waiterCalls.length === 0 && <FileVide message="Rien en attente" />}
+              {waiterCalls.map((c) => (
+                <div
+                  key={c.call_id}
+                  className="flex items-center gap-[14px] px-[14px] py-[11px] border-b border-[#efe6d2] last:border-b-0"
+                  style={{ backgroundColor: "rgba(214,64,30,.06)" }}
+                >
+                  <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                    {c.table_label}
+                  </span>
+                  <div className="min-w-0 flex-1 text-[13.5px] font-semibold text-[var(--encre)] inline-flex items-center gap-1.5">
+                    <BellIcon className="w-4 h-4 shrink-0 text-[var(--harissa)]" />
+                    Vous appelle
+                  </div>
+                  <button
+                    onClick={() => resolveWaiterCall(c.call_id)}
+                    className="shrink-0 whitespace-nowrap rounded-[10px] px-[15px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)]"
+                  >
+                    Je prends
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
+              <EntetePanneau titre="Prêtes à servir" couleur="var(--menthe)" count={readyToServe.length} />
+              {readyToServe.length === 0 && <FileVide message="Rien en attente" />}
+              {readyToServe.map((o) => (
+                <div
+                  key={o.order_id}
+                  className="flex items-center gap-[14px] px-[14px] py-[11px] border-b border-[#efe6d2] last:border-b-0"
+                >
+                  <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                    {o.table_label}
+                  </span>
+                  <div className="min-w-0 flex-1 text-[13.5px] font-semibold text-[var(--encre)]">
+                    Commande #{o.order_id} — prête en cuisine
+                  </div>
+                  <button
+                    onClick={() => markServed(o.order_id)}
+                    className="shrink-0 whitespace-nowrap rounded-[10px] px-[15px] py-[10px] text-[13px] font-bold bg-[var(--menthe)] text-[var(--semoule)]"
+                  >
+                    Servie
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
+              <EntetePanneau titre="Demandes d'encaissement" couleur="var(--laiton)" count={encaissementRequests.length} />
+              {encaissementRequests.length === 0 && <FileVide message="Rien en attente" />}
+              {encaissementRequests.map((o) => {
+                const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
+                return (
+                  <div key={`${o.methode}-${o.order_id}`} className="border-b border-[#efe6d2] last:border-b-0">
+                    <div className="flex items-center gap-[14px] px-[14px] py-[11px]">
+                      <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                        {o.table_label}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13.5px] font-semibold text-[var(--encre)]">
+                          Commande #{o.order_id} — {o.amount.toFixed(3)} DT
+                        </div>
+                        <div className="text-xs text-[var(--ink-soft)] mt-0.5">{o.methode === "espèces" ? "Espèces" : "Carte (terminal)"}</div>
+                      </div>
+                      <button
+                        onClick={o.confirmer}
+                        className="shrink-0 whitespace-nowrap rounded-[10px] px-[15px] py-[10px] text-[13px] font-bold bg-[var(--laiton)] text-[var(--espresso)]"
+                      >
+                        Encaisser
+                      </button>
+                    </div>
+                    {loyaltyMember && (
+                      <div className="mx-[14px] mb-[11px] rounded-xl border border-[rgba(184,134,46,.5)] bg-[var(--creme)] px-3 py-2.5 text-sm flex justify-between items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 flex-wrap text-[var(--encre)]">
+                          <GiftIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
+                          {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
+                          {loyaltyMember.order_count > 1 ? "s" : ""}
+                          {loyaltyMember.reward_available ? " — récompense disponible" : ""}
+                          {loyaltyMember.is_birthday_today && (
+                            <span className="inline-flex items-center gap-1">
+                              — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
+                            </span>
+                          )}
+                        </span>
+                        {loyaltyMember.reward_available && (
+                          <Button variant="laiton" size="sm" className="shrink-0" onClick={() => redeemReward(loyaltyMember)}>
+                            Récompense donnée
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <h2 className="text-lg font-semibold mt-8 mb-4 flex items-center gap-1.5 text-[var(--encre)]">
+          <GiftIcon className="w-5 h-5 shrink-0 text-[var(--laiton)]" />
+          Fidélité — vérifier un client
+        </h2>
+        <Card className="mb-3">
+          <div className="flex gap-2">
+            <input
+              type="tel"
+              value={lookupPhone}
+              onChange={(e) => setLookupPhone(e.target.value)}
+              placeholder="Numéro de téléphone du client"
+              className="flex-1 bg-white border border-[var(--line)] rounded-xl px-3 py-2 text-sm"
+            />
+            <Button onClick={lookupLoyaltyByPhone}>Vérifier</Button>
+          </div>
+          {lookupError && <p className="mt-2 text-sm text-[var(--harissa)]">{lookupError}</p>}
+          {lookupResult && (
+            <div className="mt-3 rounded-xl border border-[rgba(184,134,46,.5)] bg-[var(--creme)] px-3 py-2.5 text-sm flex justify-between items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 flex-wrap text-[var(--encre)]">
+                <GiftIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
+                {lookupResult.phone_number} — {lookupResult.order_count} commande
+                {lookupResult.order_count > 1 ? "s" : ""}
+                {lookupResult.reward_available
+                  ? " — récompense disponible"
+                  : ` — encore ${lookupResult.orders_until_reward} pour un article offert`}
+                {lookupResult.is_birthday_today && (
+                  <span className="inline-flex items-center gap-1">
+                    — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
+                  </span>
+                )}
+              </span>
+              {lookupResult.reward_available && (
+                <Button variant="laiton" size="sm" className="shrink-0" onClick={() => redeemReward(lookupResult)}>
+                  Récompense donnée
                 </Button>
               )}
             </div>
-            {takenByOther && (
-              <p className="text-sm text-neutral-500 mt-2">Pris en charge par {o.taken_by_staff_name}</p>
-            )}
-          </Card>
-        );
-      })}
-      </div>
-
-      <div>
-      <h2 className="text-lg font-semibold mb-4">Prêtes à servir</h2>
-      {readyToServe.length === 0 && <EmptyState message="Rien à servir pour l'instant." />}
-      {readyToServe.map((o) => (
-        <Card key={o.order_id} tone="success" className="mb-3 flex justify-between items-center">
-          <div>
-            <div className="font-medium">{o.table_label}</div>
-            <div className="text-sm text-neutral-500">Commande #{o.order_id} — prête en cuisine</div>
-          </div>
-          <Button variant="success" onClick={() => markServed(o.order_id)}>
-            Servi
-          </Button>
+          )}
         </Card>
-      ))}
       </div>
-
-      <div>
-      <h2 className="text-lg font-semibold mb-4">Demandes de paiement en espèces</h2>
-      {myCashRequests.length === 0 && <EmptyState message="Aucune demande en attente." />}
-      {myCashRequests.map((o) => {
-        const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
-        return (
-          <Card key={o.order_id} tone="warning" className="mb-3">
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="font-medium">{o.table_label}</div>
-                <div className="text-sm text-neutral-500">
-                  Commande #{o.order_id} — {o.amount.toFixed(2)} DT
-                </div>
-              </div>
-              <Button variant="success" onClick={() => confirmCash(o.order_id)}>
-                Encaissé
-              </Button>
-            </div>
-            {loyaltyMember && (
-              <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 flex-wrap">
-                  <GiftIcon className="w-4 h-4 shrink-0" />
-                  {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
-                  {loyaltyMember.order_count > 1 ? "s" : ""}
-                  {loyaltyMember.reward_available ? " — récompense disponible" : ""}
-                  {loyaltyMember.is_birthday_today && (
-                    <span className="inline-flex items-center gap-1">
-                      — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
-                    </span>
-                  )}
-                </span>
-                {loyaltyMember.reward_available && (
-                  <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(loyaltyMember)}>
-                    Récompense donnée
-                  </Button>
-                )}
-              </Card>
-            )}
-          </Card>
-        );
-      })}
-      </div>
-      </div>
-
-      <h2 className="text-lg font-semibold mt-8 mb-4">Demandes de paiement carte (terminal)</h2>
-      {myCardTerminalRequests.length === 0 && <EmptyState message="Aucune demande en attente." />}
-      {myCardTerminalRequests.map((o) => {
-        const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
-        return (
-          <Card key={o.order_id} tone="warning" className="mb-3">
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="font-medium">{o.table_label}</div>
-                <div className="text-sm text-neutral-500">
-                  Commande #{o.order_id} — {o.amount.toFixed(2)} DT
-                </div>
-              </div>
-              <Button variant="success" onClick={() => confirmCardTerminal(o.order_id)}>
-                Encaissé
-              </Button>
-            </div>
-            {loyaltyMember && (
-              <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 flex-wrap">
-                  <GiftIcon className="w-4 h-4 shrink-0" />
-                  {loyaltyMember.phone_number} — {loyaltyMember.order_count} commande
-                  {loyaltyMember.order_count > 1 ? "s" : ""}
-                  {loyaltyMember.reward_available ? " — récompense disponible" : ""}
-                  {loyaltyMember.is_birthday_today && (
-                    <span className="inline-flex items-center gap-1">
-                      — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
-                    </span>
-                  )}
-                </span>
-                {loyaltyMember.reward_available && (
-                  <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(loyaltyMember)}>
-                    Récompense donnée
-                  </Button>
-                )}
-              </Card>
-            )}
-          </Card>
-        );
-      })}
-
-      <h2 className="text-lg font-semibold mt-8 mb-4 flex items-center gap-1.5">
-        <GiftIcon className="w-5 h-5 shrink-0" />
-        Fidélité — vérifier un client
-      </h2>
-      <Card className="mb-3">
-        <div className="flex gap-2">
-          <input
-            type="tel"
-            value={lookupPhone}
-            onChange={(e) => setLookupPhone(e.target.value)}
-            placeholder="Numéro de téléphone du client"
-            className="flex-1 border rounded-lg px-3 py-2 text-sm"
-          />
-          <Button onClick={lookupLoyaltyByPhone}>Vérifier</Button>
-        </div>
-        {lookupError && <p className="mt-2 text-sm text-red-700">{lookupError}</p>}
-        {lookupResult && (
-          <Card tone="warning" padding="sm" className="mt-3 text-sm flex justify-between items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 flex-wrap">
-              <GiftIcon className="w-4 h-4 shrink-0" />
-              {lookupResult.phone_number} — {lookupResult.order_count} commande
-              {lookupResult.order_count > 1 ? "s" : ""}
-              {lookupResult.reward_available
-                ? " — récompense disponible"
-                : ` — encore ${lookupResult.orders_until_reward} pour un article offert`}
-              {lookupResult.is_birthday_today && (
-                <span className="inline-flex items-center gap-1">
-                  — <CakeIcon className="w-3.5 h-3.5 shrink-0" /> anniversaire aujourd&apos;hui
-                </span>
-              )}
-            </span>
-            {lookupResult.reward_available && (
-              <Button variant="success" size="sm" className="shrink-0" onClick={() => redeemReward(lookupResult)}>
-                Récompense donnée
-              </Button>
-            )}
-          </Card>
-        )}
-      </Card>
     </div>
   );
 }
