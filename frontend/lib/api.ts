@@ -459,8 +459,13 @@ export const api = {
     ),
   login: (email: string, password: string) =>
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  register: (payload: { restaurant_name: string; manager_name: string; email: string; password: string }) =>
-    request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  register: (payload: {
+    restaurant_name: string;
+    manager_name: string;
+    email: string;
+    password: string;
+    tier: SubscriptionTier;
+  }) => request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   // Offre de lancement (2026-08-21) : public, interrogé par /signup avant
   // même l'inscription pour savoir s'il faut afficher la bannière.
   getLaunchPromoStatus: () => request<LaunchPromoStatus>("/api/v1/auth/launch-promo"),

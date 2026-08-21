@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.staff.models import StaffRole
+from app.modules.tenants.models import SubscriptionTier
 
 
 class LoginRequest(BaseModel):
@@ -13,6 +14,11 @@ class RegisterRequest(BaseModel):
     manager_name: str = Field(min_length=1, max_length=80)
     email: str
     password: str = Field(min_length=8)
+    # Palier choisi dès l'inscription (page d'accueil → carte tarif cliquée),
+    # Essentiel par défaut si l'inscrit arrive par un chemin générique
+    # (mailto, /signup direct). Voir staff/router.py::register — conditionne
+    # le palier accordé par l'offre de lancement, pas seulement Essentiel.
+    tier: SubscriptionTier = SubscriptionTier.ESSENTIEL
 
 
 class LaunchPromoStatus(BaseModel):

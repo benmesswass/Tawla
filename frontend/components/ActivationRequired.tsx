@@ -28,12 +28,13 @@ export default function ActivationRequired({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const tier = TIERS.find((t) => t.id === "essentiel");
+  const tier = TIERS.find((t) => t.id === restaurant.subscription_tier);
   // Offre de lancement (2026-08-21) : réduction figée à l'inscription de ce
-  // restaurant (voir Restaurant.launch_promo_discount_percent) — jamais la
-  // campagne en cours, qui a pu changer depuis. `is_active` est déjà faux
-  // ici (sinon cet écran ne s'afficherait pas), donc la réduction s'applique
-  // encore — même règle que essentiel_price_tnd() côté backend.
+  // restaurant (voir Restaurant.launch_promo_discount_percent), pour le
+  // palier qu'il avait choisi À CE MOMENT-LÀ (`restaurant.subscription_tier`)
+  // — jamais la campagne en cours, qui a pu changer depuis. `is_active` est
+  // déjà faux ici (sinon cet écran ne s'afficherait pas), donc la réduction
+  // s'applique encore — même règle que tier_price_tnd() côté backend.
   const basePrice = tier?.priceDT ?? 50;
   const price =
     restaurant.launch_promo_discount_percent != null
@@ -44,7 +45,7 @@ export default function ActivationRequired({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await api.startSubscriptionCheckout(restaurant.id, "essentiel");
+      const result = await api.startSubscriptionCheckout(restaurant.id, restaurant.subscription_tier);
       if (result.mode === "konnect" && result.pay_url) {
         window.location.href = result.pay_url;
         return;

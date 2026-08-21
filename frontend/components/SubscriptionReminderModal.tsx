@@ -6,8 +6,6 @@ import { toFrenchMessage } from "@/lib/errors";
 import Button from "@/components/ui/Button";
 import { TIERS } from "@/lib/offer";
 
-const ESSENTIEL_PRICE_DT = TIERS.find((t) => t.id === "essentiel")?.priceDT ?? 50;
-
 function daysRemaining(periodEnd: string): number {
   const ms = new Date(periodEnd).getTime() - Date.now();
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
@@ -36,12 +34,13 @@ export default function SubscriptionReminderModal({
   const [error, setError] = useState<string | null>(null);
 
   const days = restaurant.subscription_period_end ? daysRemaining(restaurant.subscription_period_end) : null;
+  const price = TIERS.find((t) => t.id === restaurant.subscription_tier)?.priceDT ?? 50;
 
   async function handlePay() {
     setSubmitting(true);
     setError(null);
     try {
-      const result = await api.startSubscriptionCheckout(restaurant.id, "essentiel");
+      const result = await api.startSubscriptionCheckout(restaurant.id, restaurant.subscription_tier);
       if (result.mode === "konnect" && result.pay_url) {
         window.location.href = result.pay_url;
         return;
@@ -68,7 +67,7 @@ export default function SubscriptionReminderModal({
           commandes.
         </p>
         <p className="mt-3">
-          <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">{ESSENTIEL_PRICE_DT} DT</span>
+          <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">{price} DT</span>
           <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
         </p>
 

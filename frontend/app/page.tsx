@@ -94,7 +94,7 @@ export default function HomePage() {
             {TIERS.map((tier) => (
               <div
                 key={tier.id}
-                className={`rounded-lg border p-5 bg-white ${
+                className={`flex flex-col rounded-lg border p-5 bg-white ${
                   tier.recommended ? "border-[var(--harissa)] ring-1 ring-[var(--harissa)]" : "border-[var(--line)]"
                 }`}
               >
@@ -114,14 +114,28 @@ export default function HomePage() {
                     <li key={feature}>• {feature}</li>
                   ))}
                 </ul>
+                <Link
+                  href={`/signup?tier=${tier.id}`}
+                  className={`mt-auto pt-4 border-t border-[var(--line)] text-center text-sm font-medium ${
+                    tier.recommended ? "text-[var(--harissa)]" : "text-[var(--encre)] underline"
+                  }`}
+                >
+                  Choisir {tier.name}
+                </Link>
               </div>
             ))}
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              href="/signup"
+              className="inline-flex items-center rounded-lg bg-[var(--harissa)] px-5 py-3 text-white font-medium"
+            >
+              Créer mon compte
+            </Link>
             <a
               href="mailto:contact@tawla.tn?subject=Essai%20Tawla"
-              className="inline-flex items-center rounded-lg bg-[var(--harissa)] px-5 py-3 text-white font-medium"
+              className="inline-flex items-center rounded-lg border border-[var(--line)] px-5 py-3 font-medium text-[var(--encre)]"
             >
               Demander un essai
             </a>

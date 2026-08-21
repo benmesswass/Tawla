@@ -82,23 +82,31 @@ def launch_promo_grants_used(db: Session) -> int:
     return db.query(Restaurant).filter(Restaurant.launch_promo_discount_percent.is_not(None)).count()
 
 
-def essentiel_price_tnd(restaurant: Restaurant) -> int:
+def tier_price_tnd(restaurant: Restaurant, tier: SubscriptionTier) -> int:
     """
-    Le prix RÉEL à payer pour Essentiel, réduction de lancement comprise —
+    Le prix RÉEL à payer pour `tier`, réduction de lancement comprise —
     toujours cette fonction pour calculer un montant, jamais
-    `TIER_PRICES_TND[ESSENTIEL]` en lecture directe dès qu'un restaurant est
-    en jeu (checkout, vérification de règlement).
+    `TIER_PRICES_TND[...]` en lecture directe dès qu'un restaurant est en jeu
+    (checkout, vérification de règlement).
 
     La réduction, si elle existe, a été FIGÉE à l'inscription
-    (`Restaurant.launch_promo_discount_percent`) — jamais recalculée depuis la
-    campagne en cours, qui a pu changer depuis. Elle ne s'applique qu'une
-    fois : `is_active` passe à `True` dès la première activation (gratuite à
-    100 %, ou réglée à un taux partiel), donc `not restaurant.is_active`
-    protège naturellement contre un rachat "à prix cassé" lors d'un
-    renouvellement — voir Restaurant.is_active/launch_promo_discount_percent.
+    (`Restaurant.launch_promo_discount_percent`) pour le palier choisi À CE
+    MOMENT-LÀ (`Restaurant.subscription_tier`) — jamais recalculée depuis la
+    campagne en cours, qui a pu changer depuis, et jamais reportée sur un
+    AUTRE palier que celui d'origine (`tier == restaurant.subscription_tier`)
+    : passer à un palier supérieur après coup se paie plein tarif. Elle ne
+    s'applique qu'une fois : `is_active` passe à `True` dès la première
+    activation (gratuite à 100 %, ou réglée à un taux partiel), donc
+    `not restaurant.is_active` protège naturellement contre un rachat "à prix
+    cassé" lors d'un renouvellement — voir
+    Restaurant.is_active/launch_promo_discount_percent.
     """
-    base = TIER_PRICES_TND[SubscriptionTier.ESSENTIEL]
-    if restaurant.launch_promo_discount_percent is not None and not restaurant.is_active:
+    base = TIER_PRICES_TND[tier]
+    if (
+        restaurant.launch_promo_discount_percent is not None
+        and not restaurant.is_active
+        and tier == restaurant.subscription_tier
+    ):
         return round(base * (100 - restaurant.launch_promo_discount_percent) / 100)
     return base
 
