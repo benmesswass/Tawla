@@ -526,13 +526,6 @@ def test_is_usable_false_when_never_activated_even_without_period_end():
     assert restaurant.is_usable is False
 
 
-def test_is_usable_promo_gratuit_overrides_an_expired_or_missing_period():
-    restaurant = Restaurant(
-        name="x", slug="y", is_active=False, promo_gratuit=True, subscription_period_end=None,
-    )
-    assert restaurant.is_usable is True
-
-
 def test_a_staff_route_is_blocked_again_once_the_essentiel_period_expires(client, db_session):
     """Bout en bout : une route staff ordinaire (pas juste is_usable en
     isolation) refuse un restaurant dont l'abonnement Essentiel a expiré."""
@@ -614,8 +607,8 @@ def test_public_qr_surface_works_again_once_active(client, db_session):
     assert res.status_code == 200
 
 
-def test_public_qr_surface_works_with_promo_even_if_never_paid(client, db_session):
-    restaurant = create_restaurant(slug="public-qr-promo", is_active=False, promo_gratuit=True)
+def test_public_qr_surface_works_when_active_but_never_paid(client, db_session):
+    restaurant = create_restaurant(slug="public-qr-promo", is_active=True, has_paid_for_subscription=False)
     table = _table_for(db_session, restaurant.id)
 
     res = client.get(f"/api/v1/restaurants/by-token/{table.qr_token}")

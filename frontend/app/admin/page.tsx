@@ -67,8 +67,14 @@ export default function PlatformAdminPage() {
   const [maxGrantsInput, setMaxGrantsInput] = useState("");
   const [savingCampaign, setSavingCampaign] = useState(false);
   const [savingPromoId, setSavingPromoId] = useState<number | null>(null);
+  const [promoDrafts, setPromoDrafts] = useState<Record<number, { discount: string; days: string }>>({});
   const [error, setError] = useState<string | null>(null);
   const [checkedAuth, setCheckedAuth] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminName, setNewAdminName] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [savingNewAdmin, setSavingNewAdmin] = useState(false);
+  const [newAdminMessage, setNewAdminMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -118,11 +124,11 @@ export default function PlatformAdminPage() {
     }
   }
 
-  async function handleTogglePromo(restaurantId: number, next: boolean) {
+  async function handleSetPromo(restaurantId: number, discountPercent: number, durationDays: number) {
     setSavingPromoId(restaurantId);
     setError(null);
     try {
-      await platformAdminApi.setRestaurantPromo(restaurantId, next);
+      await platformAdminApi.setRestaurantPromo(restaurantId, discountPercent, durationDays);
       await load();
     } catch {
       setError(errorMessage());
@@ -131,9 +137,36 @@ export default function PlatformAdminPage() {
     }
   }
 
+  function handleGrantPromo(restaurantId: number) {
+    const draft = promoDrafts[restaurantId];
+    const discount = Number(draft?.discount ?? "100");
+    const days = Number(draft?.days ?? "30");
+    if (!Number.isInteger(discount) || discount < 0 || discount > 100) return;
+    if (!Number.isInteger(days) || days < 1) return;
+    handleSetPromo(restaurantId, discount, days);
+  }
+
   function handleLogout() {
     clearAdminToken();
     router.replace("/admin/login");
+  }
+
+  async function handleCreateAdmin() {
+    if (!newAdminEmail.trim() || !newAdminName.trim() || newAdminPassword.length < 8) return;
+    setSavingNewAdmin(true);
+    setNewAdminMessage(null);
+    setError(null);
+    try {
+      const created = await platformAdminApi.createAdmin(newAdminEmail.trim(), newAdminName.trim(), newAdminPassword);
+      setNewAdminMessage(`Compte créé : ${created.email}`);
+      setNewAdminEmail("");
+      setNewAdminName("");
+      setNewAdminPassword("");
+    } catch {
+      setError(errorMessage());
+    } finally {
+      setSavingNewAdmin(false);
+    }
   }
 
   if (!checkedAuth || (!overview && !error)) {
@@ -334,8 +367,8 @@ export default function PlatformAdminPage() {
                         </td>
                         <td className="py-2 pr-3">
                           <div className="flex flex-wrap gap-1">
-                            <Badge tone={r.is_active || r.promo_gratuit ? "success" : "danger"}>
-                              {r.is_active || r.promo_gratuit ? "Actif" : "Bloqué"}
+                            <Badge tone={r.is_active ? "success" : "danger"}>
+                              {r.is_active ? "Actif" : "Bloqué"}
                             </Badge>
                             {!r.has_paid_for_subscription && <Badge tone="info">Jamais payé</Badge>}
                           </div>
@@ -352,14 +385,62 @@ export default function PlatformAdminPage() {
                           )}
                         </td>
                         <td className="py-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={savingPromoId === r.id}
-                            onClick={() => handleTogglePromo(r.id, !r.promo_gratuit)}
-                          >
-                            {r.promo_gratuit ? "Retirer" : "Offrir"}
-                          </Button>
+                          {r.custom_promo_discount_percent !== null && r.custom_promo_ends_at ? (
+                            <div className="flex items-center gap-2">
+                              <Badge tone="info">
+                                {r.custom_promo_discount_percent}% jusqu&apos;au {formatDate(r.custom_promo_ends_at)}
+                              </Badge>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                disabled={savingPromoId === r.id}
+                                onClick={() => handleSetPromo(r.id, 0, 0)}
+                              >
+                                Retirer
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                aria-label={`Réduction (%) — ${r.name}`}
+                                className="w-14 rounded px-1 py-0.5 text-sm"
+                                style={{ border: "1px solid var(--line)" }}
+                                value={promoDrafts[r.id]?.discount ?? "100"}
+                                onChange={(e) =>
+                                  setPromoDrafts((d) => ({
+                                    ...d,
+                                    [r.id]: { discount: e.target.value, days: d[r.id]?.days ?? "30" },
+                                  }))
+                                }
+                              />
+                              <span className="text-xs" style={{ color: "var(--ink-soft)" }}>%</span>
+                              <input
+                                type="number"
+                                min={1}
+                                aria-label={`Durée (jours) — ${r.name}`}
+                                className="w-14 rounded px-1 py-0.5 text-sm"
+                                style={{ border: "1px solid var(--line)" }}
+                                value={promoDrafts[r.id]?.days ?? "30"}
+                                onChange={(e) =>
+                                  setPromoDrafts((d) => ({
+                                    ...d,
+                                    [r.id]: { discount: d[r.id]?.discount ?? "100", days: e.target.value },
+                                  }))
+                                }
+                              />
+                              <span className="text-xs" style={{ color: "var(--ink-soft)" }}>j</span>
+                              <Button
+                                size="sm"
+                                disabled={savingPromoId === r.id}
+                                onClick={() => handleGrantPromo(r.id)}
+                              >
+                                Offrir
+                              </Button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -368,6 +449,68 @@ export default function PlatformAdminPage() {
               </div>
             )}
           </Card>
+
+          <div className="mt-6">
+            <Card padding="md">
+              <h2 className="font-semibold mb-1">Comptes admin</h2>
+              <p className="text-sm mb-3" style={{ color: "var(--ink-soft)" }}>
+                Ouvre l&apos;accès à ce tableau de bord à quelqu&apos;un d&apos;autre — jamais un compte
+                restaurateur, seulement l&apos;opérateur de la plateforme.
+              </p>
+              {newAdminMessage && (
+                <Card tone="success" padding="sm" className="mb-3 text-sm">
+                  {newAdminMessage}
+                </Card>
+              )}
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1">
+                  <label htmlFor="newAdminEmail" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                    E-mail
+                  </label>
+                  <input
+                    id="newAdminEmail"
+                    type="email"
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                    className="rounded-lg px-2 py-1 text-sm"
+                    style={{ border: "1px solid var(--line)" }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="newAdminName" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                    Nom
+                  </label>
+                  <input
+                    id="newAdminName"
+                    type="text"
+                    value={newAdminName}
+                    onChange={(e) => setNewAdminName(e.target.value)}
+                    className="rounded-lg px-2 py-1 text-sm"
+                    style={{ border: "1px solid var(--line)" }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="newAdminPassword" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                    Mot de passe
+                  </label>
+                  <input
+                    id="newAdminPassword"
+                    type="password"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    className="rounded-lg px-2 py-1 text-sm"
+                    style={{ border: "1px solid var(--line)" }}
+                  />
+                </div>
+                <Button size="sm" disabled={savingNewAdmin} onClick={handleCreateAdmin}>
+                  {savingNewAdmin ? "Création…" : "Créer"}
+                </Button>
+              </div>
+              <p className="text-xs mt-3" style={{ color: "var(--ink-soft)" }}>
+                8 caractères minimum. Un e-mail déjà utilisé met juste à jour le mot de passe et le nom.
+              </p>
+            </Card>
+          </div>
         </>
       )}
     </div>

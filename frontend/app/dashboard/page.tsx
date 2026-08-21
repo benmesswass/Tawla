@@ -210,7 +210,7 @@ export default function DashboardPage() {
       setIftarInput(isoToLocalInput(rest.iftar_time));
       setCafeModeEnabled(rest.cafe_mode_enabled);
       setKitchenSoundEnabled(rest.kitchen_sound_enabled);
-      if (!rest.is_active && !rest.promo_gratuit) return;
+      if (!rest.is_active) return;
 
       const [menu, tableList, teamList, suggested, dayStats] = await Promise.all([
         api.getMenu(restaurantId),
@@ -672,7 +672,7 @@ export default function DashboardPage() {
   // `restaurant &&` : ne rien afficher tant que la fiche restaurant n'a pas
   // fini de charger (voir load()), pour ne jamais flasher cet écran avant le
   // dashboard normal chez un compte déjà actif.
-  if (restaurant && !restaurant.is_active && !restaurant.promo_gratuit) {
+  if (restaurant && !restaurant.is_active) {
     return <ActivationRequired restaurant={restaurant} onActivated={(updated) => setRestaurant(updated)} />;
   }
 

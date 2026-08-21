@@ -2,6 +2,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEV_JWT_SECRET = "dev-only-secret-change-in-production"
+_DEV_ADMIN_CREATION_SECRET = "dev-only-admin-secret-change-in-production"
 
 
 class Settings(BaseSettings):
@@ -19,6 +20,14 @@ class Settings(BaseSettings):
     # garde-fou ci-dessous empêche de démarrer en prod avec cette valeur
     # par erreur.
     jwt_secret: str = _DEV_JWT_SECRET
+
+    # Verrou de création d'un compte `PlatformAdmin` (2026-08-21ter,
+    # remplace `scripts/create_platform_admin.py`) — aucune route ne crée
+    # d'admin sans ce secret (voir platform_admin/router.py::create_admin),
+    # exactement comme JWT_SECRET : DOIT être surchargé en prod, connu de
+    # Wassim seul (gestionnaire de mots de passe), jamais commité. Le
+    # garde-fou ci-dessous empêche de démarrer en prod avec la valeur de dev.
+    admin_creation_secret: str = _DEV_ADMIN_CREATION_SECRET
 
     # Origine(s) autorisées en CORS, séparées par une virgule (ex:
     # "https://tawla.tn,https://www.tawla.tn"). Défaut = port du frontend
@@ -47,6 +56,11 @@ class Settings(BaseSettings):
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:
             raise ValueError(
                 "JWT_SECRET est encore la valeur de dev alors que ENV=production. "
+                "Générer une vraie valeur (voir backend/.env.example) avant de démarrer."
+            )
+        if self.env == "production" and self.admin_creation_secret == _DEV_ADMIN_CREATION_SECRET:
+            raise ValueError(
+                "ADMIN_CREATION_SECRET est encore la valeur de dev alors que ENV=production. "
                 "Générer une vraie valeur (voir backend/.env.example) avant de démarrer."
             )
         return self

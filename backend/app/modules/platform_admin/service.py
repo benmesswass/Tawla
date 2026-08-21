@@ -107,7 +107,8 @@ async def get_overview(db: Session) -> schemas.PlatformOverview:
                 last_order_at=last_order_at,
                 dashboard_views_last_7d=views_by_restaurant.get(restaurant.id, 0),
                 is_active=restaurant.is_active,
-                promo_gratuit=restaurant.promo_gratuit,
+                custom_promo_discount_percent=restaurant.custom_promo_discount_percent,
+                custom_promo_ends_at=restaurant.custom_promo_ends_at,
                 launch_promo_discount_percent=restaurant.launch_promo_discount_percent,
                 has_paid_for_subscription=restaurant.has_paid_for_subscription,
             )

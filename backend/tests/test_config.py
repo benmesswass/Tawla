@@ -5,15 +5,29 @@ from app.core.config import Settings
 
 def test_refuses_dev_secret_in_production():
     with pytest.raises(ValueError):
-        Settings(env="production", jwt_secret="dev-only-secret-change-in-production")
+        Settings(
+            env="production", jwt_secret="dev-only-secret-change-in-production",
+            admin_creation_secret="a-real-generated-secret",
+        )
+
+
+def test_refuses_dev_admin_creation_secret_in_production():
+    with pytest.raises(ValueError):
+        Settings(
+            env="production", jwt_secret="a-real-generated-secret",
+            admin_creation_secret="dev-only-admin-secret-change-in-production",
+        )
 
 
 def test_accepts_real_secret_in_production():
-    Settings(env="production", jwt_secret="a-real-generated-secret")
+    Settings(env="production", jwt_secret="a-real-generated-secret", admin_creation_secret="another-real-secret")
 
 
 def test_dev_secret_allowed_outside_production():
-    Settings(env="development", jwt_secret="dev-only-secret-change-in-production")
+    Settings(
+        env="development", jwt_secret="dev-only-secret-change-in-production",
+        admin_creation_secret="dev-only-admin-secret-change-in-production",
+    )
 
 
 def test_cors_origins_splits_and_strips_comma_separated_list():

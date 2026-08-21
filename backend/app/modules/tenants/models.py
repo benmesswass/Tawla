@@ -100,17 +100,26 @@ class Restaurant(Base):
     # force explicitement à `False`.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    # Dérogation posée à la main par Wassim (écran admin, jamais un
-    # restaurateur) : accès gratuit sans paiement, indépendamment de
-    # `is_active` — voir `is_usable` ci-dessous. Distinct de `is_active` pour
-    # ne jamais perdre la trace de "a réellement payé" sous la dérogation.
-    promo_gratuit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Promo personnalisée posée à la main par Wassim sur UN restaurant précis
+    # (écran admin, 2026-08-21bis — remplace l'ancien `promo_gratuit`,
+    # booléen figé qui n'expirait jamais) : réduction + fenêtre de validité,
+    # même principe que `LaunchCampaignConfig` mais réglable par restaurant et
+    # modifiable à tout moment (contrairement à `launch_promo_discount_percent`
+    # ci-dessous, figé à l'inscription). `None` = aucune promo personnalisée
+    # en cours. À 100 %, `platform_admin/router.py::set_restaurant_promo`
+    # active le compte pour la durée choisie via `is_active`/
+    # `subscription_period_end` ci-dessus — `is_usable` n'a donc besoin
+    # d'aucune branche dédiée. Sous 100 %, sert uniquement à réduire le prix
+    # au prochain paiement (voir `core/subscription.py::tier_price_tnd`).
+    custom_promo_discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    custom_promo_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Offre de lancement (2026-08-21, décidée par Wassim, rendue configurable
     # le même jour — voir LaunchCampaignConfig) : réduction (0-100 %) sur le
     # premier mois du palier choisi À L'INSCRIPTION (`subscription_tier`,
     # cartes tarifs cliquables sur l'accueil), accordée AUTOMATIQUEMENT (pas
-    # une action admin au cas par cas, voir promo_gratuit ci-dessus) aux N
+    # une action admin au cas par cas, voir custom_promo_discount_percent
+    # ci-dessus) aux N
     # premiers établissements inscrits en self-service — voir
     # staff/router.py::register. `None` = jamais dans la campagne. Sinon,
     # POSÉ UNE FOIS à l'inscription (jamais remis à jour si la campagne
@@ -167,8 +176,6 @@ class Restaurant(Base):
         setup_restaurant.py (pilote, relation commerciale directe), jamais
         d'expiration — même convention que `effective_tier()`.
         """
-        if self.promo_gratuit:
-            return True
         if not self.is_active:
             return False
         if self.subscription_period_end is None:
