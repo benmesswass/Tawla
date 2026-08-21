@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dates import as_utc
-from app.modules.staff.dependencies import get_current_staff
+from app.modules.staff.dependencies import require_active_restaurant
 from app.modules.staff.models import Staff
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
@@ -17,13 +17,21 @@ _TIER_RANK = {
     SubscriptionTier.BUSINESS: 2,
 }
 
-# Prix du passage à un palier supérieur, payé en ligne (voir konnect.py /
-# subscription_payments.py). Aucune entrée pour Essentiel : c'est le palier
-# gratuit par défaut d'un compte auto-inscrit (/auth/register), jamais une
-# cible de paiement — payer pour un palier qu'on a déjà gratuitement n'a pas
-# de sens. Montants alignés sur lib/offer.ts (frontend) — source de vérité
-# CÔTÉ SERVEUR : ne jamais faire confiance à un montant transmis par le client.
+# Prix payé en ligne (voir konnect.py / subscription_payments.py). Montants
+# alignés sur lib/offer.ts (frontend) — source de vérité CÔTÉ SERVEUR : ne
+# jamais faire confiance à un montant transmis par le client.
+#
+# ESSENTIEL est un abonnement de 30 jours comme PRO/BUSINESS (2026-08-20, voir
+# CLAUDE.md — "chaque client doit payer 50 DT pour l'Essentiel, jamais
+# gratuit, sauf promo activée par l'admin") : même mécanique de
+# `subscription_period_end` que les deux autres. La seule différence est
+# `Restaurant.is_active`/`is_usable` (tenants/models.py) : Essentiel étant le
+# palier PLANCHER, il n'y a plus de repli gratuit en dessous quand la période
+# expire sans renouvellement — le compte redevient bloqué plutôt que de
+# retomber sur un palier gratuit, contrairement à PRO/BUSINESS qui retombent
+# sur Essentiel (`effective_tier()`).
 TIER_PRICES_TND = {
+    SubscriptionTier.ESSENTIEL: 50,
     SubscriptionTier.PRO: 100,
     SubscriptionTier.BUSINESS: 150,
 }
@@ -79,7 +87,7 @@ def require_tier(minimum: SubscriptionTier):
     fidélité) et `notifications` (push).
     """
 
-    def _dependency(staff: Staff = Depends(get_current_staff), db: Session = Depends(get_db)) -> Staff:
+    def _dependency(staff: Staff = Depends(require_active_restaurant), db: Session = Depends(get_db)) -> Staff:
         restaurant = db.get(Restaurant, staff.restaurant_id)
         if not restaurant or not tier_includes(effective_tier(restaurant), minimum):
             raise upgrade_required_error(minimum)

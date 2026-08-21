@@ -5,6 +5,7 @@ from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.dates import as_utc
 
 
 class SubscriptionTier(str, enum.Enum):
@@ -52,8 +53,9 @@ class Restaurant(Base):
     kitchen_sound_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Palier d'abonnement — conditionne l'accès aux fonctionnalités Pro/Business,
-    # voir app/core/subscription.py. Essentiel par défaut : c'est le palier
-    # qu'obtient un établissement inscrit en self-service via /auth/register.
+    # voir app/core/subscription.py. Essentiel par défaut, mais un palier ne
+    # dit rien de si le compte est UTILISABLE (voir `is_active`/`is_usable`
+    # ci-dessous) : Essentiel reste un palier payant (50 DT), jamais gratuit.
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
         Enum(SubscriptionTier), default=SubscriptionTier.ESSENTIEL
     )
@@ -81,6 +83,29 @@ class Restaurant(Base):
         Enum(SubscriptionTier), nullable=True
     )
 
+    # A-t-il DÉJÀ payé au moins une fois (ou été onboardé à la main) — PAS "a
+    # accès en ce moment" (voir `is_usable` ci-dessous, qui vérifie EN PLUS
+    # `subscription_period_end`). Un établissement inscrit en self-service via
+    # /auth/register démarre à `False` — jamais d'accès gratuit, y compris à
+    # Essentiel (voir CLAUDE.md). Passe à `True` — définitivement, jamais remis
+    # à `False` ensuite — au règlement du premier paiement, quel que soit le
+    # palier payé (settle_subscription_payment). Essentiel EST un abonnement de
+    # 30 jours comme Pro/Business (2026-08-20) : un compte qui ne renouvelle
+    # pas reste `is_active=True` mais redevient inutilisable via
+    # `subscription_period_end` expiré, exactement comme un palier Pro/Business
+    # qui retombe à Essentiel dans `effective_tier()` — la seule différence
+    # est qu'il n'y a plus de palier gratuit en dessous où retomber. Un
+    # restaurant créé par setup_restaurant.py (pilote facturé à la main)
+    # démarre à `True` — c'est le défaut de la colonne, seul /auth/register le
+    # force explicitement à `False`.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Dérogation posée à la main par Wassim (écran admin, jamais un
+    # restaurateur) : accès gratuit sans paiement, indépendamment de
+    # `is_active` — voir `is_usable` ci-dessous. Distinct de `is_active` pour
+    # ne jamais perdre la trace de "a réellement payé" sous la dérogation.
+    promo_gratuit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # Konnect propre au restaurant, pour le paiement carte du CLIENT — modèle
     # direct (connexion Konnect au paiement carte, 2026-08-19) : la promesse
     # commerciale de Tawla est "vos clients vous règlent directement", donc le
@@ -95,6 +120,31 @@ class Restaurant(Base):
     @property
     def konnect_configured(self) -> bool:
         return bool(self.konnect_api_key_encrypted and self.konnect_wallet_id)
+
+    @property
+    def is_usable(self) -> bool:
+        """
+        Portail unique pour "ce restaurant a-t-il le droit d'utiliser Tawla
+        MAINTENANT" — jamais lire `is_active` seul pour du gating.
+
+        Essentiel est un abonnement de 30 jours comme Pro/Business
+        (2026-08-20, voir CLAUDE.md) : `is_active` reste `True` à vie une fois
+        payé une première fois, mais un compte qui ne renouvelle pas doit
+        quand même redevenir bloqué — d'où la même vérification d'expiration
+        que `effective_tier()` (core/subscription.py), dupliquée ici plutôt
+        qu'importée pour éviter un import circulaire (staff.dependencies et
+        core.subscription importent déjà `Restaurant`/`is_usable` DEPUIS ce
+        module). `subscription_period_end = None` = palier fixé à la main par
+        setup_restaurant.py (pilote, relation commerciale directe), jamais
+        d'expiration — même convention que `effective_tier()`.
+        """
+        if self.promo_gratuit:
+            return True
+        if not self.is_active:
+            return False
+        if self.subscription_period_end is None:
+            return True
+        return as_utc(self.subscription_period_end) > datetime.now(timezone.utc)
 
     def konnect_credentials(self) -> tuple[str, str] | None:
         """`(api_key, wallet_id)` déchiffrés, ou `None` tant que ce restaurant

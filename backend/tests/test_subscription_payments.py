@@ -16,6 +16,7 @@ from app.core.konnect import KonnectError, KonnectPayment
 from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, effective_tier
 from app.core.subscription_payments import settle_subscription_payment
 from app.modules.staff.models import StaffRole
+from app.modules.tables.models import Table
 from app.modules.tenants import router as tenants_router
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 from tests.conftest import auth_headers, create_restaurant, create_staff
@@ -43,7 +44,10 @@ def test_demo_checkout_upgrades_tier_and_sets_period_end(client, db_session):
     assert abs((period_end - expected).total_seconds()) < 60
 
 
-def test_demo_checkout_rejects_essentiel_as_a_target(client):
+def test_demo_checkout_rejects_essentiel_when_already_active(client):
+    """Essentiel n'est plus jamais gratuit (2026-08-20), mais reste rejeté
+    comme cible de checkout une fois le compte déjà actif — pas un
+    renouvellement, voir start_subscription_checkout."""
     restaurant = create_restaurant(slug="demo-checkout-essentiel", subscription_tier=SubscriptionTier.ESSENTIEL)
     headers = _manager_headers(restaurant.id)
 
@@ -52,7 +56,52 @@ def test_demo_checkout_rejects_essentiel_as_a_target(client):
     )
 
     assert res.status_code == 400
-    assert res.json()["detail"]["code"] == "INVALID_TIER"
+    assert res.json()["detail"]["code"] == "ALREADY_ACTIVE"
+
+
+def test_demo_checkout_activates_an_inactive_restaurant_on_essentiel(client, db_session):
+    """Essentiel EST un abonnement de 30 jours comme Pro/Business
+    (2026-08-20, voir CLAUDE.md) : payer l'active ET pose une échéance,
+    exactement comme un passage à Pro/Business — voir aussi
+    test_settle_activates_and_extends_period_for_essentiel plus bas."""
+    restaurant = create_restaurant(
+        slug="demo-checkout-activates", subscription_tier=SubscriptionTier.ESSENTIEL, is_active=False
+    )
+    headers = _manager_headers(restaurant.id)
+
+    res = client.post(
+        f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "essentiel"}, headers=headers
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["mode"] == "demo"
+    assert body["restaurant"]["is_active"] is True
+    assert body["restaurant"]["subscription_tier"] == "essentiel"
+    period_end = datetime.fromisoformat(body["restaurant"]["subscription_period_end"])
+    expected = datetime.now(timezone.utc) + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
+    assert abs((period_end - expected).total_seconds()) < 60
+
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    assert restaurant.is_active is True
+
+
+def test_demo_checkout_to_pro_activates_an_inactive_restaurant_directly(client):
+    """Pas besoin de payer Essentiel d'abord : un compte inactif qui paie
+    directement Pro/Business est activé au passage (2026-08-20)."""
+    restaurant = create_restaurant(
+        slug="demo-checkout-pro-activates", subscription_tier=SubscriptionTier.ESSENTIEL, is_active=False
+    )
+    headers = _manager_headers(restaurant.id)
+
+    res = client.post(
+        f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "pro"}, headers=headers
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["restaurant"]["is_active"] is True
+    assert body["restaurant"]["subscription_tier"] == "pro"
 
 
 def test_demo_checkout_rejects_a_tier_already_covered(client):
@@ -123,6 +172,15 @@ def test_effective_tier_never_expires_a_manually_set_tier():
 
 
 def test_a_gated_feature_is_blocked_again_once_the_paid_period_expires(client, db_session):
+    """
+    Avant le 2026-08-20, un palier PRO/BUSINESS expiré retombait sur Essentiel
+    GRATUIT : la fonctionnalité Pro se bloquait (403 UPGRADE_REQUIRED) mais le
+    compte restait utilisable. Essentiel n'étant plus jamais gratuit, il n'y a
+    plus de repli — `require_active_restaurant` (402) bloque tout, avant même
+    que `require_tier` n'ait la main. Le 403 UPGRADE_REQUIRED reste, lui,
+    couvert pour le cas "abonnement actif mais palier insuffisant" — voir
+    test_subscription_gating.py.
+    """
     restaurant = create_restaurant(slug="expiry-blocks-gate", subscription_tier=SubscriptionTier.PRO)
     restaurant.subscription_period_end = datetime.now(timezone.utc) - timedelta(days=1)
     db_session.add(restaurant)
@@ -131,8 +189,8 @@ def test_a_gated_feature_is_blocked_again_once_the_paid_period_expires(client, d
 
     res = client.patch(f"/api/v1/restaurants/{restaurant.id}/ramadan-mode", json={"enabled": True}, headers=headers)
 
-    assert res.status_code == 403
-    assert res.json()["detail"]["code"] == "UPGRADE_REQUIRED"
+    assert res.status_code == 402
+    assert res.json()["detail"]["code"] == "PAYMENT_REQUIRED"
 
 
 def test_demo_checkout_used_even_with_payment_mode_konnect_if_tawlas_own_keys_are_missing(client, monkeypatch):
@@ -275,6 +333,90 @@ def test_settle_is_idempotent_against_a_concurrent_replay(db_session, monkeypatc
     )
 
 
+def test_settle_activates_and_sets_period_end_for_essentiel(db_session, monkeypatch):
+    """Essentiel EST un abonnement de 30 jours comme Pro/Business
+    (2026-08-20, voir CLAUDE.md) : le règlement pose une échéance comme
+    n'importe quel autre palier — is_active bascule EN PLUS, une bonne fois
+    pour toutes (voir Restaurant.is_active/is_usable)."""
+    restaurant = create_restaurant(
+        slug="settle-essentiel-activates", subscription_tier=SubscriptionTier.ESSENTIEL, is_active=False
+    )
+    restaurant.subscription_payment_ref = "ref-essentiel"
+    restaurant.subscription_pending_tier = SubscriptionTier.ESSENTIEL
+    db_session.add(restaurant)
+    db_session.commit()
+    db_session.refresh(restaurant)
+    monkeypatch.setattr(
+        subscription_payments_module, "get_konnect_payment",
+        lambda ref: KonnectPayment(id=ref, status="completed", amount=50_000, reached_amount=50_000),
+    )
+
+    result = settle_subscription_payment(db_session, restaurant.id)
+
+    assert result == "active"
+    db_session.refresh(restaurant)
+    assert restaurant.is_active is True
+    assert restaurant.subscription_tier == SubscriptionTier.ESSENTIEL
+    assert as_utc(restaurant.subscription_period_end) > datetime.now(timezone.utc) + timedelta(
+        days=SUBSCRIPTION_DURATION_DAYS - 1
+    )
+    assert restaurant.subscription_payment_ref is None
+    assert restaurant.subscription_pending_tier is None
+
+
+def test_is_usable_reverts_to_false_once_an_essentiel_period_expires():
+    """Le cœur de la correction du 2026-08-20 : contrairement à Pro/Business
+    qui retombent sur Essentiel gratuit à l'expiration, Essentiel est le
+    palier plancher — sans lui, le compte redevient bloqué, pas gratuit."""
+    restaurant = Restaurant(
+        name="x", slug="y", subscription_tier=SubscriptionTier.ESSENTIEL, is_active=True,
+        subscription_period_end=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    assert restaurant.is_usable is False
+
+
+def test_is_usable_true_while_essentiel_period_is_still_future():
+    restaurant = Restaurant(
+        name="x", slug="y", subscription_tier=SubscriptionTier.ESSENTIEL, is_active=True,
+        subscription_period_end=datetime.now(timezone.utc) + timedelta(days=1),
+    )
+    assert restaurant.is_usable is True
+
+
+def test_is_usable_false_when_never_activated_even_without_period_end():
+    """Un restaurant tout juste inscrit (is_active=False, period_end=None par
+    défaut) ne doit jamais être confondu avec un pilote fixé à la main
+    (is_active=True, period_end=None = sans expiration) — voir is_usable."""
+    restaurant = Restaurant(name="x", slug="y", is_active=False, subscription_period_end=None)
+    assert restaurant.is_usable is False
+
+
+def test_is_usable_promo_gratuit_overrides_an_expired_or_missing_period():
+    restaurant = Restaurant(
+        name="x", slug="y", is_active=False, promo_gratuit=True, subscription_period_end=None,
+    )
+    assert restaurant.is_usable is True
+
+
+def test_a_staff_route_is_blocked_again_once_the_essentiel_period_expires(client, db_session):
+    """Bout en bout : une route staff ordinaire (pas juste is_usable en
+    isolation) refuse un restaurant dont l'abonnement Essentiel a expiré."""
+    restaurant = create_restaurant(
+        slug="essentiel-expiry-blocks-route",
+        subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=True,
+    )
+    restaurant.subscription_period_end = datetime.now(timezone.utc) - timedelta(days=1)
+    db_session.add(restaurant)
+    db_session.commit()
+    headers = _manager_headers(restaurant.id)
+
+    res = client.get(f"/api/v1/tables/by-restaurant/{restaurant.id}", headers=headers)
+
+    assert res.status_code == 402
+    assert res.json()["detail"]["code"] == "PAYMENT_REQUIRED"
+
+
 def test_settle_returns_error_on_konnect_fetch_failure(db_session, monkeypatch):
     restaurant = _pending_konnect_restaurant(db_session, slug="settle-fetch-error")
 
@@ -300,3 +442,47 @@ def test_check_endpoint_settles_a_completed_pending_payment(client, db_session, 
 
     assert res.status_code == 200
     assert res.json()["subscription_tier"] == "pro"
+
+
+# --- Parcours client public (QR) : même blocage, jamais distinguable -------
+
+
+def _table_for(db_session, restaurant_id: int) -> Table:
+    table = Table(restaurant_id=restaurant_id, label="Table 1")
+    db_session.add(table)
+    db_session.commit()
+    db_session.refresh(table)
+    return table
+
+
+def test_public_qr_surface_404s_like_an_unknown_token_when_restaurant_inactive(client, db_session):
+    """get_table_by_qr_token (tables/service.py) est le point d'entrée unique
+    du parcours client (menu, commande, appel serveur, fiche restaurant,
+    fidélité) — un seul test ici suffit à couvrir les cinq, voir la docstring
+    de cette fonction. Même 404 INVALID_TABLE_CODE qu'un token inconnu : ne
+    jamais dire à un client qu'un établissement existe mais n'a pas payé."""
+    restaurant = create_restaurant(slug="public-qr-inactive", is_active=False)
+    table = _table_for(db_session, restaurant.id)
+
+    res = client.get(f"/api/v1/restaurants/by-token/{table.qr_token}")
+
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "INVALID_TABLE_CODE"
+
+
+def test_public_qr_surface_works_again_once_active(client, db_session):
+    restaurant = create_restaurant(slug="public-qr-active", is_active=True)
+    table = _table_for(db_session, restaurant.id)
+
+    res = client.get(f"/api/v1/restaurants/by-token/{table.qr_token}")
+
+    assert res.status_code == 200
+
+
+def test_public_qr_surface_works_with_promo_even_if_never_paid(client, db_session):
+    restaurant = create_restaurant(slug="public-qr-promo", is_active=False, promo_gratuit=True)
+    table = _table_for(db_session, restaurant.id)
+
+    res = client.get(f"/api/v1/restaurants/by-token/{table.qr_token}")
+
+    assert res.status_code == 200

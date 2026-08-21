@@ -30,6 +30,7 @@ import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPl
 import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
 import UpgradeModal from "@/components/UpgradeModal";
+import ActivationRequired from "@/components/ActivationRequired";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -190,9 +191,22 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const [menu, rest, tableList, teamList, suggested, dayStats] = await Promise.all([
+      // La fiche restaurant d'abord, séparément : contrairement au reste
+      // (voir require_active_restaurant côté backend), elle reste lisible
+      // même si le compte n'est pas encore activé — c'est elle qui permet de
+      // savoir s'il faut afficher l'écran de paiement (2026-08-20) plutôt que
+      // le dashboard. Inutile de lancer les autres requêtes (menu, tables,
+      // équipe, stats) si elles vont toutes échouer en 402.
+      const rest = await api.getRestaurant(restaurantId);
+      setRestaurant(rest);
+      setRamadanEnabled(rest.ramadan_mode_enabled);
+      setIftarInput(isoToLocalInput(rest.iftar_time));
+      setCafeModeEnabled(rest.cafe_mode_enabled);
+      setKitchenSoundEnabled(rest.kitchen_sound_enabled);
+      if (!rest.is_active && !rest.promo_gratuit) return;
+
+      const [menu, tableList, teamList, suggested, dayStats] = await Promise.all([
         api.getMenu(restaurantId),
-        api.getRestaurant(restaurantId),
         api.listTables(restaurantId),
         api.listStaff(restaurantId),
         api.getMenuSuggestions(restaurantId),
@@ -203,11 +217,6 @@ export default function DashboardPage() {
       setDayStats(dayStats);
       setItems(menu);
       setDrafts(Object.fromEntries(menu.map((m) => [m.id, itemToDraft(m)])));
-      setRestaurant(rest);
-      setRamadanEnabled(rest.ramadan_mode_enabled);
-      setIftarInput(isoToLocalInput(rest.iftar_time));
-      setCafeModeEnabled(rest.cafe_mode_enabled);
-      setKitchenSoundEnabled(rest.kitchen_sound_enabled);
       setTables(tableList);
       setTableDrafts(Object.fromEntries(tableList.map((t) => [t.id, tableToDraft(t)])));
       setTeam(teamList);
@@ -629,6 +638,16 @@ export default function DashboardPage() {
         <Skeleton className="h-32 w-full" />
       </div>
     );
+  }
+
+  // Écran bloquant, jamais une modale dismissible (contrairement à
+  // UpgradeModal) : Essentiel n'est jamais gratuit, y compris pour un compte
+  // inscrit en self-service (2026-08-20, voir CLAUDE.md). Gardé par
+  // `restaurant &&` : ne rien afficher tant que la fiche restaurant n'a pas
+  // fini de charger (voir load()), pour ne jamais flasher cet écran avant le
+  // dashboard normal chez un compte déjà actif.
+  if (restaurant && !restaurant.is_active && !restaurant.promo_gratuit) {
+    return <ActivationRequired restaurant={restaurant} onActivated={(updated) => setRestaurant(updated)} />;
   }
 
   const filteredItems = items.filter((item) => {

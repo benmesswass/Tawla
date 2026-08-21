@@ -74,6 +74,11 @@ export type Restaurant = RestaurantPublic & {
   // n'est jamais renvoyée, seulement ces deux champs.
   konnect_configured: boolean;
   konnect_wallet_id: string | null;
+  // Activation du compte (2026-08-20) — Essentiel n'est jamais gratuit, voir
+  // is_usable côté backend (tenants/models.py). Le dashboard bloque tout tant
+  // que ni l'un ni l'autre n'est vrai.
+  is_active: boolean;
+  promo_gratuit: boolean;
 };
 
 /**
@@ -86,6 +91,19 @@ export type SubscriptionCheckoutResult = {
   mode: "demo" | "konnect";
   restaurant: Restaurant | null;
   pay_url: string | null;
+};
+
+/** Vue admin d'un restaurant (écran /admin, 2026-08-20) — jamais servie
+ * ailleurs que sous le secret admin, voir lib/adminAuth.ts. */
+export type AdminRestaurant = {
+  id: number;
+  name: string;
+  slug: string;
+  created_at: string;
+  subscription_tier: SubscriptionTier;
+  subscription_period_end: string | null;
+  is_active: boolean;
+  promo_gratuit: boolean;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -618,6 +636,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify(subscription),
       headers: orderHeaders(orderToken),
+    }),
+  // Écran admin (2026-08-20) : secret partagé en en-tête, jamais le JWT staff
+  // (authHeaders()) — voir backend app/modules/admin/router.py::require_admin.
+  adminListRestaurants: (secret: string) =>
+    request<AdminRestaurant[]>("/api/v1/admin/restaurants", { headers: { "X-Admin-Secret": secret } }),
+  adminSetPromo: (secret: string, restaurantId: number, promoGratuit: boolean) =>
+    request<AdminRestaurant>(`/api/v1/admin/restaurants/${restaurantId}/promo`, {
+      method: "PATCH",
+      body: JSON.stringify({ promo_gratuit: promoGratuit }),
+      headers: { "X-Admin-Secret": secret },
     }),
 };
 

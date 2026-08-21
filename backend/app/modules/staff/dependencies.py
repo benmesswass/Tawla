@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import decode_access_token
+from app.modules.tenants.models import Restaurant
 
 
 def get_current_staff(
@@ -38,8 +39,51 @@ def get_current_staff(
     return staff
 
 
+def require_active_restaurant(
+    staff: Staff = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> Staff:
+    """
+    Toute route qui représente un USAGE réel de Tawla (gérer la carte, les
+    tables, prendre des commandes, voir les stats...) en dépend — jamais
+    `get_current_staff` seul pour ça. Volontairement PAS fusionné dans
+    `get_current_staff` : le manager d'un restaurant pas encore activé doit
+    quand même pouvoir se connecter, lire sa fiche restaurant et payer —
+    seules ces routes-là (tenants `GET /{id}`, `/subscription/*`, `/auth/me`)
+    restent sur `get_current_staff` nu, une allowlist volontaire (voir
+    CLAUDE.md, 2026-08-20).
+    """
+    restaurant = db.get(Restaurant, staff.restaurant_id)
+    if not restaurant or not restaurant.is_usable:
+        raise HTTPException(
+            status_code=402,
+            detail={"code": "PAYMENT_REQUIRED", "message": "restaurant subscription is not active"},
+        )
+    return staff
+
+
 def require_role(*roles: StaffRole):
-    """Ex: Depends(require_role(StaffRole.MANAGER)) — 403 si le rôle ne correspond pas."""
+    """Ex: Depends(require_role(StaffRole.MANAGER)) — 403 si le rôle ne correspond pas.
+    Passe par `require_active_restaurant` (pas `get_current_staff` nu) : un
+    restaurant non activé n'a accès à aucune route protégée par rôle."""
+
+    def _dependency(staff: Staff = Depends(require_active_restaurant)) -> Staff:
+        if staff.role not in roles:
+            raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "insufficient role"})
+        return staff
+
+    return _dependency
+
+
+def require_role_regardless_of_activation(*roles: StaffRole):
+    """
+    Comme `require_role`, mais SANS passer par `require_active_restaurant` —
+    exclusivement pour `tenants/router.py::start_subscription_checkout` et
+    `check_subscription_payment` : un manager doit pouvoir payer/vérifier son
+    paiement précisément PARCE QUE son restaurant n'est pas encore actif. Ne
+    jamais réutiliser ailleurs — toute autre route « manager » doit passer
+    par `require_role` (voir CLAUDE.md, 2026-08-20).
+    """
 
     def _dependency(staff: Staff = Depends(get_current_staff)) -> Staff:
         if staff.role not in roles:

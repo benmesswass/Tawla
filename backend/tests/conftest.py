@@ -70,7 +70,11 @@ def db_session():
 
 
 def create_restaurant(
-    name: str = "Resto de test", slug: str | None = None, subscription_tier: SubscriptionTier = SubscriptionTier.BUSINESS
+    name: str = "Resto de test",
+    slug: str | None = None,
+    subscription_tier: SubscriptionTier = SubscriptionTier.BUSINESS,
+    is_active: bool = True,
+    promo_gratuit: bool = False,
 ) -> Restaurant:
     """
     Crée un restaurant directement en base. Remplace l'ancien
@@ -82,10 +86,19 @@ def create_restaurant(
     Palier Business par défaut : la quasi-totalité des tests exercent le
     produit, pas le gating par palier (offre à trois paliers, 2026-08-18) —
     les tests qui testent justement ce gating passent leur propre palier.
+
+    `is_active=True`/`promo_gratuit=False` par défaut, comme le modèle (voir
+    Restaurant.is_active/promo_gratuit) : la quasi-totalité des tests
+    exercent le produit, pas l'activation du compte (2026-08-20) — les tests
+    qui testent justement l'activation passent leurs propres valeurs.
     """
     db = _TestingSessionLocal()
     restaurant = Restaurant(
-        name=name, slug=slug or f"resto-{uuid.uuid4().hex[:8]}", subscription_tier=subscription_tier
+        name=name,
+        slug=slug or f"resto-{uuid.uuid4().hex[:8]}",
+        subscription_tier=subscription_tier,
+        is_active=is_active,
+        promo_gratuit=promo_gratuit,
     )
     db.add(restaurant)
     db.commit()

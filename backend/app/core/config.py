@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
+    # Secret unique de l'écran admin (2026-08-20, voir app/modules/admin/) —
+    # PAS un compte, juste un mot de passe partagé que Wassim seul détient
+    # (YAGNI : aucun rôle/compte admin dans Tawla aujourd'hui). Vide par
+    # défaut = admin_secret fermé (fail-closed, voir require_admin) : une
+    # valeur vide ne doit jamais se comparer "avec succès" à un en-tête vide.
+    admin_secret: str = ""
+
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:

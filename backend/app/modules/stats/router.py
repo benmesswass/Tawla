@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.subscription import require_tier
-from app.modules.staff.dependencies import get_current_staff, require_role
+from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.stats import schemas, service
 from app.modules.tenants.models import SubscriptionTier
@@ -24,7 +24,7 @@ _KITCHEN_OR_MANAGER = require_role(StaffRole.KITCHEN, StaffRole.MANAGER)
 async def my_shift(
     date: date_type | None = None,
     db: Session = Depends(get_db),
-    staff: Staff = Depends(get_current_staff),
+    staff: Staff = Depends(require_active_restaurant),
 ):
     """Sa soirée à lui. Ouverte à tous les rôles : le poste chaud prend rarement
     des commandes, l'écran doit répondre zéro plutôt que refuser l'accès."""

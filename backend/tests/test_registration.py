@@ -1,5 +1,7 @@
 import uuid
 
+from app.modules.tenants.models import Restaurant
+
 _PASSWORD = "onboard1234"
 
 
@@ -20,6 +22,29 @@ def test_register_creates_restaurant_and_manager(client):
     assert body["staff"]["email"] == email
     assert body["staff"]["role"] == "manager"
     assert body["staff"]["restaurant_id"]
+
+
+def test_register_creates_an_inactive_restaurant(client, db_session):
+    """Essentiel n'est jamais gratuit (2026-08-20, voir CLAUDE.md) : un
+    établissement inscrit en self-service ne doit démarrer utilisable sous
+    aucun prétexte, contrairement à un restaurant onboardé par
+    setup_restaurant.py (pilote facturé à la main, is_active=True par
+    défaut — voir Restaurant.is_active)."""
+    res = client.post(
+        "/api/v1/auth/register",
+        json={
+            "restaurant_name": "Resto Inactif",
+            "manager_name": "Manager",
+            "email": f"owner-inactive-{uuid.uuid4().hex[:8]}@test.local",
+            "password": _PASSWORD,
+        },
+    )
+    assert res.status_code == 201
+    restaurant_id = res.json()["staff"]["restaurant_id"]
+
+    restaurant = db_session.get(Restaurant, restaurant_id)
+    assert restaurant.is_active is False
+    assert restaurant.is_usable is False
 
 
 def test_register_derives_slug_from_restaurant_name(client):
@@ -121,7 +146,7 @@ def test_newly_registered_manager_can_log_in(client):
     assert res.json()["staff"]["role"] == "manager"
 
 
-def test_registered_manager_is_isolated_to_their_own_restaurant(client):
+def test_registered_manager_is_isolated_to_their_own_restaurant(client, db_session):
     res_a = client.post(
         "/api/v1/auth/register",
         json={
@@ -141,7 +166,16 @@ def test_registered_manager_is_isolated_to_their_own_restaurant(client):
         },
     )
     token_a = res_a.json()["access_token"]
+    restaurant_a_id = res_a.json()["staff"]["restaurant_id"]
     restaurant_b_id = res_b.json()["staff"]["restaurant_id"]
+
+    # Ce test vérifie l'isolation multi-tenant, pas l'activation (2026-08-20) :
+    # un restaurant A pas encore activé se ferait bloquer par
+    # require_active_restaurant avant même d'atteindre le contrôle
+    # cross-tenant qui nous intéresse ici.
+    restaurant_a = db_session.get(Restaurant, restaurant_a_id)
+    restaurant_a.is_active = True
+    db_session.commit()
 
     res = client.patch(
         f"/api/v1/restaurants/{restaurant_b_id}/cafe-mode",

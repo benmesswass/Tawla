@@ -8,20 +8,22 @@ Les tests couvrent les vrais risques : isolation entre restaurants, escalade de
 rôle, et le verrouillage définitif d'un restaurant qui perdrait son dernier
 manager actif.
 """
-from tests.conftest import auth_headers, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.modules.staff.models import StaffRole
 
 
 def _restaurant(client, slug: str = "resto-equipe") -> int:
-    response = client.post("/api/v1/auth/register", json={
-        "restaurant_name": slug,
-        "manager_name": "Manager",
-        "email": f"{slug}@test.local",
-        "password": "manager-pass-1234",
-    })
-    assert response.status_code == 201
-    return response.json()["staff"]["restaurant_id"]
+    """
+    Restaurant directement en base (voir create_restaurant), pas via
+    `/auth/register` : ce module teste la gestion d'équipe, pas l'inscription
+    elle-même, et un restaurant inscrit en self-service démarre désormais
+    inactif tant qu'il n'a pas payé (2026-08-20, voir CLAUDE.md / Restaurant.
+    is_active) — passer par `/register` ici bloquerait chaque appel staff
+    suivant sur `PAYMENT_REQUIRED` sans rapport avec ce que ces tests vérifient.
+    `client` reste dans la signature pour ne pas toucher tous les appelants.
+    """
+    return create_restaurant(slug=slug).id
 
 
 def test_manager_creates_waiter_with_generated_password(client):

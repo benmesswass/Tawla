@@ -9,6 +9,7 @@ from app.core import model_registry  # noqa: F401 — enregistre tous les modèl
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_logger
+from app.modules.admin.router import router as admin_router
 from app.modules.loyalty.router import router as loyalty_router
 from app.modules.menu.router import router as menu_router
 from app.modules.notifications.router import router as notifications_router
@@ -62,6 +63,7 @@ app.include_router(stats_router)
 app.include_router(notifications_router)
 app.include_router(waiter_calls_router)
 app.include_router(loyalty_router)
+app.include_router(admin_router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])

@@ -61,6 +61,10 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
         )
         return "error"
 
+    # Essentiel EST un abonnement de 30 jours comme Pro/Business (2026-08-20,
+    # voir CLAUDE.md) — même calcul de période pour les trois. `is_active`
+    # passe à `True` une bonne fois pour toutes (voir Restaurant.is_active/
+    # is_usable) ; c'est `subscription_period_end` qui porte le renouvellement.
     now = datetime.now(timezone.utc)
     base = (
         as_utc(restaurant.subscription_period_end)
@@ -78,6 +82,7 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
             {
                 "subscription_tier": pending_tier,
                 "subscription_period_end": new_period_end,
+                "is_active": True,
                 "subscription_payment_ref": None,
                 "subscription_pending_tier": None,
             }

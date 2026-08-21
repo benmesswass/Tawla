@@ -50,6 +50,13 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     immédiatement (même paire access_token/staff que /login) — pas d'étape
     de vérification d'e-mail (aucun service d'envoi en place, cohérent avec
     le reste du projet qui n'a aucune dépendance payante obligatoire).
+
+    `is_active=False` explicitement (2026-08-20) : Essentiel n'est jamais
+    gratuit, y compris passé par ce chemin-là — voir Restaurant.is_active et
+    CLAUDE.md. Le manager verra l'écran d'activation (50 DT) au premier
+    chargement du dashboard tant qu'il n'a pas payé ou qu'aucune dérogation
+    promo n'est posée (écran admin). Les restaurants créés par
+    setup_restaurant.py (pilotes facturés à la main) gardent le défaut `True`.
     """
     email = payload.email.lower()
     if db.query(Staff).filter(Staff.email == email).first():
@@ -57,7 +64,7 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
             status_code=409, detail={"code": "EMAIL_EXISTS", "message": "an account already exists with this email"}
         )
 
-    restaurant = Restaurant(name=payload.restaurant_name, slug=_unique_slug(db, payload.restaurant_name))
+    restaurant = Restaurant(name=payload.restaurant_name, slug=_unique_slug(db, payload.restaurant_name), is_active=False)
     db.add(restaurant)
     db.flush()
 
