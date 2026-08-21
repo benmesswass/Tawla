@@ -26,6 +26,17 @@ class AdminLoginResponse(BaseModel):
     admin: PlatformAdminOut
 
 
+class AdminCreateIn(BaseModel):
+    """Voir platform_admin/router.py::create_admin — `secret` doit égaler
+    `ADMIN_CREATION_SECRET`, jamais vérifié via un token JWT existant :
+    c'est justement ce qui permet de créer le tout premier compte."""
+
+    secret: str
+    email: str
+    name: str
+    password: str = Field(min_length=8)
+
+
 class RestaurantSummary(BaseModel):
     """Une ligne par restaurant client — de quoi voir en un coup d'œil lequel
     est réellement utilisé, pas seulement inscrit ou payant."""
@@ -46,17 +57,28 @@ class RestaurantSummary(BaseModel):
     # si sa recette du mois dernier avait l'air bonne.
     dashboard_views_last_7d: int
     # Activation et offre de lancement (2026-08-20/21) — de quoi voir d'un
-    # coup d'œil qui est bloqué, qui bénéficie d'une dérogation manuelle, et
+    # coup d'œil qui est bloqué, qui bénéficie d'une promo personnalisée, et
     # qui n'a encore jamais payé pour de vrai (voir Restaurant.is_active/
-    # promo_gratuit/launch_promo_discount_percent/has_paid_for_subscription).
+    # custom_promo_discount_percent/launch_promo_discount_percent/
+    # has_paid_for_subscription).
     is_active: bool
-    promo_gratuit: bool
+    custom_promo_discount_percent: int | None
+    custom_promo_ends_at: UtcDatetime | None
     launch_promo_discount_percent: int | None
     has_paid_for_subscription: bool
 
 
 class PromoUpdateIn(BaseModel):
-    promo_gratuit: bool
+    """`duration_days = 0` retire la promo en cours — voir
+    platform_admin/router.py::set_restaurant_promo."""
+
+    discount_percent: int = Field(ge=0, le=100)
+    duration_days: int = Field(ge=0)
+
+
+class PromoUpdateOut(BaseModel):
+    custom_promo_discount_percent: int | None
+    custom_promo_ends_at: UtcDatetime | None
 
 
 class LaunchCampaignOut(BaseModel):

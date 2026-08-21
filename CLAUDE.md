@@ -106,8 +106,14 @@ cd backend && alembic upgrade head
 
 # Compte du dashboard plateforme (vue admin cross-tenant, /admin côté
 # frontend) — un seul canal de création, jamais une route d'inscription
-# publique. Mot de passe demandé en interactif, jamais en argument.
-cd backend && python scripts/create_platform_admin.py --email wassim@tawla.tn --name Wassim
+# publique : POST /api/v1/platform-admin/admins, verrouillé par
+# ADMIN_CREATION_SECRET (backend/.env, jamais commité, connu de Wassim
+# seul — voir app/modules/platform_admin/router.py::create_admin).
+# Idempotent par e-mail : rejouer met à jour le mot de passe/nom/réactive
+# plutôt que d'en créer un second.
+curl -X POST http://localhost:8000/api/v1/platform-admin/admins \
+  -H "Content-Type: application/json" \
+  -d '{"secret": "<ADMIN_CREATION_SECRET>", "email": "wassim@tawla.tn", "name": "Wassim", "password": "<mot-de-passe>"}'
 ```
 
 Comptes démo (fixes, mot de passe `tawla2026`) : `manager@tawla.tn` (manager),

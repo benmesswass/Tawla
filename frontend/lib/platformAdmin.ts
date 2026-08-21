@@ -52,11 +52,13 @@ export type RestaurantSummary = {
   revenue_tnd: number;
   last_order_at: string | null;
   dashboard_views_last_7d: number;
-  // Activation et offre de lancement (2026-08-20/21) — voir la section Promo
-  // de cette page et backend Restaurant.is_active/promo_gratuit/
-  // launch_promo_discount_percent/has_paid_for_subscription.
+  // Activation, promo personnalisée et offre de lancement (2026-08-20/21bis)
+  // — voir la section Promo de cette page et backend Restaurant.is_active/
+  // custom_promo_discount_percent/launch_promo_discount_percent/
+  // has_paid_for_subscription.
   is_active: boolean;
-  promo_gratuit: boolean;
+  custom_promo_discount_percent: number | null;
+  custom_promo_ends_at: string | null;
   launch_promo_discount_percent: number | null;
   has_paid_for_subscription: boolean;
 };
@@ -148,9 +150,10 @@ export const platformAdminApi = {
       method: "PUT",
       body: JSON.stringify({ discount_percent: discountPercent, max_grants: maxGrants }),
     }),
-  setRestaurantPromo: (restaurantId: number, promoGratuit: boolean) =>
-    request<{ promo_gratuit: boolean }>(`/api/v1/platform-admin/restaurants/${restaurantId}/promo`, {
-      method: "PUT",
-      body: JSON.stringify({ promo_gratuit: promoGratuit }),
-    }),
+  // `durationDays = 0` retire la promo en cours.
+  setRestaurantPromo: (restaurantId: number, discountPercent: number, durationDays: number) =>
+    request<{ custom_promo_discount_percent: number | null; custom_promo_ends_at: string | null }>(
+      `/api/v1/platform-admin/restaurants/${restaurantId}/promo`,
+      { method: "PUT", body: JSON.stringify({ discount_percent: discountPercent, duration_days: durationDays }) }
+    ),
 };

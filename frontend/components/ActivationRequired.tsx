@@ -12,10 +12,9 @@ import TawlaMark from "@/components/brand/TawlaMark";
 
 /**
  * Écran BLOQUANT (pas une modale dismissible comme UpgradeModal) affiché à la
- * place du dashboard tant que `Restaurant.is_active`/`promo_gratuit` sont
- * tous les deux faux (2026-08-20) : Essentiel n'est jamais gratuit, y
- * compris pour un compte inscrit en self-service (voir CLAUDE.md et
- * backend app/modules/staff/router.py::register).
+ * place du dashboard tant que `Restaurant.is_active` est faux (2026-08-20) :
+ * Essentiel n'est jamais gratuit, y compris pour un compte inscrit en
+ * self-service (voir CLAUDE.md et backend app/modules/staff/router.py::register).
  */
 export default function ActivationRequired({
   restaurant,

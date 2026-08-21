@@ -14,8 +14,9 @@ function daysRemaining(periodEnd: string): number {
 /**
  * Rappel de paiement (offre de lancement, 2026-08-21) : affiché à CHAQUE
  * connexion tant que le restaurant profite d'un accès actif sans avoir
- * jamais payé (`is_active`/`promo_gratuit` vrai, `has_paid_for_subscription`
- * faux) — jamais mémorisé en local, contrairement à une modale qu'on ferme
+ * jamais payé (`has_paid_for_subscription` faux, que l'activation vienne de
+ * l'offre de lancement ou d'une promo personnalisée posée par l'admin) —
+ * jamais mémorisé en local, contrairement à une modale qu'on ferme
  * une fois pour toutes : Wassim veut un rappel flagrant, pas discret. Le
  * bouton payer doit fonctionner MÊME pendant le mois gratuit — voir
  * start_subscription_checkout, qui autorise désormais Essentiel à tout

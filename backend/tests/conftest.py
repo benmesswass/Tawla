@@ -75,7 +75,8 @@ def create_restaurant(
     subscription_tier: SubscriptionTier = SubscriptionTier.BUSINESS,
     subscription_period_end=None,
     is_active: bool = True,
-    promo_gratuit: bool = False,
+    custom_promo_discount_percent: int | None = None,
+    custom_promo_ends_at=None,
     launch_promo_discount_percent: int | None = None,
     has_paid_for_subscription: bool = True,
 ) -> Restaurant:
@@ -94,7 +95,7 @@ def create_restaurant(
     expiration) — les tests qui distinguent un palier payé en ligne d'un
     pilote gratuit (dashboard plateforme) passent leur propre échéance. Tous
     les autres défauts suivent le modèle (voir Restaurant.is_active/
-    promo_gratuit/launch_promo_discount_percent/has_paid_for_subscription) :
+    custom_promo_discount_percent/launch_promo_discount_percent/has_paid_for_subscription) :
     la quasi-totalité des tests exercent le produit, pas l'activation ou
     l'offre de lancement (2026-08-20/21) — les tests qui testent justement ça
     passent leurs propres valeurs.
@@ -106,7 +107,8 @@ def create_restaurant(
         subscription_tier=subscription_tier,
         subscription_period_end=subscription_period_end,
         is_active=is_active,
-        promo_gratuit=promo_gratuit,
+        custom_promo_discount_percent=custom_promo_discount_percent,
+        custom_promo_ends_at=custom_promo_ends_at,
         launch_promo_discount_percent=launch_promo_discount_percent,
         has_paid_for_subscription=has_paid_for_subscription,
     )

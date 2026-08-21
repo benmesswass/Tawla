@@ -67,6 +67,7 @@ export default function PlatformAdminPage() {
   const [maxGrantsInput, setMaxGrantsInput] = useState("");
   const [savingCampaign, setSavingCampaign] = useState(false);
   const [savingPromoId, setSavingPromoId] = useState<number | null>(null);
+  const [promoDrafts, setPromoDrafts] = useState<Record<number, { discount: string; days: string }>>({});
   const [error, setError] = useState<string | null>(null);
   const [checkedAuth, setCheckedAuth] = useState(false);
 
@@ -118,17 +119,26 @@ export default function PlatformAdminPage() {
     }
   }
 
-  async function handleTogglePromo(restaurantId: number, next: boolean) {
+  async function handleSetPromo(restaurantId: number, discountPercent: number, durationDays: number) {
     setSavingPromoId(restaurantId);
     setError(null);
     try {
-      await platformAdminApi.setRestaurantPromo(restaurantId, next);
+      await platformAdminApi.setRestaurantPromo(restaurantId, discountPercent, durationDays);
       await load();
     } catch {
       setError(errorMessage());
     } finally {
       setSavingPromoId(null);
     }
+  }
+
+  function handleGrantPromo(restaurantId: number) {
+    const draft = promoDrafts[restaurantId];
+    const discount = Number(draft?.discount ?? "100");
+    const days = Number(draft?.days ?? "30");
+    if (!Number.isInteger(discount) || discount < 0 || discount > 100) return;
+    if (!Number.isInteger(days) || days < 1) return;
+    handleSetPromo(restaurantId, discount, days);
   }
 
   function handleLogout() {
@@ -334,8 +344,8 @@ export default function PlatformAdminPage() {
                         </td>
                         <td className="py-2 pr-3">
                           <div className="flex flex-wrap gap-1">
-                            <Badge tone={r.is_active || r.promo_gratuit ? "success" : "danger"}>
-                              {r.is_active || r.promo_gratuit ? "Actif" : "Bloqué"}
+                            <Badge tone={r.is_active ? "success" : "danger"}>
+                              {r.is_active ? "Actif" : "Bloqué"}
                             </Badge>
                             {!r.has_paid_for_subscription && <Badge tone="info">Jamais payé</Badge>}
                           </div>
@@ -352,14 +362,62 @@ export default function PlatformAdminPage() {
                           )}
                         </td>
                         <td className="py-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={savingPromoId === r.id}
-                            onClick={() => handleTogglePromo(r.id, !r.promo_gratuit)}
-                          >
-                            {r.promo_gratuit ? "Retirer" : "Offrir"}
-                          </Button>
+                          {r.custom_promo_discount_percent !== null && r.custom_promo_ends_at ? (
+                            <div className="flex items-center gap-2">
+                              <Badge tone="info">
+                                {r.custom_promo_discount_percent}% jusqu&apos;au {formatDate(r.custom_promo_ends_at)}
+                              </Badge>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                disabled={savingPromoId === r.id}
+                                onClick={() => handleSetPromo(r.id, 0, 0)}
+                              >
+                                Retirer
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                aria-label={`Réduction (%) — ${r.name}`}
+                                className="w-14 rounded px-1 py-0.5 text-sm"
+                                style={{ border: "1px solid var(--line)" }}
+                                value={promoDrafts[r.id]?.discount ?? "100"}
+                                onChange={(e) =>
+                                  setPromoDrafts((d) => ({
+                                    ...d,
+                                    [r.id]: { discount: e.target.value, days: d[r.id]?.days ?? "30" },
+                                  }))
+                                }
+                              />
+                              <span className="text-xs" style={{ color: "var(--ink-soft)" }}>%</span>
+                              <input
+                                type="number"
+                                min={1}
+                                aria-label={`Durée (jours) — ${r.name}`}
+                                className="w-14 rounded px-1 py-0.5 text-sm"
+                                style={{ border: "1px solid var(--line)" }}
+                                value={promoDrafts[r.id]?.days ?? "30"}
+                                onChange={(e) =>
+                                  setPromoDrafts((d) => ({
+                                    ...d,
+                                    [r.id]: { discount: d[r.id]?.discount ?? "100", days: e.target.value },
+                                  }))
+                                }
+                              />
+                              <span className="text-xs" style={{ color: "var(--ink-soft)" }}>j</span>
+                              <Button
+                                size="sm"
+                                disabled={savingPromoId === r.id}
+                                onClick={() => handleGrantPromo(r.id)}
+                              >
+                                Offrir
+                              </Button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

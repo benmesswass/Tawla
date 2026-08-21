@@ -11,6 +11,9 @@ import pytest
 
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
+from app.core.config import settings
+from app.core.dates import as_utc
+from app.core.subscription import tier_price_tnd
 from app.modules.menu.models import MenuItem
 from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentStatus
 from app.modules.platform_admin import security as admin_security
@@ -99,6 +102,52 @@ def test_login_email_is_case_insensitive(client, db_session):
     admin = _create_admin(db_session, email="wassim@tawla.tn")
     res = client.post("/api/v1/platform-admin/login", json={"email": "Wassim@Tawla.tn", "password": _PASSWORD})
     assert res.status_code == 200
+
+
+# --- Création d'un compte admin (2026-08-21ter) -----------------------------
+# Remplace scripts/create_platform_admin.py : plus besoin d'un accès shell au
+# serveur, mais toujours aucune route d'inscription publique — verrouillé par
+# ADMIN_CREATION_SECRET (settings), jamais un token admin existant.
+
+
+def test_create_admin_rejects_wrong_secret(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "admin_creation_secret", "le-vrai-secret")
+    res = client.post(
+        "/api/v1/platform-admin/admins",
+        json={"secret": "un-mauvais-secret", "email": "intrus@tawla.tn", "name": "Intrus", "password": "peu-importe"},
+    )
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "INVALID_SECRET"
+    assert db_session.query(PlatformAdmin).filter(PlatformAdmin.email == "intrus@tawla.tn").first() is None
+
+
+def test_create_admin_succeeds_with_correct_secret(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "admin_creation_secret", "le-vrai-secret")
+    res = client.post(
+        "/api/v1/platform-admin/admins",
+        json={"secret": "le-vrai-secret", "email": "wassim@tawla.tn", "name": "Wassim", "password": _PASSWORD},
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["email"] == "wassim@tawla.tn"
+    assert "password" not in body and "password_hash" not in body
+
+    login_res = client.post(
+        "/api/v1/platform-admin/login", json={"email": "wassim@tawla.tn", "password": _PASSWORD}
+    )
+    assert login_res.status_code == 200
+
+
+def test_create_admin_is_idempotent_by_email_never_creates_a_second_row(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "admin_creation_secret", "le-vrai-secret")
+    payload = {"secret": "le-vrai-secret", "email": "wassim@tawla.tn", "name": "Wassim", "password": _PASSWORD}
+
+    client.post("/api/v1/platform-admin/admins", json=payload)
+    res2 = client.post("/api/v1/platform-admin/admins", json={**payload, "name": "Wassim Ben Messaoud"})
+
+    assert res2.status_code == 201
+    assert res2.json()["name"] == "Wassim Ben Messaoud"
+    assert db_session.query(PlatformAdmin).filter(PlatformAdmin.email == "wassim@tawla.tn").count() == 1
 
 
 # --- Protection de /overview et confusion de principal ---------------------
@@ -438,12 +487,15 @@ def test_set_launch_campaign_does_not_change_a_restaurant_already_registered(cli
     assert restaurant.launch_promo_discount_percent == 100
 
 
-# --- Dérogation promo au cas par cas (2026-08-20) ----------------------------
+# --- Promo personnalisée au cas par cas (2026-08-21bis) ----------------------
 
 
 def test_set_restaurant_promo_requires_admin_token(client, db_session):
     restaurant = create_restaurant(slug="promo-toggle-noauth")
-    res = client.put(f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo", json={"promo_gratuit": True})
+    res = client.put(
+        f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo",
+        json={"discount_percent": 100, "duration_days": 30},
+    )
     assert res.status_code == 401
 
 
@@ -451,40 +503,81 @@ def test_set_restaurant_promo_404s_on_unknown_restaurant(client, db_session):
     admin = _create_admin(db_session)
     res = client.put(
         "/api/v1/platform-admin/restaurants/999999/promo",
-        json={"promo_gratuit": True},
+        json={"discount_percent": 100, "duration_days": 30},
         headers=_admin_headers(admin),
     )
     assert res.status_code == 404
     assert res.json()["detail"]["code"] == "RESTAURANT_NOT_FOUND"
 
 
-def test_set_restaurant_promo_toggles_the_override(client, db_session):
+def test_set_restaurant_promo_at_100_percent_activates_for_the_chosen_duration(client, db_session):
     admin = _create_admin(db_session)
-    restaurant = create_restaurant(slug="promo-toggle", is_active=False)
+    restaurant = create_restaurant(slug="promo-100", is_active=False)
 
     res = client.put(
         f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo",
-        json={"promo_gratuit": True},
+        json={"discount_percent": 100, "duration_days": 10},
         headers=_admin_headers(admin),
     )
 
     assert res.status_code == 200
-    assert res.json() == {"promo_gratuit": True}
+    body = res.json()
+    assert body["custom_promo_discount_percent"] == 100
     restaurant = db_session.get(Restaurant, restaurant.id)
-    assert restaurant.promo_gratuit is True
+    assert restaurant.is_active is True
     assert restaurant.is_usable is True
+    assert as_utc(restaurant.subscription_period_end) < datetime.now(timezone.utc) + timedelta(days=11)
 
+    # Retrait : `duration_days=0` efface la promo mais ne reprend jamais un
+    # accès déjà accordé (voir le docstring de l'endpoint).
     res2 = client.put(
         f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo",
-        json={"promo_gratuit": False},
+        json={"discount_percent": 0, "duration_days": 0},
         headers=_admin_headers(admin),
     )
     assert res2.status_code == 200
-    # db_session a déjà cette ligne dans sa carte d'identité depuis le
-    # .get() ci-dessus : un deuxième .get() la renverrait telle quelle sans
-    # requêter, la mutation ayant eu lieu via la session PROPRE à la requête
-    # HTTP — jamais db_session. `expire_all()` force la relecture.
+    assert res2.json() == {"custom_promo_discount_percent": None, "custom_promo_ends_at": None}
     db_session.expire_all()
     restaurant = db_session.get(Restaurant, restaurant.id)
-    assert restaurant.promo_gratuit is False
-    assert restaurant.is_usable is False
+    assert restaurant.custom_promo_discount_percent is None
+    assert restaurant.is_active is True
+    assert restaurant.is_usable is True
+
+
+def test_set_restaurant_promo_at_100_percent_never_shortens_an_existing_paid_period(client, db_session):
+    admin = _create_admin(db_session)
+    already_paid_until = datetime.now(timezone.utc) + timedelta(days=25)
+    restaurant = create_restaurant(
+        slug="promo-100-extends", is_active=True, has_paid_for_subscription=True,
+        subscription_period_end=already_paid_until,
+    )
+
+    res = client.put(
+        f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo",
+        json={"discount_percent": 100, "duration_days": 5},
+        headers=_admin_headers(admin),
+    )
+
+    assert res.status_code == 200
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    # 5 jours de cadeau n'effacent jamais les 25 jours déjà payés.
+    assert as_utc(restaurant.subscription_period_end) >= already_paid_until
+
+
+def test_set_restaurant_promo_under_100_percent_only_discounts_the_next_checkout(client, db_session):
+    admin = _create_admin(db_session)
+    restaurant = create_restaurant(
+        slug="promo-partial", is_active=False, subscription_tier=SubscriptionTier.ESSENTIEL,
+    )
+
+    res = client.put(
+        f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo",
+        json={"discount_percent": 50, "duration_days": 15},
+        headers=_admin_headers(admin),
+    )
+
+    assert res.status_code == 200
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    # Ne jamais activer sous 100 % — même logique que l'offre de lancement.
+    assert restaurant.is_active is False
+    assert tier_price_tnd(restaurant, SubscriptionTier.ESSENTIEL) == 25

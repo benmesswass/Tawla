@@ -84,29 +84,38 @@ def launch_promo_grants_used(db: Session) -> int:
 
 def tier_price_tnd(restaurant: Restaurant, tier: SubscriptionTier) -> int:
     """
-    Le prix RÉEL à payer pour `tier`, réduction de lancement comprise —
-    toujours cette fonction pour calculer un montant, jamais
-    `TIER_PRICES_TND[...]` en lecture directe dès qu'un restaurant est en jeu
-    (checkout, vérification de règlement).
+    Le prix RÉEL à payer pour `tier`, réduction comprise — toujours cette
+    fonction pour calculer un montant, jamais `TIER_PRICES_TND[...]` en
+    lecture directe dès qu'un restaurant est en jeu (checkout, vérification
+    de règlement).
 
-    La réduction, si elle existe, a été FIGÉE à l'inscription
-    (`Restaurant.launch_promo_discount_percent`) pour le palier choisi À CE
-    MOMENT-LÀ (`Restaurant.subscription_tier`) — jamais recalculée depuis la
-    campagne en cours, qui a pu changer depuis, et jamais reportée sur un
-    AUTRE palier que celui d'origine (`tier == restaurant.subscription_tier`)
-    : passer à un palier supérieur après coup se paie plein tarif. Elle ne
-    s'applique qu'une fois : `is_active` passe à `True` dès la première
-    activation (gratuite à 100 %, ou réglée à un taux partiel), donc
-    `not restaurant.is_active` protège naturellement contre un rachat "à prix
-    cassé" lors d'un renouvellement — voir
-    Restaurant.is_active/launch_promo_discount_percent.
+    Deux sources de réduction, jamais cumulées (la promo personnalisée gagne
+    si les deux existent — c'est la plus récente, décidée à la main) :
+
+    - `Restaurant.custom_promo_discount_percent` (admin, au cas par cas,
+      voir platform_admin/router.py::set_restaurant_promo) — bornée par
+      `custom_promo_ends_at`, expire donc naturellement.
+    - `Restaurant.launch_promo_discount_percent` — FIGÉE à l'inscription,
+      jamais recalculée depuis la campagne en cours qui a pu changer depuis,
+      sans échéance propre.
+
+    Dans les deux cas : jamais reportée sur un AUTRE palier que celui
+    d'origine (`tier == restaurant.subscription_tier`) — passer à un palier
+    supérieur après coup se paie plein tarif — et plus valable une fois
+    `is_active` déjà vrai : la réduction ne s'applique qu'à LA PREMIÈRE
+    activation, jamais à un rachat "à prix cassé" lors d'un renouvellement —
+    voir Restaurant.is_active.
     """
     base = TIER_PRICES_TND[tier]
+    if restaurant.is_active or tier != restaurant.subscription_tier:
+        return base
     if (
-        restaurant.launch_promo_discount_percent is not None
-        and not restaurant.is_active
-        and tier == restaurant.subscription_tier
+        restaurant.custom_promo_discount_percent is not None
+        and restaurant.custom_promo_ends_at is not None
+        and as_utc(restaurant.custom_promo_ends_at) > datetime.now(timezone.utc)
     ):
+        return round(base * (100 - restaurant.custom_promo_discount_percent) / 100)
+    if restaurant.launch_promo_discount_percent is not None:
         return round(base * (100 - restaurant.launch_promo_discount_percent) / 100)
     return base
 

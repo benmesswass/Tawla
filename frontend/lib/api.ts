@@ -76,9 +76,9 @@ export type Restaurant = RestaurantPublic & {
   konnect_wallet_id: string | null;
   // Activation du compte (2026-08-20) — Essentiel n'est jamais gratuit, voir
   // is_usable côté backend (tenants/models.py). Le dashboard bloque tout tant
-  // que ni l'un ni l'autre n'est vrai.
+  // que ce n'est pas vrai (une promo personnalisée à 100 % l'active comme un
+  // paiement, voir platform_admin/router.py::set_restaurant_promo).
   is_active: boolean;
-  promo_gratuit: boolean;
   // Offre de lancement (2026-08-21, réglages configurables depuis le
   // dashboard plateforme — voir lib/platformAdmin.ts) : réduction figée à
   // l'inscription, `null` si ce restaurant n'en a jamais bénéficié.
