@@ -1,19 +1,32 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api, type LaunchPromoStatus } from "@/lib/api";
+import { api, type LaunchPromoStatus, type SubscriptionTier } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { toFrenchMessage } from "@/lib/errors";
 import { hankenGrotesk, lalezar } from "@/lib/fonts";
 import TawlaMark from "@/components/brand/TawlaMark";
 import { TIERS } from "@/lib/offer";
 
-const ESSENTIEL_PRICE_DT = TIERS.find((t) => t.id === "essentiel")?.priceDT ?? 50;
-
 export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Palier choisi sur la carte tarif cliquée depuis l'accueil
+  // (`/signup?tier=pro`) — Essentiel par défaut pour tout autre chemin
+  // d'arrivée (mailto, /signup direct).
+  const requestedTier = searchParams.get("tier");
+  const tier = TIERS.find((t) => t.id === requestedTier) ?? TIERS.find((t) => t.id === "essentiel")!;
+
   const [restaurantName, setRestaurantName] = useState("");
   const [managerName, setManagerName] = useState("");
   const [email, setEmail] = useState("");
@@ -43,6 +56,7 @@ export default function SignupPage() {
         manager_name: managerName,
         email,
         password,
+        tier: tier.id as SubscriptionTier,
       });
       setToken(access_token);
       router.push("/dashboard");
@@ -76,6 +90,9 @@ export default function SignupPage() {
             <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
               Onboardez votre restaurant ou café et devenez son premier compte manager.
             </p>
+            <p className="text-xs mt-2" style={{ color: "var(--ink-soft)" }}>
+              Palier choisi : <span style={{ color: "var(--encre)" }}>{tier.name}</span> — {tier.priceDT} DT / mois
+            </p>
           </div>
         </div>
 
@@ -89,12 +106,12 @@ export default function SignupPage() {
             </p>
             <p className="mt-1">
               <span className="text-sm line-through" style={{ color: "var(--ink-soft)" }}>
-                {ESSENTIEL_PRICE_DT} DT
+                {tier.priceDT} DT
               </span>{" "}
               <span className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
                 {promo.discount_percent >= 100
                   ? "Gratuit"
-                  : `${Math.round((ESSENTIEL_PRICE_DT * (100 - promo.discount_percent)) / 100)} DT`}
+                  : `${Math.round((tier.priceDT * (100 - promo.discount_percent)) / 100)} DT`}
               </span>
               <span className="text-sm" style={{ color: "var(--ink-soft)" }}> le premier mois</span>
             </p>

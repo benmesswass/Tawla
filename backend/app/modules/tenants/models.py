@@ -108,16 +108,18 @@ class Restaurant(Base):
 
     # Offre de lancement (2026-08-21, décidée par Wassim, rendue configurable
     # le même jour — voir LaunchCampaignConfig) : réduction (0-100 %) sur le
-    # premier mois Essentiel, accordée AUTOMATIQUEMENT (pas une action admin
-    # au cas par cas, voir promo_gratuit ci-dessus) aux N premiers
-    # établissements inscrits en self-service — voir staff/router.py::register.
-    # `None` = jamais dans la campagne. Sinon, POSÉ UNE FOIS à l'inscription
-    # (jamais remis à jour si la campagne change ensuite — la promesse faite à
-    # l'inscription ne bouge pas) : un historique, pas une config courante.
-    # Consommé au premier paiement/activation (`is_active` passe à `True`, que
-    # ce soit via l'octroi automatique à 100 % ou via un checkout réglé à un
-    # taux partiel) — jamais réappliqué à un renouvellement, voir
-    # `core/subscription.py::essentiel_price_tnd`.
+    # premier mois du palier choisi À L'INSCRIPTION (`subscription_tier`,
+    # cartes tarifs cliquables sur l'accueil), accordée AUTOMATIQUEMENT (pas
+    # une action admin au cas par cas, voir promo_gratuit ci-dessus) aux N
+    # premiers établissements inscrits en self-service — voir
+    # staff/router.py::register. `None` = jamais dans la campagne. Sinon,
+    # POSÉ UNE FOIS à l'inscription (jamais remis à jour si la campagne
+    # change ensuite — la promesse faite à l'inscription ne bouge pas) : un
+    # historique, pas une config courante. Consommé au premier
+    # paiement/activation (`is_active` passe à `True`, que ce soit via
+    # l'octroi automatique à 100 % ou via un checkout réglé à un taux
+    # partiel) — jamais réappliqué à un renouvellement, voir
+    # `core/subscription.py::tier_price_tnd`.
     launch_promo_discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # A-t-il payé pour de vrai au moins une fois (Konnect réel OU mode démo,

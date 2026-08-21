@@ -72,24 +72,32 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     de vérification d'e-mail (aucun service d'envoi en place, cohérent avec
     le reste du projet qui n'a aucune dépendance payante obligatoire).
 
-    `is_active=False` explicitement (2026-08-20) : Essentiel n'est jamais
-    gratuit, y compris passé par ce chemin-là — voir Restaurant.is_active et
-    CLAUDE.md. Le manager verra l'écran d'activation (50 DT) au premier
-    chargement du dashboard tant qu'il n'a pas payé ou qu'aucune dérogation
-    promo n'est posée (écran admin). Les restaurants créés par
-    setup_restaurant.py (pilotes facturés à la main) gardent le défaut `True`.
+    `is_active=False` explicitement (2026-08-20) : aucun palier — y compris
+    Essentiel — n'est jamais gratuit par défaut, y compris passé par ce
+    chemin-là — voir Restaurant.is_active et CLAUDE.md. Le manager verra
+    l'écran d'activation (au prix du palier choisi) au premier chargement du
+    dashboard tant qu'il n'a pas payé ou qu'aucune dérogation promo n'est
+    posée (écran admin). Les restaurants créés par setup_restaurant.py
+    (pilotes facturés à la main) gardent le défaut `True`.
+
+    Palier choisi (2026-08-21, cartes tarifs cliquables sur la page
+    d'accueil) : `payload.tier`, Essentiel si l'inscrit arrive par un chemin
+    générique. Posé sur `subscription_tier` dès la création — ne rend rien
+    utilisable avant activation (voir require_active_restaurant), juste
+    l'intention commerciale de l'inscrit.
 
     Offre de lancement (2026-08-21, réglages configurables depuis l'écran
     admin — voir platform_admin/router.py) : tant que la campagne en cours a
     des places, l'inscrit reçoit `launch_promo_discount_percent` figé à la
-    réduction actuelle de la campagne — un historique, jamais recalculé si la
-    campagne change ensuite (voir Restaurant.launch_promo_discount_percent).
-    Seule une réduction de 100 % active le compte immédiatement (0 DT ne se
-    facture pas via Konnect, voir core/subscription.py::essentiel_price_tnd) —
-    même mécanique qu'un paiement (`subscription_period_end` à 30 jours) sauf
-    que `has_paid_for_subscription` reste `False`, ce n'est pas un vrai
-    paiement. En dessous de 100 %, le compte reste inactif comme d'habitude :
-    le manager verra l'écran d'activation, au tarif réduit (voir
+    réduction actuelle de la campagne, pour LE PALIER QU'IL A CHOISI — un
+    historique, jamais recalculé si la campagne change ensuite (voir
+    Restaurant.launch_promo_discount_percent). Seule une réduction de 100 %
+    active le compte immédiatement, au palier choisi (0 DT ne se facture pas
+    via Konnect, voir core/subscription.py::tier_price_tnd) — même mécanique
+    qu'un paiement (`subscription_period_end` à 30 jours) sauf que
+    `has_paid_for_subscription` reste `False`, ce n'est pas un vrai paiement.
+    En dessous de 100 %, le compte reste inactif comme d'habitude : le
+    manager verra l'écran d'activation, au tarif réduit (voir
     `start_subscription_checkout`). Décompte non verrouillé (pas de
     `SELECT ... FOR UPDATE`) : au pire quelques inscriptions simultanées
     dépassent le plafond de peu, acceptable pour une offre marketing, pas une
@@ -104,6 +112,7 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     restaurant = Restaurant(
         name=payload.restaurant_name,
         slug=_unique_slug(db, payload.restaurant_name),
+        subscription_tier=payload.tier,
         is_active=False,
         has_paid_for_subscription=False,
     )

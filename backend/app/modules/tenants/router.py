@@ -21,7 +21,7 @@ from app.core.subscription import (
     SUBSCRIPTION_DURATION_DAYS,
     TIER_PRICES_TND,
     effective_tier,
-    essentiel_price_tnd,
+    tier_price_tnd,
     require_tier,
     tier_includes,
 )
@@ -268,7 +268,7 @@ def start_subscription_checkout(
         )
         return schemas.SubscriptionCheckoutOut(mode="demo", restaurant=schemas.serialize_restaurant(restaurant))
 
-    price = essentiel_price_tnd(restaurant) if target == SubscriptionTier.ESSENTIEL else TIER_PRICES_TND[target]
+    price = tier_price_tnd(restaurant, target)
     try:
         pay_url, payment_ref = init_konnect_payment(
             amount_tnd=price,
