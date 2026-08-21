@@ -106,6 +106,28 @@ class Restaurant(Base):
     # ne jamais perdre la trace de "a réellement payé" sous la dérogation.
     promo_gratuit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Offre de lancement (2026-08-21, décidée par Wassim) : le premier mois
+    # Essentiel gratuit, accordé AUTOMATIQUEMENT (pas une action admin, voir
+    # promo_gratuit ci-dessus) aux 20 premiers établissements inscrits en
+    # self-service — voir staff/router.py::register. Marqueur PERMANENT,
+    # jamais remis à `False` (même après un vrai paiement) : c'est le
+    # décompte des 20 places qui en dépend (`COUNT(*) WHERE
+    # launch_promo_granted`), un historique, pas un état courant.
+    launch_promo_granted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # A-t-il payé pour de vrai au moins une fois (Konnect réel OU mode démo,
+    # peu importe — voir settle_subscription_payment et
+    # tenants/router.py::start_subscription_checkout) — DISTINCT d'`is_active`
+    # ci-dessus : un restaurant peut être `is_active=True` uniquement parce
+    # que l'offre de lancement l'a activé, sans qu'aucun paiement n'ait
+    # jamais eu lieu. Sert à savoir quand arrêter d'afficher le rappel de
+    # paiement (frontend) — jamais à du gating (voir is_usable, qui n'en tient
+    # pas compte). Défaut `True` : un restaurant onboardé par
+    # setup_restaurant.py (pilote facturé à la main) ou un compte de démo/test
+    # est une vraie relation payante, juste pas via Konnect — seul
+    # /auth/register le force explicitement à `False` à l'inscription.
+    has_paid_for_subscription: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
     # Konnect propre au restaurant, pour le paiement carte du CLIENT — modèle
     # direct (connexion Konnect au paiement carte, 2026-08-19) : la promesse
     # commerciale de Tawla est "vos clients vous règlent directement", donc le

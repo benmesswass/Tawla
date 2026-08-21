@@ -75,6 +75,8 @@ def create_restaurant(
     subscription_tier: SubscriptionTier = SubscriptionTier.BUSINESS,
     is_active: bool = True,
     promo_gratuit: bool = False,
+    launch_promo_granted: bool = False,
+    has_paid_for_subscription: bool = True,
 ) -> Restaurant:
     """
     Crée un restaurant directement en base. Remplace l'ancien
@@ -87,10 +89,11 @@ def create_restaurant(
     produit, pas le gating par palier (offre à trois paliers, 2026-08-18) —
     les tests qui testent justement ce gating passent leur propre palier.
 
-    `is_active=True`/`promo_gratuit=False` par défaut, comme le modèle (voir
-    Restaurant.is_active/promo_gratuit) : la quasi-totalité des tests
-    exercent le produit, pas l'activation du compte (2026-08-20) — les tests
-    qui testent justement l'activation passent leurs propres valeurs.
+    Tous les défauts ci-dessous suivent le modèle (voir Restaurant.is_active/
+    promo_gratuit/launch_promo_granted/has_paid_for_subscription) : la
+    quasi-totalité des tests exercent le produit, pas l'activation ou l'offre
+    de lancement (2026-08-20/21) — les tests qui testent justement ça passent
+    leurs propres valeurs.
     """
     db = _TestingSessionLocal()
     restaurant = Restaurant(
@@ -99,6 +102,8 @@ def create_restaurant(
         subscription_tier=subscription_tier,
         is_active=is_active,
         promo_gratuit=promo_gratuit,
+        launch_promo_granted=launch_promo_granted,
+        has_paid_for_subscription=has_paid_for_subscription,
     )
     db.add(restaurant)
     db.commit()

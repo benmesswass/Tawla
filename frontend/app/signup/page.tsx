@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -17,6 +17,17 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Offre de lancement (2026-08-21) : `null` tant que la disponibilité n'a
+  // pas été vérifiée — on n'affiche jamais la bannière par optimisme avant
+  // de savoir, elle apparaîtrait puis disparaîtrait au premier rendu.
+  const [promoAvailable, setPromoAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    api
+      .getLaunchPromoStatus()
+      .then((s) => setPromoAvailable(s.available))
+      .catch(() => setPromoAvailable(false));
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -63,6 +74,26 @@ export default function SignupPage() {
             </p>
           </div>
         </div>
+
+        {promoAvailable && (
+          <div
+            className="rounded-lg p-3 text-center"
+            style={{ background: "var(--semoule)", border: "1px solid var(--harissa)" }}
+          >
+            <p className={`${lalezar.className} text-sm tracking-wide`} style={{ color: "var(--harissa)" }}>
+              Offre de lancement — les 20 premières inscriptions
+            </p>
+            <p className="mt-1">
+              <span className="text-sm line-through" style={{ color: "var(--ink-soft)" }}>
+                50 DT
+              </span>{" "}
+              <span className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
+                Gratuit
+              </span>
+              <span className="text-sm" style={{ color: "var(--ink-soft)" }}> le premier mois</span>
+            </p>
+          </div>
+        )}
 
         {error && <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
 

@@ -200,14 +200,17 @@ def start_subscription_checkout(
     staff: Staff = Depends(_MANAGER_EVEN_IF_INACTIVE),
 ):
     """
-    Deux usages distincts derrière ce même endpoint (2026-08-20) :
+    Deux usages distincts derrière ce même endpoint (2026-08-20, revu le
+    2026-08-21 pour l'offre de lancement) :
 
-    - `tier=essentiel` : abonnement de 30 jours comme les deux autres paliers
-      (50 DT, jamais gratuit — voir CLAUDE.md), mais jamais une cible tant que
-      le restaurant est déjà utilisable (`is_usable`) — jamais un
-      renouvellement anticipé, seulement un rachat une fois expiré (même
-      règle que "jamais un renouvellement à l'identique" pour Pro/Business
-      ci-dessous).
+    - `tier=essentiel` : abonnement de 30 jours (50 DT, jamais gratuit — voir
+      CLAUDE.md) — TOUJOURS payable, contrairement à Pro/Business ci-dessous.
+      Pas de règle "déjà actif, refusé" : payer avant l'échéance ne fait que
+      prolonger la période depuis le reste courant (voir le calcul plus bas),
+      jamais un double paiement problématique. Nécessaire pour que le rappel
+      de paiement affiché tant que `has_paid_for_subscription` est faux
+      (offre de lancement, frontend) propose un bouton qui marche vraiment,
+      y compris pendant que le mois gratuit court encore.
     - `tier=pro`/`business` : passage à un palier SUPÉRIEUR, payé en ligne
       (offre à trois paliers, 2026-08-18) — jamais un renouvellement à
       l'identique ni une rétrogradation. Fonctionne aussi directement depuis
@@ -222,13 +225,7 @@ def start_subscription_checkout(
     target = payload.tier
     if target not in TIER_PRICES_TND:
         raise HTTPException(status_code=400, detail={"code": "INVALID_TIER", "message": "unknown tier"})
-    if target == SubscriptionTier.ESSENTIEL:
-        if restaurant.is_usable:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "ALREADY_ACTIVE", "message": "restaurant is already active"},
-            )
-    else:
+    if target != SubscriptionTier.ESSENTIEL:
         current = effective_tier(restaurant)
         if tier_includes(current, target):
             raise HTTPException(
@@ -261,6 +258,7 @@ def start_subscription_checkout(
         restaurant.subscription_tier = target
         restaurant.subscription_period_end = base + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
         restaurant.is_active = True
+        restaurant.has_paid_for_subscription = True
         db.commit()
         db.refresh(restaurant)
         log_event(

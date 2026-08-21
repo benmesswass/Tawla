@@ -43,6 +43,13 @@ TIER_PRICES_TND = {
 # limite — voir Restaurant.subscription_period_end.
 SUBSCRIPTION_DURATION_DAYS = 30
 
+# Offre de lancement (2026-08-21, décidée par Wassim) : premier mois Essentiel
+# gratuit accordé automatiquement aux N premiers établissements inscrits en
+# self-service — voir staff/router.py::register (octroi) et
+# GET /api/v1/auth/launch-promo (même compte, affiché sur /signup avant même
+# l'inscription). Une seule constante, jamais dupliquée.
+LAUNCH_PROMO_MAX_GRANTS = 20
+
 
 def tier_includes(tier: SubscriptionTier, minimum: SubscriptionTier) -> bool:
     return _TIER_RANK[tier] >= _TIER_RANK[minimum]

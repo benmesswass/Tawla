@@ -83,6 +83,7 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
                 "subscription_tier": pending_tier,
                 "subscription_period_end": new_period_end,
                 "is_active": True,
+                "has_paid_for_subscription": True,
                 "subscription_payment_ref": None,
                 "subscription_pending_tier": None,
             }

@@ -1,11 +1,13 @@
 import re
 import unicodedata
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
+from app.core.subscription import LAUNCH_PROMO_MAX_GRANTS, SUBSCRIPTION_DURATION_DAYS
 from app.modules.staff import schemas, security, service
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -42,6 +44,20 @@ def _unique_slug(db: Session, name: str) -> str:
     return slug
 
 
+@router.get("/launch-promo", response_model=schemas.LaunchPromoStatus)
+def launch_promo_status(db: Session = Depends(get_db)):
+    """
+    Public, sans authentification : la page `/signup` l'interroge AVANT même
+    que le visiteur ne s'inscrive, pour savoir s'il faut afficher la bannière
+    « 50 DT barré, Gratuit — offre pour les 20 premières inscriptions »
+    (2026-08-21). Ne renvoie jamais le nombre de places restantes ni le total
+    déjà accordé — un booléen seul, pour ne pas exposer la vitesse
+    d'inscription de Tawla à qui regarde cette route.
+    """
+    granted_so_far = db.query(Restaurant).filter(Restaurant.launch_promo_granted.is_(True)).count()
+    return schemas.LaunchPromoStatus(available=granted_so_far < LAUNCH_PROMO_MAX_GRANTS)
+
+
 @router.post("/register", response_model=schemas.LoginResponse, status_code=201, dependencies=[Depends(rate_limit())])
 def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     """
@@ -57,6 +73,17 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     chargement du dashboard tant qu'il n'a pas payé ou qu'aucune dérogation
     promo n'est posée (écran admin). Les restaurants créés par
     setup_restaurant.py (pilotes facturés à la main) gardent le défaut `True`.
+
+    Offre de lancement (2026-08-21) : les `LAUNCH_PROMO_MAX_GRANTS` premiers
+    inscrits reçoivent immédiatement un mois Essentiel gratuit (même
+    mécanique qu'un paiement — `subscription_period_end` à 30 jours — sauf
+    que `has_paid_for_subscription` reste `False` : ce n'est pas un vrai
+    paiement, voir Restaurant.has_paid_for_subscription). `launch_promo_granted`
+    ne se remet jamais à `False` ensuite, y compris après un vrai paiement :
+    c'est un historique, pas un état courant — le compteur des 20 places en
+    dépend. Décompte non verrouillé (pas de `SELECT ... FOR UPDATE`) : au pire
+    quelques inscriptions simultanées dépassent 20 de peu, acceptable pour une
+    offre marketing, pas une garantie financière.
     """
     email = payload.email.lower()
     if db.query(Staff).filter(Staff.email == email).first():
@@ -64,7 +91,17 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
             status_code=409, detail={"code": "EMAIL_EXISTS", "message": "an account already exists with this email"}
         )
 
-    restaurant = Restaurant(name=payload.restaurant_name, slug=_unique_slug(db, payload.restaurant_name), is_active=False)
+    restaurant = Restaurant(
+        name=payload.restaurant_name,
+        slug=_unique_slug(db, payload.restaurant_name),
+        is_active=False,
+        has_paid_for_subscription=False,
+    )
+    granted_so_far = db.query(Restaurant).filter(Restaurant.launch_promo_granted.is_(True)).count()
+    if granted_so_far < LAUNCH_PROMO_MAX_GRANTS:
+        restaurant.is_active = True
+        restaurant.launch_promo_granted = True
+        restaurant.subscription_period_end = datetime.now(timezone.utc) + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
     db.add(restaurant)
     db.flush()
 

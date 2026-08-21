@@ -79,6 +79,12 @@ export type Restaurant = RestaurantPublic & {
   // que ni l'un ni l'autre n'est vrai.
   is_active: boolean;
   promo_gratuit: boolean;
+  // Offre de lancement (2026-08-21) — has_paid_for_subscription à false tant
+  // qu'aucun vrai paiement n'a eu lieu : c'est ce qui déclenche le rappel de
+  // paiement sur le dashboard, avec le compte à rebours dérivé de
+  // subscription_period_end ci-dessus.
+  launch_promo_granted: boolean;
+  has_paid_for_subscription: boolean;
 };
 
 /**
@@ -104,6 +110,8 @@ export type AdminRestaurant = {
   subscription_period_end: string | null;
   is_active: boolean;
   promo_gratuit: boolean;
+  launch_promo_granted: boolean;
+  has_paid_for_subscription: boolean;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -436,6 +444,9 @@ export const api = {
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (payload: { restaurant_name: string; manager_name: string; email: string; password: string }) =>
     request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  // Offre de lancement (2026-08-21) : public, interrogé par /signup avant
+  // même l'inscription pour savoir s'il faut afficher la bannière.
+  getLaunchPromoStatus: () => request<{ available: boolean }>("/api/v1/auth/launch-promo"),
   me: () => request<Staff>("/api/v1/auth/me"),
   listStaff: (restaurantId: number) => request<Staff[]>(`/api/v1/staff/by-restaurant/${restaurantId}`),
   createStaff: (payload: { name: string; email: string; role: StaffRole; password?: string }) =>

@@ -22,6 +22,8 @@ class AdminRestaurantOut(BaseModel):
     subscription_period_end: UtcDatetime | None
     is_active: bool
     promo_gratuit: bool
+    launch_promo_granted: bool
+    has_paid_for_subscription: bool
 
 
 class PromoUpdateIn(BaseModel):

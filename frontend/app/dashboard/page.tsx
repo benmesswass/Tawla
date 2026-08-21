@@ -31,6 +31,7 @@ import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
 import UpgradeModal from "@/components/UpgradeModal";
 import ActivationRequired from "@/components/ActivationRequired";
+import SubscriptionReminderModal from "@/components/SubscriptionReminderModal";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -149,6 +150,10 @@ export default function DashboardPage() {
   const [upgradeTier, setUpgradeTier] = useState<SubscriptionTier | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  // Rappel de paiement (offre de lancement, 2026-08-21) : "Plus tard" ne le
+  // ferme que pour cette page ouverte — jamais mémorisé, il doit réapparaître
+  // à chaque connexion (voir SubscriptionReminderModal).
+  const [paymentReminderDismissed, setPaymentReminderDismissed] = useState(false);
   const [dayStats, setDayStats] = useState<DashboardStats | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
   const [ramadanEnabled, setRamadanEnabled] = useState(false);
@@ -664,6 +669,16 @@ export default function DashboardPage() {
           requiredTier={upgradeTier}
           onClose={() => setUpgradeTier(null)}
           onUpgraded={(updated) => setRestaurant(updated)}
+        />
+      )}
+      {restaurant && !restaurant.has_paid_for_subscription && !paymentReminderDismissed && (
+        <SubscriptionReminderModal
+          restaurant={restaurant}
+          onPaid={(updated) => {
+            setRestaurant(updated);
+            setPaymentReminderDismissed(true);
+          }}
+          onDismiss={() => setPaymentReminderDismissed(true)}
         />
       )}
       <EnteteManager

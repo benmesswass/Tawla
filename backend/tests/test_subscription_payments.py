@@ -44,19 +44,35 @@ def test_demo_checkout_upgrades_tier_and_sets_period_end(client, db_session):
     assert abs((period_end - expected).total_seconds()) < 60
 
 
-def test_demo_checkout_rejects_essentiel_when_already_active(client):
-    """Essentiel n'est plus jamais gratuit (2026-08-20), mais reste rejeté
-    comme cible de checkout une fois le compte déjà actif — pas un
-    renouvellement, voir start_subscription_checkout."""
-    restaurant = create_restaurant(slug="demo-checkout-essentiel", subscription_tier=SubscriptionTier.ESSENTIEL)
+def test_demo_checkout_allows_paying_essentiel_early_and_extends_the_period(client, db_session):
+    """Contrairement à Pro/Business, Essentiel est TOUJOURS payable
+    (2026-08-21 — le rappel de paiement de l'offre de lancement doit pouvoir
+    proposer un bouton qui marche vraiment, y compris pendant le mois
+    gratuit) : payer avant l'échéance prolonge depuis le reste courant,
+    jamais un double paiement rejeté."""
+    restaurant = create_restaurant(
+        slug="demo-checkout-essentiel-early",
+        subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=True,
+        has_paid_for_subscription=False,
+    )
+    restaurant.subscription_period_end = datetime.now(timezone.utc) + timedelta(days=10)
+    db_session.add(restaurant)
+    db_session.commit()
     headers = _manager_headers(restaurant.id)
 
     res = client.post(
         f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "essentiel"}, headers=headers
     )
 
-    assert res.status_code == 400
-    assert res.json()["detail"]["code"] == "ALREADY_ACTIVE"
+    assert res.status_code == 200
+    body = res.json()
+    assert body["restaurant"]["has_paid_for_subscription"] is True
+    period_end = datetime.fromisoformat(body["restaurant"]["subscription_period_end"])
+    # 10 jours restants (offre de lancement) + 30 nouveaux (vrai paiement) —
+    # jamais juste 30 depuis maintenant.
+    expected = datetime.now(timezone.utc) + timedelta(days=10 + SUBSCRIPTION_DURATION_DAYS)
+    assert abs((period_end - expected).total_seconds()) < 60
 
 
 def test_demo_checkout_activates_an_inactive_restaurant_on_essentiel(client, db_session):
@@ -65,7 +81,10 @@ def test_demo_checkout_activates_an_inactive_restaurant_on_essentiel(client, db_
     exactement comme un passage à Pro/Business — voir aussi
     test_settle_activates_and_extends_period_for_essentiel plus bas."""
     restaurant = create_restaurant(
-        slug="demo-checkout-activates", subscription_tier=SubscriptionTier.ESSENTIEL, is_active=False
+        slug="demo-checkout-activates",
+        subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=False,
+        has_paid_for_subscription=False,
     )
     headers = _manager_headers(restaurant.id)
 
@@ -77,6 +96,7 @@ def test_demo_checkout_activates_an_inactive_restaurant_on_essentiel(client, db_
     body = res.json()
     assert body["mode"] == "demo"
     assert body["restaurant"]["is_active"] is True
+    assert body["restaurant"]["has_paid_for_subscription"] is True
     assert body["restaurant"]["subscription_tier"] == "essentiel"
     period_end = datetime.fromisoformat(body["restaurant"]["subscription_period_end"])
     expected = datetime.now(timezone.utc) + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
@@ -84,6 +104,7 @@ def test_demo_checkout_activates_an_inactive_restaurant_on_essentiel(client, db_
 
     restaurant = db_session.get(Restaurant, restaurant.id)
     assert restaurant.is_active is True
+    assert restaurant.has_paid_for_subscription is True
 
 
 def test_demo_checkout_to_pro_activates_an_inactive_restaurant_directly(client):
@@ -339,7 +360,10 @@ def test_settle_activates_and_sets_period_end_for_essentiel(db_session, monkeypa
     n'importe quel autre palier — is_active bascule EN PLUS, une bonne fois
     pour toutes (voir Restaurant.is_active/is_usable)."""
     restaurant = create_restaurant(
-        slug="settle-essentiel-activates", subscription_tier=SubscriptionTier.ESSENTIEL, is_active=False
+        slug="settle-essentiel-activates",
+        subscription_tier=SubscriptionTier.ESSENTIEL,
+        is_active=False,
+        has_paid_for_subscription=False,
     )
     restaurant.subscription_payment_ref = "ref-essentiel"
     restaurant.subscription_pending_tier = SubscriptionTier.ESSENTIEL
@@ -356,6 +380,7 @@ def test_settle_activates_and_sets_period_end_for_essentiel(db_session, monkeypa
     assert result == "active"
     db_session.refresh(restaurant)
     assert restaurant.is_active is True
+    assert restaurant.has_paid_for_subscription is True
     assert restaurant.subscription_tier == SubscriptionTier.ESSENTIEL
     assert as_utc(restaurant.subscription_period_end) > datetime.now(timezone.utc) + timedelta(
         days=SUBSCRIPTION_DURATION_DAYS - 1
