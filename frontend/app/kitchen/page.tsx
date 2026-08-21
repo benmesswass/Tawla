@@ -15,6 +15,7 @@ import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import { MoonIcon, UtensilsIcon } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
+import TawlaMark from "@/components/brand/TawlaMark";
 
 type KitchenOrder = {
   order_id: number;
@@ -296,6 +297,7 @@ export default function KitchenPage() {
     <div className="min-h-screen bg-[var(--espresso)] overflow-x-hidden">
       <header className="px-[18px] sm:px-[26px] pt-[18px] pb-[18px] border-b border-[var(--line-on-espresso)] flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-baseline gap-3 flex-wrap">
+          <TawlaMark size={30} variant="reserveSombre" />
           <h1 className={`${lalezar.className} text-[30px] leading-none text-[var(--semoule)]`}>Cuisine</h1>
           {restaurant && (
             <span className="text-[15px] font-semibold text-[var(--ink-on-espresso-strong)]">

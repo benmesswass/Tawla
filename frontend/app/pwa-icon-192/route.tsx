@@ -1,23 +1,14 @@
 import { ImageResponse } from "next/og";
 
 const MARK_DATA_URI =
-  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB4PSIxMCIgeT0iMjgiIHdpZHRoPSI4MCIgaGVpZ2h0PSI0NCIgcng9IjgiIGZpbGw9IiNENjQwMUUiLz48bGluZSB4MT0iNjIiIHkxPSIyOCIgeDI9IjYyIiB5Mj0iNzIiIHN0cm9rZT0iI0Y2RUZERCIgc3Ryb2tlLXdpZHRoPSI0Ii8+PHBhdGggZD0iTTY4LDUwIEw3NCw1NiBMODYsNDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0Y2RUZERCIgc3Ryb2tlLXdpZHRoPSI3IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=";
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0zMiAtMzIgMjMzIDIzMyI+PHJlY3QgeD0iLTMyIiB5PSItMzIiIHdpZHRoPSIyMzMiIGhlaWdodD0iMjMzIiByeD0iMjYiIGZpbGw9IiNENjQwMUUiPjwvcmVjdD48cmVjdCB4PSIxMzAiIHk9IjAiIHdpZHRoPSIzOSIgaGVpZ2h0PSIxMyIgZmlsbD0iI0Y2RUZERCI+PC9yZWN0PjxyZWN0IHg9IjE1NiIgeT0iMCIgd2lkdGg9IjEzIiBoZWlnaHQ9IjY1IiBmaWxsPSIjRjZFRkREIj48L3JlY3Q+PHJlY3QgeD0iMTMwIiB5PSI1MiIgd2lkdGg9IjM5IiBoZWlnaHQ9IjEzIiBmaWxsPSIjRjZFRkREIj48L3JlY3Q+PHJlY3QgeD0iMTMwIiB5PSI1MiIgd2lkdGg9IjEzIiBoZWlnaHQ9IjkxIiBmaWxsPSIjRjZFRkREIj48L3JlY3Q+PHJlY3QgeD0iNTIiIHk9IjEzMCIgd2lkdGg9IjY1IiBoZWlnaHQ9IjEzIiBmaWxsPSIjRjZFRkREIj48L3JlY3Q+PHJlY3QgeD0iMTA0IiB5PSIxMDQiIHdpZHRoPSIxMyIgaGVpZ2h0PSIzOSIgZmlsbD0iI0Y2RUZERCI+PC9yZWN0PjxyZWN0IHg9IjAiIHk9IjEwNCIgd2lkdGg9IjM5IiBoZWlnaHQ9IjEzIiBmaWxsPSIjRjZFRkREIj48L3JlY3Q+PHJlY3QgeD0iMCIgeT0iMTA0IiB3aWR0aD0iMTMiIGhlaWdodD0iNjUiIGZpbGw9IiNGNkVGREQiPjwvcmVjdD48cmVjdCB4PSIwIiB5PSIxNTYiIHdpZHRoPSIzOSIgaGVpZ2h0PSIxMyIgZmlsbD0iI0Y2RUZERCI+PC9yZWN0PjxyZWN0IHg9Ijc4IiB5PSIyNiIgd2lkdGg9IjEzIiBoZWlnaHQ9IjExNyIgZmlsbD0iI0Y2RUZERCI+PC9yZWN0PjxyZWN0IHg9IjI2IiB5PSI3OCIgd2lkdGg9IjExNyIgaGVpZ2h0PSIxMyIgZmlsbD0iI0Y2RUZERCI+PC9yZWN0PjxyZWN0IHg9IjI2IiB5PSIyNiIgd2lkdGg9IjEzIiBoZWlnaHQ9IjkxIiBmaWxsPSIjRjZFRkREIj48L3JlY3Q+PHJlY3QgeD0iNTIiIHk9IjI2IiB3aWR0aD0iNjUiIGhlaWdodD0iMTMiIGZpbGw9IiNGNkVGREQiPjwvcmVjdD48cmVjdCB4PSI1MiIgeT0iMjYiIHdpZHRoPSIxMyIgaGVpZ2h0PSIzOSIgZmlsbD0iI0Y2RUZERCI+PC9yZWN0PjxyZWN0IHg9IjEyOCIgeT0iMjQiIHdpZHRoPSIxNyIgaGVpZ2h0PSIxNyIgZmlsbD0iIzI0MTgxMSI+PC9yZWN0PjxyZWN0IHg9IjEwMiIgeT0iNTAiIHdpZHRoPSIxNyIgaGVpZ2h0PSIxNyIgZmlsbD0iIzI0MTgxMSI+PC9yZWN0PjxyZWN0IHg9IjUwIiB5PSIxMDIiIHdpZHRoPSIxNyIgaGVpZ2h0PSIxNyIgZmlsbD0iIzI0MTgxMSI+PC9yZWN0PjxyZWN0IHg9IjI0IiB5PSIxMjgiIHdpZHRoPSIxNyIgaGVpZ2h0PSIxNyIgZmlsbD0iIzI0MTgxMSI+PC9yZWN0Pjwvc3ZnPg==";
 
 export async function GET() {
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          background: "#F6EFDD",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
+      <div style={{ width: "100%", height: "100%", display: "flex" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={MARK_DATA_URI} width="70%" height="70%" alt="" />
+        <img src={MARK_DATA_URI} width="100%" height="100%" alt="" />
       </div>
     ),
     { width: 192, height: 192 }

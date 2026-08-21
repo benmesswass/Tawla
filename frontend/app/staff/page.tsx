@@ -25,6 +25,7 @@ import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 // avant, pas après — sinon le serveur découvre la perte dans le tableau de bord.
 const ATTENTE_ALERTE_MINUTES = 10;
 import Skeleton from "@/components/ui/Skeleton";
+import TawlaMark from "@/components/brand/TawlaMark";
 
 type PendingOrder = {
   order_id: number;
@@ -591,11 +592,14 @@ export default function StaffPage() {
   return (
     <div className="min-h-screen bg-[var(--semoule)]">
       <header className="bg-[var(--espresso)] px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className={`${lalezar.className} text-[26px] leading-none text-[var(--semoule)]`}>Service</h1>
-          <p className="text-[14px] font-semibold text-[rgba(246,239,221,.62)] mt-1">
-            {staff.name} — {mesTables.size} table{mesTables.size > 1 ? "s" : ""} en charge
-          </p>
+        <div className="flex items-center gap-3">
+          <TawlaMark size={30} variant="reserveSombre" />
+          <div>
+            <h1 className={`${lalezar.className} text-[26px] leading-none text-[var(--semoule)]`}>Service</h1>
+            <p className="text-[14px] font-semibold text-[rgba(246,239,221,.62)] mt-1">
+              {staff.name} — {mesTables.size} table{mesTables.size > 1 ? "s" : ""} en charge
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <ConnectionBadge status={status} dark />

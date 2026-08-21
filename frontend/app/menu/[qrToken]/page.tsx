@@ -23,6 +23,7 @@ import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
+import TawlaMark from "@/components/brand/TawlaMark";
 import {
   MoonIcon,
   UtensilsIcon,
@@ -1499,9 +1500,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   return (
     <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pb-[132px] ${wrapperClassName ?? ""}`}>
       <header className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-[10px] pb-[14px] flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
-          <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
+        <div className="flex items-start gap-3 min-w-0">
+          <TawlaMark size={30} variant="reserve" className="shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
+            <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
+          </div>
         </div>
         <div className="flex flex-col items-end gap-[7px] shrink-0">
           <button
