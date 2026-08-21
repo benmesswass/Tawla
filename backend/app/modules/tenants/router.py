@@ -21,11 +21,12 @@ from app.core.subscription import (
     SUBSCRIPTION_DURATION_DAYS,
     TIER_PRICES_TND,
     effective_tier,
+    essentiel_price_tnd,
     require_tier,
     tier_includes,
 )
 from app.core.subscription_payments import settle_subscription_payment
-from app.modules.staff.dependencies import get_current_staff, require_role
+from app.modules.staff.dependencies import get_current_staff, require_role, require_role_regardless_of_activation
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import service as tables_service
 from app.modules.tenants import schemas
@@ -34,6 +35,9 @@ from app.modules.tenants.models import Restaurant, SubscriptionTier
 router = APIRouter(prefix="/api/v1/restaurants", tags=["restaurants"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
+# Uniquement pour le checkout/vérification d'abonnement, voir la docstring de
+# require_role_regardless_of_activation — jamais pour une autre route.
+_MANAGER_EVEN_IF_INACTIVE = require_role_regardless_of_activation(StaffRole.MANAGER)
 logger = get_logger("tenants")
 
 
@@ -194,15 +198,26 @@ def start_subscription_checkout(
     restaurant_id: int,
     payload: schemas.SubscriptionCheckoutIn,
     db: Session = Depends(get_db),
-    staff: Staff = Depends(_MANAGER),
+    staff: Staff = Depends(_MANAGER_EVEN_IF_INACTIVE),
 ):
     """
-    Passage à un palier supérieur, payé en ligne (offre à trois paliers,
-    paiement en ligne du 2026-08-18). Essentiel n'est jamais une cible valide
-    — c'est déjà le palier gratuit par défaut, payer pour l'obtenir n'a pas de
-    sens — ni un palier déjà couvert par le palier effectif actuel : ceci est
-    un passage à un palier SUPÉRIEUR, jamais un renouvellement à l'identique
-    ni une rétrogradation.
+    Deux usages distincts derrière ce même endpoint (2026-08-20, revu le
+    2026-08-21 pour l'offre de lancement) :
+
+    - `tier=essentiel` : abonnement de 30 jours (50 DT, jamais gratuit — voir
+      CLAUDE.md) — TOUJOURS payable, contrairement à Pro/Business ci-dessous.
+      Pas de règle "déjà actif, refusé" : payer avant l'échéance ne fait que
+      prolonger la période depuis le reste courant (voir le calcul plus bas),
+      jamais un double paiement problématique. Nécessaire pour que le rappel
+      de paiement affiché tant que `has_paid_for_subscription` est faux
+      (offre de lancement, frontend) propose un bouton qui marche vraiment,
+      y compris pendant que le mois gratuit court encore.
+    - `tier=pro`/`business` : passage à un palier SUPÉRIEUR, payé en ligne
+      (offre à trois paliers, 2026-08-18) — jamais un renouvellement à
+      l'identique ni une rétrogradation. Fonctionne aussi directement depuis
+      un compte pas encore activé : le régler active le compte au passage
+      (voir settle_subscription_payment), pas besoin de payer Essentiel
+      d'abord.
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
@@ -210,15 +225,14 @@ def start_subscription_checkout(
 
     target = payload.tier
     if target not in TIER_PRICES_TND:
-        raise HTTPException(
-            status_code=400, detail={"code": "INVALID_TIER", "message": "essentiel is never a paid checkout target"}
-        )
-    current = effective_tier(restaurant)
-    if tier_includes(current, target):
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "NOT_AN_UPGRADE", "message": f"restaurant already has {current.value} or above"},
-        )
+        raise HTTPException(status_code=400, detail={"code": "INVALID_TIER", "message": "unknown tier"})
+    if target != SubscriptionTier.ESSENTIEL:
+        current = effective_tier(restaurant)
+        if tier_includes(current, target):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "NOT_AN_UPGRADE", "message": f"restaurant already has {current.value} or above"},
+            )
 
     if not is_subscription_konnect_enabled():
         # Mode démonstration : aucune clé Konnect réelle pour Tawla elle-même
@@ -231,6 +245,11 @@ def start_subscription_checkout(
         # (pas `is_konnect_enabled` seule) : PAYMENT_MODE=konnect peut être
         # posé pour le paiement carte du client sans que Tawla ait encore ses
         # propres clés Konnect — rester en démo tant qu'elles manquent.
+        # Essentiel EST un abonnement de 30 jours comme Pro/Business
+        # (2026-08-20, voir CLAUDE.md) — même calcul de période pour les
+        # trois. `is_active=True` passe à `True` une bonne fois pour toutes
+        # (voir Restaurant.is_active/is_usable) ; c'est `subscription_period_end`
+        # qui porte le renouvellement, pas ce booléen.
         now = datetime.now(timezone.utc)
         base = (
             as_utc(restaurant.subscription_period_end)
@@ -239,6 +258,8 @@ def start_subscription_checkout(
         )
         restaurant.subscription_tier = target
         restaurant.subscription_period_end = base + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
+        restaurant.is_active = True
+        restaurant.has_paid_for_subscription = True
         db.commit()
         db.refresh(restaurant)
         log_event(
@@ -247,9 +268,10 @@ def start_subscription_checkout(
         )
         return schemas.SubscriptionCheckoutOut(mode="demo", restaurant=schemas.serialize_restaurant(restaurant))
 
+    price = essentiel_price_tnd(restaurant) if target == SubscriptionTier.ESSENTIEL else TIER_PRICES_TND[target]
     try:
         pay_url, payment_ref = init_konnect_payment(
-            amount_tnd=TIER_PRICES_TND[target],
+            amount_tnd=price,
             order_id=str(restaurant.id),
             description=f"Tawla — abonnement {target.value}",
             webhook=(
@@ -308,7 +330,7 @@ def subscription_webhook(
 def check_subscription_payment(
     restaurant_id: int,
     db: Session = Depends(get_db),
-    staff: Staff = Depends(_MANAGER),
+    staff: Staff = Depends(_MANAGER_EVEN_IF_INACTIVE),
 ):
     """
     Filet de sécurité appelé par la page de retour (`?konnect=success`) : en

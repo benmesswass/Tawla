@@ -52,6 +52,13 @@ export type RestaurantSummary = {
   revenue_tnd: number;
   last_order_at: string | null;
   dashboard_views_last_7d: number;
+  // Activation et offre de lancement (2026-08-20/21) — voir la section Promo
+  // de cette page et backend Restaurant.is_active/promo_gratuit/
+  // launch_promo_discount_percent/has_paid_for_subscription.
+  is_active: boolean;
+  promo_gratuit: boolean;
+  launch_promo_discount_percent: number | null;
+  has_paid_for_subscription: boolean;
 };
 
 export type WeeklyPoint = {
@@ -90,6 +97,18 @@ export type PlatformOverview = {
   restaurants: RestaurantSummary[];
 };
 
+/**
+ * Réglages de l'offre de lancement (2026-08-21) — `grants_used` n'est
+ * visible qu'ici (jamais sur l'endpoint public /auth/launch-promo, qui ne
+ * renvoie qu'un booléen de disponibilité pour ne pas exposer la vitesse
+ * d'inscription de Tawla).
+ */
+export type LaunchCampaign = {
+  discount_percent: number;
+  max_grants: number;
+  grants_used: number;
+};
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getAdminToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -123,4 +142,15 @@ export const platformAdminApi = {
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
   getOverview: () => request<PlatformOverview>("/api/v1/platform-admin/overview"),
+  getLaunchCampaign: () => request<LaunchCampaign>("/api/v1/platform-admin/launch-campaign"),
+  setLaunchCampaign: (discountPercent: number, maxGrants: number) =>
+    request<LaunchCampaign>("/api/v1/platform-admin/launch-campaign", {
+      method: "PUT",
+      body: JSON.stringify({ discount_percent: discountPercent, max_grants: maxGrants }),
+    }),
+  setRestaurantPromo: (restaurantId: number, promoGratuit: boolean) =>
+    request<{ promo_gratuit: boolean }>(`/api/v1/platform-admin/restaurants/${restaurantId}/promo`, {
+      method: "PUT",
+      body: JSON.stringify({ promo_gratuit: promoGratuit }),
+    }),
 };

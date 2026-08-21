@@ -74,6 +74,19 @@ export type Restaurant = RestaurantPublic & {
   // n'est jamais renvoyée, seulement ces deux champs.
   konnect_configured: boolean;
   konnect_wallet_id: string | null;
+  // Activation du compte (2026-08-20) — Essentiel n'est jamais gratuit, voir
+  // is_usable côté backend (tenants/models.py). Le dashboard bloque tout tant
+  // que ni l'un ni l'autre n'est vrai.
+  is_active: boolean;
+  promo_gratuit: boolean;
+  // Offre de lancement (2026-08-21, réglages configurables depuis le
+  // dashboard plateforme — voir lib/platformAdmin.ts) : réduction figée à
+  // l'inscription, `null` si ce restaurant n'en a jamais bénéficié.
+  // has_paid_for_subscription à false tant qu'aucun vrai paiement n'a eu
+  // lieu : c'est ce qui déclenche le rappel de paiement sur le dashboard,
+  // avec le compte à rebours dérivé de subscription_period_end ci-dessus.
+  launch_promo_discount_percent: number | null;
+  has_paid_for_subscription: boolean;
 };
 
 /**
@@ -86,6 +99,15 @@ export type SubscriptionCheckoutResult = {
   mode: "demo" | "konnect";
   restaurant: Restaurant | null;
   pay_url: string | null;
+};
+
+/** Offre de lancement (2026-08-21) — voir GET /auth/launch-promo. Termes de
+ * la campagne EN COURS, pas ce qu'un restaurant déjà inscrit a obtenu (voir
+ * Restaurant.launch_promo_discount_percent, figé à l'inscription). */
+export type LaunchPromoStatus = {
+  available: boolean;
+  discount_percent: number;
+  max_grants: number;
 };
 
 export type StaffRole = "waiter" | "kitchen" | "manager";
@@ -439,6 +461,9 @@ export const api = {
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (payload: { restaurant_name: string; manager_name: string; email: string; password: string }) =>
     request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  // Offre de lancement (2026-08-21) : public, interrogé par /signup avant
+  // même l'inscription pour savoir s'il faut afficher la bannière.
+  getLaunchPromoStatus: () => request<LaunchPromoStatus>("/api/v1/auth/launch-promo"),
   me: () => request<Staff>("/api/v1/auth/me"),
   listStaff: (restaurantId: number) => request<Staff[]>(`/api/v1/staff/by-restaurant/${restaurantId}`),
   createStaff: (payload: { name: string; email: string; role: StaffRole; password?: string }) =>

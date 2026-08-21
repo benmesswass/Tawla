@@ -12,6 +12,7 @@ import {
   getAdminToken,
   platformAdminApi,
   PlatformAdminApiError,
+  type LaunchCampaign,
   type PlatformOverview,
   type SubscriptionTier,
 } from "@/lib/platformAdmin";
@@ -61,13 +62,24 @@ function KpiTile({ label, value, sub }: { label: string; value: string; sub?: st
 export default function PlatformAdminPage() {
   const router = useRouter();
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
+  const [campaign, setCampaign] = useState<LaunchCampaign | null>(null);
+  const [discountInput, setDiscountInput] = useState("");
+  const [maxGrantsInput, setMaxGrantsInput] = useState("");
+  const [savingCampaign, setSavingCampaign] = useState(false);
+  const [savingPromoId, setSavingPromoId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checkedAuth, setCheckedAuth] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await platformAdminApi.getOverview();
+      const [data, campaignData] = await Promise.all([
+        platformAdminApi.getOverview(),
+        platformAdminApi.getLaunchCampaign(),
+      ]);
       setOverview(data);
+      setCampaign(campaignData);
+      setDiscountInput(String(campaignData.discount_percent));
+      setMaxGrantsInput(String(campaignData.max_grants));
     } catch (err) {
       // Session invalide (jamais configurée, expirée après 12h, compte
       // désactivé) : le client a déjà effacé le token, il ne reste qu'à
@@ -88,6 +100,36 @@ export default function PlatformAdminPage() {
     setCheckedAuth(true);
     load();
   }, [router, load]);
+
+  async function handleSaveCampaign() {
+    const discount = Number(discountInput);
+    const maxGrants = Number(maxGrantsInput);
+    if (!Number.isInteger(discount) || discount < 0 || discount > 100) return;
+    if (!Number.isInteger(maxGrants) || maxGrants < 0) return;
+    setSavingCampaign(true);
+    setError(null);
+    try {
+      const updated = await platformAdminApi.setLaunchCampaign(discount, maxGrants);
+      setCampaign(updated);
+    } catch {
+      setError(errorMessage());
+    } finally {
+      setSavingCampaign(false);
+    }
+  }
+
+  async function handleTogglePromo(restaurantId: number, next: boolean) {
+    setSavingPromoId(restaurantId);
+    setError(null);
+    try {
+      await platformAdminApi.setRestaurantPromo(restaurantId, next);
+      await load();
+    } catch {
+      setError(errorMessage());
+    } finally {
+      setSavingPromoId(null);
+    }
+  }
 
   function handleLogout() {
     clearAdminToken();
@@ -178,6 +220,60 @@ export default function PlatformAdminPage() {
             />
           </div>
 
+          {campaign && (
+            <div className="mb-6">
+              <Card padding="md">
+                <div className="flex items-start justify-between gap-4 flex-wrap mb-3">
+                  <div>
+                    <h2 className="font-semibold">Offre de lancement</h2>
+                    <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
+                      Réduction automatique sur le premier mois Essentiel, pour les N premières inscriptions.
+                    </p>
+                  </div>
+                  <Badge tone="neutral">{campaign.grants_used}/{campaign.max_grants} déjà utilisés</Badge>
+                </div>
+                <div className="flex items-end gap-4 flex-wrap">
+                  <div className="space-y-1">
+                    <label htmlFor="discountPercent" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                      Réduction (%)
+                    </label>
+                    <input
+                      id="discountPercent"
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={discountInput}
+                      onChange={(e) => setDiscountInput(e.target.value)}
+                      className="w-40 align-middle"
+                    />
+                    <span className="ms-2 text-sm font-medium tabular-nums">{discountInput}%</span>
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="maxGrants" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                      Nombre de restaurants
+                    </label>
+                    <input
+                      id="maxGrants"
+                      type="number"
+                      min={0}
+                      value={maxGrantsInput}
+                      onChange={(e) => setMaxGrantsInput(e.target.value)}
+                      className="w-24 rounded-lg px-2 py-1 text-sm"
+                      style={{ border: "1px solid var(--line)" }}
+                    />
+                  </div>
+                  <Button size="sm" onClick={handleSaveCampaign} disabled={savingCampaign}>
+                    {savingCampaign ? "Enregistrement…" : "Enregistrer"}
+                  </Button>
+                </div>
+                <p className="text-xs mt-3" style={{ color: "var(--ink-soft)" }}>
+                  S&apos;applique aux prochaines inscriptions — n&apos;affecte jamais un restaurant déjà inscrit.
+                </p>
+              </Card>
+            </div>
+          )}
+
           <div className="mb-6">
             <Card padding="md">
               <h2 className="font-semibold mb-3">Nouveaux restaurants par semaine</h2>
@@ -220,11 +316,13 @@ export default function PlatformAdminPage() {
                     <tr className="text-left" style={{ color: "var(--ink-soft)" }}>
                       <th className="font-normal pb-2 pr-3">Restaurant</th>
                       <th className="font-normal pb-2 pr-3">Palier</th>
+                      <th className="font-normal pb-2 pr-3">Statut</th>
                       <th className="font-normal pb-2 pr-3">Inscrit le</th>
                       <th className="font-normal pb-2 pr-3">Commandes</th>
                       <th className="font-normal pb-2 pr-3">Recette</th>
                       <th className="font-normal pb-2 pr-3">Dernière commande</th>
-                      <th className="font-normal pb-2">Ouvertures (7j)</th>
+                      <th className="font-normal pb-2 pr-3">Ouvertures (7j)</th>
+                      <th className="font-normal pb-2">Promo</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -234,16 +332,34 @@ export default function PlatformAdminPage() {
                         <td className="py-2 pr-3">
                           <Badge tone="neutral">{TIER_LABELS[r.effective_tier]}</Badge>
                         </td>
+                        <td className="py-2 pr-3">
+                          <div className="flex flex-wrap gap-1">
+                            <Badge tone={r.is_active || r.promo_gratuit ? "success" : "danger"}>
+                              {r.is_active || r.promo_gratuit ? "Actif" : "Bloqué"}
+                            </Badge>
+                            {!r.has_paid_for_subscription && <Badge tone="info">Jamais payé</Badge>}
+                          </div>
+                        </td>
                         <td className="py-2 pr-3">{formatDate(r.created_at)}</td>
                         <td className="py-2 pr-3">{r.orders_count}</td>
                         <td className="py-2 pr-3">{formatMoney(r.revenue_tnd)}</td>
                         <td className="py-2 pr-3">{r.last_order_at ? formatDate(r.last_order_at) : "—"}</td>
-                        <td className="py-2">
+                        <td className="py-2 pr-3">
                           {r.dashboard_views_last_7d === 0 ? (
                             <Badge tone="warning">Inactif</Badge>
                           ) : (
                             r.dashboard_views_last_7d
                           )}
+                        </td>
+                        <td className="py-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={savingPromoId === r.id}
+                            onClick={() => handleTogglePromo(r.id, !r.promo_gratuit)}
+                          >
+                            {r.promo_gratuit ? "Retirer" : "Offrir"}
+                          </Button>
                         </td>
                       </tr>
                     ))}

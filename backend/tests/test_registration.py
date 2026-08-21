@@ -1,4 +1,14 @@
 import uuid
+from datetime import datetime, timezone
+
+from app.core.dates import as_utc
+from app.core.subscription import (
+    LAUNCH_CAMPAIGN_DEFAULT_DISCOUNT_PERCENT,
+    LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS,
+    get_launch_campaign,
+)
+from app.modules.tenants.models import Restaurant
+from tests.conftest import create_restaurant
 
 _PASSWORD = "onboard1234"
 
@@ -20,6 +30,114 @@ def test_register_creates_restaurant_and_manager(client):
     assert body["staff"]["email"] == email
     assert body["staff"]["role"] == "manager"
     assert body["staff"]["restaurant_id"]
+
+
+def test_register_within_launch_promo_cap_is_active_but_unpaid(client, db_session):
+    """Offre de lancement (2026-08-21) : dans une base fraîche (aucune des
+    LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS places prises), une inscription
+    self-service est immédiatement utilisable — un mois gratuit, jamais un
+    vrai paiement."""
+    res = client.post(
+        "/api/v1/auth/register",
+        json={
+            "restaurant_name": "Resto Promo Lancement",
+            "manager_name": "Manager",
+            "email": f"owner-promo-{uuid.uuid4().hex[:8]}@test.local",
+            "password": _PASSWORD,
+        },
+    )
+    assert res.status_code == 201
+    restaurant_id = res.json()["staff"]["restaurant_id"]
+
+    restaurant = db_session.get(Restaurant, restaurant_id)
+    assert restaurant.is_active is True
+    assert restaurant.is_usable is True
+    assert restaurant.launch_promo_discount_percent == LAUNCH_CAMPAIGN_DEFAULT_DISCOUNT_PERCENT
+    assert restaurant.has_paid_for_subscription is False
+    assert restaurant.subscription_period_end is not None
+    assert as_utc(restaurant.subscription_period_end) > datetime.now(timezone.utc)
+
+
+def test_register_past_launch_promo_cap_is_inactive(client, db_session):
+    """Essentiel n'est jamais gratuit (2026-08-20, voir CLAUDE.md) : une fois
+    les LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS places de l'offre de lancement
+    prises, un établissement inscrit en self-service ne doit démarrer
+    utilisable sous aucun prétexte, contrairement à un restaurant onboardé
+    par setup_restaurant.py (pilote facturé à la main, is_active=True par
+    défaut — voir Restaurant.is_active)."""
+    for i in range(LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS):
+        create_restaurant(slug=f"launch-promo-filler-{i}", launch_promo_discount_percent=100)
+
+    res = client.post(
+        "/api/v1/auth/register",
+        json={
+            "restaurant_name": "Resto Inactif",
+            "manager_name": "Manager",
+            "email": f"owner-inactive-{uuid.uuid4().hex[:8]}@test.local",
+            "password": _PASSWORD,
+        },
+    )
+    assert res.status_code == 201
+    restaurant_id = res.json()["staff"]["restaurant_id"]
+
+    restaurant = db_session.get(Restaurant, restaurant_id)
+    assert restaurant.is_active is False
+    assert restaurant.is_usable is False
+    assert restaurant.launch_promo_discount_percent is None
+    assert restaurant.has_paid_for_subscription is False
+
+
+def test_register_with_a_partial_discount_campaign_stays_inactive(client, db_session):
+    """Réglage configurable (2026-08-21, écran admin) : seule une réduction à
+    100 % active immédiatement (voir staff/router.py::register). En dessous,
+    l'inscription reste bloquée comme d'habitude — la réduction est
+    seulement figée pour l'écran d'activation à venir, jamais une
+    activation gratuite déguisée."""
+    campaign = get_launch_campaign(db_session)
+    campaign.discount_percent = 50
+    db_session.commit()
+
+    res = client.post(
+        "/api/v1/auth/register",
+        json={
+            "restaurant_name": "Resto Promo Partielle",
+            "manager_name": "Manager",
+            "email": f"owner-partial-{uuid.uuid4().hex[:8]}@test.local",
+            "password": _PASSWORD,
+        },
+    )
+    assert res.status_code == 201
+    restaurant_id = res.json()["staff"]["restaurant_id"]
+
+    restaurant = db_session.get(Restaurant, restaurant_id)
+    assert restaurant.is_active is False
+    assert restaurant.is_usable is False
+    assert restaurant.launch_promo_discount_percent == 50
+    assert restaurant.subscription_period_end is None
+
+
+def test_launch_promo_status_reports_available_in_a_fresh_database(client):
+    res = client.get("/api/v1/auth/launch-promo")
+    assert res.status_code == 200
+    assert res.json() == {
+        "available": True,
+        "discount_percent": LAUNCH_CAMPAIGN_DEFAULT_DISCOUNT_PERCENT,
+        "max_grants": LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS,
+    }
+
+
+def test_launch_promo_status_reports_unavailable_once_cap_is_reached(client):
+    for i in range(LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS):
+        create_restaurant(slug=f"launch-promo-status-filler-{i}", launch_promo_discount_percent=100)
+
+    res = client.get("/api/v1/auth/launch-promo")
+
+    assert res.status_code == 200
+    assert res.json() == {
+        "available": False,
+        "discount_percent": LAUNCH_CAMPAIGN_DEFAULT_DISCOUNT_PERCENT,
+        "max_grants": LAUNCH_CAMPAIGN_DEFAULT_MAX_GRANTS,
+    }
 
 
 def test_register_derives_slug_from_restaurant_name(client):
@@ -121,7 +239,7 @@ def test_newly_registered_manager_can_log_in(client):
     assert res.json()["staff"]["role"] == "manager"
 
 
-def test_registered_manager_is_isolated_to_their_own_restaurant(client):
+def test_registered_manager_is_isolated_to_their_own_restaurant(client, db_session):
     res_a = client.post(
         "/api/v1/auth/register",
         json={
@@ -141,7 +259,16 @@ def test_registered_manager_is_isolated_to_their_own_restaurant(client):
         },
     )
     token_a = res_a.json()["access_token"]
+    restaurant_a_id = res_a.json()["staff"]["restaurant_id"]
     restaurant_b_id = res_b.json()["staff"]["restaurant_id"]
+
+    # Ce test vérifie l'isolation multi-tenant, pas l'activation (2026-08-20) :
+    # un restaurant A pas encore activé se ferait bloquer par
+    # require_active_restaurant avant même d'atteindre le contrôle
+    # cross-tenant qui nous intéresse ici.
+    restaurant_a = db_session.get(Restaurant, restaurant_a_id)
+    restaurant_a.is_active = True
+    db_session.commit()
 
     res = client.patch(
         f"/api/v1/restaurants/{restaurant_b_id}/cafe-mode",

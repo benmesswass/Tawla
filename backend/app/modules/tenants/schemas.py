@@ -38,6 +38,19 @@ class RestaurantOut(RestaurantPublicOut):
     kitchen_sound_enabled: bool
     subscription_tier: SubscriptionTier
     subscription_period_end: UtcDatetime | None
+    # Activation du compte (2026-08-20) — jamais sur RestaurantPublicOut,
+    # donnée commerciale comme subscription_tier. Le frontend s'en sert pour
+    # afficher l'écran de paiement (50 DT) tant que ni l'un ni l'autre n'est
+    # vrai — voir Restaurant.is_usable.
+    is_active: bool
+    promo_gratuit: bool
+    # Offre de lancement (2026-08-21, réglages configurables — voir
+    # platform_admin) — le frontend s'en sert pour afficher le prix réduit
+    # (ActivationRequired) et le rappel de paiement tant que
+    # has_paid_for_subscription est faux, avec le compte à rebours dérivé de
+    # subscription_period_end ci-dessus.
+    launch_promo_discount_percent: int | None
+    has_paid_for_subscription: bool
     # Jamais la clé API elle-même (voir Restaurant.konnect_credentials) —
     # juste de quoi afficher "connecté" et le wallet, qui n'est pas un secret.
     konnect_configured: bool

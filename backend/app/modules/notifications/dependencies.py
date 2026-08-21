@@ -5,6 +5,7 @@ from app.modules.orders.models import Order
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import TOKEN_TYPE, decode_access_token
 from app.modules.tables.models import Table
+from app.modules.tenants.models import Restaurant
 
 # Code de fermeture applicatif (plage 4000-4999 réservée aux applications) :
 # la poignée de main WebSocket n'a pas de 401.
@@ -69,6 +70,13 @@ async def authenticate_staff_socket(
         await _reject(websocket)
         return False
 
+    # Comme require_active_restaurant côté HTTP (staff/dependencies.py) : un
+    # restaurant pas encore activé n'a accès à aucun canal staff/cuisine.
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant or not restaurant.is_usable:
+        await _reject(websocket)
+        return False
+
     return True
 
 
@@ -87,6 +95,11 @@ async def authenticate_table_socket(
     """
     table = db.query(Table).filter(Table.qr_token == qr_token).first()
     if not table or table.restaurant_id != restaurant_id:
+        await _reject(websocket)
+        return None
+
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant or not restaurant.is_usable:
         await _reject(websocket)
         return None
 

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.subscription import effective_tier, require_tier, tier_includes
-from app.modules.staff.dependencies import get_current_staff, require_role
+from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import schemas, service
 from app.modules.tables.models import Table
@@ -128,7 +128,7 @@ def assign_staff(
 def read_plan(
     restaurant_id: int,
     db: Session = Depends(get_db),
-    staff: Staff = Depends(get_current_staff),
+    staff: Staff = Depends(require_active_restaurant),
 ):
     """Le plan tel que le service le lit. Ouvert à tous les rôles : le serveur
     et la cuisine regardent la même salle que le manager."""

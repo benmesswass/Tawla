@@ -20,8 +20,8 @@ from sqlalchemy.orm import Session
 from app.core.dates import as_utc
 from app.core.konnect import KonnectError, get_konnect_payment, tnd_to_millimes
 from app.core.logging import get_logger, log_event
-from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, TIER_PRICES_TND
-from app.modules.tenants.models import Restaurant
+from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, TIER_PRICES_TND, essentiel_price_tnd
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 logger = get_logger("subscription_payments")
 
@@ -51,9 +51,15 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
         return "pending"
 
     # Contrôle d'intégrité : montant réellement reçu jamais inférieur au prix
-    # du palier — toujours recalculé côté serveur depuis TIER_PRICES_TND,
-    # jamais un montant transmis par le client ou par le webhook lui-même.
-    expected_millimes = tnd_to_millimes(TIER_PRICES_TND[pending_tier])
+    # du palier — toujours recalculé côté serveur (jamais un montant transmis
+    # par le client ou par le webhook lui-même). Essentiel passe par
+    # essentiel_price_tnd() : peut être réduit par l'offre de lancement, voir
+    # Restaurant.launch_promo_discount_percent — calculé ICI, avant la mise à
+    # jour plus bas, tant que `restaurant.is_active` reflète encore l'état
+    # PRÉ-paiement (la réduction ne s'applique qu'une fois, jamais à un
+    # renouvellement).
+    price = essentiel_price_tnd(restaurant) if pending_tier == SubscriptionTier.ESSENTIEL else TIER_PRICES_TND[pending_tier]
+    expected_millimes = tnd_to_millimes(price)
     if payment.reached_amount < expected_millimes:
         log_event(
             logger, "konnect.subscription_amount_mismatch",
@@ -61,6 +67,10 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
         )
         return "error"
 
+    # Essentiel EST un abonnement de 30 jours comme Pro/Business (2026-08-20,
+    # voir CLAUDE.md) — même calcul de période pour les trois. `is_active`
+    # passe à `True` une bonne fois pour toutes (voir Restaurant.is_active/
+    # is_usable) ; c'est `subscription_period_end` qui porte le renouvellement.
     now = datetime.now(timezone.utc)
     base = (
         as_utc(restaurant.subscription_period_end)
@@ -78,6 +88,8 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
             {
                 "subscription_tier": pending_tier,
                 "subscription_period_end": new_period_end,
+                "is_active": True,
+                "has_paid_for_subscription": True,
                 "subscription_payment_ref": None,
                 "subscription_pending_tier": None,
             }

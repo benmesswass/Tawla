@@ -5,6 +5,7 @@ from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.dates import as_utc
 
 
 class SubscriptionTier(str, enum.Enum):
@@ -52,8 +53,9 @@ class Restaurant(Base):
     kitchen_sound_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Palier d'abonnement — conditionne l'accès aux fonctionnalités Pro/Business,
-    # voir app/core/subscription.py. Essentiel par défaut : c'est le palier
-    # qu'obtient un établissement inscrit en self-service via /auth/register.
+    # voir app/core/subscription.py. Essentiel par défaut, mais un palier ne
+    # dit rien de si le compte est UTILISABLE (voir `is_active`/`is_usable`
+    # ci-dessous) : Essentiel reste un palier payant (50 DT), jamais gratuit.
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
         Enum(SubscriptionTier), default=SubscriptionTier.ESSENTIEL
     )
@@ -81,6 +83,56 @@ class Restaurant(Base):
         Enum(SubscriptionTier), nullable=True
     )
 
+    # A-t-il DÉJÀ payé au moins une fois (ou été onboardé à la main) — PAS "a
+    # accès en ce moment" (voir `is_usable` ci-dessous, qui vérifie EN PLUS
+    # `subscription_period_end`). Un établissement inscrit en self-service via
+    # /auth/register démarre à `False` — jamais d'accès gratuit, y compris à
+    # Essentiel (voir CLAUDE.md). Passe à `True` — définitivement, jamais remis
+    # à `False` ensuite — au règlement du premier paiement, quel que soit le
+    # palier payé (settle_subscription_payment). Essentiel EST un abonnement de
+    # 30 jours comme Pro/Business (2026-08-20) : un compte qui ne renouvelle
+    # pas reste `is_active=True` mais redevient inutilisable via
+    # `subscription_period_end` expiré, exactement comme un palier Pro/Business
+    # qui retombe à Essentiel dans `effective_tier()` — la seule différence
+    # est qu'il n'y a plus de palier gratuit en dessous où retomber. Un
+    # restaurant créé par setup_restaurant.py (pilote facturé à la main)
+    # démarre à `True` — c'est le défaut de la colonne, seul /auth/register le
+    # force explicitement à `False`.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Dérogation posée à la main par Wassim (écran admin, jamais un
+    # restaurateur) : accès gratuit sans paiement, indépendamment de
+    # `is_active` — voir `is_usable` ci-dessous. Distinct de `is_active` pour
+    # ne jamais perdre la trace de "a réellement payé" sous la dérogation.
+    promo_gratuit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Offre de lancement (2026-08-21, décidée par Wassim, rendue configurable
+    # le même jour — voir LaunchCampaignConfig) : réduction (0-100 %) sur le
+    # premier mois Essentiel, accordée AUTOMATIQUEMENT (pas une action admin
+    # au cas par cas, voir promo_gratuit ci-dessus) aux N premiers
+    # établissements inscrits en self-service — voir staff/router.py::register.
+    # `None` = jamais dans la campagne. Sinon, POSÉ UNE FOIS à l'inscription
+    # (jamais remis à jour si la campagne change ensuite — la promesse faite à
+    # l'inscription ne bouge pas) : un historique, pas une config courante.
+    # Consommé au premier paiement/activation (`is_active` passe à `True`, que
+    # ce soit via l'octroi automatique à 100 % ou via un checkout réglé à un
+    # taux partiel) — jamais réappliqué à un renouvellement, voir
+    # `core/subscription.py::essentiel_price_tnd`.
+    launch_promo_discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # A-t-il payé pour de vrai au moins une fois (Konnect réel OU mode démo,
+    # peu importe — voir settle_subscription_payment et
+    # tenants/router.py::start_subscription_checkout) — DISTINCT d'`is_active`
+    # ci-dessus : un restaurant peut être `is_active=True` uniquement parce
+    # que l'offre de lancement l'a activé, sans qu'aucun paiement n'ait
+    # jamais eu lieu. Sert à savoir quand arrêter d'afficher le rappel de
+    # paiement (frontend) — jamais à du gating (voir is_usable, qui n'en tient
+    # pas compte). Défaut `True` : un restaurant onboardé par
+    # setup_restaurant.py (pilote facturé à la main) ou un compte de démo/test
+    # est une vraie relation payante, juste pas via Konnect — seul
+    # /auth/register le force explicitement à `False` à l'inscription.
+    has_paid_for_subscription: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
     # Konnect propre au restaurant, pour le paiement carte du CLIENT — modèle
     # direct (connexion Konnect au paiement carte, 2026-08-19) : la promesse
     # commerciale de Tawla est "vos clients vous règlent directement", donc le
@@ -96,6 +148,31 @@ class Restaurant(Base):
     def konnect_configured(self) -> bool:
         return bool(self.konnect_api_key_encrypted and self.konnect_wallet_id)
 
+    @property
+    def is_usable(self) -> bool:
+        """
+        Portail unique pour "ce restaurant a-t-il le droit d'utiliser Tawla
+        MAINTENANT" — jamais lire `is_active` seul pour du gating.
+
+        Essentiel est un abonnement de 30 jours comme Pro/Business
+        (2026-08-20, voir CLAUDE.md) : `is_active` reste `True` à vie une fois
+        payé une première fois, mais un compte qui ne renouvelle pas doit
+        quand même redevenir bloqué — d'où la même vérification d'expiration
+        que `effective_tier()` (core/subscription.py), dupliquée ici plutôt
+        qu'importée pour éviter un import circulaire (staff.dependencies et
+        core.subscription importent déjà `Restaurant`/`is_usable` DEPUIS ce
+        module). `subscription_period_end = None` = palier fixé à la main par
+        setup_restaurant.py (pilote, relation commerciale directe), jamais
+        d'expiration — même convention que `effective_tier()`.
+        """
+        if self.promo_gratuit:
+            return True
+        if not self.is_active:
+            return False
+        if self.subscription_period_end is None:
+            return True
+        return as_utc(self.subscription_period_end) > datetime.now(timezone.utc)
+
     def konnect_credentials(self) -> tuple[str, str] | None:
         """`(api_key, wallet_id)` déchiffrés, ou `None` tant que ce restaurant
         n'a rien connecté (ou si la clé de chiffrement a changé depuis —
@@ -108,3 +185,25 @@ class Restaurant(Base):
         if not api_key:
             return None
         return api_key, self.konnect_wallet_id
+
+
+# Réglages de l'offre de lancement (2026-08-21) : configurable par Wassim
+# depuis le dashboard plateforme (`/admin`, section Promo), jamais en dur
+# dans le code — voir platform_admin/router.py. Ligne UNIQUE (id=1), pas une
+# table d'historique de campagnes successives : YAGNI tant qu'il n'y a qu'un
+# seul lancement à la fois. Voir core/subscription.py::get_launch_campaign
+# pour la lecture (crée la ligne avec les valeurs par défaut au premier
+# accès si elle n'existe pas encore).
+class LaunchCampaignConfig(Base):
+    __tablename__ = "launch_campaign_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 100 = gratuit (comme le lancement d'origine, 2026-08-21) ; 0 = campagne
+    # inactive dans les faits (aucune réduction) sans avoir à la désactiver
+    # autrement. Toujours 0-100, contrôlé côté serveur (jamais confiance au
+    # client) — voir platform_admin/schemas.py::LaunchCampaignUpdate.
+    discount_percent: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    # Combien d'établissements au total peuvent bénéficier de la campagne
+    # actuelle — voir staff/router.py::register (octroi) et is compté via
+    # Restaurant.launch_promo_discount_percent IS NOT NULL.
+    max_grants: Mapped[int] = mapped_column(Integer, default=20, nullable=False)

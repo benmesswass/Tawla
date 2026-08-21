@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
-from app.modules.staff.dependencies import get_current_staff, require_role
+from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.waiter_calls import schemas, service
 
@@ -29,7 +29,7 @@ async def create_call(payload: schemas.WaiterCallCreate, db: Session = Depends(g
 
 @router.get("/by-restaurant/{restaurant_id}/pending", response_model=list[schemas.WaiterCallOut])
 async def list_pending_calls(
-    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(get_current_staff)
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(require_active_restaurant)
 ):
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})

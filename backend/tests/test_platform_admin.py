@@ -18,7 +18,7 @@ from app.modules.platform_admin.models import PlatformAdmin
 from app.modules.staff.models import StaffRole
 from app.modules.staff.security import hash_password
 from app.modules.tables.models import Table
-from app.modules.tenants.models import SubscriptionTier
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 _PASSWORD = "un-mot-de-passe-fort-1234"
 
@@ -221,6 +221,31 @@ def test_mrr_counts_only_active_online_paid_tiers(client, db_session):
     assert by_slug["chez-slah"]["effective_tier"] == "business"
 
 
+def test_mrr_excludes_a_free_launch_promo_restaurant_even_while_active(client, db_session):
+    """
+    Corrigé le 2026-08-21 en même temps que l'offre de lancement devenait
+    configurable : un restaurant actif via le mois gratuit
+    (is_active=True, has_paid_for_subscription=False) ne paie rien — le
+    compter dans le MRR ou paying_restaurants_count mentirait à Wassim,
+    exactement comme un pilote gratuit (test ci-dessus).
+    """
+    now = datetime.now(timezone.utc)
+    admin = _create_admin(db_session)
+    create_restaurant(
+        name="Resto Lancement Gratuit", slug="resto-lancement-gratuit",
+        subscription_tier=SubscriptionTier.ESSENTIEL, subscription_period_end=now + timedelta(days=20),
+        is_active=True, launch_promo_discount_percent=100, has_paid_for_subscription=False,
+    )
+
+    body = client.get("/api/v1/platform-admin/overview", headers=_admin_headers(admin)).json()
+
+    assert body["mrr_tnd"] == 0
+    assert body["paying_restaurants_count"] == 0
+    by_slug = {r["slug"]: r for r in body["restaurants"]}
+    assert by_slug["resto-lancement-gratuit"]["has_paid_for_subscription"] is False
+    assert by_slug["resto-lancement-gratuit"]["launch_promo_discount_percent"] == 100
+
+
 def test_overview_aggregates_orders_across_every_restaurant(client, db_session):
     admin = _create_admin(db_session)
     resto_a, table_a, item_a = _resto_with_item("Chez Slah", "chez-slah-orders", db_session)
@@ -319,3 +344,147 @@ def test_dashboard_view_survives_even_with_no_orders(client, db_session):
 
     body = client.get("/api/v1/platform-admin/overview", headers=_admin_headers(admin)).json()
     assert body["dashboard_views_last_7d"] == 1
+
+
+# --- Offre de lancement : réglages (2026-08-21) -----------------------------
+
+
+def test_get_launch_campaign_requires_admin_token(client):
+    res = client.get("/api/v1/platform-admin/launch-campaign")
+    assert res.status_code == 401
+
+
+def test_get_launch_campaign_returns_defaults_in_a_fresh_database(client, db_session):
+    admin = _create_admin(db_session)
+    res = client.get("/api/v1/platform-admin/launch-campaign", headers=_admin_headers(admin))
+    assert res.status_code == 200
+    assert res.json() == {"discount_percent": 100, "max_grants": 20, "grants_used": 0}
+
+
+def test_get_launch_campaign_counts_grants_already_used(client, db_session):
+    admin = _create_admin(db_session)
+    create_restaurant(slug="lancement-deja-pris-1", launch_promo_discount_percent=100)
+    create_restaurant(slug="lancement-deja-pris-2", launch_promo_discount_percent=50)
+    create_restaurant(slug="lancement-jamais-offert", launch_promo_discount_percent=None)
+
+    res = client.get("/api/v1/platform-admin/launch-campaign", headers=_admin_headers(admin))
+
+    assert res.status_code == 200
+    assert res.json()["grants_used"] == 2
+
+
+def test_set_launch_campaign_requires_admin_token(client):
+    res = client.put("/api/v1/platform-admin/launch-campaign", json={"discount_percent": 50, "max_grants": 5})
+    assert res.status_code == 401
+
+
+def test_set_launch_campaign_updates_discount_and_cap(client, db_session):
+    """« Une seule manip simple » demandée par Wassim (2026-08-21) : régler
+    pourcentage + nombre de places d'un coup, persisté, reflété immédiatement
+    sur `grants_used`."""
+    admin = _create_admin(db_session)
+    create_restaurant(slug="lancement-avant-reglage", launch_promo_discount_percent=100)
+
+    res = client.put(
+        "/api/v1/platform-admin/launch-campaign",
+        json={"discount_percent": 50, "max_grants": 5},
+        headers=_admin_headers(admin),
+    )
+
+    assert res.status_code == 200
+    assert res.json() == {"discount_percent": 50, "max_grants": 5, "grants_used": 1}
+
+    res2 = client.get("/api/v1/platform-admin/launch-campaign", headers=_admin_headers(admin))
+    assert res2.json()["discount_percent"] == 50
+    assert res2.json()["max_grants"] == 5
+
+
+def test_set_launch_campaign_rejects_a_percent_above_100(client, db_session):
+    admin = _create_admin(db_session)
+    res = client.put(
+        "/api/v1/platform-admin/launch-campaign",
+        json={"discount_percent": 150, "max_grants": 5},
+        headers=_admin_headers(admin),
+    )
+    assert res.status_code == 422
+
+
+def test_set_launch_campaign_rejects_a_negative_max_grants(client, db_session):
+    admin = _create_admin(db_session)
+    res = client.put(
+        "/api/v1/platform-admin/launch-campaign",
+        json={"discount_percent": 50, "max_grants": -1},
+        headers=_admin_headers(admin),
+    )
+    assert res.status_code == 422
+
+
+def test_set_launch_campaign_does_not_change_a_restaurant_already_registered(client, db_session):
+    """La réduction est FIGÉE à l'inscription (voir
+    Restaurant.launch_promo_discount_percent) — changer la campagne
+    ensuite ne doit jamais recalculer rétroactivement un restaurant déjà
+    inscrit sous l'ancien réglage."""
+    admin = _create_admin(db_session)
+    restaurant = create_restaurant(slug="lancement-immuable", launch_promo_discount_percent=100)
+
+    res = client.put(
+        "/api/v1/platform-admin/launch-campaign",
+        json={"discount_percent": 20, "max_grants": 20},
+        headers=_admin_headers(admin),
+    )
+    assert res.status_code == 200
+
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    assert restaurant.launch_promo_discount_percent == 100
+
+
+# --- Dérogation promo au cas par cas (2026-08-20) ----------------------------
+
+
+def test_set_restaurant_promo_requires_admin_token(client, db_session):
+    restaurant = create_restaurant(slug="promo-toggle-noauth")
+    res = client.put(f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo", json={"promo_gratuit": True})
+    assert res.status_code == 401
+
+
+def test_set_restaurant_promo_404s_on_unknown_restaurant(client, db_session):
+    admin = _create_admin(db_session)
+    res = client.put(
+        "/api/v1/platform-admin/restaurants/999999/promo",
+        json={"promo_gratuit": True},
+        headers=_admin_headers(admin),
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "RESTAURANT_NOT_FOUND"
+
+
+def test_set_restaurant_promo_toggles_the_override(client, db_session):
+    admin = _create_admin(db_session)
+    restaurant = create_restaurant(slug="promo-toggle", is_active=False)
+
+    res = client.put(
+        f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo",
+        json={"promo_gratuit": True},
+        headers=_admin_headers(admin),
+    )
+
+    assert res.status_code == 200
+    assert res.json() == {"promo_gratuit": True}
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    assert restaurant.promo_gratuit is True
+    assert restaurant.is_usable is True
+
+    res2 = client.put(
+        f"/api/v1/platform-admin/restaurants/{restaurant.id}/promo",
+        json={"promo_gratuit": False},
+        headers=_admin_headers(admin),
+    )
+    assert res2.status_code == 200
+    # db_session a déjà cette ligne dans sa carte d'identité depuis le
+    # .get() ci-dessus : un deuxième .get() la renverrait telle quelle sans
+    # requêter, la mutation ayant eu lieu via la session PROPRE à la requête
+    # HTTP — jamais db_session. `expire_all()` force la relecture.
+    db_session.expire_all()
+    restaurant = db_session.get(Restaurant, restaurant.id)
+    assert restaurant.promo_gratuit is False
+    assert restaurant.is_usable is False

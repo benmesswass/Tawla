@@ -26,14 +26,22 @@ def _is_paying_online(restaurant: Restaurant, now: datetime) -> bool:
     """
     Palier payé en ligne et toujours actif — jamais un pilote fixé à la main
     par `setup_restaurant.py` (qui n'a pas d'échéance, voir
-    `Restaurant.subscription_period_end`). Un MRR qui compterait les pilotes
-    gratuits mentirait à Wassim sur son propre chiffre d'affaires.
+    `Restaurant.subscription_period_end`), NI un restaurant seulement actif
+    via l'offre de lancement gratuite (2026-08-21, `has_paid_for_subscription`
+    reste `False` tant qu'aucun vrai paiement n'a eu lieu — voir
+    Restaurant.has_paid_for_subscription). Un MRR qui compterait les pilotes
+    gratuits OU les bénéficiaires du mois gratuit mentirait à Wassim sur son
+    propre chiffre d'affaires.
 
     Équivalent, pour les restaurants qui remplissent cette condition, à
     `effective_tier(restaurant) == restaurant.subscription_tier` : une
     échéance future ne fait jamais retomber le palier (voir subscription.py).
     """
-    return restaurant.subscription_period_end is not None and as_utc(restaurant.subscription_period_end) > now
+    return (
+        restaurant.has_paid_for_subscription
+        and restaurant.subscription_period_end is not None
+        and as_utc(restaurant.subscription_period_end) > now
+    )
 
 
 def _weekly_signups(restaurants: list[Restaurant], now: datetime) -> list[schemas.WeeklyPoint]:
@@ -98,6 +106,10 @@ async def get_overview(db: Session) -> schemas.PlatformOverview:
                 revenue_tnd=sum(o.total_amount for o in restaurant_paid_orders),
                 last_order_at=last_order_at,
                 dashboard_views_last_7d=views_by_restaurant.get(restaurant.id, 0),
+                is_active=restaurant.is_active,
+                promo_gratuit=restaurant.promo_gratuit,
+                launch_promo_discount_percent=restaurant.launch_promo_discount_percent,
+                has_paid_for_subscription=restaurant.has_paid_for_subscription,
             )
         )
     # Le plus actif d'abord : la question posée en ouvrant cet écran est "qui

@@ -1,6 +1,6 @@
 from datetime import date as date_type
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.dates import UtcDatetime
 from app.modules.tenants.models import SubscriptionTier
@@ -45,6 +45,35 @@ class RestaurantSummary(BaseModel):
     # restaurant sans ouverture récente est un restaurant qui décroche, même
     # si sa recette du mois dernier avait l'air bonne.
     dashboard_views_last_7d: int
+    # Activation et offre de lancement (2026-08-20/21) — de quoi voir d'un
+    # coup d'œil qui est bloqué, qui bénéficie d'une dérogation manuelle, et
+    # qui n'a encore jamais payé pour de vrai (voir Restaurant.is_active/
+    # promo_gratuit/launch_promo_discount_percent/has_paid_for_subscription).
+    is_active: bool
+    promo_gratuit: bool
+    launch_promo_discount_percent: int | None
+    has_paid_for_subscription: bool
+
+
+class PromoUpdateIn(BaseModel):
+    promo_gratuit: bool
+
+
+class LaunchCampaignOut(BaseModel):
+    """Réglages en cours de l'offre de lancement (2026-08-21) — voir
+    Restaurant.launch_promo_discount_percent et core/subscription.py::
+    get_launch_campaign. `grants_used` : combien de places déjà prises,
+    visible seulement ici (jamais sur l'endpoint public /auth/launch-promo,
+    qui ne renvoie qu'un booléen de disponibilité)."""
+
+    discount_percent: int
+    max_grants: int
+    grants_used: int
+
+
+class LaunchCampaignUpdate(BaseModel):
+    discount_percent: int = Field(ge=0, le=100)
+    max_grants: int = Field(ge=0)
 
 
 class WeeklyPoint(BaseModel):

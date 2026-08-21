@@ -10,7 +10,7 @@ from app.core.rate_limit import ORDER_VOLUME_MAX_REQUESTS, rate_limit
 from app.modules.orders import schemas, service
 from app.modules.orders.dependencies import get_order_by_token, get_paid_order_by_query_token
 from app.modules.orders.models import Order, OrderStatus
-from app.modules.staff.dependencies import get_current_staff, require_role
+from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tenants.models import Restaurant
 
@@ -40,7 +40,7 @@ async def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_d
 
 @router.get("/by-restaurant/{restaurant_id}/active", response_model=list[schemas.OrderOutStaff])
 async def list_active_orders(
-    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(get_current_staff)
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(require_active_restaurant)
 ):
     """
     Rechargement d'état pour les écrans serveur/cuisine au montage : le

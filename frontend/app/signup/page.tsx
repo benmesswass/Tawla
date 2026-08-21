@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type LaunchPromoStatus } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { toFrenchMessage } from "@/lib/errors";
 import { hankenGrotesk, lalezar } from "@/lib/fonts";
 import TawlaMark from "@/components/brand/TawlaMark";
+import { TIERS } from "@/lib/offer";
+
+const ESSENTIEL_PRICE_DT = TIERS.find((t) => t.id === "essentiel")?.priceDT ?? 50;
 
 export default function SignupPage() {
   const router = useRouter();
@@ -17,6 +20,18 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Offre de lancement (2026-08-21, réglages configurables — voir
+  // dashboard plateforme) : `null` tant que la disponibilité n'a pas été
+  // vérifiée — on n'affiche jamais la bannière par optimisme avant de
+  // savoir, elle apparaîtrait puis disparaîtrait au premier rendu.
+  const [promo, setPromo] = useState<LaunchPromoStatus | null>(null);
+
+  useEffect(() => {
+    api
+      .getLaunchPromoStatus()
+      .then(setPromo)
+      .catch(() => setPromo(null));
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -63,6 +78,28 @@ export default function SignupPage() {
             </p>
           </div>
         </div>
+
+        {promo?.available && (
+          <div
+            className="rounded-lg p-3 text-center"
+            style={{ background: "var(--semoule)", border: "1px solid var(--harissa)" }}
+          >
+            <p className={`${lalezar.className} text-sm tracking-wide`} style={{ color: "var(--harissa)" }}>
+              Offre de lancement — les {promo.max_grants} premières inscriptions
+            </p>
+            <p className="mt-1">
+              <span className="text-sm line-through" style={{ color: "var(--ink-soft)" }}>
+                {ESSENTIEL_PRICE_DT} DT
+              </span>{" "}
+              <span className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
+                {promo.discount_percent >= 100
+                  ? "Gratuit"
+                  : `${Math.round((ESSENTIEL_PRICE_DT * (100 - promo.discount_percent)) / 100)} DT`}
+              </span>
+              <span className="text-sm" style={{ color: "var(--ink-soft)" }}> le premier mois</span>
+            </p>
+          </div>
+        )}
 
         {error && <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
 

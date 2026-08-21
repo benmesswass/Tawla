@@ -1,11 +1,13 @@
 import re
 import unicodedata
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
+from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, get_launch_campaign, launch_promo_grants_used
 from app.modules.staff import schemas, security, service
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -42,6 +44,25 @@ def _unique_slug(db: Session, name: str) -> str:
     return slug
 
 
+@router.get("/launch-promo", response_model=schemas.LaunchPromoStatus)
+def launch_promo_status(db: Session = Depends(get_db)):
+    """
+    Public, sans authentification : la page `/signup` l'interroge AVANT même
+    que le visiteur ne s'inscrive, pour savoir s'il faut afficher la bannière
+    de campagne et avec quels termes (2026-08-21, réglages configurables
+    depuis l'écran admin — voir platform_admin/router.py). `max_grants` est
+    la taille TOTALE de la campagne (une donnée marketing, pas un signal
+    sensible) ; le nombre de places déjà prises, lui, n'est volontairement
+    jamais exposé publiquement — il révélerait la vitesse d'inscription de
+    Tawla à qui regarde cette route.
+    """
+    campaign = get_launch_campaign(db)
+    available = launch_promo_grants_used(db) < campaign.max_grants
+    return schemas.LaunchPromoStatus(
+        available=available, discount_percent=campaign.discount_percent, max_grants=campaign.max_grants
+    )
+
+
 @router.post("/register", response_model=schemas.LoginResponse, status_code=201, dependencies=[Depends(rate_limit())])
 def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     """
@@ -50,6 +71,29 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     immédiatement (même paire access_token/staff que /login) — pas d'étape
     de vérification d'e-mail (aucun service d'envoi en place, cohérent avec
     le reste du projet qui n'a aucune dépendance payante obligatoire).
+
+    `is_active=False` explicitement (2026-08-20) : Essentiel n'est jamais
+    gratuit, y compris passé par ce chemin-là — voir Restaurant.is_active et
+    CLAUDE.md. Le manager verra l'écran d'activation (50 DT) au premier
+    chargement du dashboard tant qu'il n'a pas payé ou qu'aucune dérogation
+    promo n'est posée (écran admin). Les restaurants créés par
+    setup_restaurant.py (pilotes facturés à la main) gardent le défaut `True`.
+
+    Offre de lancement (2026-08-21, réglages configurables depuis l'écran
+    admin — voir platform_admin/router.py) : tant que la campagne en cours a
+    des places, l'inscrit reçoit `launch_promo_discount_percent` figé à la
+    réduction actuelle de la campagne — un historique, jamais recalculé si la
+    campagne change ensuite (voir Restaurant.launch_promo_discount_percent).
+    Seule une réduction de 100 % active le compte immédiatement (0 DT ne se
+    facture pas via Konnect, voir core/subscription.py::essentiel_price_tnd) —
+    même mécanique qu'un paiement (`subscription_period_end` à 30 jours) sauf
+    que `has_paid_for_subscription` reste `False`, ce n'est pas un vrai
+    paiement. En dessous de 100 %, le compte reste inactif comme d'habitude :
+    le manager verra l'écran d'activation, au tarif réduit (voir
+    `start_subscription_checkout`). Décompte non verrouillé (pas de
+    `SELECT ... FOR UPDATE`) : au pire quelques inscriptions simultanées
+    dépassent le plafond de peu, acceptable pour une offre marketing, pas une
+    garantie financière.
     """
     email = payload.email.lower()
     if db.query(Staff).filter(Staff.email == email).first():
@@ -57,7 +101,20 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
             status_code=409, detail={"code": "EMAIL_EXISTS", "message": "an account already exists with this email"}
         )
 
-    restaurant = Restaurant(name=payload.restaurant_name, slug=_unique_slug(db, payload.restaurant_name))
+    restaurant = Restaurant(
+        name=payload.restaurant_name,
+        slug=_unique_slug(db, payload.restaurant_name),
+        is_active=False,
+        has_paid_for_subscription=False,
+    )
+    campaign = get_launch_campaign(db)
+    if launch_promo_grants_used(db) < campaign.max_grants:
+        restaurant.launch_promo_discount_percent = campaign.discount_percent
+        if campaign.discount_percent >= 100:
+            restaurant.is_active = True
+            restaurant.subscription_period_end = datetime.now(timezone.utc) + timedelta(
+                days=SUBSCRIPTION_DURATION_DAYS
+            )
     db.add(restaurant)
     db.flush()
 
