@@ -24,7 +24,7 @@ export default function HomePage() {
     <main className="min-h-screen">
       <section className="bg-[var(--harissa)] text-white">
         <div className="max-w-3xl mx-auto px-6 py-14">
-          <TawlaLogo size={40} className="mb-8" />
+          <TawlaLogo size={40} className="mb-8" inverse />
           <h1 className={`${lalezar.className} text-3xl sm:text-4xl leading-tight text-balance`}>
             La commande à table, sans commande perdue
           </h1>
