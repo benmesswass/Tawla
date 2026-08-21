@@ -70,6 +70,11 @@ export default function PlatformAdminPage() {
   const [promoDrafts, setPromoDrafts] = useState<Record<number, { discount: string; days: string }>>({});
   const [error, setError] = useState<string | null>(null);
   const [checkedAuth, setCheckedAuth] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminName, setNewAdminName] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [savingNewAdmin, setSavingNewAdmin] = useState(false);
+  const [newAdminMessage, setNewAdminMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -144,6 +149,24 @@ export default function PlatformAdminPage() {
   function handleLogout() {
     clearAdminToken();
     router.replace("/admin/login");
+  }
+
+  async function handleCreateAdmin() {
+    if (!newAdminEmail.trim() || !newAdminName.trim() || newAdminPassword.length < 8) return;
+    setSavingNewAdmin(true);
+    setNewAdminMessage(null);
+    setError(null);
+    try {
+      const created = await platformAdminApi.createAdmin(newAdminEmail.trim(), newAdminName.trim(), newAdminPassword);
+      setNewAdminMessage(`Compte créé : ${created.email}`);
+      setNewAdminEmail("");
+      setNewAdminName("");
+      setNewAdminPassword("");
+    } catch {
+      setError(errorMessage());
+    } finally {
+      setSavingNewAdmin(false);
+    }
   }
 
   if (!checkedAuth || (!overview && !error)) {
@@ -426,6 +449,68 @@ export default function PlatformAdminPage() {
               </div>
             )}
           </Card>
+
+          <div className="mt-6">
+            <Card padding="md">
+              <h2 className="font-semibold mb-1">Comptes admin</h2>
+              <p className="text-sm mb-3" style={{ color: "var(--ink-soft)" }}>
+                Ouvre l&apos;accès à ce tableau de bord à quelqu&apos;un d&apos;autre — jamais un compte
+                restaurateur, seulement l&apos;opérateur de la plateforme.
+              </p>
+              {newAdminMessage && (
+                <Card tone="success" padding="sm" className="mb-3 text-sm">
+                  {newAdminMessage}
+                </Card>
+              )}
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1">
+                  <label htmlFor="newAdminEmail" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                    E-mail
+                  </label>
+                  <input
+                    id="newAdminEmail"
+                    type="email"
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                    className="rounded-lg px-2 py-1 text-sm"
+                    style={{ border: "1px solid var(--line)" }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="newAdminName" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                    Nom
+                  </label>
+                  <input
+                    id="newAdminName"
+                    type="text"
+                    value={newAdminName}
+                    onChange={(e) => setNewAdminName(e.target.value)}
+                    className="rounded-lg px-2 py-1 text-sm"
+                    style={{ border: "1px solid var(--line)" }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="newAdminPassword" className="text-xs font-medium block" style={{ color: "var(--ink-soft)" }}>
+                    Mot de passe
+                  </label>
+                  <input
+                    id="newAdminPassword"
+                    type="password"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    className="rounded-lg px-2 py-1 text-sm"
+                    style={{ border: "1px solid var(--line)" }}
+                  />
+                </div>
+                <Button size="sm" disabled={savingNewAdmin} onClick={handleCreateAdmin}>
+                  {savingNewAdmin ? "Création…" : "Créer"}
+                </Button>
+              </div>
+              <p className="text-xs mt-3" style={{ color: "var(--ink-soft)" }}>
+                8 caractères minimum. Un e-mail déjà utilisé met juste à jour le mot de passe et le nom.
+              </p>
+            </Card>
+          </div>
         </>
       )}
     </div>

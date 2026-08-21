@@ -1,7 +1,7 @@
 import hmac
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -54,24 +54,43 @@ def login(payload: schemas.AdminLoginRequest, db: Session = Depends(get_db)):
 @router.post(
     "/admins", response_model=schemas.PlatformAdminOut, status_code=201, dependencies=[Depends(rate_limit(5))]
 )
-def create_admin(payload: schemas.AdminCreateIn, db: Session = Depends(get_db)):
+def create_admin(
+    payload: schemas.AdminCreateIn,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
     """
     Seul chemin de création d'un compte `PlatformAdmin` (2026-08-21ter,
-    remplace `scripts/create_platform_admin.py` — Wassim veut pouvoir le
-    faire sans accès shell au serveur) : jamais de compte staff/manager, ni
-    aucune session admin existante, qui n'y autorise — seule la connaissance
-    de `ADMIN_CREATION_SECRET` (variable d'environnement, jamais commitée,
-    connue de Wassim seul) le permet. `hmac.compare_digest` : comparaison en
-    temps constant, même raison que pour un mot de passe. Rate-limité à 5/min
-    (`Depends(rate_limit())` vaut 20/min par défaut, pensé pour un
-    brute-force de mot de passe — un secret à deviner mérite un plafond
-    encore plus bas).
+    remplace `scripts/create_platform_admin.py` — plus d'accès shell au
+    serveur requis ; 2026-08-21quater, formulaire dans /admin) — deux
+    autorisations possibles, jamais un compte staff/manager :
+
+    1. Un JWT admin valide (`Authorization: Bearer ...`, même token que
+       `/overview`) — le cas normal : une fois connecté sur /admin, ça
+       suffit à en créer un autre, pas besoin de ressaisir un secret.
+    2. `ADMIN_CREATION_SECRET` (variable d'environnement, jamais commitée) —
+       le seul chemin quand aucun admin n'existe encore (premier compte) ou
+       que Wassim est bloqué dehors sans session valide. `hmac.compare_digest` :
+       comparaison en temps constant, même raison que pour un mot de passe.
+
+    Un JWT présent mais invalide/expiré retombe sur la vérification du
+    secret plutôt que de refuser tout de suite — sinon un token périmé
+    couperait aussi l'accès de secours. Rate-limité à 5/min (`rate_limit()`
+    vaut 20/min par défaut, pensé pour un brute-force de mot de passe — un
+    secret à deviner mérite un plafond encore plus bas).
 
     Idempotent par e-mail comme l'ancien script : rejouer avec le même
     e-mail met à jour le mot de passe/nom/réactive le compte plutôt que d'en
     créer un second.
     """
-    if not hmac.compare_digest(payload.secret, settings.admin_creation_secret):
+    creator_email = "secret"
+    if authorization:
+        try:
+            creator_email = get_current_platform_admin(authorization=authorization, db=db).email
+        except HTTPException:
+            if not hmac.compare_digest(payload.secret, settings.admin_creation_secret):
+                raise HTTPException(status_code=401, detail={"code": "INVALID_SECRET", "message": "invalid secret"})
+    elif not hmac.compare_digest(payload.secret, settings.admin_creation_secret):
         raise HTTPException(status_code=401, detail={"code": "INVALID_SECRET", "message": "invalid secret"})
 
     email = payload.email.strip().lower()
@@ -86,7 +105,7 @@ def create_admin(payload: schemas.AdminCreateIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(admin)
     # Jamais le secret ni le mot de passe dans les logs.
-    log_event(logger, "platform_admin.admin_created_or_updated", admin_email=email)
+    log_event(logger, "platform_admin.admin_created_or_updated", admin_email=email, created_by=creator_email)
     return admin
 
 

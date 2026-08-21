@@ -104,10 +104,11 @@ def test_login_email_is_case_insensitive(client, db_session):
     assert res.status_code == 200
 
 
-# --- Création d'un compte admin (2026-08-21ter) -----------------------------
+# --- Création d'un compte admin (2026-08-21ter/quater) ----------------------
 # Remplace scripts/create_platform_admin.py : plus besoin d'un accès shell au
 # serveur, mais toujours aucune route d'inscription publique — verrouillé par
-# ADMIN_CREATION_SECRET (settings), jamais un token admin existant.
+# un JWT admin existant (formulaire dans /admin) OU ADMIN_CREATION_SECRET
+# (bootstrap/dépannage en curl).
 
 
 def test_create_admin_rejects_wrong_secret(client, db_session, monkeypatch):
@@ -148,6 +149,44 @@ def test_create_admin_is_idempotent_by_email_never_creates_a_second_row(client, 
     assert res2.status_code == 201
     assert res2.json()["name"] == "Wassim Ben Messaoud"
     assert db_session.query(PlatformAdmin).filter(PlatformAdmin.email == "wassim@tawla.tn").count() == 1
+
+
+def test_create_admin_authorized_via_existing_admin_jwt_ignores_wrong_secret(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "admin_creation_secret", "le-vrai-secret")
+    existing_admin = _create_admin(db_session)
+
+    res = client.post(
+        "/api/v1/platform-admin/admins",
+        json={
+            "secret": "un-mauvais-secret", "email": "second@tawla.tn", "name": "Second Admin",
+            "password": "un-autre-mot-de-passe-1234",
+        },
+        headers=_admin_headers(existing_admin),
+    )
+
+    assert res.status_code == 201
+    assert res.json()["email"] == "second@tawla.tn"
+
+
+def test_create_admin_with_no_authorization_at_all_is_rejected(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "admin_creation_secret", "le-vrai-secret")
+    res = client.post(
+        "/api/v1/platform-admin/admins",
+        json={"email": "intrus@tawla.tn", "name": "Intrus", "password": "peu-importe"},
+    )
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "INVALID_SECRET"
+    assert db_session.query(PlatformAdmin).filter(PlatformAdmin.email == "intrus@tawla.tn").first() is None
+
+
+def test_create_admin_with_expired_or_garbage_bearer_token_falls_back_to_the_secret(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "admin_creation_secret", "le-vrai-secret")
+    res = client.post(
+        "/api/v1/platform-admin/admins",
+        json={"secret": "le-vrai-secret", "email": "wassim@tawla.tn", "name": "Wassim", "password": _PASSWORD},
+        headers={"Authorization": "Bearer un-token-invalide"},
+    )
+    assert res.status_code == 201
 
 
 # --- Protection de /overview et confusion de principal ---------------------

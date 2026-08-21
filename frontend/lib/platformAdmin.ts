@@ -156,4 +156,12 @@ export const platformAdminApi = {
       `/api/v1/platform-admin/restaurants/${restaurantId}/promo`,
       { method: "PUT", body: JSON.stringify({ discount_percent: discountPercent, duration_days: durationDays }) }
     ),
+  // Aucun `secret` envoyé ici : `request()` attache déjà le JWT admin en
+  // cours (en-tête Authorization), qui suffit à autoriser côté serveur —
+  // voir backend/app/modules/platform_admin/router.py::create_admin.
+  createAdmin: (email: string, name: string, password: string) =>
+    request<PlatformAdminInfo>("/api/v1/platform-admin/admins", {
+      method: "POST",
+      body: JSON.stringify({ email, name, password }),
+    }),
 };

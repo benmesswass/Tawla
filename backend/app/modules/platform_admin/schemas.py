@@ -27,11 +27,12 @@ class AdminLoginResponse(BaseModel):
 
 
 class AdminCreateIn(BaseModel):
-    """Voir platform_admin/router.py::create_admin — `secret` doit égaler
-    `ADMIN_CREATION_SECRET`, jamais vérifié via un token JWT existant :
-    c'est justement ce qui permet de créer le tout premier compte."""
+    """Voir platform_admin/router.py::create_admin — `secret` n'est vérifié
+    que si la requête n'apporte aucun JWT admin valide ; laisser vide quand
+    on est déjà connecté sur /admin (voir lib/platformAdmin.ts::createAdmin,
+    qui envoie le JWT dans l'en-tête, jamais dans ce champ)."""
 
-    secret: str
+    secret: str = ""
     email: str
     name: str
     password: str = Field(min_length=8)
