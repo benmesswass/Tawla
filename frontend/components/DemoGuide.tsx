@@ -1,38 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Button from "@/components/ui/Button";
 
 const STEPS = [
   {
+    route: "/menu",
     title: "Client — scanner le QR",
     body: "Scannez le QR sur votre téléphone, parcourez la carte catégorisée, ajoutez 2-3 plats, laissez une note à la cuisine sur un plat, validez la commande. À souligner : zéro app à télécharger, ça marche en 10 secondes.",
   },
   {
+    route: "/menu",
     title: "Mode hors ligne — le point fort",
     body: "Coupez le réseau du téléphone puis ajoutez un plat au panier. Montrez le message « enregistrée sur votre téléphone, envoyée automatiquement dès que la connexion revient ». Réactivez le réseau : la commande part seule.",
   },
   {
+    route: "/staff",
     title: "Serveur — pool partagé",
-    body: "Ouvrez /staff, connectez-vous en tant que serveur. La commande apparaît dans le pool partagé. Cliquez Prendre en charge puis Confirmé vers cuisine.",
+    body: "Connectez-vous en tant que serveur. La commande apparaît dans le pool partagé. Cliquez Prendre en charge puis Confirmé vers cuisine.",
   },
   {
+    route: "/kitchen",
     title: "Cuisine — le temps réel",
-    body: "Ouvrez /kitchen, connectez-vous en tant que cuisine. Le ticket apparaît en direct, sans rafraîchissement (WebSocket). Cliquez Commencer puis Prêt.",
+    body: "Connectez-vous en tant que cuisine. Le ticket apparaît en direct, sans rafraîchissement (WebSocket). Cliquez Commencer puis Prêt.",
   },
   {
+    route: "/staff",
     title: "Paiement",
     body: "Retour côté serveur : encaissez en espèces, ou montrez le paiement carte simulé. Cliquez Payé.",
   },
   {
+    route: "/dashboard",
     title: "Manager — l'écran qui vend",
-    body: "Ouvrez /dashboard, connectez-vous en tant que manager. Montrez la recette du jour, les commandes perdues, et /dashboard/preuve. Gardez cet écran ouvert le plus longtemps — c'est ce qui justifie le prix.",
+    body: "Connectez-vous en tant que manager. Montrez la recette du jour, les commandes perdues, et /dashboard/preuve. Gardez cet écran ouvert le plus longtemps — c'est ce qui justifie le prix.",
   },
   {
+    route: "/signup",
     title: "Si la question du prix arrive",
-    body: "Ouvrez /signup : les 3 paliers cliquables (Essentiel 50 / Pro 100 / Business 150 DT). Le prix ne bouge jamais une fois annoncé à un restaurateur.",
+    body: "Les 3 paliers cliquables (Essentiel 50 / Pro 100 / Business 150 DT). Le prix ne bouge jamais une fois annoncé à un restaurateur.",
   },
 ];
+
+function matchesRoute(pathname: string, route: string): boolean {
+  return pathname === route || pathname.startsWith(`${route}/`);
+}
 
 const STORAGE_ACTIVE = "tawlaDemoGuideActive";
 const STORAGE_STEP = "tawlaDemoGuideStep";
@@ -42,6 +54,7 @@ const STORAGE_COLLAPSED = "tawlaDemoGuideCollapsed";
 // fois via ?demo=1, puis persisté en localStorage pour survivre à la
 // navigation entre /menu, /staff, /kitchen, /dashboard et /signup.
 export default function DemoGuide() {
+  const pathname = usePathname();
   const [active, setActive] = useState(false);
   const [step, setStep] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
@@ -65,6 +78,16 @@ export default function DemoGuide() {
     setStep(clamped);
     localStorage.setItem(STORAGE_STEP, String(clamped));
   }
+
+  // Avance automatiquement dès qu'une page correspond à une étape plus loin
+  // dans le parcours — jamais en arrière, pour ne pas défaire une avance
+  // manuelle (ex: repasser par /staff après la cuisine, pour le paiement).
+  useEffect(() => {
+    if (!ready || !active) return;
+    const matchIndex = STEPS.findIndex((s, i) => i >= step && matchesRoute(pathname, s.route));
+    if (matchIndex !== -1 && matchIndex !== step) goTo(matchIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, ready, active]);
 
   function toggleCollapsed(next: boolean) {
     setCollapsed(next);
