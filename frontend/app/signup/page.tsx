@@ -90,7 +90,7 @@ function SignupForm() {
             <p className="text-sm mt-1" style={{ color: "var(--ink-soft)" }}>
               Onboardez votre restaurant ou café et devenez son premier compte manager.
             </p>
-            <p className="text-xs mt-2" style={{ color: "var(--ink-soft)" }}>
+            <p className="text-xs mt-2" data-visite="signup-palier" style={{ color: "var(--ink-soft)" }}>
               Palier choisi : <span style={{ color: "var(--encre)" }}>{tier.name}</span> — {tier.priceDT} DT / mois
             </p>
           </div>
@@ -120,7 +120,7 @@ function SignupForm() {
 
         {error && <div className="text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg p-3">{error}</div>}
 
-        <div className="space-y-1">
+        <div className="space-y-1" data-visite="signup-etablissement">
           <label htmlFor="restaurantName" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
             Nom de l&apos;établissement
           </label>
@@ -150,42 +150,47 @@ function SignupForm() {
           />
         </div>
 
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
-            E-mail
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={inputClass}
-            style={inputStyle}
-          />
-        </div>
+        {/* E-mail et mot de passe forment un seul bloc pour la visite guidée :
+            c'est le compte manager qu'on présente, pas deux champs séparés. */}
+        <div className="space-y-4" data-visite="signup-identifiants">
+          <div className="space-y-1">
+            <label htmlFor="email" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
+              E-mail
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+            />
+          </div>
 
-        <div className="space-y-1">
-          <label htmlFor="password" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
-            Mot de passe
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={inputClass}
-            style={inputStyle}
-          />
-          <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
-            8 caractères minimum.
-          </p>
+          <div className="space-y-1">
+            <label htmlFor="password" className="text-sm font-medium" style={{ color: "var(--encre)" }}>
+              Mot de passe
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+            />
+            <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+              8 caractères minimum.
+            </p>
+          </div>
         </div>
 
         <button
           type="submit"
+          data-visite="signup-valider"
           disabled={submitting}
           className={`${lalezar.className} w-full text-white text-base tracking-wide px-3 py-2 rounded-lg disabled:opacity-50 transition-colors`}
           style={{ background: "var(--harissa)" }}

@@ -100,6 +100,17 @@ class Restaurant(Base):
     # force explicitement à `False`.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Établissement de démonstration jetable, créé par POST /api/v1/demo/sessions
+    # quand un visiteur clique « Voir la démo » — un par visiteur, jamais
+    # partagé (voir `modules/demo/service.py` pour pourquoi). Marqué ici et pas
+    # déduit du slug : c'est ce drapeau qui autorise `supprimer_demo()` à
+    # effacer un établissement entier, et qui permet à l'écran admin de ne pas
+    # compter les démos comme des clients.
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    # Échéance de suppression. Toujours renseignée sur une démo, toujours nulle
+    # ailleurs : une date passée ici vaut ordre d'effacement complet.
+    demo_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Promo personnalisée posée à la main par Wassim sur UN restaurant précis
     # (écran admin, 2026-08-21bis — remplace l'ancien `promo_gratuit`,
     # booléen figé qui n'expirait jamais) : réduction + fenêtre de validité,

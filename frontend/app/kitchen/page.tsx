@@ -343,7 +343,7 @@ export default function KitchenPage() {
         )}
       </div>
 
-      <nav className="flex gap-[14px] px-[18px] sm:px-[26px] pt-4 pb-1.5 flex-wrap">
+      <nav className="flex gap-[14px] px-[18px] sm:px-[26px] pt-4 pb-1.5 flex-wrap" data-visite="cuisine-files">
         {TABS.map((tab) => (
           <button
             key={tab.key}

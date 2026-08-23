@@ -135,6 +135,22 @@ export type LoginResponse = {
   staff: Staff;
 };
 
+/**
+ * Établissement de démonstration jetable, monté à la demande quand un visiteur
+ * clique « Voir la démo ». Un par visiteur — voir
+ * `backend/app/modules/demo/service.py` pour pourquoi jamais un compte
+ * partagé. `qr_token` est ce qui rend le parcours client atteignable : sans
+ * lui, la page d'accueil ne connaît aucune table.
+ */
+export type DemoSession = {
+  access_token: string;
+  staff: Staff;
+  restaurant_id: number;
+  restaurant_name: string;
+  qr_token: string;
+  expires_at: string;
+};
+
 export type OrderStatus =
   | "pending_confirmation"
   | "confirmed"
@@ -466,6 +482,7 @@ export const api = {
     password: string;
     tier: SubscriptionTier;
   }) => request<LoginResponse>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  createDemoSession: () => request<DemoSession>("/api/v1/demo/sessions", { method: "POST" }),
   // Offre de lancement (2026-08-21) : public, interrogé par /signup avant
   // même l'inscription pour savoir s'il faut afficher la bannière.
   getLaunchPromoStatus: () => request<LaunchPromoStatus>("/api/v1/auth/launch-promo"),

@@ -61,6 +61,7 @@ const fr: PrivacyPage = {
         "L'identifiant de notification est effacé dès que votre commande est servie ou annulée : il n'a plus rien à vous annoncer.",
         "Votre fiche de fidélité (numéro de téléphone et date de naissance) est supprimée après 24 mois sans nouvelle commande.",
         "Les commandes sont conservées par le restaurant pour sa comptabilité et son suivi d'activité.",
+        "Si vous êtes sur un établissement de démonstration — le bandeau en haut de l'écran vous le dit —, tout ce qu'il contient est supprimé deux heures après son ouverture : les commandes, les tables et les comptes, sans exception et sans archive.",
       ],
     },
     {
@@ -113,6 +114,7 @@ const ar: PrivacyPage = {
         "معرّف الإشعار يتمسح ديراكت كي الطلبية تتقدملك ولا تتلغى : ما بقاش عندو شنوة يقلك.",
         "بطاقة الولاء تاعك (رقم التليفون وتاريخ الميلاد) تتمسح بعد 24 شهر بلا طلبية جديدة.",
         "الطلبيات يحافظ عليهم المطعم للحسابيات ومتابعة النشاط.",
+        "كان راك في محل تجريبي — الشريط إلي فوق الشاشة يقلك — كل شي فيه يتمسح بعد ساعتين من فتحو : الطلبيات، الطاولات والحسابات، الكل بلا استثناء وبلا أرشيف.",
       ],
     },
     {

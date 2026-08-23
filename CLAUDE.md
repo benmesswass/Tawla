@@ -121,6 +121,56 @@ Comptes démo (fixes, mot de passe `tawla2026`) : `manager@tawla.tn` (manager),
 tables, eux, changent à chaque reseed — voir `CREDENTIALS.md` local (généré
 par le script, non commité).
 
+## Montrer le produit — deux aides distinctes
+
+Aucune des deux ne démarre seule : un restaurateur qui arrive sur le site n'a
+jamais rien à fermer.
+
+**Établissement de démonstration jetable** — « Voir la démo » ouvre d'abord
+`POST /api/v1/demo/sessions` : un restaurant complet (équipe, tables, carte),
+palier Pro, actif, `is_demo=true`, effacé **en entier** deux heures plus tard.
+**Un par visiteur, jamais un compte partagé** : les canaux temps réel sont
+groupés par `(restaurant_id, channel)` (`notifications/manager.py`), donc deux
+démos sur le même établissement se verraient l'une l'autre. La purge se
+déclenche à chaque création (pas d'ordonnanceur nécessaire) et depuis
+`scripts/purge_donnees_personnelles.py`. Plafond dur `PLAFOND_DEMOS` + limite
+par IP : c'est la seule route publique qui écrit en base. Si elle échoue, le
+bouton lance quand même la visite, en version visiteur.
+
+- **Visite guidée** (`?visite=1`, ou le lien « Voir la visite guidée » en bas de
+  l'accueil) — s'adresse au **restaurateur**. Bulles pas à pas ancrées sur les
+  vrais éléments de l'écran, façon Stonly, sans dépendance ni service payant :
+  moteur dans `frontend/components/visite/`, contenu dans
+  `frontend/lib/visite/etapes.ts`. Chaque étape désigne sa cible par un attribut
+  `data-visite="…"` posé sur la page — déplacer une section ne casse rien, la
+  bulle se recentre (et le dit en console hors production). Ajouter une étape =
+  une entrée dans `etapes.ts` et l'attribut correspondant, rien d'autre.
+  **Deux parcours qui ne se croisent jamais**, parce qu'ils ne se jouent pas
+  sur le même appareil (`Parcours` dans `etapes.ts`) :
+  - **vente** — sur l'ordinateur de celui qui montre : accueil, paliers,
+    inscription, connexion, tableau de bord, pool serveur, cuisine. Les deux
+    écrans de service sont accessibles au manager connecté, aucun second
+    compte n'est nécessaire. **Le parcours s'adapte au visiteur** (champ
+    `acces` dans `etapes.ts`) : connecté, 20 étapes ; sans compte, les sept
+    écrans derrière la connexion sortent de la liste et une étape de clôture
+    les remplace — 14 étapes, et un compteur qui ne ment pas. Sans ça la
+    visite marchait droit sur `/dashboard`, l'application la renvoyait sur
+    `/login`, et elle restait plantée sur une pastille à 14/20.
+  - **client** (6 étapes) — sur le téléphone, en ouvrant
+    `…/menu/<qr_token>?visite=1` : la carte, un plat, le panier, l'appel
+    serveur, le hors-ligne, le suivi. La visite ne peut pas y aller seule
+    (elle ne connaît aucun `qr_token`), d'où le parcours séparé.
+
+  Sur `/menu/…`, **seules** les étapes du parcours client s'affichent : une
+  visite de vente en cours ailleurs n'y laisse même pas sa pastille.
+  **Ouvrir à une étape précise** : `?visite=tarif-pro` (identifiant, à préférer
+  dans un lien qu'on envoie — il survit à l'insertion d'une étape, et désigne
+  son parcours) ou `?visite=6` (rang affiché dans le parcours de l'écran).
+- **Aide-mémoire de démo** (`?demo=1`, `frontend/components/DemoGuide.tsx`) —
+  s'adresse à **Wassim** pendant la démo : le script des gestes à faire
+  (« coupez le réseau du téléphone, puis… »). S'efface tant que la visite
+  guidée tourne.
+
 ## Roadmap
 
 `ROADMAP.md` est le fichier unique de pilotage du projet (phases 19 à 24 depuis
