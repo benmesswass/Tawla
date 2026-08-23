@@ -33,6 +33,15 @@ export default function HomePage() {
             Vos clients scannent le QR de leur table et commandent. Vos serveurs gardent la main : rien ne part
             en cuisine sans qu&apos;ils l&apos;aient vérifié à table.
           </p>
+          {/* La démo est le premier appel à l'action, avant « créer mon
+              compte » : un restaurateur qui découvre Tawla veut le voir
+              tourner, pas s'inscrire. Elle ne quitte pas la page — les bulles
+              s'ouvrent par-dessus celle qu'il est en train de lire. */}
+          <div className="mt-7 flex flex-wrap items-center gap-4">
+            <BoutonVisite className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-medium text-[var(--harissa)] shadow-sm" />
+            <p className="text-sm text-white/80">2 minutes, sans inscription.</p>
+          </div>
+
           <p className="mt-6 text-sm text-white/80">
             Pour les restaurants et brasseries à partir de 6 tables, en Tunisie.
           </p>
@@ -142,6 +151,9 @@ export default function HomePage() {
             >
               Demander un essai
             </a>
+            {/* Le même appel, pour qui a lu la page jusqu'au bout sans
+                cliquer en haut. Discret ici : la décision du bas de page,
+                c'est « créer mon compte ». */}
             <BoutonVisite className="text-sm underline text-[var(--ink-soft)]" />
             <Link href="/login" className="text-sm underline text-[var(--ink-soft)]">
               J&apos;ai déjà un compte
