@@ -16,12 +16,21 @@ export const CLE_PARCOURS = "tawlaVisiteParcours";
 export const CLE_DEMO = "tawlaDemoSession";
 
 /**
- * L'établissement jetable ouvert pour cette démo. Gardé ici parce que deux
- * choses en dépendent après le clic : le bandeau qui annonce l'échéance, et
- * l'étape finale qui propose d'ouvrir la carte de la table — la seule façon
- * d'atteindre le parcours client depuis un ordinateur.
+ * L'établissement jetable ouvert pour cette démo. Gardé ici parce que
+ * plusieurs choses en dépendent après le clic : le bandeau qui annonce
+ * l'échéance, l'étape finale qui propose d'ouvrir la carte de la table — la
+ * seule façon d'atteindre le parcours client depuis un ordinateur —, et les
+ * liens par rôle que ce même bandeau propose de partager sur un autre
+ * appareil (`lib/demoLien.ts`).
  */
-export type SessionDemo = { qrToken: string; expireLe: string; nom: string };
+export type SessionDemo = {
+  qrToken: string;
+  expireLe: string;
+  nom: string;
+  managerToken: string;
+  waiterToken: string;
+  kitchenToken: string;
+};
 
 export function sessionDemo(): SessionDemo | null {
   try {

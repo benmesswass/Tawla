@@ -134,7 +134,7 @@ def purger_demos_expirees(db: Session) -> int:
     return len(expirees)
 
 
-def creer_demo(db: Session) -> tuple[Restaurant, Staff, Table]:
+def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     """
     Monte un établissement complet : l'équipe, trois tables, une carte.
 
@@ -142,6 +142,12 @@ def creer_demo(db: Session) -> tuple[Restaurant, Staff, Table]:
     l'on vend (paiement carte, fidélité, plan de salle), pas un écran
     d'activation. C'est le seul chemin qui crée un restaurant utilisable sans
     paiement — d'où `is_demo`, qui le distingue d'un vrai client à vie.
+
+    Renvoie les trois comptes plutôt que le seul manager : `router.py` émet un
+    jeton pour chacun, pour qu'un lien puisse ouvrir l'écran serveur ou
+    cuisine, déjà connecté, sur un autre appareil que celui qui a ouvert la
+    démo — les comptes serveur et cuisine ont un mot de passe généré
+    aléatoirement ci-dessous, jamais révélé, donc jamais saisissable à la main.
     """
     purger_demos_expirees(db)
 
@@ -191,9 +197,9 @@ def creer_demo(db: Session) -> tuple[Restaurant, Staff, Table]:
         db.refresh(compte)
     db.refresh(tables[0])
 
-    manager = next(c for c in comptes if c.role is StaffRole.MANAGER)
+    par_role = {compte.role: compte for compte in comptes}
     log_event(logger, "demo.creee", restaurant_id=restaurant.id, table_id=tables[0].id)
-    return restaurant, manager, tables[0]
+    return restaurant, par_role, tables[0]
 
 
 def expiration_restante(restaurant: Restaurant) -> datetime:

@@ -149,6 +149,8 @@ export type DemoSession = {
   restaurant_name: string;
   qr_token: string;
   expires_at: string;
+  waiter_access_token: string;
+  kitchen_access_token: string;
 };
 
 export type OrderStatus =

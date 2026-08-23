@@ -8,6 +8,7 @@ from app.core.logging import log_event
 from app.core.rate_limit import rate_limit
 from app.modules.demo import schemas, service
 from app.modules.staff import security
+from app.modules.staff.models import StaffRole
 
 router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
 logger = logging.getLogger("demo")
@@ -34,6 +35,13 @@ def create_demo_session(db: Session = Depends(get_db)):
 
     Tout est supprimé au bout de deux heures (`DUREE_DEMO`), purge déclenchée
     à chaque création — la démo se nettoie donc sans ordonnanceur.
+
+    Émet aussi un jeton pour le serveur et pour la cuisine, pas seulement pour
+    le manager : ces deux comptes ont un mot de passe généré aléatoirement,
+    jamais révélé (`service.py::creer_demo`), donc jamais saisissable à la
+    main. Sans ces jetons, montrer l'écran serveur ou cuisine en direct sur un
+    deuxième appareil — pendant qu'un vrai client commande sur le sien —
+    n'avait aucun chemin possible.
     """
     if service.demos_vivantes(db) >= service.PLAFOND_DEMOS:
         # On refuse plutôt que de laisser la base enfler : la démo est un
@@ -47,13 +55,21 @@ def create_demo_session(db: Session = Depends(get_db)):
             },
         )
 
-    restaurant, manager, table = service.creer_demo(db)
-    token = security.create_access_token(manager.id, manager.restaurant_id, manager.role.value)
+    restaurant, comptes, table = service.creer_demo(db)
+    manager = comptes[StaffRole.MANAGER]
+    waiter = comptes[StaffRole.WAITER]
+    kitchen = comptes[StaffRole.KITCHEN]
+
+    def jeton_pour(staff) -> str:
+        return security.create_access_token(staff.id, staff.restaurant_id, staff.role.value)
+
     return schemas.DemoSessionOut(
-        access_token=token,
+        access_token=jeton_pour(manager),
         staff=manager,
         restaurant_id=restaurant.id,
         restaurant_name=restaurant.name,
         qr_token=table.qr_token,
         expires_at=service.expiration_restante(restaurant),
+        waiter_access_token=jeton_pour(waiter),
+        kitchen_access_token=jeton_pour(kitchen),
     )
