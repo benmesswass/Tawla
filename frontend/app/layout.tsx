@@ -1,6 +1,7 @@
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import DemoGuide from "@/components/DemoGuide";
+import VisiteGuidee from "@/components/visite/VisiteGuidee";
 import { hankenGrotesk } from "@/lib/fonts";
 
 export const metadata = {
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <ServiceWorkerRegister />
         <DemoGuide />
+        <VisiteGuidee />
       </body>
     </html>
   );

@@ -46,7 +46,10 @@ export default function EnteteManager({ titre, sousTitre }: { titre: string; sou
       {/* La navigation au-dessus du titre, et non à côté : elle appartient à
           l'application, le titre à la page. Les inverser faisait sauter le
           titre d'un bord à l'autre d'un écran au suivant. */}
-      <nav className="flex items-center gap-x-4 gap-y-1 flex-wrap border-b border-[var(--line)] pb-2 mb-3">
+      <nav
+        data-visite="dashboard-navigation"
+        className="flex items-center gap-x-4 gap-y-1 flex-wrap border-b border-[var(--line)] pb-2 mb-3"
+      >
         {PAGES.map((page) => {
           const active = chemin === page.href;
           return (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { EVENEMENT_VISITE, visiteEnCours } from "@/lib/visite/etat";
 
 const STEPS = [
   {
@@ -59,6 +60,16 @@ export default function DemoGuide() {
   const [step, setStep] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [ready, setReady] = useState(false);
+  // La visite guidée s'adresse au restaurateur, cet aide-mémoire au vendeur :
+  // les deux panneaux flottants ensemble encombrent l'écran qu'on montre.
+  const [visite, setVisite] = useState(false);
+
+  useEffect(() => {
+    const relire = () => setVisite(visiteEnCours());
+    relire();
+    window.addEventListener(EVENEMENT_VISITE, relire);
+    return () => window.removeEventListener(EVENEMENT_VISITE, relire);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -101,7 +112,7 @@ export default function DemoGuide() {
     setActive(false);
   }
 
-  if (!ready || !active) return null;
+  if (!ready || !active || visite) return null;
 
   if (collapsed) {
     return (

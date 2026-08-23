@@ -707,7 +707,9 @@ export default function DashboardPage() {
         sousTitre="Modifier un plat, signaler une rupture, en ajouter un — et déposer les photos en les glissant sur leur vignette."
       />
 
-      <RecetteDuJour stats={dayStats} />
+      <div data-visite="dashboard-recette">
+        <RecetteDuJour stats={dayStats} />
+      </div>
 
       {error && (
         <Card tone="danger" padding="sm" className="mb-4 text-sm text-[var(--harissa)]">
@@ -720,7 +722,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="flex gap-1 border-b border-[var(--line)] mb-4">
+      <div className="flex gap-1 border-b border-[var(--line)] mb-4" data-visite="dashboard-onglets">
         {TABS.map((tab) => (
           <button
             key={tab.key}

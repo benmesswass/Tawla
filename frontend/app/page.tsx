@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { lalezar } from "@/lib/fonts";
 import TawlaLogo from "@/components/brand/TawlaLogo";
+import BoutonVisite from "@/components/visite/BoutonVisite";
 import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
 
 /**
@@ -23,7 +24,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen">
       <section className="bg-[var(--harissa)] text-white">
-        <div className="max-w-3xl mx-auto px-6 py-14">
+        <div className="max-w-3xl mx-auto px-6 py-14" data-visite="accueil-promesse">
           <TawlaLogo size={40} className="mb-8" inverse />
           <h1 className={`${lalezar.className} text-3xl sm:text-4xl leading-tight text-balance`}>
             La commande à table, sans commande perdue
@@ -38,7 +39,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="max-w-3xl mx-auto px-6 py-12">
+      <section className="max-w-3xl mx-auto px-6 py-12" data-visite="accueil-benefices">
         <div className="grid gap-6 sm:grid-cols-3">
           {BENEFITS.map((benefit) => (
             <div key={benefit.title}>
@@ -66,7 +67,7 @@ export default function HomePage() {
         </section>
       )}
 
-      <section className="max-w-3xl mx-auto px-6 py-12">
+      <section className="max-w-3xl mx-auto px-6 py-12" data-visite="accueil-inclus">
         <h2 className={`${lalezar.className} text-2xl mb-2`}>Tout est inclus</h2>
         <p className="text-sm text-[var(--ink-soft)] mb-6 max-w-xl">
           Vous n&apos;avez ni carte à saisir, ni QR à imprimer, ni logiciel à apprendre seul. On s&apos;installe
@@ -94,6 +95,7 @@ export default function HomePage() {
             {TIERS.map((tier) => (
               <div
                 key={tier.id}
+                data-visite={`tarif-${tier.id}`}
                 className={`flex flex-col rounded-lg border p-5 bg-white ${
                   tier.recommended ? "border-[var(--harissa)] ring-1 ring-[var(--harissa)]" : "border-[var(--line)]"
                 }`}
@@ -129,6 +131,7 @@ export default function HomePage() {
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
               href="/signup"
+              data-visite="accueil-creer-compte"
               className="inline-flex items-center rounded-lg bg-[var(--harissa)] px-5 py-3 text-white font-medium"
             >
               Créer mon compte
@@ -139,6 +142,7 @@ export default function HomePage() {
             >
               Demander un essai
             </a>
+            <BoutonVisite className="text-sm underline text-[var(--ink-soft)]" />
             <Link href="/login" className="text-sm underline text-[var(--ink-soft)]">
               J&apos;ai déjà un compte
             </Link>

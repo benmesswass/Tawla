@@ -44,6 +44,7 @@ export default function LoginPage() {
     >
       <form
         onSubmit={handleSubmit}
+        data-visite="login-formulaire"
         className="w-full max-w-sm rounded-xl p-6 space-y-4 shadow-sm"
         style={{ background: "var(--semoule-raised)", border: "1px solid var(--line)" }}
       >

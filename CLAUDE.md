@@ -121,6 +121,24 @@ Comptes démo (fixes, mot de passe `tawla2026`) : `manager@tawla.tn` (manager),
 tables, eux, changent à chaque reseed — voir `CREDENTIALS.md` local (généré
 par le script, non commité).
 
+## Montrer le produit — deux aides distinctes
+
+Aucune des deux ne démarre seule : un restaurateur qui arrive sur le site n'a
+jamais rien à fermer.
+
+- **Visite guidée** (`?visite=1`, ou le lien « Voir la visite guidée » en bas de
+  l'accueil) — s'adresse au **restaurateur**. Bulles pas à pas ancrées sur les
+  vrais éléments de l'écran, façon Stonly, sans dépendance ni service payant :
+  moteur dans `frontend/components/visite/`, contenu dans
+  `frontend/lib/visite/etapes.ts`. Chaque étape désigne sa cible par un attribut
+  `data-visite="…"` posé sur la page — déplacer une section ne casse rien, la
+  bulle se recentre. Ajouter une étape = une entrée dans `etapes.ts` et
+  l'attribut correspondant, rien d'autre. Ne s'affiche jamais sur `/menu/…`.
+- **Aide-mémoire de démo** (`?demo=1`, `frontend/components/DemoGuide.tsx`) —
+  s'adresse à **Wassim** pendant la démo : le script des gestes à faire
+  (« coupez le réseau du téléphone, puis… »). S'efface tant que la visite
+  guidée tourne.
+
 ## Roadmap
 
 `ROADMAP.md` est le fichier unique de pilotage du projet (phases 19 à 24 depuis
