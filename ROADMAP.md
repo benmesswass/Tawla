@@ -166,7 +166,14 @@ Tout ici demande un compte ou une carte bancaire de Wassim.
 
 - [ ] Choisir et provisionner l'hébergement 🧑 — backend dockerisé sur Railway ou Render (WebSocket natif + Postgres managé), frontend sur Vercel. Contrainte à respecter : **une seule instance backend** (gestionnaire WebSocket et limiteur de débit en mémoire)
 - [ ] Réserver le domaine 🧑 (`tawla.tn` en priorité, `.com` en secours)
-- [ ] Générer les vraies clés en variables d'environnement 🧑 : `JWT_SECRET`, `FRONTEND_ORIGIN` sur l'origine exacte de prod, paire VAPID, `FORWARDED_ALLOW_IPS` (cf. 19bis.2 S-2a)
+- [ ] Générer les vraies clés en variables d'environnement 🧑 — **la liste fait foi dans [`backend/.env.example`](./backend/.env.example), pas ici** : cette ligne avait oublié `ADMIN_CREATION_SECRET`, et c'est exactement ce qui a fait échouer le déploiement du 2026-08-23 (voir ci-dessous)
+  - `ENV=production` — c'est lui qui arme les garde-fous de `app/core/config.py`
+  - `JWT_SECRET` et **`ADMIN_CREATION_SECRET`** — les deux seuls dont le démarrage refuse la valeur de dev, dans cet ordre. Générer avec `python -c "import secrets; print(secrets.token_urlsafe(32))"`, garder dans un gestionnaire de mots de passe, ne jamais committer
+  - `FRONTEND_ORIGIN` sur l'origine exacte de prod (CORS) — s'il reste sur `localhost:3000`, le frontend déployé n'atteint aucune route
+  - **`FRONTEND_URL`** et **`BACKEND_URL`** — URLs canoniques du retour et du webhook de paiement d'abonnement (`app/core/konnect.py`) ; laissées sur `localhost`, un paiement de palier ne revient jamais
+  - paire VAPID, `FORWARDED_ALLOW_IPS` (cf. 19bis.2 S-2a)
+  - `FIELD_ENCRYPTION_KEY` — facultative, dérivée de `JWT_SECRET` si absente
+- [ ] **Redéployer le backend après toute PR qui ajoute une variable obligatoire** 🧑 — le verrou `ADMIN_CREATION_SECRET` est arrivé en PR #79, les deux commits suivants étaient purement frontend, et l'échec n'est apparu qu'au déploiement backend suivant (PR #80), deux jours plus tard. Un garde-fou qui ne se déclenche qu'au prochain déploiement backend accuse le commit qui déploie, pas celui qui l'a introduit
 - [ ] Activer les sauvegardes automatiques du Postgres managé 🧑
 - [ ] **Restaurer une sauvegarde une fois, sur une base jetable** 🧑 — une sauvegarde jamais restaurée n'est pas une sauvegarde. C'est la seule ligne de cette phase qu'on sera tenté de sauter, et la seule qui prouve les autres
 - [ ] Brancher le monitoring externe sur `/health` 🧑 (UptimeRobot gratuit) — la sonde interroge déjà la base et renvoie 503 si elle est injoignable
