@@ -2,6 +2,7 @@ import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import DemoGuide from "@/components/DemoGuide";
 import VisiteGuidee from "@/components/visite/VisiteGuidee";
+import BandeauDemo from "@/components/visite/BandeauDemo";
 import { hankenGrotesk } from "@/lib/fonts";
 
 export const metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <ServiceWorkerRegister />
         <DemoGuide />
+        <BandeauDemo />
         <VisiteGuidee />
       </body>
     </html>

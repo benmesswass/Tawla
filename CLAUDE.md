@@ -126,6 +126,17 @@ par le script, non commité).
 Aucune des deux ne démarre seule : un restaurateur qui arrive sur le site n'a
 jamais rien à fermer.
 
+**Établissement de démonstration jetable** — « Voir la démo » ouvre d'abord
+`POST /api/v1/demo/sessions` : un restaurant complet (équipe, tables, carte),
+palier Pro, actif, `is_demo=true`, effacé **en entier** deux heures plus tard.
+**Un par visiteur, jamais un compte partagé** : les canaux temps réel sont
+groupés par `(restaurant_id, channel)` (`notifications/manager.py`), donc deux
+démos sur le même établissement se verraient l'une l'autre. La purge se
+déclenche à chaque création (pas d'ordonnanceur nécessaire) et depuis
+`scripts/purge_donnees_personnelles.py`. Plafond dur `PLAFOND_DEMOS` + limite
+par IP : c'est la seule route publique qui écrit en base. Si elle échoue, le
+bouton lance quand même la visite, en version visiteur.
+
 - **Visite guidée** (`?visite=1`, ou le lien « Voir la visite guidée » en bas de
   l'accueil) — s'adresse au **restaurateur**. Bulles pas à pas ancrées sur les
   vrais éléments de l'écran, façon Stonly, sans dépendance ni service payant :

@@ -13,6 +13,37 @@ import type { Parcours } from "./etapes";
 export const CLE_ACTIVE = "tawlaVisiteActive";
 export const CLE_ETAPE = "tawlaVisiteEtape";
 export const CLE_PARCOURS = "tawlaVisiteParcours";
+export const CLE_DEMO = "tawlaDemoSession";
+
+/**
+ * L'établissement jetable ouvert pour cette démo. Gardé ici parce que deux
+ * choses en dépendent après le clic : le bandeau qui annonce l'échéance, et
+ * l'étape finale qui propose d'ouvrir la carte de la table — la seule façon
+ * d'atteindre le parcours client depuis un ordinateur.
+ */
+export type SessionDemo = { qrToken: string; expireLe: string; nom: string };
+
+export function sessionDemo(): SessionDemo | null {
+  try {
+    const brut = window.localStorage.getItem(CLE_DEMO);
+    if (!brut) return null;
+    const session = JSON.parse(brut) as SessionDemo;
+    // Une session échue ne vaut rien : le backend a déjà effacé
+    // l'établissement, les liens qu'elle porte mènent à un 404.
+    if (new Date(session.expireLe).getTime() <= Date.now()) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+export function enregistrerSessionDemo(session: SessionDemo): void {
+  try {
+    window.localStorage.setItem(CLE_DEMO, JSON.stringify(session));
+  } catch {
+    /* voir visiteEnCours */
+  }
+}
 
 /**
  * La visite démarre aussi depuis un bouton, donc sans rechargement de page :
@@ -48,6 +79,9 @@ export function arreterVisite(): void {
     window.localStorage.removeItem(CLE_ACTIVE);
     window.localStorage.removeItem(CLE_ETAPE);
     window.localStorage.removeItem(CLE_PARCOURS);
+    // La session de démo, elle, survit à la fermeture de la visite : le
+    // visiteur qui referme les bulles doit pouvoir continuer à cliquer dans
+    // le produit jusqu'à l'échéance.
   } catch {
     /* voir visiteEnCours */
   }

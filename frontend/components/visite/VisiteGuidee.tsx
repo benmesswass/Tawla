@@ -13,7 +13,9 @@ import {
   etapeEnregistree,
   EVENEMENT_VISITE,
   parcoursEnregistre,
+  sessionDemo,
   visiteEnCours,
+  type SessionDemo,
 } from "@/lib/visite/etat";
 
 function surLaRoute(chemin: string, route: string): boolean {
@@ -55,6 +57,7 @@ export default function VisiteGuidee() {
   // compteur ne se corrige en « 1/20 ». Sûr côté serveur — `getToken` y rend
   // `null`, et rien de ce composant n'est rendu avant le montage.
   const [connecte, setConnecte] = useState(() => getToken() !== null);
+  const [demo, setDemo] = useState<SessionDemo | null>(null);
   const bulle = useRef<HTMLDivElement>(null);
 
   // Mémorisé : `aller` en dépend, et un nouveau tableau à chaque rendu
@@ -67,6 +70,13 @@ export default function VisiteGuidee() {
     setParcours(enregistre);
     setIndex(Math.min(etapeEnregistree(), etapesDe(enregistre).length - 1));
     setReduite(false);
+    // Relus ici aussi, et pas seulement au changement de page : le bouton
+    // « Voir la démo » ouvre une session et pose le jeton juste avant
+    // d'émettre l'événement, sans navigation. Sans ces deux lignes, la visite
+    // démarrait en « 1/14 » puis sautait à « 9/20 » au premier changement de
+    // page — un compteur qui recule au milieu d'une démonstration.
+    setConnecte(getToken() !== null);
+    setDemo(sessionDemo());
   }, []);
 
   useEffect(() => {
@@ -108,6 +118,7 @@ export default function VisiteGuidee() {
   // « connecté », et les sept écrans de service doivent apparaître.
   useEffect(() => {
     setConnecte(getToken() !== null);
+    setDemo(sessionDemo());
   }, [chemin, pret]);
 
   // Avance seule quand on atterrit sur la page d'une étape plus loin : le
@@ -213,6 +224,19 @@ export default function VisiteGuidee() {
 
         <h2 className="mt-3 text-base font-semibold text-[var(--encre)]">{etape.titre}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-[var(--ink-soft)]">{etape.corps}</p>
+
+        {/* Le seul chemin vers le parcours client depuis un ordinateur : il
+            faut le `qr_token` de la démo, qu'aucun texte figé ne peut porter.
+            Absent si la démo n'a pas pu s'ouvrir — le texte de l'étape reste
+            vrai, il parle alors du QR posé sur la table. */}
+        {etape.carteDemo && demo && (
+          <a
+            href={`/menu/${demo.qrToken}?visite=1`}
+            className="mt-3 inline-block text-sm font-medium underline text-[var(--menthe)]"
+          >
+            Ouvrir la carte de la table 1 →
+          </a>
+        )}
 
         <div className="mt-4 flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => aller(rang - 1, true)} disabled={rang === 0}>

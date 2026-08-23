@@ -7,7 +7,11 @@ Deux traitements, prévus par la politique de confidentialité publiée :
      servent qu'à annoncer « votre commande est prête » ;
   2. les fiches fidélité sans commande depuis 24 mois — un numéro de téléphone
      conservé sans finalité est une conservation illégale au sens de la loi
-     organique 2004-63.
+     organique 2004-63 ;
+  3. les établissements de démonstration échus — créés par « Voir la démo »
+     sur le site, ils vivent deux heures et sont ensuite supprimés en entier.
+     Ils se purgent déjà tout seuls à chaque nouvelle démo ; ce script les
+     ramasse quand plus personne n'en lance.
 
 Lancé à la main, pas par un ordonnanceur : le volume actuel ne le justifie pas
 et une purge automatique mal réglée détruit des données irrécupérables. Par
@@ -27,6 +31,7 @@ from app.core import model_registry  # noqa: E402,F401 — sans lui, la ForeignK
 # `orders.restaurant_id` ne trouve pas la table `restaurants` et le premier
 # commit lève NoReferencedTableError (constaté en lançant ce script).
 from app.core.database import SessionLocal  # noqa: E402
+from app.modules.demo import service as demo_service  # noqa: E402
 from app.modules.loyalty import service as loyalty_service  # noqa: E402
 from app.modules.orders import service as orders_service  # noqa: E402
 
@@ -45,15 +50,21 @@ def main() -> None:
     try:
         pushes = orders_service.purge_terminal_push_subscriptions(db, dry_run=dry_run)
         members = loyalty_service.purge_inactive_members(db, dry_run=dry_run)
+        # Une démo échue se supprime en entier — il n'y a rien à anonymiser
+        # dedans, et rien à conserver : ce ne sont ni des commandes réelles ni
+        # des clients réels.
+        demos = len(demo_service.demos_expirees(db)) if dry_run else demo_service.purger_demos_expirees(db)
     finally:
         db.close()
 
     if dry_run:
         print(f"Abonnements push sur commandes terminées à supprimer : {pushes}")
         print(f"Fiches fidélité inactives depuis 24 mois à supprimer : {members}")
+        print(f"Établissements de démonstration échus à supprimer : {demos}")
     else:
         print(f"Abonnements push sur commandes terminées supprimés : {pushes}")
         print(f"Fiches fidélité inactives depuis 24 mois supprimées : {members}")
+        print(f"Établissements de démonstration échus supprimés : {demos}")
     if dry_run:
         print("\nSimulation — rien n'a été supprimé. Relancer avec --appliquer.")
 

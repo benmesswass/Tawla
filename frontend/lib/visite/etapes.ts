@@ -42,6 +42,13 @@ export type EtapeVisite = {
    * compte, pour lui dire où s'arrête ce qu'il peut voir seul.
    */
   acces?: "staff" | "visiteur";
+  /**
+   * L'étape propose d'ouvrir la carte d'une table de la démonstration.
+   * Seule façon d'atteindre le parcours client depuis un ordinateur : le lien
+   * ne peut être construit qu'avec le `qr_token` rendu par la session de démo,
+   * il n'a donc pas sa place dans un texte figé.
+   */
+  carteDemo?: true;
   /** Page sur laquelle l'étape se joue. */
   route: string;
   /**
@@ -285,10 +292,11 @@ export const ETAPES: EtapeVisite[] = [
   {
     id: "fin",
     acces: "staff",
+    carteDemo: true,
     route: "/kitchen",
     titre: "Il reste le principal : votre client",
     corps:
-      "Vous venez de voir vos trois écrans. Reste celui que voit la personne assise à votre table — et c'est celui qui décide. Prenez votre téléphone, scannez le QR d'une table : la visite y continue toute seule, côté client.",
+      "Vous venez de voir vos trois écrans. Reste celui que voit la personne assise à votre table — et c'est celui qui décide. Ouvrez la carte de votre table 1 : la visite y continue, côté client. Sur un vrai service, c'est le QR posé sur la table qui y mène.",
   },
 
   // --- Parcours client, sur le téléphone -----------------------------------
