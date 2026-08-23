@@ -31,6 +31,10 @@ function useRectCible(cible: string | undefined, cle: string): Rect | null {
     let element: HTMLElement | null = null;
 
     function mesurer() {
+      // Un re-rendu peut avoir remplacé le nœud retenu (le tableau de bord se
+      // redessine quand l'API répond) : mesurer un nœud détaché donnerait un
+      // rectangle nul, donc un halo qui disparaît sans raison.
+      if (element && !element.isConnected) element = document.querySelector<HTMLElement>(`[data-visite="${cible}"]`);
       if (!element) return;
       const r = element.getBoundingClientRect();
       // Un élément masqué (onglet non actif, écran étroit) a un rect nul :

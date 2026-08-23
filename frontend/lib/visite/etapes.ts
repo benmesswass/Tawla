@@ -83,7 +83,7 @@ export const ETAPES: EtapeVisite[] = [
     cible: "tarif-pro",
     titre: "Pro — 100 DT / mois",
     corps:
-      "Tout Essentiel, plus ce qui fait vendre et revenir : paiement carte, programme de fidélité, suggestion « avec ce plat », plan de salle visuel, photos des plats et mode Ramadan. C'est le palier que prennent la plupart des restaurants.",
+      "Tout Essentiel, plus le paiement carte, le programme de fidélité, la suggestion « avec ce plat », le plan de salle visuel, les photos des plats et le mode Ramadan. C'est le palier que nous recommandons pour un restaurant qui sert à table.",
   },
   {
     id: "tarif-business",
@@ -112,7 +112,7 @@ export const ETAPES: EtapeVisite[] = [
     cible: "signup-palier",
     titre: "Le palier que vous avez choisi",
     corps:
-      "Il reprend la carte tarif sur laquelle vous avez cliqué. Vous pouvez changer de palier plus tard depuis votre tableau de bord, sans refaire de compte.",
+      "Il reprend la carte tarif sur laquelle vous avez cliqué. Vous pourrez passer à un palier supérieur plus tard depuis votre tableau de bord, sans refaire de compte.",
   },
   {
     id: "signup-etablissement",
@@ -164,7 +164,7 @@ export const ETAPES: EtapeVisite[] = [
     cible: "dashboard-recette",
     titre: "Votre service, en direct",
     corps:
-      "La recette du jour se met à jour à chaque commande encaissée, sans que personne ait à saisir quoi que ce soit. C'est le premier écran qu'ouvrent les patrons le soir.",
+      "La recette du jour se met à jour à chaque commande encaissée, sans que personne ait à saisir quoi que ce soit. Seul ce qui est réellement réglé y entre : une commande servie mais pas encore payée n'y est pas comptée.",
   },
   {
     id: "dashboard-onglets",
@@ -172,7 +172,7 @@ export const ETAPES: EtapeVisite[] = [
     cible: "dashboard-onglets",
     titre: "Votre carte, vos tables, votre équipe",
     corps:
-      "Un plat en rupture se signale en un clic et disparaît de la carte du client à l'instant. Vous ajoutez une table, imprimez son QR, créez un accès serveur — sans nous appeler.",
+      "Un plat en rupture se signale en un clic : il se barre chez le client dans la seconde, sans qu'il ait à recharger. Il reste affiché, parce que « il n'y en a plus ce soir » est une information, pas un vide. Vous ajoutez une table, imprimez son QR, créez un accès serveur — sans nous appeler.",
   },
   {
     id: "fin",
