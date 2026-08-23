@@ -1,16 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Projecteur from "@/components/visite/Projecteur";
-import { ETAPES, indexEtape } from "@/lib/visite/etapes";
+import { etapesDe, resoudreVisite, type Parcours } from "@/lib/visite/etapes";
 import {
   arreterVisite,
   demarrerVisite,
   enregistrerEtape,
   etapeEnregistree,
   EVENEMENT_VISITE,
+  parcoursEnregistre,
   visiteEnCours,
 } from "@/lib/visite/etat";
 
@@ -28,31 +29,45 @@ function surLaRoute(chemin: string, route: string): boolean {
  * `?visite=1` dans l'URL, ou le bouton « Visite guidée » de la page d'accueil.
  * Un restaurateur qui arrive sur le site n'a donc rien à fermer.
  *
- * Elle ne s'affiche pas sur le parcours client (`/menu/…`) : cet écran-là est
- * celui du client attablé, il doit rester nu même pendant une démonstration.
+ * Deux parcours qui ne se croisent jamais (voir `Parcours` dans `etapes.ts`) :
+ * celui de vente sur l'ordinateur, celui du client sur le téléphone qui a
+ * scanné le QR. Sur `/menu/…`, seules les étapes du parcours client
+ * s'affichent — jamais la pastille d'une visite en cours ailleurs : l'écran du
+ * client attablé doit rester nu.
  */
 export default function VisiteGuidee() {
   const router = useRouter();
   const chemin = usePathname();
   const [active, setActive] = useState(false);
+  const [parcours, setParcours] = useState<Parcours>("vente");
   const [index, setIndex] = useState(0);
   const [reduite, setReduite] = useState(false);
   const [pret, setPret] = useState(false);
   const bulle = useRef<HTMLDivElement>(null);
 
+  // Mémorisé : `aller` en dépend, et un nouveau tableau à chaque rendu
+  // réabonnerait le clavier à chaque frappe.
+  const etapes = useMemo(() => etapesDe(parcours), [parcours]);
+
   const relire = useCallback(() => {
+    const enregistre = parcoursEnregistre();
     setActive(visiteEnCours());
-    setIndex(Math.min(etapeEnregistree(), ETAPES.length - 1));
+    setParcours(enregistre);
+    setIndex(Math.min(etapeEnregistree(), etapesDe(enregistre).length - 1));
     setReduite(false);
   }, []);
 
   useEffect(() => {
     // `?visite=1` ouvre au début, `?visite=tarif-pro` (ou `?visite=6`) droit à
     // l'étape — de quoi renvoyer un patron sur le point exact dont on a parlé.
+    // Sur la carte d'une table, c'est le parcours client qui s'ouvre.
     // L'événement émis ici ne réveille personne (l'écouteur n'est posé qu'en
     // dessous) : c'est `relire` juste après qui prend l'état en compte.
     const demande = new URLSearchParams(window.location.search).get("visite");
-    if (demande) demarrerVisite(indexEtape(demande));
+    if (demande) {
+      const { parcours: voulu, index: depuis } = resoudreVisite(demande, window.location.pathname);
+      demarrerVisite(depuis, voulu);
+    }
     relire();
     setPret(true);
     window.addEventListener(EVENEMENT_VISITE, relire);
@@ -61,14 +76,14 @@ export default function VisiteGuidee() {
 
   const aller = useCallback(
     (cible: number, naviguer: boolean) => {
-      const borne = Math.max(0, Math.min(ETAPES.length - 1, cible));
-      const etape = ETAPES[borne];
+      const borne = Math.max(0, Math.min(etapes.length - 1, cible));
+      const etape = etapes[borne];
       setIndex(borne);
       setReduite(false);
       enregistrerEtape(borne);
       if (naviguer && !surLaRoute(chemin, etape.route)) router.push(etape.lien ?? etape.route);
     },
-    [chemin, router],
+    [chemin, router, etapes],
   );
 
   const quitter = useCallback(() => {
@@ -82,7 +97,7 @@ export default function VisiteGuidee() {
   // sinon un retour sur l'accueil défait tout le parcours déjà fait.
   useEffect(() => {
     if (!pret || !active) return;
-    const trouve = ETAPES.findIndex((e, i) => i >= index && surLaRoute(chemin, e.route));
+    const trouve = etapes.findIndex((e, i) => i >= index && surLaRoute(chemin, e.route));
     if (trouve !== -1 && trouve !== index) aller(trouve, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chemin, pret, active]);
@@ -113,12 +128,15 @@ export default function VisiteGuidee() {
   }, [index, active, reduite]);
 
   if (!pret || !active) return null;
-  if (surLaRoute(chemin, "/menu")) return null;
 
-  const etape = ETAPES[index];
-  const total = ETAPES.length;
+  const etape = etapes[index];
+  const total = etapes.length;
   const derniere = index === total - 1;
   const surLaBonnePage = surLaRoute(chemin, etape.route);
+
+  // La carte d'une table est l'écran d'un client qui mange : une visite en
+  // cours ailleurs n'y laisse même pas une pastille.
+  if (!surLaBonnePage && surLaRoute(chemin, "/menu")) return null;
 
   // Hors de la page de l'étape (ou repliée à la main) : une pastille, jamais un
   // panneau qui recouvre un écran dont la visite n'a rien à dire.

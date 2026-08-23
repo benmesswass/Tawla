@@ -8,8 +8,11 @@
  * rendez-vous, c'est un de trop.
  */
 
+import type { Parcours } from "./etapes";
+
 export const CLE_ACTIVE = "tawlaVisiteActive";
 export const CLE_ETAPE = "tawlaVisiteEtape";
+export const CLE_PARCOURS = "tawlaVisiteParcours";
 
 /**
  * La visite démarre aussi depuis un bouton, donc sans rechargement de page :
@@ -28,11 +31,12 @@ export function visiteEnCours(): boolean {
   }
 }
 
-/** `depuis` permet d'ouvrir la visite à une étape précise (voir `indexEtape`). */
-export function demarrerVisite(depuis = 0): void {
+/** Ouvre la visite à une étape précise d'un parcours (voir `resoudreVisite`). */
+export function demarrerVisite(depuis = 0, parcours: Parcours = "vente"): void {
   try {
     window.localStorage.setItem(CLE_ACTIVE, "1");
     window.localStorage.setItem(CLE_ETAPE, String(depuis));
+    window.localStorage.setItem(CLE_PARCOURS, parcours);
   } catch {
     /* voir visiteEnCours */
   }
@@ -43,6 +47,7 @@ export function arreterVisite(): void {
   try {
     window.localStorage.removeItem(CLE_ACTIVE);
     window.localStorage.removeItem(CLE_ETAPE);
+    window.localStorage.removeItem(CLE_PARCOURS);
   } catch {
     /* voir visiteEnCours */
   }
@@ -54,6 +59,14 @@ export function enregistrerEtape(index: number): void {
     window.localStorage.setItem(CLE_ETAPE, String(index));
   } catch {
     /* voir visiteEnCours */
+  }
+}
+
+export function parcoursEnregistre(): Parcours {
+  try {
+    return window.localStorage.getItem(CLE_PARCOURS) === "client" ? "client" : "vente";
+  } catch {
+    return "vente";
   }
 }
 

@@ -134,12 +134,22 @@ jamais rien à fermer.
   `data-visite="…"` posé sur la page — déplacer une section ne casse rien, la
   bulle se recentre (et le dit en console hors production). Ajouter une étape =
   une entrée dans `etapes.ts` et l'attribut correspondant, rien d'autre.
-  Ne s'affiche jamais sur `/menu/…`.
-  Elle va de l'accueil à l'écran cuisine : les deux écrans de service sont
-  accessibles au manager connecté, aucun second compte n'est nécessaire.
+  **Deux parcours qui ne se croisent jamais**, parce qu'ils ne se jouent pas
+  sur le même appareil (`Parcours` dans `etapes.ts`) :
+  - **vente** (20 étapes) — sur l'ordinateur de celui qui montre : accueil,
+    paliers, inscription, connexion, tableau de bord, pool serveur, cuisine.
+    Les deux écrans de service sont accessibles au manager connecté, aucun
+    second compte n'est nécessaire.
+  - **client** (6 étapes) — sur le téléphone, en ouvrant
+    `…/menu/<qr_token>?visite=1` : la carte, un plat, le panier, l'appel
+    serveur, le hors-ligne, le suivi. La visite ne peut pas y aller seule
+    (elle ne connaît aucun `qr_token`), d'où le parcours séparé.
+
+  Sur `/menu/…`, **seules** les étapes du parcours client s'affichent : une
+  visite de vente en cours ailleurs n'y laisse même pas sa pastille.
   **Ouvrir à une étape précise** : `?visite=tarif-pro` (identifiant, à préférer
-  dans un lien qu'on envoie — il survit à l'insertion d'une étape) ou
-  `?visite=6` (rang affiché).
+  dans un lien qu'on envoie — il survit à l'insertion d'une étape, et désigne
+  son parcours) ou `?visite=6` (rang affiché dans le parcours de l'écran).
 - **Aide-mémoire de démo** (`?demo=1`, `frontend/components/DemoGuide.tsx`) —
   s'adresse à **Wassim** pendant la démo : le script des gestes à faire
   (« coupez le réseau du téléphone, puis… »). S'efface tant que la visite

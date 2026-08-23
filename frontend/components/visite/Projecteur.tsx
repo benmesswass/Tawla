@@ -195,7 +195,15 @@ export default function Projecteur({
     ecran: { bottom: MARGE, left: gauche, width: largeur },
   };
 
-  const positionBulle = enFeuille ? { left: MARGE, right: MARGE, bottom: MARGE } : POSITIONS[place];
+  // Sur téléphone la bulle occupe toute la largeur : reste à choisir le bord.
+  // En bas par défaut (le pouce y est), mais en haut dès que la cible occupe
+  // la moitié basse — sinon la barre de panier, collée en bas de l'écran,
+  // disparaît sous la bulle qui en parle.
+  const positionBulle = enFeuille
+    ? rect.top + rect.height / 2 > fenetre.hauteur / 2
+      ? { left: MARGE, right: MARGE, top: MARGE }
+      : { left: MARGE, right: MARGE, bottom: MARGE }
+    : POSITIONS[place];
 
   return (
     <>

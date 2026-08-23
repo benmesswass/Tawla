@@ -980,7 +980,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             );
           })()}
 
-        <div className="mt-4 text-center">
+        {/* Même `data-visite` que le bouton d'appel de la carte, plus bas : les
+            deux écrans ne coexistent jamais (celui-ci sort par un retour
+            anticipé), et la visite trouve sa cible sur l'un comme sur l'autre. */}
+        <div className="mt-4 text-center" data-visite="client-appel">
           <button
             onClick={callWaiter}
             disabled={waiterCallState !== "idle"}
@@ -1314,6 +1317,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     return (
       <div
         key={item.id}
+        // Le premier plat de la carte sert de cible à la visite guidée : c'est
+        // le seul élément dont on est sûr qu'il existe. Comparé sur l'id et non
+        // sur `index`, qui repart à zéro à chaque catégorie.
+        data-visite={item.id === menu[0]?.id ? "client-plat" : undefined}
         // Décalage plafonné à 6 plats : au-delà, l'attente se verrait plus que
         // l'effet. Le style inline est le seul moyen d'indexer un délai.
         style={{ animationDelay: `${Math.min(index, 6) * 35}ms` }}
@@ -1517,6 +1524,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           <button
             onClick={callWaiter}
             disabled={waiterCallState !== "idle"}
+            data-visite="client-appel"
             className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] disabled:opacity-70 whitespace-nowrap"
           >
             {waiterCallState === "called" ? (
@@ -1546,7 +1554,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           toute la carte — et le client qui cherche renonce avant de trouver.
           Masquée en mode café, dont la carte est justement sans catégories. */}
       {!restaurant.cafe_mode_enabled && categories.length > 1 && (
-        <nav className="sticky top-0 z-30 bg-[rgba(246,239,221,.95)] backdrop-blur border-b border-[var(--line)]">
+        <nav
+          data-visite="client-categories"
+          className="sticky top-0 z-30 bg-[rgba(246,239,221,.95)] backdrop-blur border-b border-[var(--line)]"
+        >
           <ul className="flex gap-2 overflow-x-auto px-4 py-[11px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {categories.map((category) => (
               <li key={category}>
@@ -1703,7 +1714,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   {t.preorderCheckboxLabel(formatTime(restaurant.iftar_time))}
                 </label>
               )}
-              <div className="flex justify-between items-center gap-3">
+              <div className="flex justify-between items-center gap-3" data-visite="client-panier">
                 <div>
                   <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.6)]">
                     {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}

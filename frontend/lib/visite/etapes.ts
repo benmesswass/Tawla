@@ -15,9 +15,22 @@
  * décrit ce que le produit fait, jamais ce qu'il rapporte.
  */
 
+/**
+ * Deux parcours, parce qu'ils ne se jouent pas sur le même appareil.
+ *
+ * `vente` va de l'accueil à l'écran cuisine, sur l'ordinateur de celui qui
+ * montre. `client` se joue sur le téléphone du restaurateur, après avoir
+ * scanné le QR d'une table — la visite ne peut pas y aller toute seule, elle
+ * ne connaît aucun `qr_token`. Le parcours se déduit donc de l'écran sur
+ * lequel on démarre, et les deux ne se mélangent jamais.
+ */
+export type Parcours = "vente" | "client";
+
 export type EtapeVisite = {
   /** Identifiant stable — sert aussi de clé de rendu. */
   id: string;
+  /** Absent = `vente`. */
+  parcours?: Parcours;
   /** Page sur laquelle l'étape se joue. */
   route: string;
   /**
@@ -36,21 +49,32 @@ export type EtapeVisite = {
   corps: string;
 };
 
+export function etapesDe(parcours: Parcours): EtapeVisite[] {
+  return ETAPES.filter((e) => (e.parcours ?? "vente") === parcours);
+}
+
 /**
- * Traduit `?visite=<valeur>` en numéro d'étape.
+ * Traduit `?visite=<valeur>` en parcours et numéro d'étape.
  *
  * Accepte l'identifiant (`?visite=tarif-pro`) ou le rang affiché
  * (`?visite=6`) — le premier survit à l'insertion d'une étape, c'est celui à
- * mettre dans un lien qu'on envoie après un rendez-vous. Une valeur inconnue
- * démarre au début plutôt que de ne rien faire : un lien mal recopié doit
- * toujours ouvrir la visite.
+ * mettre dans un lien qu'on envoie après un rendez-vous, et il désigne aussi
+ * son parcours sans ambiguïté. À défaut, c'est l'écran de départ qui tranche :
+ * sur la carte d'une table, on veut le parcours client.
+ *
+ * Une valeur inconnue démarre au début plutôt que de ne rien faire : un lien
+ * mal recopié doit toujours ouvrir la visite.
  */
-export function indexEtape(valeur: string): number {
-  const parIdentifiant = ETAPES.findIndex((e) => e.id === valeur);
-  if (parIdentifiant !== -1) return parIdentifiant;
+export function resoudreVisite(valeur: string, chemin: string): { parcours: Parcours; index: number } {
+  const etape = ETAPES.find((e) => e.id === valeur);
+  if (etape) {
+    const parcours = etape.parcours ?? "vente";
+    return { parcours, index: etapesDe(parcours).findIndex((e) => e.id === valeur) };
+  }
+  const parcours: Parcours = chemin.startsWith("/menu/") ? "client" : "vente";
   const rang = Number.parseInt(valeur, 10);
-  if (!Number.isFinite(rang)) return 0;
-  return Math.max(0, Math.min(ETAPES.length - 1, rang - 1));
+  if (!Number.isFinite(rang)) return { parcours, index: 0 };
+  return { parcours, index: Math.max(0, Math.min(etapesDe(parcours).length - 1, rang - 1)) };
 }
 
 export const ETAPES: EtapeVisite[] = [
@@ -223,8 +247,65 @@ export const ETAPES: EtapeVisite[] = [
   {
     id: "fin",
     route: "/kitchen",
-    titre: "Voilà pour le tour",
+    titre: "Il reste le principal : votre client",
     corps:
-      "Ce que vous venez de voir à vide se juge en service : le QR scanné à votre table, la commande qui arrive chez le serveur, le ticket qui tombe en cuisine pendant qu'on regarde. On peut le faire chez vous, un après-midi creux, avec vos plats et vos tables.",
+      "Vous venez de voir vos trois écrans. Reste celui que voit la personne assise à votre table — et c'est celui qui décide. Prenez votre téléphone, scannez le QR d'une table : la visite y continue toute seule, côté client.",
+  },
+
+  // --- Parcours client, sur le téléphone -----------------------------------
+  // Se déclenche en ouvrant `…/menu/<qr_token>?visite=1`, ou tout seul si la
+  // visite tourne déjà sur cet appareil. Jamais atteignable depuis le parcours
+  // de vente : aucune étape ne peut construire l'adresse d'une table.
+  {
+    id: "client-carte",
+    parcours: "client",
+    route: "/menu",
+    cible: "client-categories",
+    titre: "Ce que voit votre client",
+    corps:
+      "Il a scanné le QR de sa table, rien à installer, rien à télécharger. Votre carte s'ouvre en français ou en arabe, rangée par catégories — sur une carte de cinquante plats, il atteint les desserts sans faire défiler le reste.",
+  },
+  {
+    id: "client-plat",
+    parcours: "client",
+    route: "/menu",
+    cible: "client-plat",
+    titre: "Un plat",
+    corps:
+      "La photo, le prix, le piment, les allergènes, et « non halal » quand c'est le cas. Il appuie sur + pour l'ajouter, et peut écrire une note pour la cuisine — « sans oignons ». Un plat en rupture reste affiché, barré : il n'a plus à demander pour l'apprendre.",
+  },
+  {
+    id: "client-panier",
+    parcours: "client",
+    route: "/menu",
+    cible: "client-panier",
+    titre: "Il valide",
+    corps:
+      "Le total s'affiche en bas, toujours visible. Ajoutez un plat ou deux pour le faire apparaître. À la validation, la commande ne part pas en cuisine : elle arrive sur l'écran de vos serveurs, et c'est un serveur qui la confirme à table.",
+  },
+  {
+    id: "client-appel",
+    parcours: "client",
+    route: "/menu",
+    cible: "client-appel",
+    titre: "Appeler le serveur",
+    corps:
+      "Sans agiter la main ni attendre un regard. L'appel apparaît dans une file dédiée sur l'écran de vos serveurs, avec le numéro de table. C'est souvent la fonction dont les clients parlent en premier.",
+  },
+  {
+    id: "client-hors-ligne",
+    parcours: "client",
+    route: "/menu",
+    titre: "Et quand le réseau lâche",
+    corps:
+      "Si la 4G tombe au moment de valider, la commande est gardée sur le téléphone du client et part toute seule dès que la connexion revient — il voit un message qui le lui dit. En terrasse ou en sous-sol, c'est la différence entre une commande et un client qui abandonne.",
+  },
+  {
+    id: "client-suivi",
+    parcours: "client",
+    route: "/menu",
+    titre: "Puis il suit sa commande",
+    corps:
+      "Une fois validée, il voit où elle en est : prise en charge, en cuisine, prête. Il règle depuis l'écran — en espèces, et le serveur voit la demande arriver dans sa file d'encaissement ; par carte à partir du palier Pro. Vos serveurs arrêtent de répondre « ça arrive » à des gens qu'ils n'ont pas pu servir plus vite.",
   },
 ];
