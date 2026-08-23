@@ -6,6 +6,7 @@ import { api, staffWsUrl, LoyaltyMember, MyShift, Order, PlanTable } from "@/lib
 import { toFrenchMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
+import { useAccesDemoParLien } from "@/lib/demoLien";
 import { clearToken } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import ConnectionBadge from "@/components/ConnectionBadge";
@@ -97,6 +98,8 @@ function FileVide({ message }: { message: string }) {
 }
 
 export default function StaffPage() {
+  // Doit être appelé avant useCurrentStaff — voir lib/demoLien.ts.
+  useAccesDemoParLien();
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["waiter", "manager"]);
   const maintenant = useHorloge();

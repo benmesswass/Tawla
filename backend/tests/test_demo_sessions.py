@@ -149,6 +149,49 @@ def test_le_plafond_refuse_plutot_que_de_remplir_la_base(client, monkeypatch):
     assert refus.json()["detail"]["code"] == "DEMO_UNAVAILABLE"
 
 
+def test_les_liens_serveur_et_cuisine_authentifient_le_bon_role(client):
+    """
+    Sans ces deux jetons, un vendeur ne peut ouvrir l'écran serveur ou cuisine
+    que sur l'appareil qui a créé la démo — les comptes serveur et cuisine ont
+    un mot de passe généré aléatoirement, jamais révélé (creer_demo), donc
+    impossible à saisir sur un deuxième appareil. C'est exactement le mur
+    rencontré en montrant Tawla à un vrai restaurateur : le client commande
+    sur son téléphone, mais rien d'autre ne peut alors afficher l'écran
+    serveur en direct.
+    """
+    demo = ouvrir_demo(client)
+
+    pour_serveur = client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {demo['waiter_access_token']}"}
+    ).json()
+    assert pour_serveur["role"] == "waiter"
+    assert pour_serveur["restaurant_id"] == demo["restaurant_id"]
+
+    pour_cuisine = client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {demo['kitchen_access_token']}"}
+    ).json()
+    assert pour_cuisine["role"] == "kitchen"
+    assert pour_cuisine["restaurant_id"] == demo["restaurant_id"]
+
+    # Trois comptes, trois rôles distincts : jamais deux jetons pour le même.
+    assert len({demo["access_token"], demo["waiter_access_token"], demo["kitchen_access_token"]}) == 3
+
+
+def test_le_jeton_serveur_dune_demo_ne_donne_pas_acces_a_lautre(client):
+    a = ouvrir_demo(client)
+    b = ouvrir_demo(client)
+
+    # Le jeton serveur de A doit rester cantonné au restaurant de A, comme
+    # n'importe quel jeton staff — même garde que pour un vrai compte. Route
+    # ouverte à tout rôle staff (pas seulement manager) : l'échec doit venir
+    # de l'isolation par restaurant, pas d'un rôle insuffisant.
+    interdit = client.get(
+        f"/api/v1/orders/by-restaurant/{b['restaurant_id']}/active",
+        headers={"Authorization": f"Bearer {a['waiter_access_token']}"},
+    )
+    assert interdit.status_code == 403
+
+
 def test_une_demo_nest_pas_comptee_comme_un_client_payant(client, db_session):
     demo = ouvrir_demo(client)
     restaurant = db_session.get(Restaurant, demo["restaurant_id"])

@@ -42,6 +42,9 @@ export default function BoutonVisite({
         qrToken: session.qr_token,
         expireLe: session.expires_at,
         nom: session.restaurant_name,
+        managerToken: session.access_token,
+        waiterToken: session.waiter_access_token,
+        kitchenToken: session.kitchen_access_token,
       });
     } catch {
       // Silencieux volontairement : le visiteur n'a pas demandé un compte, il

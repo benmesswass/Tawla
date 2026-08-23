@@ -8,6 +8,7 @@ import { toFrenchMessage } from "@/lib/errors";
 import { duree, elapsedSeconds } from "@/lib/duree";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
+import { useAccesDemoParLien } from "@/lib/demoLien";
 import { clearToken } from "@/lib/auth";
 import ConnectionBadge from "@/components/ConnectionBadge";
 import Button from "@/components/ui/Button";
@@ -89,6 +90,8 @@ function playKitchenChime() {
 }
 
 export default function KitchenPage() {
+  // Doit être appelé avant useCurrentStaff — voir lib/demoLien.ts.
+  useAccesDemoParLien();
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["kitchen", "manager"]);
   const [orders, setOrders] = useState<KitchenOrder[]>([]);

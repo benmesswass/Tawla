@@ -20,3 +20,12 @@ class DemoSessionOut(BaseModel):
     # ce jeton, la page d'accueil n'a aucun moyen de l'atteindre.
     qr_token: str
     expires_at: datetime
+    # Jetons pré-signés pour les deux autres rôles, avec la même mécanique
+    # qu'un login normal (staff/security.py::create_access_token). Les comptes
+    # serveur et cuisine d'une démo ont un mot de passe généré aléatoirement,
+    # jamais révélé (voir demo/service.py::creer_demo) — sans ces jetons, il
+    # n'existe aucun moyen de s'y connecter depuis un deuxième appareil, et
+    # montrer l'écran serveur en direct pendant qu'un client commande sur son
+    # téléphone n'avait aucun chemin possible.
+    waiter_access_token: str
+    kitchen_access_token: str

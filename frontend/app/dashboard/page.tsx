@@ -17,6 +17,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
+import { useAccesDemoParLien } from "@/lib/demoLien";
 import { clearToken } from "@/lib/auth";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -138,6 +139,8 @@ type NewStaffDraft = { name: string; email: string; role: StaffRole };
 const EMPTY_STAFF_DRAFT: NewStaffDraft = { name: "", email: "", role: "waiter" };
 
 export default function DashboardPage() {
+  // Doit être appelé avant useCurrentStaff — voir lib/demoLien.ts.
+  useAccesDemoParLien();
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["manager"]);
   const [items, setItems] = useState<MenuItem[]>([]);

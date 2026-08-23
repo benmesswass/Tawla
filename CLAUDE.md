@@ -137,6 +137,26 @@ déclenche à chaque création (pas d'ordonnanceur nécessaire) et depuis
 par IP : c'est la seule route publique qui écrit en base. Si elle échoue, le
 bouton lance quand même la visite, en version visiteur.
 
+La réponse porte aussi un jeton pour le serveur et pour la cuisine, pas
+seulement pour le manager : ces deux comptes ont un mot de passe généré
+aléatoirement, jamais révélé (`demo/service.py::creer_demo`). Le bandeau
+`BandeauDemo` propose de copier, pour chaque rôle, un lien `?demo_token=…`
+qui connecte l'appareil qui l'ouvre sans mot de passe (`lib/demoLien.ts`,
+consommé par `useAccesDemoParLien` en tout premier hook de `/dashboard`,
+`/staff` et `/kitchen` — avant `useCurrentStaff`, dont l'ordre d'appel des
+hooks garantit qu'il pose le jeton avant que la garde ne le vérifie). Sans ce
+mécanisme, montrer l'écran serveur en direct sur un deuxième appareil pendant
+qu'un client commande sur le sien n'avait aucun chemin possible.
+
+**Chaque lien doit s'ouvrir sur un appareil ou un navigateur différent**,
+jamais un deuxième onglet du même navigateur : `localStorage` est partagé
+entre tous les onglets d'une même origine, donc ouvrir le lien cuisine dans
+un onglet à côté du lien serveur écrase silencieusement le jeton serveur, qui
+finit éjecté vers `/login` à la prochaine reconnexion WebSocket. Vérifié :
+avec deux contextes de navigateur réellement séparés, une commande passée
+côté client apparaît en direct sur l'écran serveur ouvert par lien, sans
+rechargement.
+
 - **Visite guidée** (`?visite=1`, ou le lien « Voir la visite guidée » en bas de
   l'accueil) — s'adresse au **restaurateur**. Bulles pas à pas ancrées sur les
   vrais éléments de l'écran, façon Stonly, sans dépendance ni service payant :
