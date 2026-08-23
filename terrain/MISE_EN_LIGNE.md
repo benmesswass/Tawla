@@ -76,6 +76,10 @@ installé :
 # JWT_SECRET — signe les jetons de connexion du personnel
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 
+# ADMIN_CREATION_SECRET — le seul secret qui autorise la création d'un compte
+# du tableau de bord plateforme (POST /api/v1/platform-admin/admins)
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
 # Paire VAPID — notifications « votre commande est prête »
 python -c "
 from py_vapid import Vapid02
@@ -89,14 +93,22 @@ print('VAPID_PRIVATE_KEY=' + b64urlencode(priv.to_bytes(32, 'big')))
 "
 ```
 
-Coller ces trois valeurs dans un gestionnaire de mots de passe, **pas dans un
+Coller ces quatre valeurs dans un gestionnaire de mots de passe, **pas dans un
 fichier du dépôt**. Le `.env` local ne doit jamais contenir les clés de
 production : c'est le chemin le plus court vers une clé publiée par erreur.
 
-Filet de sécurité déjà en place : si `ENV=production` et que `JWT_SECRET` est
-resté la valeur de développement, l'application **refuse de démarrer**
-(`app/core/config.py`). C'est voulu — un backend qui ne démarre pas est moins
-grave qu'un backend dont tout le monde peut forger les jetons.
+Filet de sécurité déjà en place : si `ENV=production` et que `JWT_SECRET` **ou**
+`ADMIN_CREATION_SECRET` est resté la valeur de développement, l'application
+**refuse de démarrer** (`app/core/config.py`). C'est voulu — un backend qui ne
+démarre pas est moins grave qu'un backend dont tout le monde peut forger les
+jetons, ou se créer un compte d'administration.
+
+C'est arrivé pour de vrai le **2026-08-23** : `ADMIN_CREATION_SECRET` manquait
+sur l'hébergeur, et le déploiement a échoué avec
+`Exited with status 1`. Le verrou datait de deux jours ; les commits d'entre-deux
+étaient purement frontend, donc rien ne l'avait déclenché avant. **La liste des
+variables qui fait foi est [`backend/.env.example`](../backend/.env.example)**,
+pas cette page — la relire à chaque mise en ligne.
 
 ---
 
@@ -114,7 +126,10 @@ grave qu'un backend dont tout le monde peut forger les jetons.
 | `DATABASE_URL` | l'URL interne fournie par l'hébergeur |
 | `ENV` | `production` |
 | `JWT_SECRET` | la valeur générée à l'étape 2 |
+| `ADMIN_CREATION_SECRET` | l'autre valeur générée à l'étape 2 — **sans elle le conteneur ne démarre pas** |
 | `FRONTEND_ORIGIN` | `https://tawla.tn` — **l'origine exacte**, sans barre finale |
+| `FRONTEND_URL` | `https://tawla.tn` — où renvoyer le manager après un paiement d'abonnement |
+| `BACKEND_URL` | `https://api.tawla.tn` — l'adresse que Konnect rappelle. Laissée sur `localhost`, un paiement de palier ne revient jamais |
 | `VAPID_PUBLIC_KEY` · `VAPID_PRIVATE_KEY` | les valeurs générées à l'étape 2 |
 | `VAPID_CONTACT_EMAIL` | `contact@tawla.tn` |
 
