@@ -8,6 +8,7 @@ const MARGE = 12; // écart entre la cible et la bulle, et bord d'écran minimal
 const LARGEUR_BULLE = 360;
 const HAUTEUR_SUPPOSEE = 200; // sert seulement à choisir dessus/dessous
 const SEUIL_FEUILLE = 640; // sous cette largeur, la bulle se pose en bas d'écran
+const DELAI_RECHERCHE = 4000; // temps laissé à la page pour afficher sa cible
 
 function mouvementReduit(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -58,7 +59,21 @@ function useRectCible(cible: string | undefined, cle: string): Rect | null {
     if (!chercher()) {
       const debut = Date.now();
       attente = setInterval(() => {
-        if (chercher() || Date.now() - debut > 4000) clearInterval(attente);
+        if (chercher()) {
+          clearInterval(attente);
+          return;
+        }
+        if (Date.now() - debut <= DELAI_RECHERCHE) return;
+        clearInterval(attente);
+        // En production la bulle se recentre et personne ne voit rien — c'est
+        // voulu, mais c'est aussi comme ça qu'une visite pourrit en silence
+        // quand une refonte emporte un attribut. En développement, on le dit.
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(
+            `[visite] cible « ${cible} » introuvable après ${DELAI_RECHERCHE / 1000} s. ` +
+              `L'attribut data-visite="${cible}" a-t-il été retiré de la page ? La bulle se recentre.`,
+          );
+        }
       }, 150);
     }
 
@@ -94,6 +109,7 @@ export default function Projecteur({
   children: ReactNode;
 }) {
   const rect = useRectCible(cible, cle);
+  const ancree = rect !== null;
   const [fenetre, setFenetre] = useState<{ largeur: number; hauteur: number } | null>(null);
   const bulle = useRef<HTMLDivElement>(null);
   const [hauteur, setHauteur] = useState(HAUTEUR_SUPPOSEE);
@@ -108,13 +124,20 @@ export default function Projecteur({
   }, []);
 
   // La hauteur réelle décide du placement : une bulle de six lignes ne tient
-  // pas là où une de deux lignes tient. Mesurée après rendu, donc un passage
-  // de plus à chaque étape — mais pas de boucle : la bulle garde la même
-  // largeur quel que soit le placement, sa hauteur ne dépend que du texte.
+  // pas là où une de deux lignes tient. Mesurer une fois après rendu ne
+  // suffisait pas — la hauteur retenue restait celle de l'étape précédente et
+  // la bulle passait sous le bord de l'écran. L'observateur suit la boîte,
+  // fonte comprise, et se déclenche dès qu'on l'attache.
   useEffect(() => {
-    const mesuree = bulle.current?.offsetHeight;
-    if (mesuree && Math.abs(mesuree - hauteur) > 1) setHauteur(mesuree);
-  }, [cle, hauteur]);
+    const element = bulle.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observateur = new ResizeObserver(() => {
+      const mesuree = element.offsetHeight;
+      setHauteur((precedente) => (Math.abs(mesuree - precedente) > 1 ? mesuree : precedente));
+    });
+    observateur.observe(element);
+    return () => observateur.disconnect();
+  }, [cle, ancree]);
 
   if (!fenetre) return null;
 
@@ -157,11 +180,16 @@ export default function Projecteur({
             ? "gauche"
             : "ecran";
 
+  // Garde-fou : quoi que décide le placement, la bulle reste entièrement à
+  // l'écran. Une hauteur mal mesurée doit produire un chevauchement, jamais un
+  // bouton « Suivant » sous le bord de la fenêtre.
+  const borner = (y: number) => Math.min(Math.max(y, MARGE), Math.max(fenetre.hauteur - hauteur - MARGE, MARGE));
+
   const POSITIONS: Record<string, Record<string, number | string | undefined>> = {
-    bas: { top: rect.top + rect.height + MARGE, left: gauche, width: largeur },
-    haut: { top: rect.top - MARGE, left: gauche, width: largeur, transform: "translateY(-100%)" },
-    droite: { top: haut, left: rect.left + rect.width + MARGE, width: largeur },
-    gauche: { top: haut, left: rect.left - largeur - MARGE, width: largeur },
+    bas: { top: borner(rect.top + rect.height + MARGE), left: gauche, width: largeur },
+    haut: { top: borner(rect.top - MARGE - hauteur), left: gauche, width: largeur },
+    droite: { top: borner(haut), left: rect.left + rect.width + MARGE, width: largeur },
+    gauche: { top: borner(haut), left: rect.left - largeur - MARGE, width: largeur },
     // Cible plus grande que l'écran dans les deux sens : plus rien à préserver,
     // la bulle se pose en bas.
     ecran: { bottom: MARGE, left: gauche, width: largeur },

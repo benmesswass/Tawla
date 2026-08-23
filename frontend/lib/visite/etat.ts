@@ -28,10 +28,11 @@ export function visiteEnCours(): boolean {
   }
 }
 
-export function demarrerVisite(): void {
+/** `depuis` permet d'ouvrir la visite à une étape précise (voir `indexEtape`). */
+export function demarrerVisite(depuis = 0): void {
   try {
     window.localStorage.setItem(CLE_ACTIVE, "1");
-    window.localStorage.setItem(CLE_ETAPE, "0");
+    window.localStorage.setItem(CLE_ETAPE, String(depuis));
   } catch {
     /* voir visiteEnCours */
   }

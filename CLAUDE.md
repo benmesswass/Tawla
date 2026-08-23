@@ -132,8 +132,14 @@ jamais rien à fermer.
   moteur dans `frontend/components/visite/`, contenu dans
   `frontend/lib/visite/etapes.ts`. Chaque étape désigne sa cible par un attribut
   `data-visite="…"` posé sur la page — déplacer une section ne casse rien, la
-  bulle se recentre. Ajouter une étape = une entrée dans `etapes.ts` et
-  l'attribut correspondant, rien d'autre. Ne s'affiche jamais sur `/menu/…`.
+  bulle se recentre (et le dit en console hors production). Ajouter une étape =
+  une entrée dans `etapes.ts` et l'attribut correspondant, rien d'autre.
+  Ne s'affiche jamais sur `/menu/…`.
+  Elle va de l'accueil à l'écran cuisine : les deux écrans de service sont
+  accessibles au manager connecté, aucun second compte n'est nécessaire.
+  **Ouvrir à une étape précise** : `?visite=tarif-pro` (identifiant, à préférer
+  dans un lien qu'on envoie — il survit à l'insertion d'une étape) ou
+  `?visite=6` (rang affiché).
 - **Aide-mémoire de démo** (`?demo=1`, `frontend/components/DemoGuide.tsx`) —
   s'adresse à **Wassim** pendant la démo : le script des gestes à faire
   (« coupez le réseau du téléphone, puis… »). S'efface tant que la visite

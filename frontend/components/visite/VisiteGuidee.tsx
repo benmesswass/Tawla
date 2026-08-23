@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Projecteur from "@/components/visite/Projecteur";
-import { ETAPES } from "@/lib/visite/etapes";
+import { ETAPES, indexEtape } from "@/lib/visite/etapes";
 import {
   arreterVisite,
   demarrerVisite,
@@ -47,10 +47,12 @@ export default function VisiteGuidee() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    // `?visite=1` ouvre au début, `?visite=tarif-pro` (ou `?visite=6`) droit à
+    // l'étape — de quoi renvoyer un patron sur le point exact dont on a parlé.
     // L'événement émis ici ne réveille personne (l'écouteur n'est posé qu'en
     // dessous) : c'est `relire` juste après qui prend l'état en compte.
-    if (params.get("visite") === "1") demarrerVisite();
+    const demande = new URLSearchParams(window.location.search).get("visite");
+    if (demande) demarrerVisite(indexEtape(demande));
     relire();
     setPret(true);
     window.addEventListener(EVENEMENT_VISITE, relire);

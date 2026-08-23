@@ -36,6 +36,23 @@ export type EtapeVisite = {
   corps: string;
 };
 
+/**
+ * Traduit `?visite=<valeur>` en numéro d'étape.
+ *
+ * Accepte l'identifiant (`?visite=tarif-pro`) ou le rang affiché
+ * (`?visite=6`) — le premier survit à l'insertion d'une étape, c'est celui à
+ * mettre dans un lien qu'on envoie après un rendez-vous. Une valeur inconnue
+ * démarre au début plutôt que de ne rien faire : un lien mal recopié doit
+ * toujours ouvrir la visite.
+ */
+export function indexEtape(valeur: string): number {
+  const parIdentifiant = ETAPES.findIndex((e) => e.id === valeur);
+  if (parIdentifiant !== -1) return parIdentifiant;
+  const rang = Number.parseInt(valeur, 10);
+  if (!Number.isFinite(rang)) return 0;
+  return Math.max(0, Math.min(ETAPES.length - 1, rang - 1));
+}
+
 export const ETAPES: EtapeVisite[] = [
   // --- Page d'accueil : ce qu'est le produit, puis l'offre ------------------
   {
@@ -174,11 +191,40 @@ export const ETAPES: EtapeVisite[] = [
     corps:
       "Un plat en rupture se signale en un clic : il se barre chez le client dans la seconde, sans qu'il ait à recharger. Il reste affiché, parce que « il n'y en a plus ce soir » est une information, pas un vide. Vous ajoutez une table, imprimez son QR, créez un accès serveur — sans nous appeler.",
   },
+
+  // --- Les deux écrans de service ------------------------------------------
+  // Accessibles au manager connecté (`useCurrentStaff(["waiter", "manager"])`
+  // et `["kitchen", "manager"]`) : la visite peut donc les montrer sans un
+  // second compte, avec le lien « Service en salle » de l'en-tête.
+  {
+    id: "staff-files",
+    route: "/staff",
+    cible: "staff-files",
+    titre: "L'écran de vos serveurs",
+    corps:
+      "Quatre files, dans l'ordre où un serveur doit les regarder : les commandes à confirmer, les appels de table, les plats prêts à servir, les demandes d'encaissement. Les commandes de toutes les tables s'y empilent — celui qui est libre prend la suivante.",
+  },
+  {
+    id: "staff-filet",
+    route: "/staff",
+    cible: "staff-filet",
+    titre: "Le filet de secours",
+    corps:
+      "Ce bouton imprime les commandes en attente. Si le réseau tombe, si une tablette meurt, si un serveur préfère le papier ce soir-là, le service continue. On ne vous retire jamais le carnet du comptoir.",
+  },
+  {
+    id: "cuisine-files",
+    route: "/kitchen",
+    titre: "L'écran cuisine",
+    cible: "cuisine-files",
+    corps:
+      "Le ticket s'affiche ici à la seconde où le serveur confirme, sans que personne rafraîchisse quoi que ce soit. À préparer, en cours, terminées — et les compteurs suivent tout seuls. Écrit gros : ça se lit depuis le passe.",
+  },
   {
     id: "fin",
-    route: "/dashboard",
+    route: "/kitchen",
     titre: "Voilà pour le tour",
     corps:
-      "La suite se voit mieux en vrai qu'en texte : le QR scanné à votre table, la commande qui apparaît chez le serveur, le ticket qui s'affiche en cuisine sans rafraîchir l'écran. On peut le faire chez vous, pendant un service creux.",
+      "Ce que vous venez de voir à vide se juge en service : le QR scanné à votre table, la commande qui arrive chez le serveur, le ticket qui tombe en cuisine pendant qu'on regarde. On peut le faire chez vous, un après-midi creux, avec vos plats et vos tables.",
   },
 ];

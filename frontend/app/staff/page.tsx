@@ -604,7 +604,11 @@ export default function StaffPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <ConnectionBadge status={status} dark />
           <span className="text-[18px] font-semibold tabular-nums text-[var(--semoule)]">{clock}</span>
-          <button onClick={printPending} className="text-sm text-[var(--ink-on-espresso)] underline">
+          <button
+            onClick={printPending}
+            data-visite="staff-filet"
+            className="text-sm text-[var(--ink-on-espresso)] underline"
+          >
             Imprimer (filet de secours)
           </button>
           <button onClick={logout} className="text-sm text-[var(--ink-on-espresso)] underline">
@@ -690,7 +694,7 @@ export default function StaffPage() {
               doit les regarder — ce qui attend d'être confirmé et les appels
               (harissa, action requise) d'abord, puis ce qui est prêt et les
               encaissements. */}
-          <div className="flex flex-col gap-[14px]">
+          <div className="flex flex-col gap-[14px]" data-visite="staff-files">
             <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
               <EntetePanneau titre="Commandes à confirmer" couleur="var(--harissa)" count={pending.length} />
               {pending.length === 0 && <FileVide message="Rien en attente" />}
