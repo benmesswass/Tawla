@@ -136,10 +136,15 @@ jamais rien à fermer.
   une entrée dans `etapes.ts` et l'attribut correspondant, rien d'autre.
   **Deux parcours qui ne se croisent jamais**, parce qu'ils ne se jouent pas
   sur le même appareil (`Parcours` dans `etapes.ts`) :
-  - **vente** (20 étapes) — sur l'ordinateur de celui qui montre : accueil,
-    paliers, inscription, connexion, tableau de bord, pool serveur, cuisine.
-    Les deux écrans de service sont accessibles au manager connecté, aucun
-    second compte n'est nécessaire.
+  - **vente** — sur l'ordinateur de celui qui montre : accueil, paliers,
+    inscription, connexion, tableau de bord, pool serveur, cuisine. Les deux
+    écrans de service sont accessibles au manager connecté, aucun second
+    compte n'est nécessaire. **Le parcours s'adapte au visiteur** (champ
+    `acces` dans `etapes.ts`) : connecté, 20 étapes ; sans compte, les sept
+    écrans derrière la connexion sortent de la liste et une étape de clôture
+    les remplace — 14 étapes, et un compteur qui ne ment pas. Sans ça la
+    visite marchait droit sur `/dashboard`, l'application la renvoyait sur
+    `/login`, et elle restait plantée sur une pastille à 14/20.
   - **client** (6 étapes) — sur le téléphone, en ouvrant
     `…/menu/<qr_token>?visite=1` : la carte, un plat, le panier, l'appel
     serveur, le hors-ligne, le suivi. La visite ne peut pas y aller seule

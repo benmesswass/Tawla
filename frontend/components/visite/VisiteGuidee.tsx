@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { getToken } from "@/lib/auth";
 import Projecteur from "@/components/visite/Projecteur";
 import { etapesDe, resoudreVisite, type Parcours } from "@/lib/visite/etapes";
 import {
@@ -26,8 +27,14 @@ function surLaRoute(chemin: string, route: string): boolean {
  * Montée une fois dans le layout, elle survit à la navigation : les étapes
  * portent leur route, « Suivant » emmène sur la page suivante quand il faut, et
  * la position est gardée en localStorage. Elle ne démarre jamais toute seule —
- * `?visite=1` dans l'URL, ou le bouton « Visite guidée » de la page d'accueil.
+ * `?visite=1` dans l'URL, ou le bouton « Voir la démo » de la page d'accueil.
  * Un restaurateur qui arrive sur le site n'a donc rien à fermer.
+ *
+ * Le parcours s'adapte à ce que le visiteur peut réellement ouvrir : sans
+ * compte staff, les sept écrans de direction et de service sortent de la
+ * liste (voir `acces` dans `etapes.ts`) et une étape de clôture prend leur
+ * place. Sinon la visite marchait droit sur `/dashboard`, l'application la
+ * renvoyait sur `/login`, et elle restait plantée sur une pastille.
  *
  * Deux parcours qui ne se croisent jamais (voir `Parcours` dans `etapes.ts`) :
  * celui de vente sur l'ordinateur, celui du client sur le téléphone qui a
@@ -43,11 +50,12 @@ export default function VisiteGuidee() {
   const [index, setIndex] = useState(0);
   const [reduite, setReduite] = useState(false);
   const [pret, setPret] = useState(false);
+  const [connecte, setConnecte] = useState(false);
   const bulle = useRef<HTMLDivElement>(null);
 
   // Mémorisé : `aller` en dépend, et un nouveau tableau à chaque rendu
   // réabonnerait le clavier à chaque frappe.
-  const etapes = useMemo(() => etapesDe(parcours), [parcours]);
+  const etapes = useMemo(() => etapesDe(parcours, connecte), [parcours, connecte]);
 
   const relire = useCallback(() => {
     const enregistre = parcoursEnregistre();
@@ -91,6 +99,13 @@ export default function VisiteGuidee() {
     setActive(false);
   }, []);
 
+  // Relu à chaque changement de page, pas seulement au montage : un visiteur
+  // qui crée son établissement en cours de visite passe de « sans compte » à
+  // « connecté », et les sept écrans de service doivent apparaître.
+  useEffect(() => {
+    setConnecte(getToken() !== null);
+  }, [chemin, pret]);
+
   // Avance seule quand on atterrit sur la page d'une étape plus loin : le
   // restaurateur qui clique le vrai bouton « Créer mon compte » plutôt que
   // « Suivant » doit retrouver la visite au bon endroit. Jamais en arrière,
@@ -129,9 +144,12 @@ export default function VisiteGuidee() {
 
   if (!pret || !active) return null;
 
-  const etape = etapes[index];
+  // Borné ici et pas ailleurs : la liste raccourcit quand un compte se ferme,
+  // et l'étape mémorisée peut alors pointer au-delà de la fin.
   const total = etapes.length;
-  const derniere = index === total - 1;
+  const rang = Math.min(index, total - 1);
+  const etape = etapes[rang];
+  const derniere = rang === total - 1;
   const surLaBonnePage = surLaRoute(chemin, etape.route);
 
   // La carte d'une table est l'écran d'un client qui mange : une visite en
@@ -143,10 +161,10 @@ export default function VisiteGuidee() {
   if (!surLaBonnePage || reduite) {
     return (
       <button
-        onClick={() => (surLaBonnePage ? setReduite(false) : aller(index, true))}
+        onClick={() => (surLaBonnePage ? setReduite(false) : aller(rang, true))}
         className="fixed bottom-4 right-4 z-[71] rounded-full bg-[var(--harissa)] text-[var(--semoule)] shadow-lg px-4 py-3 text-sm font-medium"
       >
-        Visite guidée {index + 1}/{total}
+        Visite guidée {rang + 1}/{total}
         {!surLaBonnePage && " · reprendre"}
       </button>
     );
@@ -158,12 +176,12 @@ export default function VisiteGuidee() {
         ref={bulle}
         tabIndex={-1}
         role="dialog"
-        aria-label={`Visite guidée, étape ${index + 1} sur ${total}`}
+        aria-label={`Visite guidée, étape ${rang + 1} sur ${total}`}
         className="rounded-xl bg-white shadow-xl border border-[var(--line)] p-4 outline-none"
       >
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--harissa)]">
-            Visite guidée · {index + 1}/{total}
+            Visite guidée · {rang + 1}/{total}
           </p>
           <div className="flex items-center gap-3">
             <button
@@ -185,7 +203,7 @@ export default function VisiteGuidee() {
         <div className="mt-2 h-1 rounded-full bg-[var(--line)]" aria-hidden>
           <div
             className="h-1 rounded-full bg-[var(--harissa)] transition-[width] duration-200"
-            style={{ width: `${((index + 1) / total) * 100}%` }}
+            style={{ width: `${((rang + 1) / total) * 100}%` }}
           />
         </div>
 
@@ -193,7 +211,7 @@ export default function VisiteGuidee() {
         <p className="mt-1.5 text-sm leading-relaxed text-[var(--ink-soft)]">{etape.corps}</p>
 
         <div className="mt-4 flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => aller(index - 1, true)} disabled={index === 0}>
+          <Button variant="secondary" size="sm" onClick={() => aller(rang - 1, true)} disabled={rang === 0}>
             Précédent
           </Button>
           {derniere ? (
@@ -201,7 +219,7 @@ export default function VisiteGuidee() {
               Terminer
             </Button>
           ) : (
-            <Button size="sm" onClick={() => aller(index + 1, true)} className="flex-1">
+            <Button size="sm" onClick={() => aller(rang + 1, true)} className="flex-1">
               Suivant
             </Button>
           )}

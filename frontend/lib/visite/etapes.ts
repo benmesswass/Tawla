@@ -31,6 +31,17 @@ export type EtapeVisite = {
   id: string;
   /** Absent = `vente`. */
   parcours?: Parcours;
+  /**
+   * À qui l'étape s'adresse, quand elle ne s'adresse pas à tout le monde.
+   *
+   * `staff` : elle vit derrière la connexion (tableau de bord, salle, cuisine).
+   * Un visiteur sans compte y serait renvoyé sur `/login` par l'application,
+   * et la visite se retrouverait bloquée devant une porte fermée — elle les
+   * retire donc de son parcours.
+   * `visiteur` : au contraire, elle n'existe que pour celui qui n'a pas de
+   * compte, pour lui dire où s'arrête ce qu'il peut voir seul.
+   */
+  acces?: "staff" | "visiteur";
   /** Page sur laquelle l'étape se joue. */
   route: string;
   /**
@@ -49,8 +60,17 @@ export type EtapeVisite = {
   corps: string;
 };
 
-export function etapesDe(parcours: Parcours): EtapeVisite[] {
-  return ETAPES.filter((e) => (e.parcours ?? "vente") === parcours);
+/**
+ * Les étapes réellement jouables, selon le parcours et selon qu'un compte
+ * staff est ouvert dans ce navigateur. Sans compte, les sept écrans de
+ * direction et de service disparaissent du parcours au lieu de le bloquer —
+ * et le compteur dit la vérité : 14 étapes, pas 20 dont 7 inaccessibles.
+ */
+export function etapesDe(parcours: Parcours, connecte = true): EtapeVisite[] {
+  return ETAPES.filter(
+    (e) =>
+      (e.parcours ?? "vente") === parcours && (!e.acces || e.acces === (connecte ? "staff" : "visiteur")),
+  );
 }
 
 /**
@@ -190,9 +210,22 @@ export const ETAPES: EtapeVisite[] = [
       "Vos serveurs, votre cuisine et vous entrez par cet écran. Chacun arrive sur le sien : le pool des commandes pour le serveur, les tickets pour la cuisine, le tableau de bord pour vous. Un serveur ne voit jamais votre recette.",
   },
 
+  // Fin du parcours pour qui n'a pas de compte : la suite est derrière la
+  // connexion, autant le dire et proposer la seule chose qui l'ouvre, plutôt
+  // que de le laisser buter sur un écran de connexion vide.
+  {
+    id: "fin-visiteur",
+    acces: "visiteur",
+    route: "/login",
+    titre: "La suite demande un compte",
+    corps:
+      "Le tableau de bord, l'écran de vos serveurs et celui de la cuisine ne s'ouvrent qu'une fois connecté — c'est la même porte qui protège votre recette d'un serveur curieux. Créez votre établissement pour les voir, ou demandez-nous une démo : on vient vous les montrer en service, avec vos plats et vos tables.",
+  },
+
   // --- Tableau de bord manager ---------------------------------------------
   {
     id: "dashboard-navigation",
+    acces: "staff",
     route: "/dashboard",
     cible: "dashboard-navigation",
     titre: "Vos quatre écrans de direction",
@@ -201,6 +234,7 @@ export const ETAPES: EtapeVisite[] = [
   },
   {
     id: "dashboard-recette",
+    acces: "staff",
     route: "/dashboard",
     cible: "dashboard-recette",
     titre: "Votre service, en direct",
@@ -209,6 +243,7 @@ export const ETAPES: EtapeVisite[] = [
   },
   {
     id: "dashboard-onglets",
+    acces: "staff",
     route: "/dashboard",
     cible: "dashboard-onglets",
     titre: "Votre carte, vos tables, votre équipe",
@@ -222,6 +257,7 @@ export const ETAPES: EtapeVisite[] = [
   // second compte, avec le lien « Service en salle » de l'en-tête.
   {
     id: "staff-files",
+    acces: "staff",
     route: "/staff",
     cible: "staff-files",
     titre: "L'écran de vos serveurs",
@@ -230,6 +266,7 @@ export const ETAPES: EtapeVisite[] = [
   },
   {
     id: "staff-filet",
+    acces: "staff",
     route: "/staff",
     cible: "staff-filet",
     titre: "Le filet de secours",
@@ -238,6 +275,7 @@ export const ETAPES: EtapeVisite[] = [
   },
   {
     id: "cuisine-files",
+    acces: "staff",
     route: "/kitchen",
     titre: "L'écran cuisine",
     cible: "cuisine-files",
@@ -246,6 +284,7 @@ export const ETAPES: EtapeVisite[] = [
   },
   {
     id: "fin",
+    acces: "staff",
     route: "/kitchen",
     titre: "Il reste le principal : votre client",
     corps:
