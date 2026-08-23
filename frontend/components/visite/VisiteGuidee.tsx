@@ -50,7 +50,11 @@ export default function VisiteGuidee() {
   const [index, setIndex] = useState(0);
   const [reduite, setReduite] = useState(false);
   const [pret, setPret] = useState(false);
-  const [connecte, setConnecte] = useState(false);
+  // Lu dès le premier rendu, pas seulement dans l'effet : à `false` par
+  // défaut, un manager voyait « 1/14 » le temps d'une image avant que le
+  // compteur ne se corrige en « 1/20 ». Sûr côté serveur — `getToken` y rend
+  // `null`, et rien de ce composant n'est rendu avant le montage.
+  const [connecte, setConnecte] = useState(() => getToken() !== null);
   const bulle = useRef<HTMLDivElement>(null);
 
   // Mémorisé : `aller` en dépend, et un nouveau tableau à chaque rendu
