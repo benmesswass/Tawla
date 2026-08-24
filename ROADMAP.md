@@ -26,9 +26,11 @@ Documents qui la fondent :
   décrocher les deux premiers clients payants.
 - [`ROADMAP_ARCHIVE.md`](./ROADMAP_ARCHIVE.md) — phases 0 à 11. Lecture seule.
 - [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md) — dossier de cadrage du marché
-  français (2026-08-24). **Ce n'est pas une seconde roadmap** : il est gelé
-  tant que sa phase F0 n'est pas tranchée par Wassim, et une session qui
-  cherche « la prochaine tâche » vient ici, jamais là-bas.
+  français (2026-08-24 ; F0 tranchée le même jour, scénario C — les deux
+  marchés en parallèle). **Ce n'est pas une seconde roadmap** : une session
+  qui cherche « la prochaine tâche de code » vient toujours ici en priorité —
+  `MARCHE_FRANCE.md` reste le programme du seul chantier France, à travailler
+  à côté, jamais à la place de ce fichier.
 
 ## Objectif
 
@@ -326,7 +328,7 @@ est la condition **exacte** qui la ferait entrer dans la roadmap.
 
 ## Hors périmètre, définitivement
 
-- **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France est le même type de décision, et elle n'est pas tranchée** : elle est instruite à part dans [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md), qui reste gelé tant que sa phase F0 n'a pas reçu de réponse écrite. Rien de ce fichier-là ne s'ouvre en parallèle des phases ci-dessus sans décision explicite de Wassim
+- **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même
 - **Grands groupes, événements, réservations de salle** — Wassim a choisi de ne pas cadrer ; ne pas relancer
 - **SMS au client, imprimante cuisine matérielle, montée de version Next.js** — arbitrages déjà tranchés (cf. archive)
 
