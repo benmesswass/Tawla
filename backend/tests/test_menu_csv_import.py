@@ -74,6 +74,40 @@ def test_reads_spice_allergens_and_halal():
     assert result.items[1].is_halal is False
 
 
+def test_is_halal_default_suit_le_marche(monkeypatch):
+    """F5-A6 (MARCHE_FRANCE.md) : le défaut s'inverse en France, sans qu'aucune
+    colonne halal ne soit présente dans le fichier."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "market", "fr")
+    result = parse_menu_csv("nom,prix\nCafé,2\n")
+    assert not result.errors
+    assert result.items[0].is_halal is False
+
+
+def test_reads_allergen_codes_and_dietary_markers():
+    content = (
+        "nom,prix,allergenes ue,vegetarien,vegan,sans gluten\n"
+        "Salade,8,\"gluten,eggs\",oui,non,non\n"
+    )
+    result = parse_menu_csv(content)
+    assert not result.errors
+    item = result.items[0]
+    assert item.allergen_codes == "gluten,eggs"
+    assert item.is_vegetarian is True
+    assert item.is_vegan is False
+    assert item.is_gluten_free is False
+
+
+def test_allergen_codes_and_dietary_markers_default_to_absent():
+    result = parse_menu_csv("nom,prix\nCafé,2\n")
+    item = result.items[0]
+    assert item.allergen_codes is None
+    assert item.is_vegetarian is False
+    assert item.is_vegan is False
+    assert item.is_gluten_free is False
+
+
 # --- Tolérance aux erreurs -------------------------------------------------
 
 

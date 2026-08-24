@@ -21,6 +21,8 @@ import { toLocalizedMessage } from "@/lib/errors";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
+import { currentMarket, formatAmount } from "@/lib/market";
+import { allergenLabel, parseAllergenCodes } from "@/lib/allergens";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
 import TawlaMark from "@/components/brand/TawlaMark";
@@ -166,6 +168,7 @@ type CreateOrderPayload = Parameters<typeof api.createOrder>[0];
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { qrToken } = params;
   const { t, locale, toggleLocale } = useLocale();
+  const market = currentMarket();
 
   const [table, setTable] = useState<Table | null>(null);
   const [restaurant, setRestaurant] = useState<RestaurantPublic | null>(null);
@@ -219,7 +222,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [sharingOrder, setSharingOrder] = useState(false);
 
   function formatTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString(locale === "ar" ? "ar-TN" : "fr-FR", {
+    const intlLocale = locale === "ar" ? "ar-TN" : locale === "en" ? "en-GB" : "fr-FR";
+    return new Date(iso).toLocaleTimeString(intlLocale, {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -437,13 +441,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // moyenne) — un petit plus pendant l'attente plutôt qu'un écran silencieux.
   const inKitchenWait =
     trackedOrder?.status === "sent_to_kitchen" || trackedOrder?.status === "in_preparation";
+  // `undefined` pour une langue sans anecdotes (l'anglais, pour l'instant) —
+  // jamais un repli silencieux sur le français, qui afficherait du contenu
+  // dans la mauvaise langue sous le bandeau cuisine.
+  const culturalFacts = CULTURAL_FACTS[locale as "fr" | "ar" | "en"];
   useEffect(() => {
-    if (!inKitchenWait) return;
+    if (!inKitchenWait || !culturalFacts || culturalFacts.length === 0) return;
     const timer = setInterval(() => {
-      setCulturalFactIndex((i) => (i + 1) % CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"].length);
+      setCulturalFactIndex((i) => (i + 1) % culturalFacts.length);
     }, 8000);
     return () => clearInterval(timer);
-  }, [inKitchenWait, locale]);
+  }, [inKitchenWait, culturalFacts]);
 
   // Carte de fidélité — pré-remplit le numéro déjà utilisé sur ce resto
   // (évite de le retaper à chaque visite), sans jamais le rendre obligatoire.
@@ -873,7 +881,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         tip: trackedOrder.tip_amount,
         tableLabel: trackedOrder.table_label,
         orderId: trackedOrder.id,
-        locale: locale === "ar" ? "ar" : "fr",
+        locale: locale === "ar" || locale === "en" ? locale : "fr",
       });
       if (!blob) return;
       const file = new File([blob], "ma-commande-tawla.png", { type: "image/png" });
@@ -1093,10 +1101,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </ol>
         )}
 
-        {!cancelled && inKitchenWait && (
+        {!cancelled && inKitchenWait && culturalFacts && culturalFacts.length > 0 && (
           <div className="mt-4 text-[12.5px] leading-[1.5] rounded-xl py-[11px] px-3 flex items-start gap-2 bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--encre)]">
             <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton)]" />
-            <span>{CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"][culturalFactIndex]}</span>
+            <span>{culturalFacts[culturalFactIndex]}</span>
           </div>
         )}
 
@@ -1119,9 +1127,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </ul>
           <div className="flex justify-between text-[15px] font-bold text-[var(--encre)] mt-2 pt-2 border-t border-[var(--line)]">
             <span>{t.total}</span>
-            <span className="tabular-nums">
-              {trackedOrder.total_amount.toFixed(3)} {t.currency}
-            </span>
+            <span className="tabular-nums">{formatAmount(trackedOrder.total_amount)}</span>
           </div>
         </div>
 
@@ -1138,17 +1144,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {t.orderLabel(r.order.id)}
                     {r.order.id === trackedOrder.id && ` — ${t.thisOrder}`}
                   </span>
-                  <span className="tabular-nums">
-                    {r.order.total_amount.toFixed(3)} {t.currency}
-                  </span>
+                  <span className="tabular-nums">{formatAmount(r.order.total_amount)}</span>
                 </li>
               ))}
             </ul>
             <div className="mt-2 pt-2 border-t border-[rgba(184,134,46,.35)] flex justify-between font-semibold text-[var(--encre)]">
               <span>{t.tableTotal}</span>
-              <span className="tabular-nums">
-                {totalArdoise.toFixed(3)} {t.currency}
-              </span>
+              <span className="tabular-nums">{formatAmount(totalArdoise)}</span>
             </div>
             <p className="mt-1.5 text-xs text-[var(--ink-soft)]">{t.tableTotalNote}</p>
           </div>
@@ -1213,7 +1215,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
                   <div className="flex gap-2">
                     {[0, 0.05, 0.1].map((pct) => {
-                      const amount = Number((trackedOrder.total_amount * pct).toFixed(3));
+                      const amount = Number((trackedOrder.total_amount * pct).toFixed(market.currency.decimals));
                       const selected = (tipInput === "" && pct === 0) || Number(tipInput) === amount;
                       return (
                         <button
@@ -1378,13 +1380,36 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   {t.notHalalBadge}
                 </span>
               )}
+              {item.is_vegetarian && (
+                <span className="ms-1 text-xs font-normal text-[var(--menthe)] border border-[var(--menthe)] rounded px-1 align-middle">
+                  {t.vegetarianBadge}
+                </span>
+              )}
+              {item.is_vegan && (
+                <span className="ms-1 text-xs font-normal text-[var(--menthe)] border border-[var(--menthe)] rounded px-1 align-middle">
+                  {t.veganBadge}
+                </span>
+              )}
+              {item.is_gluten_free && (
+                <span className="ms-1 text-xs font-normal text-[var(--menthe)] border border-[var(--menthe)] rounded px-1 align-middle">
+                  {t.glutenFreeBadge}
+                </span>
+              )}
             </div>
             {item.description && (
               <div className="text-[12.5px] leading-[1.35] text-[var(--ink-soft)] mt-[3px]">{item.description}</div>
             )}
-            {item.allergens && (
-              <div className="text-xs text-[var(--ink-soft)]/70 mt-0.5">{t.allergensLabel(item.allergens)}</div>
-            )}
+            {(() => {
+              // F5-A6 (MARCHE_FRANCE.md) : la liste structurée INCO et la note
+              // libre du resto sont complémentaires, jamais fusionnées — voir
+              // menu/models.py::MenuItem.
+              const codes = parseAllergenCodes(item.allergen_codes);
+              const structured = codes.length > 0 ? codes.map((c) => allergenLabel(c, locale)).join(", ") : null;
+              const combined = [structured, item.allergens].filter(Boolean).join(" · ");
+              return combined ? (
+                <div className="text-xs text-[var(--ink-soft)]/70 mt-0.5">{t.allergensLabel(combined)}</div>
+              ) : null;
+            })()}
             {rupture && (
               <div className="text-[11.5px] font-semibold text-[var(--harissa)] mt-1">{t.itemOutOfStock}</div>
             )}
@@ -1398,7 +1423,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   rupture ? "line-through opacity-45" : ""
                 }`}
               >
-                {item.price.toFixed(3)} {t.currency}
+                {formatAmount(item.price)}
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 {ligne && (
@@ -1599,9 +1624,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     className="w-full text-start text-sm underline text-[var(--laiton)] flex justify-between gap-2"
                   >
                     <span>{t.openOrderLine(ref.order.id, ref.order.items.length)}</span>
-                    <span className="tabular-nums shrink-0">
-                      {ref.order.total_amount.toFixed(3)} {t.currency}
-                    </span>
+                    <span className="tabular-nums shrink-0">{formatAmount(ref.order.total_amount)}</span>
                   </button>
                 </li>
               ))}
@@ -1729,7 +1752,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}
                   </p>
                   <p className={`${lalezar.className} text-[26px] leading-none tabular-nums text-[var(--semoule)] mt-0.5`}>
-                    {total.toFixed(3)} {t.currency}
+                    {formatAmount(total)}
                   </p>
                 </div>
                 <button
@@ -1771,7 +1794,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   .map((item) => (
                     <li key={item.id} className="flex items-center gap-3">
                       <span className="flex-1 text-sm text-[var(--ink-soft)]">
-                        <span className="text-[var(--encre)]">{item.name}</span> · {item.price.toFixed(3)} DT
+                        <span className="text-[var(--encre)]">{item.name}</span> · {formatAmount(item.price)}
                       </span>
                       <button
                         onClick={() => addToCart(item, true)}

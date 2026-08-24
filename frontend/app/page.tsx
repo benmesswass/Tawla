@@ -1,8 +1,12 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { lalezar } from "@/lib/fonts";
 import TawlaLogo from "@/components/brand/TawlaLogo";
 import BoutonVisite from "@/components/visite/BoutonVisite";
+import BandeauAutreMarche from "@/components/marche/BandeauAutreMarche";
 import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
+import { currentMarket, formatAmount } from "@/lib/market";
+import { marketForCountry, MARKET_LABELS, siteUrl } from "@/lib/marketSelector";
 
 /**
  * Page d'accueil publique (Phase 14.2).
@@ -21,8 +25,23 @@ export const metadata = {
 };
 
 export default function HomePage() {
+  // "Vous semblez être ailleurs" (F4, MARCHE_FRANCE.md §5) — jamais une
+  // redirection automatique, seulement un bandeau fermable. Rien à afficher
+  // tant que l'URL de l'autre marché n'est pas configurée (domaine pas
+  // encore tranché, Annexe C — C4) : un bandeau sans destination utile
+  // serait pire que son absence.
+  const market = currentMarket();
+  const detected = marketForCountry(headers().get("cf-ipcountry"));
+  const otherMarketUrl = detected && detected !== market.code ? siteUrl(detected) : null;
+
   return (
     <main className="min-h-screen">
+      {otherMarketUrl && detected && (
+        <BandeauAutreMarche
+          label={`Vous semblez être en ${MARKET_LABELS[detected]} — voir Tawla ${MARKET_LABELS[detected]}`}
+          href={`/api/choisir-marche?market=${detected}`}
+        />
+      )}
       <section className="bg-[var(--harissa)] text-white">
         <div className="max-w-3xl mx-auto px-6 py-14" data-visite="accueil-promesse">
           <TawlaLogo size={40} className="mb-8" inverse />
@@ -117,7 +136,9 @@ export default function HomePage() {
                 <h3 className="font-semibold text-lg">{tier.name}</h3>
                 <p className="text-xs text-[var(--ink-soft)] mb-3">{tier.tagline}</p>
                 <p className="mb-4">
-                  <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">{tier.priceDT} DT</span>
+                  <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">
+                    {formatAmount(tier.priceDT, { decimals: 0 })}
+                  </span>
                   <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
                 </p>
                 <ul className="text-sm text-[var(--ink-soft)] space-y-1.5">

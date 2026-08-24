@@ -1,6 +1,7 @@
 import { MyShift } from "@/lib/api";
 import { duree } from "@/lib/duree";
 import { lalezar } from "@/lib/fonts";
+import { formatAmount } from "@/lib/market";
 
 /**
  * Les chiffres du serveur, sur l'écran du serveur (Phase 17.3).
@@ -25,7 +26,7 @@ export default function MaSoiree({ shift, tablesEnCharge }: { shift: MyShift | n
   const tuiles = [
     { valeur: String(tablesEnCharge), libelle: "Tables en charge" },
     { valeur: String(shift.orders_taken), libelle: "Commandes servies" },
-    { valeur: `${shift.total_amount_handled.toFixed(3)} DT`, libelle: "Encaissé ce soir" },
+    { valeur: formatAmount(shift.total_amount_handled), libelle: "Encaissé ce soir" },
     { valeur: delai, libelle: "Attente moyenne" },
   ];
 

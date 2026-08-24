@@ -16,6 +16,7 @@ import {
   type PlatformOverview,
   type SubscriptionTier,
 } from "@/lib/platformAdmin";
+import { formatAmount } from "@/lib/market";
 
 const TIER_LABELS: Record<SubscriptionTier, string> = {
   essentiel: "Essentiel",
@@ -24,7 +25,7 @@ const TIER_LABELS: Record<SubscriptionTier, string> = {
 };
 
 function formatMoney(amount: number): string {
-  return `${amount.toFixed(2)} DT`;
+  return formatAmount(amount);
 }
 
 function formatPercent(rate: number | null): string {

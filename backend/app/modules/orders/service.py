@@ -17,6 +17,7 @@ from app.core.konnect import (
     tnd_to_millimes,
 )
 from app.core.logging import get_logger, log_event
+from app.core.markets import format_amount
 from app.core.push import send_push_notification
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
@@ -532,7 +533,7 @@ def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> N
             html_body=(
                 f"<p>Bonjour,</p>"
                 f"<p>Votre commande #{order.id} chez {restaurant.name} a bien été payée "
-                f"({total:.2f} DT). Vous trouverez la facture détaillée en pièce jointe.</p>"
+                f"({format_amount(total)}). Vous trouverez la facture détaillée en pièce jointe.</p>"
                 f"<p>Merci de votre visite !</p>"
             ),
             attachment_filename=f"facture-commande-{order.id}.pdf",

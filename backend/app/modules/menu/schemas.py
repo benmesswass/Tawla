@@ -1,5 +1,17 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.markets import current_market
+
+
+def _default_is_halal() -> bool:
+    """
+    Vrai en Tunisie, faux en France (F5-A6, MARCHE_FRANCE.md) — jamais un
+    défaut fixe : la quasi-totalité des restos tunisiens sont halal, ce n'est
+    la norme nulle part ailleurs. `default_factory` plutôt que `default` : lu
+    au moment de la requête, pas figé à l'import du module.
+    """
+    return current_market().code != "fr"
+
 
 class MenuItemCreate(BaseModel):
     # `image_url` n'est pas un champ que le client écrit : il est calculé par la
@@ -16,7 +28,13 @@ class MenuItemCreate(BaseModel):
     price: float
     spice_level: int = Field(default=0, ge=0, le=3)
     allergens: str | None = None
-    is_halal: bool = True
+    is_halal: bool = Field(default_factory=_default_is_halal)
+    # F5-A6 : codes INCO séparés par une virgule, liste fermée côté client
+    # (frontend/lib/allergens.ts) — voir MenuItem.allergen_codes.
+    allergen_codes: str | None = None
+    is_vegetarian: bool = False
+    is_vegan: bool = False
+    is_gluten_free: bool = False
 
 
 class MenuItemOut(BaseModel):
@@ -33,6 +51,10 @@ class MenuItemOut(BaseModel):
     spice_level: int
     allergens: str | None
     is_halal: bool
+    allergen_codes: str | None
+    is_vegetarian: bool
+    is_vegan: bool
+    is_gluten_free: bool
 
 
 class MenuItemAvailability(BaseModel):
@@ -91,3 +113,7 @@ class MenuItemUpdate(BaseModel):
     spice_level: int | None = Field(default=None, ge=0, le=3)
     allergens: str | None = None
     is_halal: bool | None = None
+    allergen_codes: str | None = None
+    is_vegetarian: bool | None = None
+    is_vegan: bool | None = None
+    is_gluten_free: bool | None = None

@@ -1,13 +1,28 @@
 // Dictionnaire de référence — définit la forme (Dictionary) que chaque
-// autre langue doit respecter exactement (voir ar.ts). Ne couvre QUE le
-// parcours client (page /menu/[qrToken] + SplitBill) : les écrans
+// autre langue doit respecter exactement (voir ar.ts, en.ts). Ne couvre QUE
+// le parcours client (page /menu/[qrToken] + SplitBill) : les écrans
 // staff/cuisine/manager restent en français pour l'instant (back-office
 // interne, cf. ROADMAP.md).
+//
+// Seul dictionnaire partagé entre les deux marchés (le français se parle en
+// Tunisie comme en France) : c'est pour ça, et seulement ici, que les
+// montants passent par `formatAmount()` plutôt qu'un `toFixed(3) DT` en dur —
+// ar.ts et en.ts, eux, ne chargent jamais que sous leur marché respectif et
+// peuvent garder leur devise en dur sans risque.
+import { currentMarket, formatAmount } from "@/lib/market";
+
+// Le libellé du bouton de bascule s'écrit dans la langue VERS laquelle il
+// mène (même convention qu'ar.ts, qui dit "Français" — pas la traduction du
+// mot "arabe"/"anglais"). Comme `currency` juste au-dessus, calculé une fois
+// pour tout le marché de ce déploiement, jamais par requête.
+const OTHER_LANGUAGE_LABEL: Record<string, string> = { ar: "عربي", en: "English" };
+const otherLanguage = currentMarket().languages.find((code) => code !== "fr") ?? "ar";
+
 export const fr = {
-  locale: "fr" as "fr" | "ar",
+  locale: "fr" as "fr" | "ar" | "en",
   dir: "ltr" as "ltr" | "rtl",
-  currency: "DT",
-  localeSwitchLabel: "عربي",
+  currency: currentMarket().currency.symbol,
+  localeSwitchLabel: OTHER_LANGUAGE_LABEL[otherLanguage] ?? "عربي",
 
   retry: "Réessayer",
   loadingMenu: "Chargement du menu...",
@@ -20,6 +35,9 @@ export const fr = {
   removeFromCartAria: (name: string) => `Retirer un ${name} du panier`,
   allergensLabel: (allergens: string) => `Allergènes : ${allergens}`,
   notHalalBadge: "Non halal",
+  vegetarianBadge: "Végétarien",
+  veganBadge: "Vegan",
+  glutenFreeBadge: "Sans gluten",
   callWaiterButton: "Appeler le serveur",
   callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",
@@ -51,14 +69,14 @@ export const fr = {
   paymentTitle: "Paiement",
   paidMessage: (method: "card" | "card_terminal" | "cash", tipAmount: number) =>
     `Payé ✓ ${method === "cash" ? "en espèces" : "par carte"}` +
-    (tipAmount > 0 ? ` (dont ${tipAmount.toFixed(3)} DT de pourboire)` : ""),
+    (tipAmount > 0 ? ` (dont ${formatAmount(tipAmount)} de pourboire)` : ""),
   cashPendingMessage: (amount: number) =>
-    `Paiement en espèces demandé — un serveur va passer encaisser ${amount.toFixed(3)} DT.`,
+    `Paiement en espèces demandé — un serveur va passer encaisser ${formatAmount(amount)}.`,
   cardTerminalPendingMessage: (amount: number) =>
-    `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${amount.toFixed(3)} DT.`,
+    `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${formatAmount(amount)}.`,
   tipLabel: "Pourboire (facultatif, pour un paiement par carte)",
   tipNone: "Sans",
-  tipPlaceholder: "0.00 DT",
+  tipPlaceholder: formatAmount(0, { decimals: 2 }),
   emailLabel: "E-mail (facultatif, pour recevoir votre facture)",
   emailPlaceholder: "vous@exemple.com",
   payByCard: "Payer en ligne — Konnect",
@@ -108,12 +126,12 @@ export const fr = {
     "Le paiement ci-dessous règle uniquement la commande affichée. Revenez sur les autres pour les régler à leur tour, ou demandez au serveur de tout encaisser en une fois.",
   sharedWithLabel: "Partagé entre :",
   sharedWithEveryone: "Personne de sélectionnée : partagé par toute la table.",
-  sharedPerPersonAmount: (amount: number) => `${amount.toFixed(3)} DT par personne`,
+  sharedPerPersonAmount: (amount: number) => `${formatAmount(amount)} par personne`,
   dinersLabel: "Personnes à table",
   openOrdersTitle: (count: number, reste: number) =>
     count > 1
-      ? `${count} commandes en cours — ${reste.toFixed(3)} DT restent à régler`
-      : `Une commande en cours — ${reste.toFixed(3)} DT restent à régler`,
+      ? `${count} commandes en cours — ${formatAmount(reste)} restent à régler`
+      : `Une commande en cours — ${formatAmount(reste)} restent à régler`,
   openOrderLine: (id: number, lines: number) =>
     `Commande #${id} — ${lines} article${lines > 1 ? "s" : ""}`,
   loyaltyFirstVisit: "Première visite — votre carte démarre avec cette commande.",

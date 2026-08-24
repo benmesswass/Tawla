@@ -26,6 +26,11 @@ export type MenuItem = {
   spice_level: number;
   allergens: string | null;
   is_halal: boolean;
+  /** Codes INCO séparés par une virgule (F5-A6) — voir lib/allergens.ts. */
+  allergen_codes: string | null;
+  is_vegetarian: boolean;
+  is_vegan: boolean;
+  is_gluten_free: boolean;
 };
 
 export type Table = {
@@ -505,12 +510,31 @@ export const api = {
     spice_level?: number;
     allergens?: string | null;
     is_halal?: boolean;
+    allergen_codes?: string | null;
+    is_vegetarian?: boolean;
+    is_vegan?: boolean;
+    is_gluten_free?: boolean;
   }) => request<MenuItem>("/api/v1/menu-items", { method: "POST", body: JSON.stringify(payload) }),
   // `image_url` n'est pas éditable ici : le backend rejette le champ (422),
   // seules les routes /image gèrent la photo — voir MenuItemUpdate côté serveur.
   updateMenuItem: (
     itemId: number,
-    payload: Partial<Pick<MenuItem, "name" | "description" | "category" | "price" | "spice_level" | "allergens" | "is_halal">>
+    payload: Partial<
+      Pick<
+        MenuItem,
+        | "name"
+        | "description"
+        | "category"
+        | "price"
+        | "spice_level"
+        | "allergens"
+        | "is_halal"
+        | "allergen_codes"
+        | "is_vegetarian"
+        | "is_vegan"
+        | "is_gluten_free"
+      >
+    >
   ) => request<MenuItem>(`/api/v1/menu-items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   setMenuItemAvailability: (itemId: number, isAvailable: boolean) =>
     request<MenuItem>(`/api/v1/menu-items/${itemId}/availability`, {

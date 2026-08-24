@@ -3,7 +3,14 @@
 // d'attente, plutôt qu'un écran silencieux. Faits vérifiés (UNESCO,
 // géographie, traditions), pas de contenu spécifique à un plat précis du
 // menu (celui-ci variant d'un restaurant à l'autre).
-export const CULTURAL_FACTS: Record<"fr" | "ar", string[]> = {
+//
+// Contenu tunisien par construction — pas encore de version anglaise (voir
+// MARCHE_FRANCE.md F5 "Démo française" : le contenu du marché français reste
+// à écrire, ce n'est pas à ce module de l'inventer). `Partial` plutôt qu'un
+// `Record` complet : `locale === "en"` doit sauter le bloc entièrement
+// (voir l'appelant) plutôt que d'afficher du français sous une étiquette
+// anglaise.
+export const CULTURAL_FACTS: Partial<Record<"fr" | "ar" | "en", string[]>> = {
   fr: [
     "Le couscous est inscrit au patrimoine culturel immatériel de l'UNESCO depuis 2020, une tradition partagée par l'Algérie, le Maroc, la Mauritanie et la Tunisie.",
     "La harissa tunisienne est elle-même reconnue par l'UNESCO depuis 2022 comme patrimoine culturel immatériel de l'humanité.",

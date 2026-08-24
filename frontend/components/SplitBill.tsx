@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Order } from "@/lib/api";
 import { fr, type Dictionary } from "@/lib/i18n/fr";
 import { UtensilsIcon } from "@/components/icons";
+import { formatAmount } from "@/lib/market";
 
 type SplitMode = "equal" | "items";
 
@@ -140,9 +141,7 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
         {shares.map((amount, i) => (
           <div key={i} className="flex justify-between">
             <span>{t.personLabel(i + 1)}</span>
-            <span className="font-semibold tabular-nums">
-              {amount.toFixed(3)} {t.currency}
-            </span>
+            <span className="font-semibold tabular-nums">{formatAmount(amount)}</span>
           </div>
         ))}
       </div>

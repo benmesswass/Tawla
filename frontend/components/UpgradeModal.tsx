@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, type Restaurant, type SubscriptionTier } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { TIERS } from "@/lib/offer";
+import { formatAmount } from "@/lib/market";
 import Button from "@/components/ui/Button";
 
 /**
@@ -58,7 +59,9 @@ export default function UpgradeModal({
         </p>
         <h2 className="mt-1 text-lg font-semibold text-[var(--encre)]">{tier.tagline}</h2>
         <p className="mt-3">
-          <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">{tier.priceDT} DT</span>
+          <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">
+            {formatAmount(tier.priceDT, { decimals: 0 })}
+          </span>
           <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
         </p>
         <ul className="mt-3 space-y-1 text-sm text-[var(--ink-soft)]">
@@ -71,7 +74,9 @@ export default function UpgradeModal({
 
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={handleUpgrade} disabled={submitting}>
-            {submitting ? "Paiement en cours…" : `Passer à ${tier.name} — ${tier.priceDT} DT/mois`}
+            {submitting
+              ? "Paiement en cours…"
+              : `Passer à ${tier.name} — ${formatAmount(tier.priceDT, { decimals: 0 })}/mois`}
           </Button>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Plus tard

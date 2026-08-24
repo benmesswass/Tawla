@@ -13,6 +13,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import UpgradeModal from "@/components/UpgradeModal";
+import { currentMarket, formatAmount } from "@/lib/market";
 
 /**
  * Rapport d'activité par membre de l'équipe — la base d'une prime de rendement.
@@ -52,14 +53,21 @@ function reportToCsv(report: TeamReport): string {
 
   row("Rapport d'équipe Tawla", `${report.start} au ${report.end}`);
   lines.push("");
-  row("Nom", "Rôle", "Commandes prises", "Délai moyen de prise en charge (s)", "Montant traité (DT)");
+  const market = currentMarket();
+  row(
+    "Nom",
+    "Rôle",
+    "Commandes prises",
+    "Délai moyen de prise en charge (s)",
+    `Montant traité (${market.currency.code})`
+  );
   for (const member of report.staff) {
     row(
       member.staff_name,
       ROLE_LABELS[member.role],
       member.orders_taken,
       member.avg_seconds_to_claim === null ? "" : Math.round(member.avg_seconds_to_claim),
-      member.total_amount_handled.toFixed(3)
+      member.total_amount_handled.toFixed(market.currency.decimals)
     );
   }
   return lines.join("\n");
@@ -204,7 +212,7 @@ export default function TeamReportPage() {
                       {formatDelay(member.avg_seconds_to_claim)}
                     </td>
                     <td className="py-2 text-right tabular-nums">
-                      {member.total_amount_handled.toFixed(3)} DT
+                      {formatAmount(member.total_amount_handled)}
                     </td>
                   </tr>
                 ))}

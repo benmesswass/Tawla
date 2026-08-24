@@ -65,7 +65,27 @@ class MenuItem(Base):
     # obligerait une migration à chaque nouvel allergène courant).
     spice_level: Mapped[int] = mapped_column(Integer, default=0)
     allergens: Mapped[str | None] = mapped_column(String(300), nullable=True)
-    # Par défaut à True : la quasi-totalité des restos tunisiens sont
-    # halal — le champ sert surtout à signaler l'exception (établissement
-    # touristique servant alcool/porc), pas la norme.
+    # Par défaut à True EN TUNISIE (Settings.market) : la quasi-totalité des
+    # restos tunisiens sont halal — le champ sert surtout à signaler
+    # l'exception (établissement touristique servant alcool/porc), pas la
+    # norme. Le défaut s'inverse en France (voir schemas.py, csv_import.py) :
+    # la colonne elle-même n'a pas de défaut fixe, jamais market-dépendant au
+    # niveau SQL (voir MARCHE_FRANCE.md F5-A6).
     is_halal: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # F5-A6 (MARCHE_FRANCE.md) — allergènes des 14 catégories INCO
+    # (règlement UE 1169/2011), obligatoires en France : codes séparés par une
+    # virgule (ex. "gluten,oeufs,lait"), liste fermée côté client
+    # (`frontend/lib/allergens.ts`) mais colonne libre côté base — même
+    # convention que `category`, jamais de migration pour un nouvel allergène
+    # si la réglementation change. Distinct du texte libre `allergens`
+    # ci-dessus, conservé tel quel pour tout ce que la liste fermée ne couvre
+    # pas ("cuisiné dans une friture commune aux fruits à coque"…).
+    allergen_codes: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Marqueurs positifs, distincts du halal (qui exclut) — une carte
+    # française en a besoin au même titre que les allergènes (MARCHE_FRANCE.md
+    # §3.2). Faux par défaut dans les deux marchés : une affirmation "sans
+    # gluten" ou "vegan" engage le restaurant, elle ne se déduit jamais.
+    is_vegetarian: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_vegan: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_gluten_free: Mapped[bool] = mapped_column(Boolean, default=False)

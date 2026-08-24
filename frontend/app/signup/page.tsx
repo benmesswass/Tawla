@@ -9,6 +9,7 @@ import { toFrenchMessage } from "@/lib/errors";
 import { hankenGrotesk, lalezar } from "@/lib/fonts";
 import TawlaMark from "@/components/brand/TawlaMark";
 import { TIERS } from "@/lib/offer";
+import { formatAmount } from "@/lib/market";
 
 export default function SignupPage() {
   return (
@@ -91,7 +92,8 @@ function SignupForm() {
               Onboardez votre restaurant ou café et devenez son premier compte manager.
             </p>
             <p className="text-xs mt-2" data-visite="signup-palier" style={{ color: "var(--ink-soft)" }}>
-              Palier choisi : <span style={{ color: "var(--encre)" }}>{tier.name}</span> — {tier.priceDT} DT / mois
+              Palier choisi : <span style={{ color: "var(--encre)" }}>{tier.name}</span> —{" "}
+              {formatAmount(tier.priceDT, { decimals: 0 })} / mois
             </p>
           </div>
         </div>
@@ -106,12 +108,14 @@ function SignupForm() {
             </p>
             <p className="mt-1">
               <span className="text-sm line-through" style={{ color: "var(--ink-soft)" }}>
-                {tier.priceDT} DT
+                {formatAmount(tier.priceDT, { decimals: 0 })}
               </span>{" "}
               <span className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
                 {promo.discount_percent >= 100
                   ? "Gratuit"
-                  : `${Math.round((tier.priceDT * (100 - promo.discount_percent)) / 100)} DT`}
+                  : formatAmount(Math.round((tier.priceDT * (100 - promo.discount_percent)) / 100), {
+                      decimals: 0,
+                    })}
               </span>
               <span className="text-sm" style={{ color: "var(--ink-soft)" }}> le premier mois</span>
             </p>

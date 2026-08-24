@@ -1,3 +1,4 @@
+from app.core.config import settings
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 
@@ -18,6 +19,44 @@ def test_menu_item_defaults_no_spice_and_halal(client):
     assert item["spice_level"] == 0
     assert item["allergens"] is None
     assert item["is_halal"] is True
+    assert item["allergen_codes"] is None
+    assert item["is_vegetarian"] is False
+    assert item["is_vegan"] is False
+    assert item["is_gluten_free"] is False
+
+
+def test_menu_item_defaults_not_halal_in_france(client, monkeypatch):
+    """F5-A6 (MARCHE_FRANCE.md) : même route, même payload — seul le marché du
+    déploiement change le défaut, jamais une valeur envoyée par le client."""
+    monkeypatch.setattr(settings, "market", "fr")
+    restaurant, headers = _setup_restaurant(client)
+    item = client.post(
+        "/api/v1/menu-items",
+        json={"restaurant_id": restaurant.id, "name": "Couscous", "price": 15.0},
+        headers=headers,
+    ).json()
+    assert item["is_halal"] is False
+
+
+def test_menu_item_can_set_allergen_codes_and_dietary_markers(client):
+    restaurant, headers = _setup_restaurant(client)
+    item = client.post(
+        "/api/v1/menu-items",
+        json={
+            "restaurant_id": restaurant.id,
+            "name": "Salade de quinoa",
+            "price": 9.0,
+            "allergen_codes": "sesame,mustard",
+            "is_vegetarian": True,
+            "is_vegan": True,
+            "is_gluten_free": True,
+        },
+        headers=headers,
+    ).json()
+    assert item["allergen_codes"] == "sesame,mustard"
+    assert item["is_vegetarian"] is True
+    assert item["is_vegan"] is True
+    assert item["is_gluten_free"] is True
 
 
 def test_menu_item_can_set_spice_allergens_and_halal(client):

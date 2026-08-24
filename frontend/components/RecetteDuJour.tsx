@@ -1,4 +1,5 @@
 import { DashboardStats } from "@/lib/api";
+import { formatAmount } from "@/lib/market";
 
 /**
  * Les deux chiffres de tête du tableau de bord (Phase 17.1).
@@ -17,7 +18,7 @@ export default function RecetteDuJour({ stats }: { stats: DashboardStats | null 
       <div className="sm:col-span-2 rounded-xl bg-[var(--harissa)] text-white px-5 py-4">
         <p className="text-sm text-white/80">Ventes du jour</p>
         <p className="text-3xl sm:text-4xl font-semibold tabular-nums mt-1">
-          {stats ? `${stats.revenue_today.toFixed(3)} DT` : "—"}
+          {stats ? formatAmount(stats.revenue_today) : "—"}
         </p>
         <p className="text-xs text-white/70 mt-1">
           Commandes réellement réglées aujourd&apos;hui : paiement carte abouti, ou espèces confirmées par le

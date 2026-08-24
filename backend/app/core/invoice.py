@@ -12,6 +12,7 @@ tirets cadratins ni l'arabe — texte volontairement en ASCII étendu simple.
 """
 from fpdf import FPDF
 
+from app.core.markets import format_amount
 from app.modules.orders.models import Order, PaymentMethod
 
 _PAYMENT_LABELS: dict[PaymentMethod, str] = {
@@ -46,21 +47,23 @@ def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
         line_total = float(item.unit_price) * item.quantity
         pdf.cell(90, 8, item.menu_item_name)
         pdf.cell(20, 8, str(item.quantity), align="R")
-        pdf.cell(35, 8, f"{float(item.unit_price):.2f} DT", align="R")
-        pdf.cell(35, 8, f"{line_total:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(35, 8, format_amount(float(item.unit_price), use_iso_code=True), align="R")
+        pdf.cell(35, 8, format_amount(line_total, use_iso_code=True), align="R", new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(4)
     tip = float(order.tip_amount)
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(145, 7, "Sous-total", align="R")
-    pdf.cell(35, 7, f"{order.total_amount:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(35, 7, format_amount(order.total_amount, use_iso_code=True), align="R", new_x="LMARGIN", new_y="NEXT")
     if tip > 0:
         pdf.cell(145, 7, "Pourboire", align="R")
-        pdf.cell(35, 7, f"{tip:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(35, 7, format_amount(tip, use_iso_code=True), align="R", new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(145, 9, "Total payé", align="R")
-    pdf.cell(35, 9, f"{order.total_amount + tip:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(
+        35, 9, format_amount(order.total_amount + tip, use_iso_code=True), align="R", new_x="LMARGIN", new_y="NEXT"
+    )
 
     pdf.ln(6)
     pdf.set_font("Helvetica", "", 10)

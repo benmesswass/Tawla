@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+from app.core.markets import current_market
 from app.modules.menu.models import MenuItem
 
 # Colonnes reconnues -> alias acceptés (normalisés : minuscules, sans accent).
@@ -31,6 +32,14 @@ _COLUMNS: dict[str, tuple[str, ...]] = {
     "spice_level": ("piment", "spice", "spice level", "niveau de piment"),
     "allergens": ("allergenes", "allergens", "allergie", "allergies"),
     "is_halal": ("halal", "is halal"),
+    # F5-A6 (MARCHE_FRANCE.md) : codes INCO séparés par une virgule, tels
+    # qu'attendus par frontend/lib/allergens.ts — colonne distincte de
+    # `allergens` (texte libre), pas une conversion automatique de l'un vers
+    # l'autre : un patron qui remplit l'un ne remplit pas forcément l'autre.
+    "allergen_codes": ("allergenes ue", "codes allergenes", "allergen codes", "inco"),
+    "is_vegetarian": ("vegetarien", "vegetarian"),
+    "is_vegan": ("vegan", "vegetalien"),
+    "is_gluten_free": ("sans gluten", "gluten free"),
 }
 
 _TRUE_VALUES = {"1", "oui", "yes", "true", "vrai", "o", "y"}
@@ -52,7 +61,11 @@ class ParsedItem:
     description: str | None = None
     spice_level: int = 0
     allergens: str | None = None
-    is_halal: bool = True
+    is_halal: bool = field(default_factory=lambda: current_market().code != "fr")
+    allergen_codes: str | None = None
+    is_vegetarian: bool = False
+    is_vegan: bool = False
+    is_gluten_free: bool = False
 
 
 @dataclass
@@ -175,7 +188,11 @@ def parse_menu_csv(content: str) -> ParseResult:
                 description=((values.get("description") or "").strip() or None),
                 spice_level=_parse_spice(values.get("spice_level", "")),
                 allergens=((values.get("allergens") or "").strip() or None),
-                is_halal=_parse_bool(values.get("is_halal", ""), default=True),
+                is_halal=_parse_bool(values.get("is_halal", ""), default=current_market().code != "fr"),
+                allergen_codes=((values.get("allergen_codes") or "").strip()[:200] or None),
+                is_vegetarian=_parse_bool(values.get("is_vegetarian", ""), default=False),
+                is_vegan=_parse_bool(values.get("is_vegan", ""), default=False),
+                is_gluten_free=_parse_bool(values.get("is_gluten_free", ""), default=False),
             )
         except ValueError as exc:
             result.errors.append(f"Ligne {line_number} ({name}) : {exc}.")

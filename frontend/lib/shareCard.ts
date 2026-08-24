@@ -3,8 +3,9 @@
 // aucune image externe à héberger. Rendu pixel uniquement : les libellés
 // fixes ci-dessous restent volontairement en dehors du dictionnaire i18n
 // principal (portée limitée à cette carte, jamais affichés autrement).
+import { formatAmount } from "@/lib/market";
 const CANVAS_LABELS: Record<
-  "fr" | "ar",
+  "fr" | "ar" | "en",
   { tagline: string; footer: string; total: string; tip: string; table: (label: string, id: number) => string }
 > = {
   fr: {
@@ -21,6 +22,15 @@ const CANVAS_LABELS: Record<
     tip: "بقشيش",
     table: (label, id) => `${label} · طلبية #${id}`,
   },
+  // Domaine "tawla.tn" laissé tel quel comme pour fr/ar — marque
+  // internationale non tranchée (MARCHE_FRANCE.md Annexe C, C4).
+  en: {
+    tagline: "My meal on Tawla",
+    footer: "tawla.tn",
+    total: "TOTAL",
+    tip: "Tip",
+    table: (label, id) => `${label} · Order #${id}`,
+  },
 };
 
 type ShareCardParams = {
@@ -32,7 +42,7 @@ type ShareCardParams = {
   tip: number;
   tableLabel: string;
   orderId: number;
-  locale: "fr" | "ar";
+  locale: "fr" | "ar" | "en";
 };
 
 const MARGE = 110;
@@ -142,7 +152,7 @@ export async function generateShareCardBlob(params: ShareCardParams): Promise<Bl
 }
 
 function montant(valeur: number): string {
-  return `${valeur.toFixed(3)} DT`;
+  return formatAmount(valeur);
 }
 
 function ligne(ctx: CanvasRenderingContext2D, y: number, largeur: number) {

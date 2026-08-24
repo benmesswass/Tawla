@@ -12,6 +12,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import UpgradeModal from "@/components/UpgradeModal";
+import { formatAmount as formatMarketAmount } from "@/lib/market";
 
 /**
  * La page que Wassim montre à un patron à la fin d'un pilote, et au jury.
@@ -34,7 +35,7 @@ function isoDaysAgo(days: number): string {
 const formatDuration = duree;
 
 function formatAmount(amount: number | null): string {
-  return amount === null ? "—" : `${amount.toFixed(3)} DT`;
+  return amount === null ? "—" : formatMarketAmount(amount);
 }
 
 function formatDate(iso: string): string {

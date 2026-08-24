@@ -20,6 +20,7 @@ import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
+import { formatAmount } from "@/lib/market";
 
 // Même seuil que `ABANDONED_PENDING_AFTER` côté serveur : au-delà, la commande
 // est comptée perdue dans les chiffres du patron. L'écran doit donc alerter
@@ -537,7 +538,7 @@ export default function StaffPage() {
       .join("");
     const cash = cashRequests
       .map(
-        (c) => `<div>${escapeHtml(c.table_label)} — addition ${c.amount.toFixed(3)} DT (espèces)</div>`
+        (c) => `<div>${escapeHtml(c.table_label)} — addition ${formatAmount(c.amount)} (espèces)</div>`
       )
       .join("");
     win.document.write(
@@ -811,7 +812,7 @@ export default function StaffPage() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="text-[13.5px] font-semibold text-[var(--encre)]">
-                          Commande #{o.order_id} — {o.amount.toFixed(3)} DT
+                          Commande #{o.order_id} — {formatAmount(o.amount)}
                         </div>
                         <div className="text-xs text-[var(--ink-soft)] mt-0.5">{o.methode === "espèces" ? "Espèces" : "Carte (terminal)"}</div>
                       </div>

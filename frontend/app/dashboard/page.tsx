@@ -28,12 +28,16 @@ import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons
 import { MENU_CATEGORIES } from "@/lib/menuCategories";
 import { reduirePhoto } from "@/lib/photo";
 import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
+import AllergenPicker from "@/components/AllergenPicker";
+import { AllergenCode, formatAllergenCodes, parseAllergenCodes } from "@/lib/allergens";
+import { currentMarket } from "@/lib/market";
 import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
 import UpgradeModal from "@/components/UpgradeModal";
 import ActivationRequired from "@/components/ActivationRequired";
 import SubscriptionReminderModal from "@/components/SubscriptionReminderModal";
 import QrCode from "@/components/QrCode";
+import { formatAmount } from "@/lib/market";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
 // établissements n'ont pas les mêmes zones, un café sans terrasse n'en a
@@ -84,6 +88,10 @@ type Draft = {
   spiceLevel: string;
   allergens: string;
   isHalal: boolean;
+  allergenCodes: string[];
+  isVegetarian: boolean;
+  isVegan: boolean;
+  isGlutenFree: boolean;
 };
 
 // Les <option> HTML ne peuvent afficher que du texte brut, jamais un
@@ -100,9 +108,15 @@ function itemToDraft(item: MenuItem): Draft {
     spiceLevel: String(item.spice_level),
     allergens: item.allergens ?? "",
     isHalal: item.is_halal,
+    allergenCodes: parseAllergenCodes(item.allergen_codes),
+    isVegetarian: item.is_vegetarian,
+    isVegan: item.is_vegan,
+    isGlutenFree: item.is_gluten_free,
   };
 }
 
+// Halal vrai par défaut en Tunisie, faux en France (F5-A6, MARCHE_FRANCE.md) —
+// même défaut market-aware que le backend (menu/schemas.py::_default_is_halal).
 const EMPTY_DRAFT: Draft = {
   name: "",
   category: "Plats",
@@ -110,7 +124,11 @@ const EMPTY_DRAFT: Draft = {
   description: "",
   spiceLevel: "0",
   allergens: "",
-  isHalal: true,
+  isHalal: currentMarket().code !== "fr",
+  allergenCodes: [],
+  isVegetarian: false,
+  isVegan: false,
+  isGlutenFree: false,
 };
 
 type Tab = "menu" | "tables" | "team" | "settings";
@@ -377,6 +395,10 @@ export default function DashboardPage() {
         spice_level: Number(draft.spiceLevel),
         allergens: draft.allergens.trim() || null,
         is_halal: draft.isHalal,
+        allergen_codes: draft.allergenCodes.length > 0 ? formatAllergenCodes(draft.allergenCodes) : null,
+        is_vegetarian: draft.isVegetarian,
+        is_vegan: draft.isVegan,
+        is_gluten_free: draft.isGlutenFree,
       });
       flash(`« ${draft.name} » enregistré.`);
       setEditingItemId(null);
@@ -454,6 +476,10 @@ export default function DashboardPage() {
         spice_level: Number(newItem.spiceLevel),
         allergens: newItem.allergens.trim() || null,
         is_halal: newItem.isHalal,
+        allergen_codes: newItem.allergenCodes.length > 0 ? formatAllergenCodes(newItem.allergenCodes) : null,
+        is_vegetarian: newItem.isVegetarian,
+        is_vegan: newItem.isVegan,
+        is_gluten_free: newItem.isGlutenFree,
       });
       // La photo part après coup : elle a besoin de l'identifiant du plat, qui
       // n'existe qu'une fois celui-ci créé. Un échec ici ne doit pas faire
@@ -780,7 +806,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{item.name}</div>
                       <div className="text-xs text-neutral-500 truncate">
-                        {item.category} · {item.price.toFixed(3)} DT
+                        {item.category} · {formatAmount(item.price)}
                       </div>
                     </div>
                     <Badge tone={item.is_available ? "success" : "danger"} className="shrink-0 hidden sm:inline-flex">
@@ -877,6 +903,34 @@ export default function DashboardPage() {
                           />
                           Halal
                         </label>
+                      </div>
+                      <div className="mt-2">
+                        <AllergenPicker
+                          selectedCodes={draft.allergenCodes}
+                          onToggleCode={(code) =>
+                            setDrafts((d) => ({
+                              ...d,
+                              [item.id]: {
+                                ...draft,
+                                allergenCodes: draft.allergenCodes.includes(code)
+                                  ? draft.allergenCodes.filter((c) => c !== code)
+                                  : [...draft.allergenCodes, code],
+                              },
+                            }))
+                          }
+                          isVegetarian={draft.isVegetarian}
+                          isVegan={draft.isVegan}
+                          isGlutenFree={draft.isGlutenFree}
+                          onChangeVegetarian={(value) =>
+                            setDrafts((d) => ({ ...d, [item.id]: { ...draft, isVegetarian: value } }))
+                          }
+                          onChangeVegan={(value) =>
+                            setDrafts((d) => ({ ...d, [item.id]: { ...draft, isVegan: value } }))
+                          }
+                          onChangeGlutenFree={(value) =>
+                            setDrafts((d) => ({ ...d, [item.id]: { ...draft, isGlutenFree: value } }))
+                          }
+                        />
                       </div>
                       <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
                         <label className="flex items-center gap-2 text-sm">
@@ -1001,6 +1055,25 @@ export default function DashboardPage() {
                     />
                     Halal
                   </label>
+                </div>
+                <div className="mt-2">
+                  <AllergenPicker
+                    selectedCodes={newItem.allergenCodes}
+                    onToggleCode={(code) =>
+                      setNewItem({
+                        ...newItem,
+                        allergenCodes: newItem.allergenCodes.includes(code)
+                          ? newItem.allergenCodes.filter((c) => c !== code)
+                          : [...newItem.allergenCodes, code],
+                      })
+                    }
+                    isVegetarian={newItem.isVegetarian}
+                    isVegan={newItem.isVegan}
+                    isGlutenFree={newItem.isGlutenFree}
+                    onChangeVegetarian={(value) => setNewItem({ ...newItem, isVegetarian: value })}
+                    onChangeVegan={(value) => setNewItem({ ...newItem, isVegan: value })}
+                    onChangeGlutenFree={(value) => setNewItem({ ...newItem, isGlutenFree: value })}
+                  />
                 </div>
                 <div className="flex gap-2 mt-3">
                   <Button onClick={addItem}>Ajouter au menu</Button>
