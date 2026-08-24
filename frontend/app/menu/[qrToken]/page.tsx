@@ -1231,6 +1231,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       );
                     })}
                   </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={t.tipLabel}
+                    value={tipInput}
+                    onChange={(e) => setTipInput(e.target.value.replace(/[^0-9.,]/g, ""))}
+                    placeholder={t.tipPlaceholder}
+                    className="mt-2 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
+                  />
                 </div>
                 <div>
                   <label htmlFor="customer-email" className="text-sm text-[var(--ink-soft)]">
