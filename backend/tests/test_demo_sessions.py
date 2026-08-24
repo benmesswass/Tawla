@@ -9,9 +9,10 @@ commande de l'un serait tombée sur l'écran cuisine de l'autre.
 """
 from datetime import datetime, timedelta, timezone
 
+from app.core.config import settings
 from app.modules.demo import service
-from app.modules.menu.models import MenuItem
-from app.modules.orders.models import Order, OrderItem
+from app.modules.menu.models import MenuFormula, MenuItem
+from app.modules.orders.models import Order, OrderFormula, OrderFormulaSelection, OrderItem
 from app.modules.staff.models import Staff
 from app.modules.tables.models import Table
 from app.modules.tenants.models import Restaurant, SubscriptionTier
@@ -36,7 +37,7 @@ def test_une_demo_est_utilisable_immediatement(client):
     # Le tableau de bord répond, la carte est garnie, la table est scannable.
     assert client.get(f"/api/v1/stats/dashboard/{demo['restaurant_id']}", headers=entetes).status_code == 200
     carte = client.get(f"/api/v1/menu-items/by-restaurant/{demo['restaurant_id']}", headers=entetes).json()
-    assert len(carte) == len(service.CARTE)
+    assert len(carte) == len(service.CARTE_TN)
     assert client.get(f"/api/v1/tables/by-token/{demo['qr_token']}").status_code == 200
 
 
@@ -200,3 +201,59 @@ def test_une_demo_nest_pas_comptee_comme_un_client_payant(client, db_session):
     # admin cross-tenant ne doit pas prendre une démo pour un client acquis.
     assert restaurant.is_active is True
     assert restaurant.has_paid_for_subscription is False
+
+
+def test_french_demo_uses_the_brasserie_profile_with_a_formula(client, monkeypatch):
+    """F5 (MARCHE_FRANCE.md §3.2) : "un restaurateur français qui voit une
+    carte tunisienne en démo comprend que le produit n'est pas pour lui, en
+    trois secondes" — le marché du déploiement décide du profil, jamais une
+    bascule par requête (même principe que le halal par défaut, F5-A6)."""
+    monkeypatch.setattr(settings, "market", "fr")
+    demo = ouvrir_demo(client)
+    entetes = {"Authorization": f"Bearer {demo['access_token']}"}
+
+    restaurant = client.get(f"/api/v1/restaurants/{demo['restaurant_id']}", headers=entetes).json()
+    assert "Brasserie du Central" in restaurant["name"]
+
+    carte = client.get(f"/api/v1/menu-items/by-restaurant/{demo['restaurant_id']}", headers=entetes).json()
+    assert len(carte) == len(service.CARTE_FR)
+    assert any(item["category"] == "Vins" for item in carte)
+
+    formules = client.get(f"/api/v1/menu-formulas/by-restaurant/{demo['restaurant_id']}", headers=entetes).json()
+    assert len(formules) == 1
+    assert formules[0]["name"] == "Formule du jour"
+    assert {s["name"] for s in formules[0]["slots"]} == {"Entrée", "Plat", "Dessert"}
+
+
+def test_expired_demo_with_a_formula_order_is_erased_entirely(client, db_session, monkeypatch):
+    """Une formule référence des articles par une table de liaison
+    (`menu_formula_slot_items`) — sans purge dans le bon ordre, la
+    suppression de l'article échouerait sur la contrainte de clé étrangère
+    (F5-A3)."""
+    monkeypatch.setattr(settings, "market", "fr")
+    demo = ouvrir_demo(client)
+    rid = demo["restaurant_id"]
+    entetes = {"Authorization": f"Bearer {demo['access_token']}"}
+
+    formule = client.get(f"/api/v1/menu-formulas/by-restaurant/{rid}", headers=entetes).json()[0]
+    selection = [slot["items"][0]["id"] for slot in formule["slots"]]
+    creation = client.post(
+        "/api/v1/orders",
+        json={
+            "qr_token": demo["qr_token"],
+            "formulas": [{"formula_id": formule["id"], "quantity": 1, "selected_item_ids": selection}],
+        },
+    )
+    assert creation.status_code == 201, creation.text
+
+    restaurant = db_session.get(Restaurant, rid)
+    restaurant.demo_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert service.purger_demos_expirees(db_session) == 1
+
+    assert db_session.get(Restaurant, rid) is None
+    assert db_session.query(MenuFormula).filter(MenuFormula.restaurant_id == rid).count() == 0
+    assert db_session.query(OrderFormula).count() == 0
+    assert db_session.query(OrderFormulaSelection).count() == 0
+    assert db_session.query(MenuItem).filter(MenuItem.restaurant_id == rid).count() == 0

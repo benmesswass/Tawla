@@ -20,14 +20,24 @@ valeur au-delà de la démonstration.
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.dates import as_utc
 from app.core.logging import log_event
+from app.core.markets import current_market
 from app.modules.loyalty.models import LoyaltyMember
-from app.modules.menu.models import MenuItem, MenuSuggestion
-from app.modules.orders.models import Order, OrderItem
+from app.modules.menu.models import (
+    MenuFormula,
+    MenuFormulaSlot,
+    MenuItem,
+    MenuItemOptionChoice,
+    MenuItemOptionGroup,
+    MenuSuggestion,
+    menu_formula_slot_items,
+)
+from app.modules.menu.schemas import _default_is_halal
+from app.modules.orders.models import Order, OrderFormula, OrderFormulaSelection, OrderItem, OrderItemOptionChoice
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import hash_password
 from app.modules.stats.models import DashboardView
@@ -54,7 +64,8 @@ PLAFOND_DEMOS = 100
 # La carte de démonstration, alignée sur `scripts/seed_demo.py` : un
 # restaurateur qui voit la démo en ligne puis en rendez-vous doit reconnaître
 # les mêmes plats.
-CARTE = [
+NOM_TN = "Dar Chaabane"
+CARTE_TN = [
     ("Salade méchouia", "Entrées", 6.0),
     ("Brik à l'œuf", "Entrées", 4.5),
     ("Couscous au poisson", "Plats", 22.0),
@@ -63,11 +74,43 @@ CARTE = [
     ("Thé à la menthe", "Boissons", 3.0),
 ]
 
-EQUIPE = [
+EQUIPE_TN = [
     ("Amine (manager)", StaffRole.MANAGER),
     ("Sami (serveur)", StaffRole.WAITER),
     ("Karim (cuisine)", StaffRole.KITCHEN),
 ]
+
+# F5 (MARCHE_FRANCE.md §3.2) : « un restaurateur français qui voit une carte
+# tunisienne en démo comprend que le produit n'est pas pour lui, en trois
+# secondes ». Segment prioritaire identifié en F1 — brasserie/bistrot de
+# quartier (§C3) — avec sa formule du jour (F5-A3) et sa carte des vins,
+# les deux différenciateurs explicitement demandés par le dossier.
+NOM_FR = "Brasserie du Central"
+CARTE_FR = [
+    ("Salade César", "Entrées", 8.0),
+    ("Soupe à l'oignon gratinée", "Entrées", 7.5),
+    ("Steak-frites", "Plats", 19.0),
+    ("Poulet rôti, pommes grenaille", "Plats", 17.5),
+    ("Tarte tatin", "Desserts", 7.0),
+    ("Mousse au chocolat maison", "Desserts", 6.0),
+    ("Café", "Boissons", 2.5),
+    ("Verre de côtes-du-rhône", "Vins", 5.5),
+]
+
+EQUIPE_FR = [
+    ("Camille (manager)", StaffRole.MANAGER),
+    ("Léa (serveuse)", StaffRole.WAITER),
+    ("Hugo (cuisine)", StaffRole.KITCHEN),
+]
+
+
+def _profil_demo() -> tuple[str, list[tuple[str, str, float]], list[tuple[str, StaffRole]]]:
+    """Nom, carte et équipe à monter — décidés par le marché servi par CE
+    déploiement (`current_market()`, jamais par requête), même principe que
+    `_default_is_halal` (menu/schemas.py)."""
+    if current_market().code == "fr":
+        return NOM_FR, CARTE_FR, EQUIPE_FR
+    return NOM_TN, CARTE_TN, EQUIPE_TN
 
 
 def demos_vivantes(db: Session) -> int:
@@ -107,10 +150,40 @@ def supprimer_demo(db: Session, restaurant: Restaurant) -> None:
 
     rid = restaurant.id
     commandes = select(Order.id).where(Order.restaurant_id == rid)
+    formules_commandees = select(OrderFormula.id).where(OrderFormula.order_id.in_(commandes))
+    db.query(OrderFormulaSelection).filter(
+        OrderFormulaSelection.order_formula_id.in_(formules_commandees)
+    ).delete(synchronize_session=False)
+    db.query(OrderFormula).filter(OrderFormula.order_id.in_(commandes)).delete(synchronize_session=False)
+    lignes_commande = select(OrderItem.id).where(OrderItem.order_id.in_(commandes))
+    db.query(OrderItemOptionChoice).filter(
+        OrderItemOptionChoice.order_item_id.in_(lignes_commande)
+    ).delete(synchronize_session=False)
     db.query(OrderItem).filter(OrderItem.order_id.in_(commandes)).delete(synchronize_session=False)
     db.query(Order).filter(Order.restaurant_id == rid).delete(synchronize_session=False)
     db.query(WaiterCall).filter(WaiterCall.restaurant_id == rid).delete(synchronize_session=False)
     db.query(MenuSuggestion).filter(MenuSuggestion.restaurant_id == rid).delete(synchronize_session=False)
+
+    # F5-A3 : les formules référencent des articles (table de liaison) —
+    # à effacer avant les articles eux-mêmes, sinon la contrainte de clé
+    # étrangère refuse la suppression de MenuItem.
+    formules = select(MenuFormula.id).where(MenuFormula.restaurant_id == rid)
+    etapes = select(MenuFormulaSlot.id).where(MenuFormulaSlot.formula_id.in_(formules))
+    db.execute(delete(menu_formula_slot_items).where(menu_formula_slot_items.c.slot_id.in_(etapes)))
+    db.query(MenuFormulaSlot).filter(MenuFormulaSlot.formula_id.in_(formules)).delete(synchronize_session=False)
+    db.query(MenuFormula).filter(MenuFormula.restaurant_id == rid).delete(synchronize_session=False)
+
+    # F5-A2 : idem pour les groupes d'options d'un article — aucun créé par
+    # la démo aujourd'hui, mais un manager pourrait en ajouter pendant sa
+    # session de 2h, et la purge doit rester valide dans ce cas.
+    groupes = select(MenuItemOptionGroup.id).where(MenuItemOptionGroup.restaurant_id == rid)
+    db.query(MenuItemOptionChoice).filter(MenuItemOptionChoice.group_id.in_(groupes)).delete(
+        synchronize_session=False
+    )
+    db.query(MenuItemOptionGroup).filter(MenuItemOptionGroup.restaurant_id == rid).delete(
+        synchronize_session=False
+    )
+
     db.query(MenuItem).filter(MenuItem.restaurant_id == rid).delete(synchronize_session=False)
     db.query(LoyaltyMember).filter(LoyaltyMember.restaurant_id == rid).delete(synchronize_session=False)
     db.query(DashboardView).filter(DashboardView.restaurant_id == rid).delete(synchronize_session=False)
@@ -151,11 +224,12 @@ def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     """
     purger_demos_expirees(db)
 
+    nom_etablissement, carte, equipe = _profil_demo()
     suffixe = secrets.token_urlsafe(8).lower().replace("_", "").replace("-", "")
     expiration = datetime.now(timezone.utc) + DUREE_DEMO
 
     restaurant = Restaurant(
-        name="Dar Chaabane (démo)",
+        name=f"{nom_etablissement} (démo)",
         slug=f"demo-{suffixe}",
         is_demo=True,
         demo_expires_at=expiration,
@@ -171,7 +245,7 @@ def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     db.flush()
 
     comptes = []
-    for nom, role in EQUIPE:
+    for nom, role in equipe:
         compte = Staff(
             restaurant_id=restaurant.id,
             name=nom,
@@ -188,8 +262,51 @@ def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     for table in tables:
         db.add(table)
 
-    for nom, categorie, prix in CARTE:
-        db.add(MenuItem(restaurant_id=restaurant.id, name=nom, category=categorie, price=prix))
+    articles_par_nom: dict[str, MenuItem] = {}
+    for nom, categorie, prix in carte:
+        article = MenuItem(
+            restaurant_id=restaurant.id,
+            name=nom,
+            category=categorie,
+            price=prix,
+            # Construit directement en ORM, donc PASSE À CÔTÉ du défaut
+            # market-aware de MenuItemCreate (menu/schemas.py::_default_is_halal)
+            # — sans cette ligne, une brasserie française (steak-frites, vin)
+            # se retrouvait affichée "halal" par défaut (F5-A6).
+            is_halal=_default_is_halal(),
+        )
+        db.add(article)
+        articles_par_nom[nom] = article
+
+    # F5-A3 : la formule du jour est, avec la carte des vins, le
+    # différenciateur explicitement demandé pour la démo française
+    # (MARCHE_FRANCE.md §3.2) — sans elle, un restaurateur français ne voit
+    # jamais le produit qui vend le mieux sur son propre marché.
+    if current_market().code == "fr":
+        db.flush()
+        formule = MenuFormula(
+            restaurant_id=restaurant.id,
+            name="Formule du jour",
+            price=19.5,
+            slots=[
+                MenuFormulaSlot(
+                    name="Entrée",
+                    display_order=0,
+                    items=[articles_par_nom["Salade César"], articles_par_nom["Soupe à l'oignon gratinée"]],
+                ),
+                MenuFormulaSlot(
+                    name="Plat",
+                    display_order=1,
+                    items=[articles_par_nom["Steak-frites"], articles_par_nom["Poulet rôti, pommes grenaille"]],
+                ),
+                MenuFormulaSlot(
+                    name="Dessert",
+                    display_order=2,
+                    items=[articles_par_nom["Tarte tatin"], articles_par_nom["Mousse au chocolat maison"]],
+                ),
+            ],
+        )
+        db.add(formule)
 
     db.commit()
     db.refresh(restaurant)

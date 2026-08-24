@@ -26,7 +26,7 @@ import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons";
-import { MENU_CATEGORIES } from "@/lib/menuCategories";
+import { menuCategories } from "@/lib/menuCategories";
 import { reduirePhoto } from "@/lib/photo";
 import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
 import AllergenPicker from "@/components/AllergenPicker";
@@ -881,7 +881,7 @@ export default function DashboardPage() {
               className="border rounded px-2 py-1.5 text-sm"
             >
               <option value="all">Toutes les catégories</option>
-              {MENU_CATEGORIES.map((c) => (
+              {menuCategories().map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -950,7 +950,7 @@ export default function DashboardPage() {
                           }
                           className="border rounded px-2 py-1"
                         >
-                          {MENU_CATEGORIES.map((c) => (
+                          {menuCategories().map((c) => (
                             <option key={c} value={c}>
                               {c}
                             </option>
@@ -1120,7 +1120,7 @@ export default function DashboardPage() {
                     onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
                     className="border rounded px-2 py-1"
                   >
-                    {MENU_CATEGORIES.map((c) => (
+                    {menuCategories().map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>

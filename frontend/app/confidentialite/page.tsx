@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
 import { useLocale } from "@/lib/i18n/useLocale";
-import { PRIVACY } from "@/lib/i18n/privacy";
+import { getPrivacyPage } from "@/lib/i18n/privacy";
+import { currentMarket } from "@/lib/market";
 
 /**
  * Politique de confidentialité (Phase 16).
@@ -18,7 +19,10 @@ import { PRIVACY } from "@/lib/i18n/privacy";
 export default function PrivacyPage() {
   const router = useRouter();
   const { locale, toggleLocale, t } = useLocale();
-  const page = PRIVACY[locale] ?? PRIVACY.fr;
+  const page = getPrivacyPage(locale);
+  // Langue "autre" que celle du bouton de bascule — dérivée du marché
+  // (fr/ar en Tunisie, fr/en en France), jamais "ar" en dur (F5-A9).
+  const otherLanguage = currentMarket().languages.find((code) => code !== locale) ?? locale;
 
   return (
     <main dir={page.dir} className="min-h-screen bg-[var(--semoule)]">
@@ -30,7 +34,7 @@ export default function PrivacyPage() {
           <button
             onClick={toggleLocale}
             className="text-sm border rounded-lg px-3 py-1.5 bg-white"
-            lang={locale === "fr" ? "ar" : "fr"}
+            lang={otherLanguage}
           >
             {t.localeSwitchLabel}
           </button>

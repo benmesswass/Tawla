@@ -23,8 +23,10 @@ _MANAGER = require_role(StaffRole.MANAGER)
 
 # Ordre logique d'un repas plutôt que l'ordre alphabétique par défaut
 # (audit PO : "Boissons"/"Desserts" passaient avant "Plats"). Toute
-# catégorie absente de cette liste est repoussée en fin de carte.
-CATEGORY_ORDER = ["Entrées", "Plats", "Desserts", "Boissons"]
+# catégorie absente de cette liste est repoussée en fin de carte. "Vins"
+# (F5, MARCHE_FRANCE.md §3.2) : présent dans les deux marchés — une carte
+# tunisienne qui en aurait un ne doit pas se retrouver mal triée non plus.
+CATEGORY_ORDER = ["Entrées", "Plats", "Desserts", "Boissons", "Vins"]
 
 
 def _category_rank(category: str) -> int:

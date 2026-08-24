@@ -645,7 +645,7 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 - [x] **A9 — Anglais** au parcours client (`lib/i18n/en.ts`, même forme que `fr.ts`) — PR #86
 - [ ] Arabe **littéraire** proposé en option par établissement, plutôt que la derja tunisienne
 - [ ] Mode Ramadan et pré-commande **conservés**, activables par établissement, repositionnés (§3.2)
-- [ ] Réécriture RGPD de `lib/i18n/privacy.ts` + page **mentions légales** + page **CGV**
+- [x] Réécriture RGPD de `lib/i18n/privacy.ts` — `getPrivacyPage()` bascule sur le CADRE LÉGAL entier selon `currentMarket()` (RGPD/CNIL vs loi 2004-63/INPDP), pas seulement la langue ; droits RGPD ajoutés (portabilité, opposition, limitation, absents côté Tunisie) ; anglais ajouté (F5-A9). Coordonnées du responsable de traitement et adresse de contact volontairement marquées `[[À COMPLÉTER]]` dans le texte plutôt qu'inventées — la structure juridique française (F2) et le nom de domaine (F0, "MyTable") ne sont pas encore tranchés, aucun des deux ne se devine depuis une session de code. **Page mentions légales et page CGV non construites** — mêmes deux faits manquants, et la CGV recoupe C2/S1-S2 (paiement) ; F2 les possède déjà explicitement ("Rédiger les trois documents contractuels", ligne 588) — PR #86
 - [ ] Réglage de l'agrégation par défaut du rapport d'équipe + notice d'information des salariés (§3.1 (6))
 
 **Si S1 — Tawla n'encaisse pas** (le plus probable)
@@ -666,7 +666,7 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 **Dans les deux cas, en fin de phase**
 
 - [x] **A7 — Demande d'avis Google** après le service (faible coût, forte valeur perçue en France) : `Restaurant.google_review_url` réglé par le manager (Réglages), bouton affiché au client une fois la commande "servie", invisible tant qu'aucun lien n'est collé. En le testant en direct, a révélé un bug préexistant (non lié à A7) : le WebSocket de suivi effaçait le suivi local d'une commande servie mais PAS PAYÉE, coupant l'accès du client à son addition avant même qu'il ait pu payer — corrigé dans le même commit — PR #86
-- [ ] Démo française : brasserie, formule du jour, carte des vins — plus jamais « Dar Chaabane » sur le marché français (`demo/service.py:158`)
+- [x] Démo française : brasserie, formule du jour, carte des vins — plus jamais « Dar Chaabane » sur le marché français. `demo/service.py::_profil_demo()` bascule sur `current_market()`, jamais une requête : « Brasserie du Central », carte avec catégorie « Vins » (nouvelle, ajoutée aussi côté carte réelle — `menuCategories.ts`/`CATEGORY_ORDER`), une formule du jour (entrée/plat/dessert, exerce A3). En la construisant, deux bugs trouvés et corrigés dans le même commit : (1) les articles de la démo étaient construits en ORM direct, donc sans passer par le défaut `is_halal` market-aware de `MenuItemCreate` — une brasserie française (steak-frites, vin) se serait affichée « halal » par défaut ; (2) `supprimer_demo()` ne nettoyait ni les formules ni les groupes d'options avant les articles — une démo avec une formule commandée aurait fait échouer sa propre purge sur une contrainte de clé étrangère — PR #86
 
 ---
 
