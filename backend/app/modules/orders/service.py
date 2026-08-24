@@ -21,10 +21,19 @@ from app.core.markets import format_amount
 from app.core.push import send_push_notification
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
-from app.modules.menu.models import MenuItem
+from app.modules.menu.models import MenuFormula, MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
-from app.modules.orders.models import Order, OrderItem, OrderItemOptionChoice, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.models import (
+    Order,
+    OrderFormula,
+    OrderFormulaSelection,
+    OrderItem,
+    OrderItemOptionChoice,
+    OrderStatus,
+    PaymentMethod,
+    PaymentStatus,
+)
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
 from app.modules.tenants.models import Restaurant, SubscriptionTier
@@ -243,6 +252,51 @@ def _resolve_selected_options(
     return frozen, total_delta
 
 
+def _resolve_formula_selection(formula: MenuFormula, selected_item_ids: list[int]) -> list[OrderFormulaSelection]:
+    """
+    F5-A3 (MARCHE_FRANCE.md) — revérifie intégralement les choix de CETTE
+    formule, jamais confiance au client (CLAUDE.md) : chaque article proposé
+    doit appartenir à la formule, et chaque étape doit recevoir EXACTEMENT un
+    choix (pas d'étape facultative dans cette première version — voir
+    `MenuFormulaSlot`). Renvoie les lignes figées à écrire sur l'`OrderFormula`
+    (étape + nom de l'article au moment T).
+    """
+    item_to_slot = {item.id: slot for slot in formula.slots for item in slot.items}
+
+    selected_by_slot: dict[int, list[int]] = {}
+    for item_id in selected_item_ids:
+        slot = item_to_slot.get(item_id)
+        if slot is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_FORMULA_ITEM",
+                    "message": f"item {item_id} is not part of formula {formula.id}",
+                    "formula_id": formula.id,
+                },
+            )
+        selected_by_slot.setdefault(slot.id, []).append(item_id)
+
+    frozen: list[OrderFormulaSelection] = []
+    for slot in formula.slots:
+        chosen = selected_by_slot.get(slot.id, [])
+        if len(chosen) != 1:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "FORMULA_SLOT_REQUIRES_ONE_CHOICE",
+                    "message": f"'{slot.name}' requires exactly one choice",
+                    "slot_id": slot.id,
+                    "formula_id": formula.id,
+                },
+            )
+        chosen_item = next(item for item in slot.items if item.id == chosen[0])
+        frozen.append(
+            OrderFormulaSelection(menu_item_id=chosen_item.id, slot_name=slot.name, menu_item_name=chosen_item.name)
+        )
+    return frozen
+
+
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # La table est retrouvée par son token de QR code, et le restaurant en est
     # déduit : aucun identifiant numérique n'est accepté du client, donc rien
@@ -267,7 +321,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             )
             return replayed
 
-    if not payload.items:
+    if not payload.items and not payload.formulas:
         raise HTTPException(
             status_code=422,
             detail={"code": "EMPTY_ORDER", "message": "order must contain at least one item"},
@@ -331,6 +385,44 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 shared_with=",".join(str(p) for p in line.shared_with) or None,
                 from_suggestion=line.from_suggestion,
                 selected_options=selected_options,
+            )
+        )
+
+    for formula_line in payload.formulas:
+        formula = db.get(MenuFormula, formula_line.formula_id)
+        if not formula or formula.restaurant_id != restaurant_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "FORMULA_NOT_FOUND",
+                    "message": f"formula {formula_line.formula_id} not found",
+                    "formula_id": formula_line.formula_id,
+                },
+            )
+        if not formula.is_available:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "FORMULA_UNAVAILABLE",
+                    "message": f"'{formula.name}' is no longer available",
+                    "formula_id": formula.id,
+                },
+            )
+
+        selections = _resolve_formula_selection(formula, formula_line.selected_item_ids)
+
+        # Prix figé au moment T, TOUJOURS le prix fixe de la formule — jamais
+        # la somme des articles choisis (voir MenuFormula.price).
+        order.formulas.append(
+            OrderFormula(
+                formula_id=formula.id,
+                formula_name=formula.name,
+                unit_price=float(formula.price),
+                quantity=formula_line.quantity,
+                notes=formula_line.notes,
+                is_shared=formula_line.is_shared,
+                shared_with=",".join(str(p) for p in formula_line.shared_with) or None,
+                selections=selections,
             )
         )
 
@@ -512,6 +604,19 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                         "options": ", ".join(opt.choice_name for opt in i.selected_options) or None,
                     }
                     for i in order.items
+                ]
+                # F5-A3 : une formule part en cuisine comme un plat de plus —
+                # son nom, et les articles choisis à chaque étape affichés là
+                # où A2 affiche déjà les options (même case sur le ticket).
+                + [
+                    {
+                        "name": f.formula_name,
+                        "quantity": f.quantity,
+                        "notes": f.notes,
+                        "is_shared": f.is_shared,
+                        "options": ", ".join(sel.menu_item_name for sel in f.selections) or None,
+                    }
+                    for f in order.formulas
                 ],
             },
         )

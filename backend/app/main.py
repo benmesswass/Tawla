@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.logging import get_logger
 from app.modules.demo.router import router as demo_router
 from app.modules.loyalty.router import router as loyalty_router
+from app.modules.menu.router import formulas_router as menu_formulas_router
 from app.modules.menu.router import router as menu_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import router as orders_router
@@ -59,6 +60,7 @@ app.include_router(staff_router)
 app.include_router(staff_management_router)
 app.include_router(tables_router)
 app.include_router(menu_router)
+app.include_router(menu_formulas_router)
 app.include_router(orders_router)
 app.include_router(stats_router)
 app.include_router(notifications_router)

@@ -80,7 +80,7 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
 
     orders_today = (
         db.query(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.formulas))
         .filter(Order.restaurant_id == restaurant_id, Order.created_at >= day_start, Order.created_at < day_end)
         .all()
     )
@@ -123,6 +123,10 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
     for o in orders_today:
         for line in o.items:
             item_counts[line.menu_item_name] = item_counts.get(line.menu_item_name, 0) + line.quantity
+        # F5-A3 : une formule qui se vend bien doit apparaître au même titre
+        # qu'un plat — c'est justement ce que ce chiffre sert à repérer.
+        for formula_line in o.formulas:
+            item_counts[formula_line.formula_name] = item_counts.get(formula_line.formula_name, 0) + formula_line.quantity
     top_items = [
         schemas.TopMenuItem(menu_item_name=name, quantity=qty)
         for name, qty in sorted(item_counts.items(), key=lambda kv: -kv[1])[:10]
@@ -186,7 +190,7 @@ def _period_proof(
 
     orders = (
         db.query(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.formulas))
         .filter(
             Order.restaurant_id == restaurant_id,
             Order.created_at >= period_start,
@@ -265,7 +269,7 @@ async def get_team_report(
 
     orders = (
         db.query(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.formulas))
         .filter(
             Order.restaurant_id == restaurant_id,
             Order.taken_by_staff_id.isnot(None),
@@ -344,7 +348,7 @@ async def get_my_shift(db: Session, staff: Staff, day: date_type) -> schemas.MyS
 
     orders = (
         db.query(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.formulas))
         .filter(
             Order.restaurant_id == staff.restaurant_id,
             Order.taken_by_staff_id == staff.id,

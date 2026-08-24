@@ -52,14 +52,27 @@ function orderFromApi(o: Order): KitchenOrder {
   return {
     order_id: o.id,
     table_label: o.table_label,
-    items: o.items.map((i) => ({
-      name: i.menu_item_name,
-      quantity: i.quantity,
-      notes: i.notes,
-      is_shared: i.is_shared,
-      shared_with: i.shared_with ?? [],
-      options: i.selected_options.length > 0 ? i.selected_options.map((opt) => opt.choice_name).join(", ") : null,
-    })),
+    items: [
+      ...o.items.map((i) => ({
+        name: i.menu_item_name,
+        quantity: i.quantity,
+        notes: i.notes,
+        is_shared: i.is_shared,
+        shared_with: i.shared_with ?? [],
+        options: i.selected_options.length > 0 ? i.selected_options.map((opt) => opt.choice_name).join(", ") : null,
+      })),
+      // F5-A3 : une formule part en cuisine comme un plat de plus — son nom,
+      // et les articles choisis à chaque étape affichés là où A2 affiche déjà
+      // les options (même case sur le ticket), voir orders/service.py.
+      ...o.formulas.map((f) => ({
+        name: f.formula_name,
+        quantity: f.quantity,
+        notes: f.notes,
+        is_shared: f.is_shared,
+        shared_with: f.shared_with ?? [],
+        options: f.selections.length > 0 ? f.selections.map((s) => s.menu_item_name).join(", ") : null,
+      })),
+    ],
     scheduled_for: o.scheduled_for,
     sent_to_kitchen_at: o.sent_to_kitchen_at,
     preparation_started_at: o.preparation_started_at,

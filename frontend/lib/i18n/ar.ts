@@ -23,6 +23,7 @@ export const ar = {
   vegetarianBadge: "نباتي",
   veganBadge: "فيغان",
   glutenFreeBadge: "خالي من الغلوتين",
+  formulasSectionTitle: "الفورمولات",
   callWaiterButton: "نادي على الجرسون",
   callWaiterSent: "✓ الجرسون تعرّف، باش يجي دلوقتي",
   notePlaceholder: "ملاحظة للكوجينة (إختياري، مثال: بلا بصل)",

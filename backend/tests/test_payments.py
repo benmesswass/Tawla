@@ -410,6 +410,65 @@ def test_invoice_pdf_survives_items_with_selected_options(client):
     assert res.content.startswith(b"%PDF")
 
 
+def test_invoice_pdf_survives_a_formula_line(client):
+    """Même risque que pour les options (F5-A2) : sans la ligne de sélection,
+    "Formule Midi" à 22 DT ne dit pas ce qui a été choisi. Vérifie aussi que
+    fpdf2 ne plante pas sur les noms de plats accentués d'une formule."""
+    restaurant = create_restaurant(name="Le Central Facture Formule", slug="le-central-facture-formule")
+    manager_headers = auth_headers(create_staff(restaurant.id))
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=manager_headers
+    ).json()
+
+    def _item(name, price):
+        return client.post(
+            "/api/v1/menu-items",
+            json={"restaurant_id": restaurant.id, "name": name, "price": price},
+            headers=manager_headers,
+        ).json()
+
+    entree = _item("Salade César", 8.0)
+    plat = _item("Entrecôte", 18.0)
+    dessert = _item("Tarte tatin", 7.0)
+
+    formula = client.post(
+        "/api/v1/menu-formulas",
+        json={
+            "restaurant_id": restaurant.id,
+            "name": "Formule Midi",
+            "price": 22.0,
+            "slots": [
+                {"name": "Entrée", "item_ids": [entree["id"]]},
+                {"name": "Plat", "item_ids": [plat["id"]]},
+                {"name": "Dessert", "item_ids": [dessert["id"]]},
+            ],
+        },
+        headers=manager_headers,
+    ).json()
+
+    order = client.post(
+        "/api/v1/orders",
+        json={
+            "qr_token": table["qr_token"],
+            "formulas": [
+                {
+                    "formula_id": formula["id"],
+                    "quantity": 1,
+                    "selected_item_ids": [entree["id"], plat["id"], dessert["id"]],
+                }
+            ],
+        },
+    ).json()
+    confirmed = client.post(f"/api/v1/orders/{order['id']}/confirm", headers=manager_headers).json()
+    order = {**order, **confirmed}
+    client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
+
+    res = client.get(f"/api/v1/orders/{order['id']}/invoice", params={"token": order["public_token"]})
+
+    assert res.status_code == 200
+    assert res.content.startswith(b"%PDF")
+
+
 def test_invoice_rejects_the_wrong_token(client):
     _restaurant, _headers, order = _setup_order(client)
     client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))

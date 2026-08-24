@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, Numeric, String, Table, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -144,3 +144,53 @@ class MenuItemOptionChoice(Base):
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
     group: Mapped["MenuItemOptionGroup"] = relationship(back_populates="choices")
+
+
+# F5-A3 (MARCHE_FRANCE.md) — un article de la carte peut appartenir à
+# plusieurs étapes de formules différentes (le même dessert dans "Formule
+# Midi" et "Formule Soir"), et une étape propose plusieurs articles : simple
+# table de liaison, aucun champ propre à la paire.
+menu_formula_slot_items = Table(
+    "menu_formula_slot_items",
+    Base.metadata,
+    Column("slot_id", ForeignKey("menu_formula_slots.id"), primary_key=True),
+    Column("menu_item_id", ForeignKey("menu_items.id"), primary_key=True),
+)
+
+
+class MenuFormula(Base):
+    """
+    F5-A3 (MARCHE_FRANCE.md §3.2) — le produit dominant du déjeuner français :
+    un prix fixe pour un repas composé d'un choix par étape ("Entrée", "Plat",
+    "Dessert"...), toujours inférieur à la somme des prix normaux des
+    articles choisis pris séparément — c'est tout l'intérêt commercial d'une
+    formule, donc `price` ne se déduit JAMAIS des articles (voir
+    orders/service.py::_resolve_formula_selection).
+    """
+
+    __tablename__ = "menu_formulas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    slots: Mapped[list["MenuFormulaSlot"]] = relationship(
+        back_populates="formula", cascade="all, delete-orphan", order_by="MenuFormulaSlot.display_order"
+    )
+
+
+class MenuFormulaSlot(Base):
+    """Une étape de la formule ("Entrée", "Plat", "Dessert") — le client
+    choisit exactement un article parmi ceux autorisés pour cette étape-ci."""
+
+    __tablename__ = "menu_formula_slots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    formula_id: Mapped[int] = mapped_column(ForeignKey("menu_formulas.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    formula: Mapped["MenuFormula"] = relationship(back_populates="slots")
+    items: Mapped[list["MenuItem"]] = relationship(secondary=menu_formula_slot_items)

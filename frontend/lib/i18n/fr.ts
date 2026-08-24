@@ -38,6 +38,7 @@ export const fr = {
   vegetarianBadge: "Végétarien",
   veganBadge: "Vegan",
   glutenFreeBadge: "Sans gluten",
+  formulasSectionTitle: "Formules",
   callWaiterButton: "Appeler le serveur",
   callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",

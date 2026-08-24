@@ -45,6 +45,19 @@ class OrderItemCreate(BaseModel):
     selected_choice_ids: list[int] = Field(default_factory=list, max_length=40)
 
 
+class OrderFormulaCreate(BaseModel):
+    formula_id: int
+    quantity: int = 1
+    notes: str | None = None
+    is_shared: bool = False
+    shared_with: list[int] = Field(default_factory=list)
+    # F5-A3 (MARCHE_FRANCE.md) — un identifiant d'article choisi par étape de
+    # la formule (une "Entrée", un "Plat"...). Revérifié intégralement côté
+    # serveur : appartenance à la formule, exactement un choix par étape —
+    # jamais confiance au client (voir orders/service.py::_resolve_formula_selection).
+    selected_item_ids: list[int] = Field(default_factory=list, max_length=10)
+
+
 class OrderCreate(BaseModel):
     # Le client prouve qu'il a scanné le QR de cette table : ni `table_id` ni
     # `restaurant_id` ne sont acceptés, ils sont déduits du token. Sans ça,
@@ -52,7 +65,10 @@ class OrderCreate(BaseModel):
     # en cours (constat 3 de la revue du 2026-08-13) — de la nourriture
     # réellement préparée pour une table qui n'a rien demandé.
     qr_token: str
-    items: list[OrderItemCreate]
+    items: list[OrderItemCreate] = Field(default_factory=list)
+    # F5-A3 : lignes de formule, distinctes des lignes d'article (prix fixe,
+    # un choix par étape) — voir OrderFormulaCreate.
+    formulas: list[OrderFormulaCreate] = Field(default_factory=list)
     # Identifiant du panier, fabriqué par le navigateur au moment où le client
     # le compose — et surtout pas régénéré au rejeu, sinon il ne servirait à
     # rien. Facultatif : sans lui, la création reste possible, sans le filet.
@@ -91,6 +107,27 @@ class OrderItemOut(BaseModel):
     shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
     from_suggestion: bool
     selected_options: list[SelectedOptionOut] = Field(default_factory=list)
+
+
+class FormulaSelectionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    slot_name: str
+    menu_item_name: str
+
+
+class OrderFormulaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    formula_id: int
+    formula_name: str
+    unit_price: float
+    quantity: int
+    notes: str | None
+    is_shared: bool
+    shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
+    selections: list[FormulaSelectionOut] = Field(default_factory=list)
 
 
 class PayCardRequest(BaseModel):
@@ -159,6 +196,7 @@ class OrderOut(BaseModel):
     tip_amount: float
     total_amount: float
     items: list[OrderItemOut]
+    formulas: list[OrderFormulaOut] = Field(default_factory=list)
     # Posé UNIQUEMENT par la réponse de `POST /pay/card` quand le restaurant a
     # connecté son propre Konnect (modèle direct, 2026-08-19) : le client doit
     # être redirigé pour régler, `payment_status` reste "pending" jusqu'au

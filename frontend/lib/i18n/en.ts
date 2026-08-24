@@ -27,6 +27,7 @@ export const en = {
   vegetarianBadge: "Vegetarian",
   veganBadge: "Vegan",
   glutenFreeBadge: "Gluten-free",
+  formulasSectionTitle: "Set menus",
   callWaiterButton: "Call a waiter",
   callWaiterSent: "✓ Waiter notified, on their way",
   notePlaceholder: "Note for the kitchen (optional, e.g. no onions)",

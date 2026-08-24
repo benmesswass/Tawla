@@ -7,6 +7,7 @@ import {
   api,
   DashboardStats,
   MenuCsvImportResult,
+  MenuFormula,
   MenuItem,
   Restaurant,
   Staff,
@@ -30,6 +31,7 @@ import { reduirePhoto } from "@/lib/photo";
 import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
 import AllergenPicker from "@/components/AllergenPicker";
 import MenuItemOptionsEditor from "@/components/MenuItemOptionsEditor";
+import FormulaEditor from "@/components/FormulaEditor";
 import { AllergenCode, formatAllergenCodes, parseAllergenCodes } from "@/lib/allergens";
 import { currentMarket } from "@/lib/market";
 import RecetteDuJour from "@/components/RecetteDuJour";
@@ -205,6 +207,9 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<Tab>("menu");
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [optionsEditingItemId, setOptionsEditingItemId] = useState<number | null>(null);
+  const [formulas, setFormulas] = useState<MenuFormula[]>([]);
+  // F5-A3 : `undefined` = fermé, `null` = création, une formule = édition.
+  const [editingFormula, setEditingFormula] = useState<MenuFormula | null | undefined>(undefined);
   const [addingItem, setAddingItem] = useState(false);
   const [importing, setImporting] = useState(false);
   const [csvContent, setCsvContent] = useState("");
@@ -235,7 +240,7 @@ export default function DashboardPage() {
       setKitchenSoundEnabled(rest.kitchen_sound_enabled);
       if (!rest.is_active) return;
 
-      const [menu, tableList, teamList, suggested, dayStats] = await Promise.all([
+      const [menu, tableList, teamList, suggested, dayStats, formulaList] = await Promise.all([
         api.getMenu(restaurantId),
         api.listTables(restaurantId),
         api.listStaff(restaurantId),
@@ -243,6 +248,7 @@ export default function DashboardPage() {
         // Best-effort : si les chiffres du jour échouent, le manager doit
         // quand même pouvoir gérer sa carte et ses tables.
         api.getDashboardStats(restaurantId).catch(() => null),
+        api.getFormulas(restaurantId),
       ]);
       setDayStats(dayStats);
       setItems(menu);
@@ -252,6 +258,7 @@ export default function DashboardPage() {
       setTeam(teamList);
       setStaffDrafts(Object.fromEntries(teamList.map((m) => [m.id, staffToDraft(m)])));
       setSuggestions(suggested);
+      setFormulas(formulaList);
     } catch (e) {
       handleGatedError(e);
     }
@@ -735,6 +742,17 @@ export default function DashboardPage() {
             />
           );
         })()}
+      {editingFormula !== undefined && restaurantId && (
+        <FormulaEditor
+          restaurantId={restaurantId}
+          formula={editingFormula}
+          menuItems={items}
+          onClose={() => setEditingFormula(undefined)}
+          onSaved={(saved) =>
+            setFormulas((prev) => (prev.some((f) => f.id === saved.id) ? prev.map((f) => (f.id === saved.id ? saved : f)) : [...prev, saved]))
+          }
+        />
+      )}
       {restaurant && !restaurant.has_paid_for_subscription && !paymentReminderDismissed && (
         <SubscriptionReminderModal
           restaurant={restaurant}
@@ -783,6 +801,52 @@ export default function DashboardPage() {
 
       {activeTab === "menu" && (
         <>
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-[var(--encre)]">Formules</h2>
+              <Button variant="secondary" onClick={() => setEditingFormula(null)}>
+                + Nouvelle formule
+              </Button>
+            </div>
+            {formulas.length === 0 ? (
+              <p className="text-xs text-neutral-500">
+                Aucune formule pour l&apos;instant — un prix fixe pour un repas composé d&apos;un choix par étape
+                (entrée, plat, dessert…).
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {formulas.map((formula) => (
+                  <Card key={formula.id} padding="sm" className={!formula.is_available ? "bg-neutral-50" : ""}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{formula.name}</div>
+                        <div className="text-xs text-neutral-500 truncate">
+                          {formatAmount(formula.price)} · {formula.slots.map((s) => s.name).join(" + ")}
+                        </div>
+                      </div>
+                      <Badge tone={formula.is_available ? "success" : "danger"} className="shrink-0 hidden sm:inline-flex">
+                        {formula.is_available ? "Disponible" : "Rupture"}
+                      </Badge>
+                      <Button variant="secondary" onClick={() => setEditingFormula(formula)}>
+                        Modifier
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          if (!confirm(`Supprimer la formule « ${formula.name} » ?`)) return;
+                          await api.deleteFormula(formula.id);
+                          setFormulas((prev) => prev.filter((f) => f.id !== formula.id));
+                        }}
+                      >
+                        Supprimer
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-2 mb-3">
             <input
               value={searchQuery}

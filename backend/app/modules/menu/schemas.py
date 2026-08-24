@@ -164,3 +164,66 @@ class MenuItemOptionGroupsUpdate(BaseModel):
     """
 
     groups: list[MenuItemOptionGroupIn] = Field(default_factory=list, max_length=10)
+
+
+# --- F5-A3 : formules (entrée + plat + dessert) -----------------------------
+
+
+class MenuFormulaSlotItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class MenuFormulaSlotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    items: list[MenuFormulaSlotItemOut]
+
+
+class MenuFormulaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    restaurant_id: int
+    name: str
+    price: float
+    is_available: bool
+    slots: list[MenuFormulaSlotOut]
+
+
+class MenuFormulaSlotIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+    # Au moins un article : une étape vide ne proposerait rien au client,
+    # autant ne pas créer l'étape.
+    item_ids: list[int] = Field(min_length=1, max_length=30)
+
+
+class MenuFormulaCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    restaurant_id: int
+    name: str = Field(min_length=1, max_length=120)
+    price: float
+    slots: list[MenuFormulaSlotIn] = Field(min_length=1, max_length=6)
+
+
+class MenuFormulaUpdate(BaseModel):
+    """
+    Remplacement complet — même convention que `set_option_groups` : le
+    manager édite la formule (nom, prix, étapes) comme un tout, l'appel reste
+    rejouable sans effet de bord. Pas de commandes déjà passées à modifier :
+    `OrderFormula`/`OrderFormulaSelection` figent nom et prix à la commande.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    price: float
+    is_available: bool = True
+    slots: list[MenuFormulaSlotIn] = Field(min_length=1, max_length=6)

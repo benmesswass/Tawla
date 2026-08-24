@@ -24,9 +24,12 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
   // pré-remplie au lieu de lui reposer la question (retour du premier service).
   const [mode, setMode] = useState<SplitMode>("items");
   const [peopleCount, setPeopleCount] = useState(() => convivesDeLaCommande(order));
-  const [assignments, setAssignments] = useState<Record<number, number[]>>(() =>
-    Object.fromEntries(order.items.map((it) => [it.id, it.shared_with ?? []]))
-  );
+  // Clé composée ("item:3" / "formula:3") : `OrderItem.id` et `OrderFormula.id`
+  // viennent de deux tables distinctes et peuvent coïncider (F5-A3).
+  const [assignments, setAssignments] = useState<Record<string, number[]>>(() => ({
+    ...Object.fromEntries(order.items.map((it) => [`item:${it.id}`, it.shared_with ?? []])),
+    ...Object.fromEntries(order.formulas.map((f) => [`formula:${f.id}`, f.shared_with ?? []])),
+  }));
 
   if (!open) {
     return (
@@ -85,23 +88,34 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
 
       {mode === "items" && (
         <div className="space-y-3">
-          {order.items.map((it) => {
-            const places = assignments[it.id] ?? [];
+          {[
+            ...order.items.map((it) => ({
+              key: `item:${it.id}`,
+              label: it.menu_item_name,
+              quantity: it.quantity,
+              isShared: it.is_shared,
+              detail: it.selected_options.map((opt) => opt.choice_name).join(", "),
+            })),
+            ...order.formulas.map((f) => ({
+              key: `formula:${f.id}`,
+              label: f.formula_name,
+              quantity: f.quantity,
+              isShared: f.is_shared,
+              detail: f.selections.map((s) => s.menu_item_name).join(", "),
+            })),
+          ].map((line) => {
+            const places = assignments[line.key] ?? [];
             return (
-              <div key={it.id} className="text-sm">
+              <div key={line.key} className="text-sm">
                 <div className="text-[var(--encre)]">
-                  {it.quantity}× {it.menu_item_name}
-                  {it.is_shared && (
+                  {line.quantity}× {line.label}
+                  {line.isShared && (
                     <span className="text-[var(--laiton)] inline-flex items-center gap-1 align-middle">
                       · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
                     </span>
                   )}
                 </div>
-                {it.selected_options.length > 0 && (
-                  <div className="text-xs text-[var(--ink-soft)]">
-                    {it.selected_options.map((opt) => opt.choice_name).join(", ")}
-                  </div>
-                )}
+                {line.detail && <div className="text-xs text-[var(--ink-soft)]">{line.detail}</div>}
                 {/* Des pastilles plutôt qu'une liste déroulante : un plat peut
                     être partagé entre deux convives sans l'être par toute la
                     table, ce qu'un choix unique ne savait pas dire. */}
@@ -115,10 +129,10 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
                         aria-pressed={choisi}
                         onClick={() =>
                           setAssignments((prev) => {
-                            const actuel = prev[it.id] ?? [];
+                            const actuel = prev[line.key] ?? [];
                             return {
                               ...prev,
-                              [it.id]: actuel.includes(p)
+                              [line.key]: actuel.includes(p)
                                 ? actuel.filter((x) => x !== p)
                                 : [...actuel, p].sort((a, b) => a - b),
                             };
@@ -170,20 +184,26 @@ function computeShares(
   order: Order,
   mode: SplitMode,
   peopleCount: number,
-  assignments: Record<number, number[]>
+  assignments: Record<string, number[]>
 ): number[] {
   if (mode === "equal") {
     return Array(peopleCount).fill(order.total_amount / peopleCount);
   }
 
   const totals = Array(peopleCount).fill(0);
-  for (const item of order.items) {
-    const lineTotal = item.unit_price * item.quantity;
+  const lines = [
+    ...order.items.map((it) => ({ key: `item:${it.id}`, lineTotal: it.unit_price * it.quantity })),
+    // F5-A3 : une formule non répartie manuellement doit quand même être
+    // payée par quelqu'un — sans cette ligne, son prix disparaissait du
+    // calcul « par plat » alors qu'il reste dû sur l'addition réelle.
+    ...order.formulas.map((f) => ({ key: `formula:${f.id}`, lineTotal: f.unit_price * f.quantity })),
+  ];
+  for (const line of lines) {
     // Personne de désigné = partagé par toute la table : c'est le sens d'un
     // plat « à partager » sans précision, et le comportement d'avant.
-    const places = (assignments[item.id] ?? []).filter((p) => p >= 1 && p <= peopleCount);
+    const places = (assignments[line.key] ?? []).filter((p) => p >= 1 && p <= peopleCount);
     const entreQui = places.length > 0 ? places : Array.from({ length: peopleCount }, (_, i) => i + 1);
-    const part = lineTotal / entreQui.length;
+    const part = line.lineTotal / entreQui.length;
     for (const place of entreQui) {
       totals[place - 1] += part;
     }

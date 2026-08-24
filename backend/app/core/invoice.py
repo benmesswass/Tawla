@@ -59,6 +59,22 @@ def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Helvetica", "", 10)
 
+    for formula_line in order.formulas:
+        line_total = float(formula_line.unit_price) * formula_line.quantity
+        pdf.cell(90, 8, formula_line.formula_name)
+        pdf.cell(20, 8, str(formula_line.quantity), align="R")
+        pdf.cell(35, 8, format_amount(float(formula_line.unit_price), use_iso_code=True), align="R")
+        pdf.cell(35, 8, format_amount(line_total, use_iso_code=True), align="R", new_x="LMARGIN", new_y="NEXT")
+        if formula_line.selections:
+            # F5-A3 : sans cette ligne, "Formule Midi" ne dit pas ce qui a
+            # réellement été choisi à chaque étape.
+            selection_text = ", ".join(sel.menu_item_name for sel in formula_line.selections)
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(180, 5, f"   {selection_text}", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Helvetica", "", 10)
+
     pdf.ln(4)
     tip = float(order.tip_amount)
     pdf.set_font("Helvetica", "", 10)

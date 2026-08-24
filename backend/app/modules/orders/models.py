@@ -134,6 +134,9 @@ class Order(Base):
     push_subscription: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    # F5-A3 (MARCHE_FRANCE.md) — lignes de formule (prix fixe, un choix par
+    # étape), distinctes des lignes d'article : voir OrderFormula.
+    formulas: Mapped[list["OrderFormula"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     taken_by: Mapped["Staff | None"] = relationship()
     table: Mapped["Table"] = relationship()
 
@@ -154,7 +157,9 @@ class Order(Base):
 
     @property
     def total_amount(self) -> float:
-        return sum(float(i.unit_price) * i.quantity for i in self.items)
+        items_total = sum(float(i.unit_price) * i.quantity for i in self.items)
+        formulas_total = sum(float(f.unit_price) * f.quantity for f in self.formulas)
+        return items_total + formulas_total
 
 
 class OrderItem(Base):
@@ -222,3 +227,51 @@ class OrderItemOptionChoice(Base):
     price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
 
     order_item: Mapped["OrderItem"] = relationship(back_populates="selected_options")
+
+
+class OrderFormula(Base):
+    """
+    F5-A3 (MARCHE_FRANCE.md) — une ligne de formule commandée (prix fixe
+    figé, même principe que `OrderItem.unit_price`) : `unit_price` est TOU-
+    JOURS `MenuFormula.price` au moment de la commande, jamais recalculé
+    depuis les articles choisis (`orders/service.py::_resolve_formula_selection`).
+    """
+
+    __tablename__ = "order_formulas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    formula_id: Mapped[int] = mapped_column(ForeignKey("menu_formulas.id"), nullable=False)
+    formula_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    notes: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+    shared_with: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+    order: Mapped["Order"] = relationship(back_populates="formulas")
+    selections: Mapped[list["OrderFormulaSelection"]] = relationship(
+        back_populates="order_formula", cascade="all, delete-orphan"
+    )
+
+
+class OrderFormulaSelection(Base):
+    """
+    L'article choisi pour UNE étape d'une formule commandée — nom et étape
+    FIGÉS au moment de la commande, même principe que
+    `OrderItemOptionChoice` : renommer l'étape ou retirer l'article de la
+    carte ensuite ne doit jamais changer une commande déjà passée.
+
+    `menu_item_id` est informatif (traçabilité cuisine/stats), jamais relu
+    pour l'affichage.
+    """
+
+    __tablename__ = "order_formula_selections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_formula_id: Mapped[int] = mapped_column(ForeignKey("order_formulas.id"), nullable=False, index=True)
+    menu_item_id: Mapped[int | None] = mapped_column(ForeignKey("menu_items.id"), nullable=True)
+    slot_name: Mapped[str] = mapped_column(String(60), nullable=False)
+    menu_item_name: Mapped[str] = mapped_column(String(120), nullable=False)
+
+    order_formula: Mapped["OrderFormula"] = relationship(back_populates="selections")

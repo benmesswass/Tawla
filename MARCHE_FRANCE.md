@@ -640,7 +640,7 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 **Commun aux deux variantes**
 
 - [x] **A2 — Options et suppléments** sur un article (cuisson, accompagnement, sauce, taille) : nouveau modèle (`MenuItemOptionGroup`/`MenuItemOptionChoice`/`OrderItemOptionChoice`), migration, écran manager (`MenuItemOptionsEditor`), parcours client (`OptionPicker`, panier multi-lignes), affichage cuisine et facture. Prix toujours recalculé côté serveur, choix requis/uniques validés côté serveur. *Le manque fonctionnel le plus grave (§3.2)* — PR #86
-- [ ] **A3 — Formules** (entrée + plat + dessert, formule midi) : composition, prix de la formule, affichage
+- [x] **A3 — Formules** (entrée + plat + dessert, formule midi) : nouveau modèle (`MenuFormula`/`MenuFormulaSlot`, choix par étape), migration, écran manager (`FormulaEditor`), parcours client (`FormulaPicker`, panier séparé du panier d'articles), affichage cuisine, addition partagée et facture — même traitement que A2 sur chaque surface. Prix TOUJOURS fixe, jamais recalculé depuis les articles choisis — PR #86
 - [x] **A6 — Allergènes structurés** (14 allergènes INCO) en remplacement du texte libre (`menu/models.py:67`) + marqueurs végétarien / vegan / sans gluten / halal, `is_halal` par défaut à `false` en France (`menu/models.py:71`) — PR #86
 - [x] **A9 — Anglais** au parcours client (`lib/i18n/en.ts`, même forme que `fr.ts`) — PR #86
 - [ ] Arabe **littéraire** proposé en option par établissement, plutôt que la derja tunisienne

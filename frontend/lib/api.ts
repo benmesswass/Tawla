@@ -49,6 +49,32 @@ export type MenuItem = {
   option_groups: MenuItemOptionGroup[];
 };
 
+/** F5-A3 : un article éligible à une étape de formule ("Entrée", "Plat"…). */
+export type MenuFormulaSlotItem = {
+  id: number;
+  name: string;
+};
+
+export type MenuFormulaSlot = {
+  id: number;
+  name: string;
+  items: MenuFormulaSlotItem[];
+};
+
+/**
+ * F5-A3 (MARCHE_FRANCE.md) — un prix fixe pour un repas composé d'un choix
+ * par étape, toujours inférieur à la somme des prix normaux des articles
+ * choisis pris séparément (`price` ne se déduit jamais des articles).
+ */
+export type MenuFormula = {
+  id: number;
+  restaurant_id: number;
+  name: string;
+  price: number;
+  is_available: boolean;
+  slots: MenuFormulaSlot[];
+};
+
 export type Table = {
   id: number;
   restaurant_id: number;
@@ -225,6 +251,18 @@ export type Order = {
     from_suggestion: boolean;
     /** F5-A2 : figées au moment de la commande — voir lib/allergens.ts pour l'équivalent allergènes. */
     selected_options: { group_name: string; choice_name: string; price_delta: number }[];
+  }[];
+  /** F5-A3 : lignes de formule, distinctes des lignes d'article (prix fixe, un choix par étape). */
+  formulas: {
+    id: number;
+    formula_id: number;
+    formula_name: string;
+    unit_price: number;
+    quantity: number;
+    notes: string | null;
+    is_shared: boolean;
+    shared_with: number[];
+    selections: { slot_name: string; menu_item_name: string }[];
   }[];
 };
 
@@ -581,6 +619,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ content, replace_existing: replaceExisting }),
     }),
+  // F5-A3 : gestion des formules depuis le dashboard manager.
+  getFormulas: (restaurantId: number) => request<MenuFormula[]>(`/api/v1/menu-formulas/by-restaurant/${restaurantId}`),
+  getFormulasByToken: (qrToken: string) => request<MenuFormula[]>(`/api/v1/menu-formulas/by-table/${qrToken}`),
+  createFormula: (payload: {
+    restaurant_id: number;
+    name: string;
+    price: number;
+    slots: { name: string; item_ids: number[] }[];
+  }) => request<MenuFormula>("/api/v1/menu-formulas", { method: "POST", body: JSON.stringify(payload) }),
+  updateFormula: (
+    formulaId: number,
+    payload: { name: string; price: number; is_available: boolean; slots: { name: string; item_ids: number[] }[] }
+  ) => request<MenuFormula>(`/api/v1/menu-formulas/${formulaId}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteFormula: (formulaId: number) => request<void>(`/api/v1/menu-formulas/${formulaId}`, { method: "DELETE" }),
   createOrder: (payload: {
     // Le token du QR scanné, d'où le backend déduit la table et le restaurant :
     // aucun identifiant numérique n'est envoyé par le client (Phase 12.2).
@@ -593,6 +645,15 @@ export const api = {
       shared_with?: number[];
       from_suggestion?: boolean;
       selected_choice_ids?: number[];
+    }[];
+    // F5-A3 : lignes de formule, distinctes des lignes d'article.
+    formulas?: {
+      formula_id: number;
+      quantity: number;
+      notes?: string | null;
+      is_shared?: boolean;
+      shared_with?: number[];
+      selected_item_ids: number[];
     }[];
     scheduled_for?: string | null;
     loyalty_phone?: string | null;

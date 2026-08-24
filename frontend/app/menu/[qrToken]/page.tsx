@@ -11,6 +11,8 @@ import {
   orderWsUrl as buildOrderWsUrl,
   ApiError,
   LoyaltyMember,
+  MenuFormula,
+  MenuFormulaSlotItem,
   MenuItem,
   Order,
   OrderStatus,
@@ -24,6 +26,7 @@ import { menuCategoryLabel } from "@/lib/menuCategories";
 import { currentMarket, formatAmount } from "@/lib/market";
 import { allergenLabel, parseAllergenCodes } from "@/lib/allergens";
 import OptionPicker from "@/components/OptionPicker";
+import FormulaPicker from "@/components/FormulaPicker";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
 import TawlaMark from "@/components/brand/TawlaMark";
@@ -75,6 +78,24 @@ type CartLine = {
 // ajout pour un article à options (chaque sélection reste sa propre ligne).
 function cartKey(itemId: number, uniquePart?: string): string {
   return uniquePart ? `${itemId}:${uniquePart}` : String(itemId);
+}
+
+// F5-A3 : une ligne de formule au panier — un choix par étape, prix fixe.
+// Panier séparé de `cart` (articles) plutôt qu'unifié : les deux paniers
+// restent structurellement différents (prix fixe vs. somme d'options), et ça
+// évite de toucher au panier d'articles déjà en place.
+type FormulaCartLine = {
+  formula: MenuFormula;
+  quantity: number;
+  selections: { slotId: number; item: MenuFormulaSlotItem }[];
+};
+
+// Deux sélections identiques (mêmes articles choisis à chaque étape)
+// fusionnent en une ligne de quantité 2 ; deux sélections différentes de la
+// même formule restent deux lignes distinctes — même principe que `cartKey`.
+function formulaCartKey(formulaId: number, selections: { item: MenuFormulaSlotItem }[]): string {
+  const ids = selections.map((s) => s.item.id).sort((a, b) => a - b);
+  return `${formulaId}:${ids.join(",")}`;
 }
 
 type StepStatus = Exclude<OrderStatus, "cancelled">;
@@ -191,7 +212,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [table, setTable] = useState<Table | null>(null);
   const [restaurant, setRestaurant] = useState<RestaurantPublic | null>(null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [formulas, setFormulas] = useState<MenuFormula[]>([]);
   const [cart, setCart] = useState<Record<string, CartLine>>({});
+  const [formulaCart, setFormulaCart] = useState<Record<string, FormulaCartLine>>({});
+  // Formule en cours de composition (choix d'un article par étape) — même
+  // rôle que `pickerItem` pour un article à options.
+  const [formulaPickerItem, setFormulaPickerItem] = useState<MenuFormula | null>(null);
   const [cartOrderId, setCartOrderId] = useState<string | null>(null);
   // Nombre de personnes à table, demandé seulement quand un plat est marqué
   // « à partager » — jamais à l'ouverture du menu, où la question n'a pas
@@ -315,16 +341,19 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       .getTableByToken(qrToken)
       .then(async (t) => {
         setTable(t);
-        const [rest, items, suggested] = await Promise.all([
+        const [rest, items, suggested, formulaList] = await Promise.all([
           api.getRestaurantByToken(qrToken),
           api.getMenuByToken(qrToken),
           // Best-effort : une carte sans suggestions reste une carte utilisable,
           // l'échec de cet appel ne doit jamais bloquer la commande.
           api.getMenuSuggestionsByToken(qrToken).catch(() => ({})),
+          // F5-A3 : idem, une carte sans formule reste utilisable.
+          api.getFormulasByToken(qrToken).catch(() => []),
         ]);
         setRestaurant(rest);
         setMenu(items);
         setSuggestions(suggested);
+        setFormulas(formulaList);
 
         // Commandes encore ouvertes pour cette table (ex: téléphone rafraîchi
         // pendant que le plat était en préparation, ou addition d'une première
@@ -812,12 +841,40 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     });
   }
 
+  // F5-A3 : ajoute toujours une ligne de formule via le picker (un choix par
+  // étape), jamais de "+" direct — contrairement à un article sans options,
+  // une formule n'a pas de sélection par défaut à proposer.
+  function addFormulaToCart(formula: MenuFormula, selections: { slotId: number; item: MenuFormulaSlotItem }[]) {
+    const key = formulaCartKey(formula.id, selections);
+    setFormulaCart((prev) =>
+      prev[key]
+        ? { ...prev, [key]: { ...prev[key], quantity: prev[key].quantity + 1 } }
+        : { ...prev, [key]: { formula, quantity: 1, selections } }
+    );
+  }
+
+  function removeFormulaFromCart(key: string) {
+    setFormulaCart((prev) => {
+      const ligne = prev[key];
+      if (!ligne) return prev;
+      if (ligne.quantity <= 1) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: { ...ligne, quantity: ligne.quantity - 1 } };
+    });
+  }
+
   const cartLines = Object.entries(cart).map(([key, line]) => ({ key, ...line }));
   const lineUnitPrice = (l: CartLine) => l.item.price + l.selectedOptions.reduce((s, o) => s + o.priceDelta, 0);
-  const total = cartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
+  const formulaCartLines = Object.entries(formulaCart).map(([key, line]) => ({ key, ...line }));
+  const total =
+    cartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0) +
+    formulaCartLines.reduce((sum, l) => sum + l.formula.price * l.quantity, 0);
 
   async function validateOrder() {
-    if (!table || cartLines.length === 0) return;
+    if (!table || (cartLines.length === 0 && formulaCartLines.length === 0)) return;
     setSending(true);
     setOrderError(null);
     const payload: CreateOrderPayload = {
@@ -831,6 +888,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         from_suggestion: l.fromSuggestion,
         selected_choice_ids: l.selectedOptions.map((o) => o.id),
       })),
+      formulas: formulaCartLines.map((l) => ({
+        formula_id: l.formula.id,
+        quantity: l.quantity,
+        selected_item_ids: l.selections.map((s) => s.item.id),
+      })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       loyalty_phone: loyaltyPhone.trim() || null,
       loyalty_birth_date: loyaltyBirthDate || null,
@@ -842,6 +904,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       setTrackedOrder(order);
       setOrderToken(order.public_token);
       setCart({});
+      setFormulaCart({});
       setCartOrderId(null);
       setPreOrderForIftar(false);
       setShowCelebration(true);
@@ -856,6 +919,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         localStorage.setItem(offlineQueueStorageKey(qrToken), JSON.stringify(payload));
         setOfflineQueuedPayload(payload);
         setCart({});
+        setFormulaCart({});
         setCartOrderId(null);
         setPreOrderForIftar(false);
         setSending(false);
@@ -875,6 +939,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           });
         }
         api.getMenuByToken(qrToken).then(setMenu).catch(() => {});
+      }
+      // F5-A3 : même filet pour une formule retirée/désactivée pendant que le
+      // client avait le panier ouvert.
+      if (e instanceof ApiError && (e.code === "FORMULA_UNAVAILABLE" || e.code === "FORMULA_NOT_FOUND")) {
+        const staleFormulaId = e.context.formula_id as number | undefined;
+        if (staleFormulaId) {
+          setFormulaCart((prev) => {
+            const next = { ...prev };
+            for (const key of Object.keys(next)) {
+              if (next[key].formula.id === staleFormulaId) delete next[key];
+            }
+            return next;
+          });
+        }
+        api.getFormulasByToken(qrToken).then(setFormulas).catch(() => {});
       }
       setOrderError(toLocalizedMessage(e, locale));
     } finally {
@@ -919,12 +998,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     try {
       const blob = await generateShareCardBlob({
         restaurantName: restaurant.name,
-        items: trackedOrder.items.map((it) => ({
-          name: it.menu_item_name,
-          quantity: it.quantity,
-          unitPrice: it.unit_price,
-          lineTotal: it.unit_price * it.quantity,
-        })),
+        items: [
+          ...trackedOrder.items.map((it) => ({
+            name: it.menu_item_name,
+            quantity: it.quantity,
+            unitPrice: it.unit_price,
+            lineTotal: it.unit_price * it.quantity,
+          })),
+          // F5-A3 : sinon une commande composée uniquement de formules
+          // produisait une carte de partage vide.
+          ...trackedOrder.formulas.map((f) => ({
+            name: f.formula_name,
+            quantity: f.quantity,
+            unitPrice: f.unit_price,
+            lineTotal: f.unit_price * f.quantity,
+          })),
+        ],
         total: trackedOrder.total_amount,
         tip: trackedOrder.tip_amount,
         tableLabel: trackedOrder.table_label,
@@ -1170,6 +1259,29 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   </span>
                 )}
                 {it.notes && <span className="text-[var(--ink-faint)]"> — {it.notes}</span>}
+                {it.selected_options.length > 0 && (
+                  <span className="text-[var(--ink-faint)]">
+                    {" "}
+                    — {it.selected_options.map((o) => o.choice_name).join(", ")}
+                  </span>
+                )}
+              </li>
+            ))}
+            {trackedOrder.formulas.map((f) => (
+              <li key={`formula-${f.id}`}>
+                {f.quantity}× {f.formula_name}
+                {f.is_shared && (
+                  <span className="text-[var(--laiton)] inline-flex items-center gap-1 align-middle">
+                    · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
+                  </span>
+                )}
+                {f.notes && <span className="text-[var(--ink-faint)]"> — {f.notes}</span>}
+                {f.selections.length > 0 && (
+                  <span className="text-[var(--ink-faint)]">
+                    {" "}
+                    — {f.selections.map((s) => s.menu_item_name).join(", ")}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -1641,6 +1753,74 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     );
   }
 
+  // F5-A3 — carte simplifiée par rapport à `renderItem` : pas de photo, pas
+  // de note ni de partage sur une formule dans cette première version (KISS,
+  // voir CLAUDE.md) ; en revanche, incrémenter une ligne déjà au panier
+  // rappelle exactement la même sélection (`formulaCartKey`), donc rappeler
+  // `addFormulaToCart` avec les mêmes choix incrémente au lieu de dupliquer.
+  function renderFormula(formula: MenuFormula) {
+    const linesForFormula = formulaCartLines.filter((l) => l.formula.id === formula.id);
+    const totalQuantity = linesForFormula.reduce((s, l) => s + l.quantity, 0);
+    return (
+      <div
+        key={formula.id}
+        className="plat-apparait mb-[10px] rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-[11px]"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-[14.5px] font-semibold leading-[1.25]">{formula.name}</div>
+          <div className="text-[12.5px] leading-[1.35] text-[var(--ink-soft)] mt-[3px]">
+            {formula.slots.map((s) => s.name).join(" + ")}
+          </div>
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <span className="text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
+              {formatAmount(formula.price)}
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              {totalQuantity > 0 && (
+                <span className="inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums">
+                  {totalQuantity}
+                </span>
+              )}
+              <button
+                onClick={() => setFormulaPickerItem(formula)}
+                aria-label={t.addToCartAria(formula.name)}
+                className="w-[34px] h-[34px] rounded-full bg-[var(--harissa)] text-[var(--semoule)] text-[19px] leading-none shadow-sm transition-transform active:scale-90"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+        {linesForFormula.map((l) => (
+          <div key={l.key} className="mt-[10px] pt-[10px] border-t border-[var(--line)]">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-[var(--ink-soft)]">{l.selections.map((s) => s.item.name).join(", ")}</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => removeFormulaFromCart(l.key)}
+                  aria-label={t.removeFromCartAria(formula.name)}
+                  className="w-[26px] h-[26px] rounded-full border border-[var(--line)] bg-white text-sm"
+                >
+                  −
+                </button>
+                <span className="text-[13px] font-bold tabular-nums">{l.quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => addFormulaToCart(formula, l.selections)}
+                  aria-label={t.addToCartAria(formula.name)}
+                  className="w-[26px] h-[26px] rounded-full bg-[var(--harissa)] text-[var(--semoule)] text-sm"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pb-[132px] ${wrapperClassName ?? ""}`}>
       <header className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-[10px] pb-[14px] flex items-start justify-between gap-3">
@@ -1799,6 +1979,19 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           )}
         </div>
 
+        {formulas.length > 0 && (
+          <section className="mb-8">
+            <h2 className="flex items-center gap-3 mb-3">
+              <span className="h-px flex-1 bg-[var(--line)]" />
+              <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-[var(--laiton)] whitespace-nowrap">
+                {t.formulasSectionTitle}
+              </span>
+              <span className="h-px flex-1 bg-[var(--line)]" />
+            </h2>
+            {formulas.map((formula) => renderFormula(formula))}
+          </section>
+        )}
+
         {restaurant.cafe_mode_enabled ? (
           <section className="mb-6">{menu.map((item, i) => renderItem(item, i))}</section>
         ) : (
@@ -1819,7 +2012,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           ))
         )}
 
-        {cartLines.length > 0 && (
+        {(cartLines.length > 0 || formulaCartLines.length > 0) && (
           <div className="fixed bottom-0 left-0 right-0 bg-[var(--espresso)] pt-[14px] px-4 pb-[18px]">
             <div className="max-w-md mx-auto">
               {/* Posé seulement quand un plat est à partager : sinon c'est une
@@ -1852,7 +2045,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <div className="flex justify-between items-center gap-3" data-visite="client-panier">
                 <div>
                   <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.6)]">
-                    {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}
+                    {t.cartItemsCount(
+                      cartLines.reduce((s, l) => s + l.quantity, 0) +
+                        formulaCartLines.reduce((s, l) => s + l.quantity, 0)
+                    )}
                   </p>
                   <p className={`${lalezar.className} text-[26px] leading-none tabular-nums text-[var(--semoule)] mt-0.5`}>
                     {formatAmount(total)}
@@ -1883,10 +2079,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           />
         )}
 
+        {formulaPickerItem && (
+          <FormulaPicker
+            formula={formulaPickerItem}
+            t={t}
+            onClose={() => setFormulaPickerItem(null)}
+            onConfirm={(selections) => {
+              addFormulaToCart(formulaPickerItem, selections);
+              setFormulaPickerItem(null);
+            }}
+          />
+        )}
+
         {suggestFor && (
           <div
             className={`fixed left-0 right-0 bg-[var(--semoule-raised)] border-t border-[var(--line)] p-[14px] shadow-[0_-8px_20px_rgba(36,24,17,.06)] ${
-              cartLines.length > 0 ? "bottom-[132px]" : "bottom-0"
+              cartLines.length > 0 || formulaCartLines.length > 0 ? "bottom-[132px]" : "bottom-0"
             }`}
           >
             <div className="max-w-md mx-auto">

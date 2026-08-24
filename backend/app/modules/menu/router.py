@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.logging import get_logger, log_event
 from app.core.subscription import require_tier
 from app.modules.menu import csv_import, schemas, suggestions
-from app.modules.menu.models import MenuItem, MenuItemOptionChoice, MenuItemOptionGroup
+from app.modules.menu.models import MenuFormula, MenuFormulaSlot, MenuItem, MenuItemOptionChoice, MenuItemOptionGroup
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -17,6 +17,7 @@ from app.modules.tenants.models import SubscriptionTier
 logger = get_logger("menu")
 
 router = APIRouter(prefix="/api/v1/menu-items", tags=["menu"])
+formulas_router = APIRouter(prefix="/api/v1/menu-formulas", tags=["menu"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
 
@@ -341,3 +342,109 @@ def delete_menu_item_image(item_id: int, db: Session = Depends(get_db), staff: S
     db.commit()
     db.refresh(item)
     return item
+
+
+# --- F5-A3 (MARCHE_FRANCE.md) : formules (entrée + plat + dessert) ----------
+
+
+def _get_formula_in_scope(db: Session, formula_id: int, restaurant_id: int) -> MenuFormula:
+    formula = db.get(MenuFormula, formula_id)
+    if not formula or formula.restaurant_id != restaurant_id:
+        raise HTTPException(
+            status_code=404, detail={"code": "FORMULA_NOT_FOUND", "message": "formula not found"}
+        )
+    return formula
+
+
+def _slots_from_payload(
+    db: Session, restaurant_id: int, slots: list[schemas.MenuFormulaSlotIn]
+) -> list[MenuFormulaSlot]:
+    """
+    Revérifie que chaque article proposé dans une étape appartient bien à ce
+    restaurant — même garde-fou que pour les groupes d'options (jamais
+    confiance au client, CLAUDE.md) : sans ça, un manager pourrait composer
+    une formule avec la carte d'un autre établissement.
+    """
+    built: list[MenuFormulaSlot] = []
+    for slot_index, slot in enumerate(slots):
+        items = db.query(MenuItem).filter(MenuItem.id.in_(slot.item_ids), MenuItem.restaurant_id == restaurant_id).all()
+        found_ids = {item.id for item in items}
+        missing = [item_id for item_id in slot.item_ids if item_id not in found_ids]
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_FORMULA_SLOT_ITEM",
+                    "message": f"item(s) {missing} do not belong to this restaurant",
+                    "slot_name": slot.name,
+                },
+            )
+        # Ordre demandé par le manager, pas celui renvoyé par la requête SQL.
+        items_by_id = {item.id: item for item in items}
+        ordered_items = [items_by_id[item_id] for item_id in slot.item_ids]
+        built.append(MenuFormulaSlot(name=slot.name, display_order=slot_index, items=ordered_items))
+    return built
+
+
+@formulas_router.post("", response_model=schemas.MenuFormulaOut, status_code=201)
+def create_formula(
+    payload: schemas.MenuFormulaCreate, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
+):
+    if payload.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    formula = MenuFormula(
+        restaurant_id=payload.restaurant_id,
+        name=payload.name,
+        price=payload.price,
+        slots=_slots_from_payload(db, staff.restaurant_id, payload.slots),
+    )
+    db.add(formula)
+    db.commit()
+    db.refresh(formula)
+    log_event(logger, "menu.formula_created", restaurant_id=staff.restaurant_id, formula_id=formula.id)
+    return formula
+
+
+@formulas_router.get("/by-restaurant/{restaurant_id}", response_model=list[schemas.MenuFormulaOut])
+def list_formulas(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """Gestion depuis le dashboard manager — même fermeture que `list_menu`."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return db.query(MenuFormula).filter(MenuFormula.restaurant_id == restaurant_id).order_by(MenuFormula.name).all()
+
+
+@formulas_router.get("/by-table/{qr_token}", response_model=list[schemas.MenuFormulaOut])
+def list_formulas_by_table(qr_token: str, db: Session = Depends(get_db)):
+    """Parcours client — mêmes formules que la carte, disponibles seulement."""
+    table = tables_service.get_table_by_qr_token(db, qr_token)
+    return (
+        db.query(MenuFormula)
+        .filter(MenuFormula.restaurant_id == table.restaurant_id, MenuFormula.is_available.is_(True))
+        .order_by(MenuFormula.name)
+        .all()
+    )
+
+
+@formulas_router.put("/{formula_id}", response_model=schemas.MenuFormulaOut)
+def update_formula(
+    formula_id: int,
+    payload: schemas.MenuFormulaUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    formula = _get_formula_in_scope(db, formula_id, staff.restaurant_id)
+    formula.name = payload.name
+    formula.price = payload.price
+    formula.is_available = payload.is_available
+    formula.slots = _slots_from_payload(db, staff.restaurant_id, payload.slots)
+    db.commit()
+    db.refresh(formula)
+    log_event(logger, "menu.formula_updated", restaurant_id=staff.restaurant_id, formula_id=formula.id)
+    return formula
+
+
+@formulas_router.delete("/{formula_id}", status_code=204)
+def delete_formula(formula_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    formula = _get_formula_in_scope(db, formula_id, staff.restaurant_id)
+    db.delete(formula)
+    db.commit()
