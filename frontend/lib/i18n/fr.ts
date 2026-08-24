@@ -153,6 +153,9 @@ export const fr = {
   shareOrderButton: "Partager ma commande",
   shareCardTitle: (restaurantName: string) => `Mon repas chez ${restaurantName}`,
   shareCardText: "Commandé sur Tawla 🍽️",
+
+  googleReviewPromptTitle: "Vous avez apprécié votre repas ?",
+  googleReviewPromptButton: "Laisser un avis Google",
 };
 
 export type Dictionary = typeof fr;

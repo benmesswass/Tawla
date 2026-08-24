@@ -138,4 +138,7 @@ export const en = {
   shareOrderButton: "Share my order",
   shareCardTitle: (restaurantName) => `My meal at ${restaurantName}`,
   shareCardText: "Ordered on Tawla 🍽️",
+
+  googleReviewPromptTitle: "Enjoyed your meal?",
+  googleReviewPromptButton: "Leave a Google review",
 } satisfies Dictionary;

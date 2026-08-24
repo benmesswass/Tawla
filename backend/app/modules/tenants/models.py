@@ -166,6 +166,14 @@ class Restaurant(Base):
     konnect_api_key_encrypted: Mapped[str | None] = mapped_column(String(500), nullable=True)
     konnect_wallet_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    # F5-A7 (MARCHE_FRANCE.md) — demande d'avis Google après le service :
+    # argument de vente central des concurrents français, coût de
+    # développement faible. Lien de la fiche Google Business Profile saisi
+    # par le manager (ex. https://g.page/r/.../review), affiché au client une
+    # fois sa commande servie. Null = fonctionnalité invisible, jamais un
+    # bouton mort.
+    google_review_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     @property
     def konnect_configured(self) -> bool:
         return bool(self.konnect_api_key_encrypted and self.konnect_wallet_id)

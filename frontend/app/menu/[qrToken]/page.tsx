@@ -591,7 +591,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   useReconnectingSocket(orderSocketUrl, (msg) => {
     if (msg.event === "order.status_changed" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, status: msg.status } : prev));
-      if (msg.status === "served" || msg.status === "cancelled") {
+      // Même condition que le rechargement REST plus haut (`load()`) : une
+      // commande servie mais pas encore réglée doit rester atteignable —
+      // sinon un client qui regarde sa commande passer "servie" en direct
+      // (le cas courant, contrairement au rechargement) perdait l'accès à
+      // son addition impayée dès que ce message arrivait, avant même d'avoir
+      // pu payer depuis son téléphone.
+      if (msg.status === "cancelled" || (msg.status === "served" && trackedOrder.payment_status === "paid")) {
         localStorage.removeItem(lastOrderStorageKey(qrToken));
       }
     }
@@ -1439,6 +1445,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* F5-A7 (MARCHE_FRANCE.md) : uniquement une fois servie — demander un
+            avis avant que le client ait mangé n'a pas de sens — et seulement
+            si le manager a collé un lien (Réglages), jamais un bouton mort. */}
+        {trackedOrder.status === "served" && restaurant.google_review_url && (
+          <div className="mt-8 rounded-xl border border-[rgba(184,134,46,.5)] bg-[var(--creme)] p-3 text-center">
+            <p className="text-sm font-semibold text-[var(--encre)]">{t.googleReviewPromptTitle}</p>
+            <a
+              href={restaurant.google_review_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-2.5 text-sm font-semibold"
+            >
+              {t.googleReviewPromptButton}
+            </a>
           </div>
         )}
 

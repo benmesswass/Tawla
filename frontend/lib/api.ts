@@ -109,6 +109,8 @@ export type RestaurantPublic = {
   ramadan_mode_enabled: boolean;
   iftar_time: string | null;
   cafe_mode_enabled: boolean;
+  /** F5-A7 : null = pas de bouton d'avis affiché côté client. */
+  google_review_url: string | null;
 };
 
 export type Restaurant = RestaurantPublic & {
@@ -754,6 +756,12 @@ export const api = {
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/kitchen-sound`, {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
+    }),
+  // F5-A7 : `url: null` retire le bouton d'avis côté client.
+  setGoogleReviewUrl: (restaurantId: number, url: string | null) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/google-review-url`, {
+      method: "PATCH",
+      body: JSON.stringify({ url }),
     }),
   // Connexion du wallet Konnect PROPRE au restaurant (modèle direct,
   // 2026-08-19) — jamais réaffiché après coup, seul `konnect_configured` le

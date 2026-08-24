@@ -188,6 +188,10 @@ export default function DashboardPage() {
   const [savingCafeMode, setSavingCafeMode] = useState(false);
   const [kitchenSoundEnabled, setKitchenSoundEnabled] = useState(false);
   const [savingKitchenSound, setSavingKitchenSound] = useState(false);
+  // F5-A7 : lien d'avis Google, saisi tel quel puis sauvegardé au blur —
+  // même convention que l'heure d'iftar juste au-dessus.
+  const [googleReviewUrlInput, setGoogleReviewUrlInput] = useState("");
+  const [savingGoogleReviewUrl, setSavingGoogleReviewUrl] = useState(false);
   const [konnectApiKeyInput, setKonnectApiKeyInput] = useState("");
   const [konnectWalletIdInput, setKonnectWalletIdInput] = useState("");
   const [savingKonnect, setSavingKonnect] = useState(false);
@@ -238,6 +242,7 @@ export default function DashboardPage() {
       setIftarInput(isoToLocalInput(rest.iftar_time));
       setCafeModeEnabled(rest.cafe_mode_enabled);
       setKitchenSoundEnabled(rest.kitchen_sound_enabled);
+      setGoogleReviewUrlInput(rest.google_review_url ?? "");
       if (!rest.is_active) return;
 
       const [menu, tableList, teamList, suggested, dayStats, formulaList] = await Promise.all([
@@ -340,6 +345,22 @@ export default function DashboardPage() {
       handleGatedError(e);
     } finally {
       setSavingCafeMode(false);
+    }
+  }
+
+  async function saveGoogleReviewUrl() {
+    if (!restaurantId) return;
+    setError(null);
+    setSavingGoogleReviewUrl(true);
+    try {
+      const updated = await api.setGoogleReviewUrl(restaurantId, googleReviewUrlInput.trim() || null);
+      setRestaurant(updated);
+      setGoogleReviewUrlInput(updated.google_review_url ?? "");
+      flash(updated.google_review_url ? "Lien d'avis Google enregistré." : "Lien d'avis Google retiré.");
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingGoogleReviewUrl(false);
     }
   }
 
@@ -1628,6 +1649,29 @@ export default function DashboardPage() {
                 joueront le premier son qu&apos;après une interaction sur l&apos;écran cuisine (politique de lecture
                 automatique).
               </p>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm" className="mt-4">
+              <label htmlFor="google-review-url" className="font-medium">
+                Lien d&apos;avis Google
+              </label>
+              <p className="text-xs text-neutral-500 mt-1 mb-2">
+                Une fois la commande servie, le client voit un bouton pour laisser un avis sur votre fiche Google.
+                Collez le lien depuis votre fiche Google Business Profile (« Demander des avis » → copier le lien).
+                Laissez vide pour ne rien afficher.
+              </p>
+              <input
+                id="google-review-url"
+                type="url"
+                value={googleReviewUrlInput}
+                onChange={(e) => setGoogleReviewUrlInput(e.target.value)}
+                onBlur={saveGoogleReviewUrl}
+                disabled={savingGoogleReviewUrl}
+                placeholder="https://g.page/r/..../review"
+                className="w-full text-sm bg-white border border-[var(--line)] rounded px-2 py-1.5"
+              />
             </Card>
           )}
 

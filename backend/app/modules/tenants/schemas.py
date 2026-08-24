@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.dates import UtcDatetime
 from app.core.subscription import effective_tier
@@ -27,6 +27,8 @@ class RestaurantPublicOut(BaseModel):
     ramadan_mode_enabled: bool
     iftar_time: UtcDatetime | None
     cafe_mode_enabled: bool
+    # F5-A7 : null = pas de bouton d'avis affiché — voir Restaurant.google_review_url.
+    google_review_url: str | None
 
 
 class RestaurantOut(RestaurantPublicOut):
@@ -81,6 +83,22 @@ class CafeModeUpdate(BaseModel):
 
 class KitchenSoundUpdate(BaseModel):
     enabled: bool
+
+
+class GoogleReviewUrlUpdate(BaseModel):
+    """`None`/vide retire le bouton. Doit être un vrai lien http(s) — même
+    garde-fou que `MenuItem.image_url` (jamais de `javascript:`/`data:` stocké,
+    même si c'est le manager qui le saisit)."""
+
+    url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("url")
+    @classmethod
+    def _http_or_none(cls, value: str | None) -> str | None:
+        value = (value or "").strip() or None
+        if value and not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("google_review_url must start with http:// or https://")
+        return value
 
 
 class KonnectCredentialsIn(BaseModel):

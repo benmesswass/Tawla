@@ -184,6 +184,25 @@ def set_konnect_credentials(
     return schemas.serialize_restaurant(restaurant)
 
 
+@router.patch("/{restaurant_id}/google-review-url", response_model=schemas.RestaurantOut)
+def set_google_review_url(
+    restaurant_id: int,
+    payload: schemas.GoogleReviewUrlUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """F5-A7 (MARCHE_FRANCE.md) — le manager colle le lien d'avis de sa fiche
+    Google Business Profile ; vide/absent retire le bouton côté client."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    restaurant.google_review_url = payload.url
+    db.commit()
+    db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
 def _restaurant_or_404(db: Session, restaurant_id: int) -> Restaurant:
     restaurant = db.get(Restaurant, restaurant_id)
     if not restaurant:

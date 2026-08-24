@@ -665,7 +665,7 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 
 **Dans les deux cas, en fin de phase**
 
-- [ ] **A7 — Demande d'avis Google** après le service (faible coût, forte valeur perçue en France)
+- [x] **A7 — Demande d'avis Google** après le service (faible coût, forte valeur perçue en France) : `Restaurant.google_review_url` réglé par le manager (Réglages), bouton affiché au client une fois la commande "servie", invisible tant qu'aucun lien n'est collé. En le testant en direct, a révélé un bug préexistant (non lié à A7) : le WebSocket de suivi effaçait le suivi local d'une commande servie mais PAS PAYÉE, coupant l'accès du client à son addition avant même qu'il ait pu payer — corrigé dans le même commit — PR #86
 - [ ] Démo française : brasserie, formule du jour, carte des vins — plus jamais « Dar Chaabane » sur le marché français (`demo/service.py:158`)
 
 ---
