@@ -212,14 +212,14 @@ pas construite. Le produit ne manque pas de fonctionnalité, il manque un client
 - `ROADMAP_ARCHIVE.md` — historique des phases 0 à 11. Lecture seule, ne rien y
   ajouter : les décisions et renoncements qu'il documente restent la
   justification de l'état du code.
-- `MARCHE_FRANCE.md` — dossier de cadrage du marché français (2026-08-24) :
+- `MARCHE_FRANCE.md` — dossier de cadrage du marché français (2026-08-24, F0
+  tranchée le même jour — scénario C, les deux marchés en parallèle) :
   différences produit/légales/techniques avec la Tunisie, architecture à deux
   marchés, sélecteur de pays, phases F0 à F8. **Ce n'est PAS une seconde
   roadmap et ça ne remet pas en cause « `ROADMAP.md` est le fichier unique de
-  pilotage »** : il est gelé tant que sa phase F0 (le choix de scénario) n'a
-  pas reçu de réponse écrite de Wassim. Une session qui cherche la prochaine
-  tâche prend `ROADMAP.md` ; on ne va dans `MARCHE_FRANCE.md` que si Wassim
-  nomme explicitement le marché français.
+  pilotage »** : une session qui cherche la prochaine tâche **codable** prend
+  `ROADMAP.md` en priorité ; `MARCHE_FRANCE.md` pilote le chantier France en
+  parallèle, jamais à la place de `ROADMAP.md`.
 - `REVUE_INVESTISSEURS.md` — revue d'investissement du 2026-08-13 (grille de
   notation, failles vérifiées, plafond de revenus).
 - `PREMIERES_VENTES.md` — audit orienté vente et les dix recommandations pour

@@ -20,15 +20,22 @@ continuent de s'exécuter dans leur ordre, avec leur règle (« une seule phase 
 code avant la mise en ligne, et plus rien ensuite avant le premier pilote »).
 
 Ce fichier-ci est un **programme de marché**, pas une roadmap produit
-concurrente. Il est **gelé** : aucune de ses tâches ne s'ouvre tant que la
-tâche **F0** ci-dessous n'a pas été tranchée par Wassim, par écrit, dans ce
-fichier. Une session qui démarre et cherche « la prochaine tâche » va dans
-`ROADMAP.md`, jamais ici — sauf si Wassim nomme explicitement le marché
-français.
+concurrente. **F0 a été tranchée par Wassim le 2026-08-24** (voir la phase F0
+plus bas pour le détail des quatre décisions) : scénario **C**, les deux
+marchés en parallèle, sans attendre un jalon tunisien. Une session qui
+démarre et cherche « la prochaine tâche » va toujours dans `ROADMAP.md` en
+priorité — ce fichier n'en devient pas une seconde roadmap générale, il reste
+le programme du seul chantier France, à travailler à côté.
 
-C'est la seule façon d'avoir les deux à la fois : un dossier France complet,
-prêt à être travaillé sur d'autres sessions, et une roadmap tunisienne qui ne
-se fait pas diluer par lui.
+**Ce qui rend le scénario C jouable aujourd'hui, et pourrait cesser de
+l'être** : au 2026-08-24, `ROADMAP.md` ne contient plus aucune tâche non
+cochée qui ne soit marquée 🧑 — hébergement, domaine, entretiens, compte
+Konnect, pilotes, tout demande une action réelle de Wassim, aucune ligne de
+code n'attend. Le risque de dilution que le §1 décrit pour le scénario C ne
+s'est donc pas encore matérialisé : il n'y a rien à disputer entre les deux
+chantiers **côté code**. Le jour où une tâche codable rouvre en Tunisie
+(après un déblocage 🧑), la question de la priorité entre les deux devra être
+retranchée à ce moment-là — pas supposée réglée par cette note.
 
 ---
 
@@ -505,16 +512,43 @@ pas en France », ce qui serait un excellent résultat pour un coût nul.
 
 ---
 
-### Phase F0 — La décision 🧑 (gate — rien ne s'ouvre avant)
+### Phase F0 — La décision (tranchée le 2026-08-24)
 
-- [ ] Trancher le scénario A / B / C du §1, **par écrit dans ce fichier**, avec la raison 🧑
-- [ ] Nommer ce qui déclenche la suite : une date, ou un événement (« quand deux clients tunisiens paient »), jamais « quand j'aurai le temps » 🧑
-- [ ] Fixer le budget maximum d'exploration France (§9) et ce qu'on arrête si on le dépasse 🧑
-- [ ] Décider le sort de la marque : garder « Tawla » ou non, recherche INPI classes 9 et 42, domaines à réserver 🧑
-- [ ] Écrire dans `ROADMAP.md` la ligne qui renvoie ici, pour qu'aucune session future ne redécouvre ce fichier par hasard
+- [x] **Scénario retenu : C — les deux marchés en parallèle, tout de suite.**
+  Décision explicite de Wassim, sans attendre un jalon tunisien. Le §1
+  documente pourquoi ce scénario est normalement le plus risqué des trois
+  (« un fondateur, deux marchés ») — retenu quand même, en connaissance de
+  cause. Voir §0 pour ce qui atténue ce risque **dans l'état actuel** du
+  dépôt : `ROADMAP.md` n'a plus aucune tâche codable non cochée en ce moment,
+  donc ce chantier ne dispute encore rien à la Tunisie côté code
+- [x] **Déclencheur : aucun.** « Moi et maintenant » — pas de date, pas
+  d'événement tunisien à attendre. F1 et F2 s'ouvrent avec cette décision
+- [x] **Budget : aucun plafond fixé.** On avance au cas par cas plutôt que sur
+  un montant arrêté à l'avance — décision explicite, pas un oubli
+- [x] **Marque : ouverte**, « MyTable » proposé par Wassim comme piste sérieuse
+  pour le nom international — **à confirmer par une recherche de
+  disponibilité avant tout engagement**, voir la note ci-dessous. Rien
+  n'élimine « Tawla » côté tunisien dans tous les cas : la question ouverte
+  porte seulement sur le nom du marché français/international
+- [x] Renvoi posé dans `ROADMAP.md` (§ documents fondateurs, § hors périmètre)
+  et dans `CLAUDE.md` (§ Roadmap) — PR #84
 
-**Critère de sortie** : une décision datée et signée dans ce fichier. Tant
-qu'elle n'y est pas, F1 ne s'ouvre pas.
+> **Sur « MyTable »** : l'idée tient conceptuellement — traduction directe de
+> Tawla (« la table »), compréhensible sans effort dans toute l'Europe, garde
+> le fil entre les deux marchés. Le risque est réel et concret : c'est un nom
+> de forme très générique (« My + nom commun », le schéma de MyFitnessPal,
+> MyHeritage…), le genre de nom qui a de bonnes chances d'être déjà pris —
+> comme marque, comme domaine, ou comme produit concurrent quelque part dans
+> la restauration digitale. **Prochaine action concrète, avant tout
+> engagement de communication ou de code sur ce nom** : vérifier la
+> disponibilité de `mytable.fr` / `.com` / `.eu`, et lancer une recherche
+> d'antériorité INPI en classes 9 et 42 — exactement la case que F0 posait
+> déjà pour « Tawla ». Candidats de repli à garder en tête si « MyTable » est
+> pris : une variante moins générique du même axe (ex. composé avec « table »
+> et un second mot distinctif), à chercher seulement si la vérification
+> échoue
+
+**F0 est tranchée. F1 et F2 sont ouvertes dès maintenant.**
 
 ---
 
@@ -859,19 +893,21 @@ non seulement acceptable mais **vendable**.
 Aucune de ces questions ne peut être tranchée depuis une session Claude. Elles
 sont listées ici pour qu'aucune ne se règle par défaut, en silence.
 
-| # | Décision | Bloque |
-|---|---|---|
-| **C1** | Scénario A, B ou C du §1 | Tout |
-| **C2** | S1 (ne pas encaisser) ou S2 (être conforme au fisc) | F5, F6, et la promesse commerciale |
-| **C3** | Segment prioritaire : brasserie de quartier, ou restaurants à clientèle maghrébine | Le positionnement, la démo, la langue, la carte |
-| **C4** | La marque : « Tawla » en France ou non ; recherche INPI ; domaines | F4 |
-| **C5** | Le prix français (hypothèse 49/89/149 €, à ne pas annoncer avant F1) | F1 |
-| **C6** | Structure juridique et hébergeur (« hébergé en France » comme argument, ou pas) | F2, F7 |
-| **C7** | Le mode Ramadan reste-t-il visible sur le marché français, ou seulement sur le segment 2 ? | F5 |
-| **C8** | Qui fait les 20 entretiens français, et quand | F1 |
+| # | Décision | Bloque | Statut |
+|---|---|---|---|
+| ~~C1~~ | ~~Scénario A, B ou C du §1~~ | — | ✅ Tranchée 2026-08-24 : **C** (§ Phase F0) |
+| **C2** | S1 (ne pas encaisser) ou S2 (être conforme au fisc) | F5, F6, et la promesse commerciale | Ouverte — se tranche en F2, avec l'expert-comptable |
+| **C3** | Segment prioritaire : brasserie de quartier, ou restaurants à clientèle maghrébine | Le positionnement, la démo, la langue, la carte | Ouverte — se tranche en F1, à l'écoute des entretiens |
+| **C4** | La marque internationale : « Tawla » ou un autre nom ; recherche INPI ; domaines | F4 | Amorcée 2026-08-24 : « MyTable » proposé, disponibilité à vérifier (§ Phase F0) |
+| **C5** | Le prix français (hypothèse 49/89/149 €, à ne pas annoncer avant F1) | F1 | Ouverte |
+| **C6** | Structure juridique et hébergeur (« hébergé en France » comme argument, ou pas) | F2, F7 | Ouverte |
+| **C7** | Le mode Ramadan reste-t-il visible sur le marché français, ou seulement sur le segment 2 ? | F5 | Ouverte |
+| **C8** | Qui fait les 20 entretiens français, et quand | F1 | Ouverte — c'est la prochaine décision concrète, F1 est ouverte |
 
 ---
 
-**Dernière mise à jour** : 2026-08-24. Prochaine action : **C1** (§ Phase F0).
-Tant qu'elle n'est pas prise et écrite ici, `ROADMAP.md` reste le seul fichier
-de pilotage actif.
+**Dernière mise à jour** : 2026-08-24. F0 tranchée (scénario C). Prochaine
+action concrète : **C8** — caler les premiers entretiens F1 — et vérifier la
+disponibilité de « MyTable » (C4) avant tout engagement dessus.
+`ROADMAP.md` reste le fichier de pilotage prioritaire pour tout ce qui est
+codable ; ce fichier pilote le chantier France en parallèle, pas à sa place.
