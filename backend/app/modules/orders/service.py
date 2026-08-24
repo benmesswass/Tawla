@@ -502,6 +502,14 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                         "quantity": i.quantity,
                         "notes": i.notes,
                         "is_shared": i.is_shared,
+                        # F5-A2 : sans ce champ, une commande arrivée en direct sur
+                        # un écran cuisine déjà ouvert (le cas normal en service —
+                        # `loadActiveOrders()` ne tourne qu'au montage/reconnexion,
+                        # voir kitchen/page.tsx) affichait le plat sans ses options.
+                        # Précalculé ici pour que le frontend n'ait qu'à le passer
+                        # tel quel (`KitchenOrder.items.options`), sans dupliquer la
+                        # logique de jointure déjà écrite pour la réponse REST.
+                        "options": ", ".join(opt.choice_name for opt in i.selected_options) or None,
                     }
                     for i in order.items
                 ],

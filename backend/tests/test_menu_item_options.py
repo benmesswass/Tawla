@@ -9,6 +9,7 @@ Le prix, comme partout ailleurs dans ce produit, est toujours recalculé côté
 serveur : ces tests vérifient d'abord que le client ne peut ni inventer un
 choix, ni ignorer un groupe requis, ni doubler un groupe à choix unique.
 """
+from app.modules.staff.models import StaffRole
 from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
 
 
@@ -153,6 +154,37 @@ def test_order_rejects_a_choice_that_belongs_to_another_item(client):
     )
     assert res.status_code == 422
     assert res.json()["detail"]["code"] in ("INVALID_OPTION_CHOICE", "OPTION_GROUP_REQUIRED")
+
+
+def test_kitchen_websocket_broadcast_carries_selected_options(client):
+    """Le rechargement REST (`loadActiveOrders`) affiche bien les options
+    (voir `orderFromApi` côté frontend), mais un écran cuisine déjà ouvert ne
+    le rejoue pas à l'arrivée d'une commande — il consomme le message
+    WebSocket directement (`kitchen/page.tsx`). Sans ce champ sur le message,
+    une commande arrivée en direct perdait ses options en plein service :
+    exactement le manque que A2 corrige."""
+    restaurant, table, item, headers = _setup_item_with_options(client)
+    kitchen_staff = create_staff(restaurant.id, StaffRole.KITCHEN)
+    cuisson_choice = next(
+        c for g in item["option_groups"] if g["name"] == "Cuisson" for c in g["choices"] if c["name"] == "Saignant"
+    )
+
+    order = client.post(
+        "/api/v1/orders",
+        json={
+            "qr_token": table["qr_token"],
+            "items": [{"menu_item_id": item["id"], "quantity": 1, "selected_choice_ids": [cuisson_choice["id"]]}],
+        },
+    ).json()
+
+    with client.websocket_connect(
+        f"/ws/kitchen/{restaurant.id}?token={auth_headers(kitchen_staff)['Authorization'].split()[1]}"
+    ) as ws:
+        client.post(f"/api/v1/orders/{order['id']}/confirm", headers=headers)
+        client.post(f"/api/v1/orders/{order['id']}/send-to-kitchen", headers=headers)
+        message = ws.receive_json()
+
+    assert message["items"][0]["options"] == "Saignant"
 
 
 def test_replacing_option_groups_does_not_change_an_already_placed_order(client):
