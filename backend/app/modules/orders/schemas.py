@@ -37,6 +37,12 @@ class OrderItemCreate(BaseModel):
     # mentirait sur ce drapeau ne fausserait qu'une statistique de son propre
     # restaurant.
     from_suggestion: bool = False
+    # F5-A2 (MARCHE_FRANCE.md) — identifiants des choix sélectionnés, tous
+    # groupes confondus. Revérifiés intégralement côté serveur à la création
+    # (appartenance à cet article, groupes requis satisfaits, une seule
+    # valeur hors `allow_multiple`) — jamais confiance au client, jamais son
+    # calcul de prix (voir orders/service.py::create_order).
+    selected_choice_ids: list[int] = Field(default_factory=list, max_length=40)
 
 
 class OrderCreate(BaseModel):
@@ -64,6 +70,14 @@ class OrderCreate(BaseModel):
     loyalty_birth_date: date | None = None
 
 
+class SelectedOptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    group_name: str
+    choice_name: str
+    price_delta: float
+
+
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,6 +90,7 @@ class OrderItemOut(BaseModel):
     is_shared: bool
     shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
     from_suggestion: bool
+    selected_options: list[SelectedOptionOut] = Field(default_factory=list)
 
 
 class PayCardRequest(BaseModel):

@@ -194,3 +194,31 @@ class OrderItem(Base):
     from_suggestion: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     order: Mapped["Order"] = relationship(back_populates="items")
+    selected_options: Mapped[list["OrderItemOptionChoice"]] = relationship(
+        back_populates="order_item", cascade="all, delete-orphan"
+    )
+
+
+class OrderItemOptionChoice(Base):
+    """
+    Options choisies pour une ligne de commande (F5-A2, MARCHE_FRANCE.md) —
+    nom et supplément de prix FIGÉS au moment de la commande, même principe
+    que `OrderItem.menu_item_name`/`unit_price` : si le resto renomme "Frites"
+    en "Frites maison" ou change son supplément après coup, une commande déjà
+    passée ne doit jamais changer sous les yeux du client ou de la cuisine.
+
+    `choice_id` est informatif (traçabilité), jamais relu pour l'affichage ou
+    le prix — un choix supprimé côté carte ne doit pas casser l'historique
+    des commandes qui l'ont utilisé.
+    """
+
+    __tablename__ = "order_item_option_choices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"), nullable=False, index=True)
+    choice_id: Mapped[int | None] = mapped_column(ForeignKey("menu_item_option_choices.id"), nullable=True)
+    group_name: Mapped[str] = mapped_column(String(60), nullable=False)
+    choice_name: Mapped[str] = mapped_column(String(60), nullable=False)
+    price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+
+    order_item: Mapped["OrderItem"] = relationship(back_populates="selected_options")

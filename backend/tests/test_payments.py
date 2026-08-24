@@ -363,6 +363,53 @@ def test_invoice_is_not_available_before_payment(client):
     assert res.status_code == 404
 
 
+def test_invoice_pdf_survives_items_with_selected_options(client):
+    """Le prix unitaire d'une ligne inclut déjà le supplément (F5-A2) — sans
+    la ligne d'options sur la facture, le prix unitaire semble incohérent
+    avec celui de la carte. Vérifie aussi que fpdf2 (police core Latin-1) ne
+    plante pas sur des libellés d'options accentués."""
+    restaurant = create_restaurant(name="Le Central Facture", slug="le-central-facture")
+    manager_headers = auth_headers(create_staff(restaurant.id))
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=manager_headers
+    ).json()
+    item = client.post(
+        "/api/v1/menu-items",
+        json={"restaurant_id": restaurant.id, "name": "Entrecôte", "price": 18.0},
+        headers=manager_headers,
+    ).json()
+    item = client.put(
+        f"/api/v1/menu-items/{item['id']}/options",
+        json={
+            "groups": [
+                {"name": "Cuisson", "is_required": True, "choices": [{"name": "Saignant", "price_delta": 0}]},
+                {"name": "Accompagnement", "choices": [{"name": "Supplément fromage", "price_delta": 1.5}]},
+            ]
+        },
+        headers=manager_headers,
+    ).json()
+    cuisson_choice = item["option_groups"][0]["choices"][0]["id"]
+    fromage_choice = item["option_groups"][1]["choices"][0]["id"]
+
+    order = client.post(
+        "/api/v1/orders",
+        json={
+            "qr_token": table["qr_token"],
+            "items": [
+                {"menu_item_id": item["id"], "quantity": 1, "selected_choice_ids": [cuisson_choice, fromage_choice]}
+            ],
+        },
+    ).json()
+    confirmed = client.post(f"/api/v1/orders/{order['id']}/confirm", headers=manager_headers).json()
+    order = {**order, **confirmed}
+    client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
+
+    res = client.get(f"/api/v1/orders/{order['id']}/invoice", params={"token": order["public_token"]})
+
+    assert res.status_code == 200
+    assert res.content.startswith(b"%PDF")
+
+
 def test_invoice_rejects_the_wrong_token(client):
     _restaurant, _headers, order = _setup_order(client)
     client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))

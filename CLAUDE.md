@@ -41,6 +41,12 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
   Ne jamais ajouter de transition sans mettre à jour ce dict.
 - Prix figé sur `OrderItem` au moment de la commande — ne jamais recalculer
   depuis `MenuItem.price` après coup.
+- Montant et devise : toujours via `format_amount()` / `formatAmount()`
+  (`core/markets.py` / `lib/market.ts`), jamais de `toFixed(3)`/`"DT"`/symbole
+  en dur — le marché courant (`MARKET=tn|fr`) décide de la devise et du nombre
+  de décimales. Fuseau horaire : toujours via `zoneinfo`/`current_market().timezone`
+  (`core/dates.py`), jamais un décalage UTC fixe — correct seulement pour un
+  marché sans heure d'été (chantier France, `MARCHE_FRANCE.md`).
 - QR token de table = `secrets.token_urlsafe`, jamais un ID incrémental.
 - Nouveau modèle = l'ajouter dans `app/core/model_registry.py`, sinon SQLAlchemy
   ignore le modèle et toute foreign key qui le vise casse (tests comme

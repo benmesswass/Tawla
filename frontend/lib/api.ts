@@ -14,6 +14,20 @@ export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:8000` : "http://localhost:8000");
 
+export type MenuItemOptionChoice = {
+  id: number;
+  name: string;
+  price_delta: number;
+};
+
+export type MenuItemOptionGroup = {
+  id: number;
+  name: string;
+  is_required: boolean;
+  allow_multiple: boolean;
+  choices: MenuItemOptionChoice[];
+};
+
 export type MenuItem = {
   id: number;
   restaurant_id: number;
@@ -31,6 +45,8 @@ export type MenuItem = {
   is_vegetarian: boolean;
   is_vegan: boolean;
   is_gluten_free: boolean;
+  /** F5-A2 : cuisson, accompagnement, taille… vide sur la quasi-totalité des articles aujourd'hui. */
+  option_groups: MenuItemOptionGroup[];
 };
 
 export type Table = {
@@ -207,6 +223,8 @@ export type Order = {
     /** Numéros de places entre lesquelles le plat est partagé. Vide = toute la table. */
     shared_with: number[];
     from_suggestion: boolean;
+    /** F5-A2 : figées au moment de la commande — voir lib/allergens.ts pour l'équivalent allergènes. */
+    selected_options: { group_name: string; choice_name: string; price_delta: number }[];
   }[];
 };
 
@@ -536,6 +554,15 @@ export const api = {
       >
     >
   ) => request<MenuItem>(`/api/v1/menu-items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  // F5-A2 : remplacement en bloc, même convention que les suggestions "avec ce plat".
+  setMenuItemOptions: (
+    itemId: number,
+    groups: { name: string; is_required?: boolean; allow_multiple?: boolean; choices: { name: string; price_delta?: number }[] }[]
+  ) =>
+    request<MenuItem>(`/api/v1/menu-items/${itemId}/options`, {
+      method: "PUT",
+      body: JSON.stringify({ groups }),
+    }),
   setMenuItemAvailability: (itemId: number, isAvailable: boolean) =>
     request<MenuItem>(`/api/v1/menu-items/${itemId}/availability`, {
       method: "PATCH",
@@ -565,6 +592,7 @@ export const api = {
       is_shared?: boolean;
       shared_with?: number[];
       from_suggestion?: boolean;
+      selected_choice_ids?: number[];
     }[];
     scheduled_for?: string | null;
     loyalty_phone?: string | null;

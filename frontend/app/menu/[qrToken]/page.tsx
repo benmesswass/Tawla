@@ -23,6 +23,7 @@ import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { currentMarket, formatAmount } from "@/lib/market";
 import { allergenLabel, parseAllergenCodes } from "@/lib/allergens";
+import OptionPicker from "@/components/OptionPicker";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
 import TawlaMark from "@/components/brand/TawlaMark";
@@ -45,6 +46,11 @@ import QrCode from "@/components/QrCode";
 import { CULTURAL_FACTS } from "@/lib/culturalFacts";
 import { generateShareCardBlob } from "@/lib/shareCard";
 
+// F5-A2 (MARCHE_FRANCE.md) : un choix figé au moment où le client compose son
+// panier, comme le reste de la ligne — le prix ne bouge plus si le manager
+// change la carte pendant que le client compose sa commande.
+type SelectedOption = { id: number; groupName: string; name: string; priceDelta: number };
+
 type CartLine = {
   item: MenuItem;
   quantity: number;
@@ -57,7 +63,19 @@ type CartLine = {
   // Ajoutée depuis une proposition « avec ce plat » plutôt que depuis la carte.
   // Sert uniquement à mesurer l'effet de la vente incitative (Phase 14.1).
   fromSuggestion: boolean;
+  // F5-A2 : vide sur la quasi-totalité des articles aujourd'hui (aucune
+  // option définie). Deux lignes du même article avec des choix différents
+  // (ex : deux entrecôtes, une saignante et une à point) restent deux lignes
+  // distinctes — jamais fusionnées par quantité, voir `cartKey`.
+  selectedOptions: SelectedOption[];
 };
+
+// Clé du panier : l'id de l'article pour une ligne sans options (comportement
+// inchangé, une seule ligne possible par article) ; un identifiant unique par
+// ajout pour un article à options (chaque sélection reste sa propre ligne).
+function cartKey(itemId: number, uniquePart?: string): string {
+  return uniquePart ? `${itemId}:${uniquePart}` : String(itemId);
+}
 
 type StepStatus = Exclude<OrderStatus, "cancelled">;
 
@@ -173,7 +191,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [table, setTable] = useState<Table | null>(null);
   const [restaurant, setRestaurant] = useState<RestaurantPublic | null>(null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<Record<number, CartLine>>({});
+  const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [cartOrderId, setCartOrderId] = useState<string | null>(null);
   // Nombre de personnes à table, demandé seulement quand un plat est marqué
   // « à partager » — jamais à l'ouverture du menu, où la question n'a pas
@@ -190,6 +208,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // Un seul à la fois : empiler les propositions transformerait la page en
   // tunnel de vente, ce qu'un client de restaurant ne supporte pas.
   const [suggestFor, setSuggestFor] = useState<MenuItem | null>(null);
+  // F5-A2 (MARCHE_FRANCE.md) : article dont le picker d'options est ouvert —
+  // jamais posé pour un article sans `option_groups` (le "+" l'ajoute direct).
+  const [pickerItem, setPickerItem] = useState<MenuItem | null>(null);
+  // Le picker peut s'ouvrir depuis la carte ou depuis une suggestion "avec ce
+  // plat" — l'origine doit survivre jusqu'à l'ajout au panier (voir
+  // `fromSuggestion` sur CartLine, Phase 14.1).
+  const [pickerFromSuggestion, setPickerFromSuggestion] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -565,9 +590,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       );
       if (!msg.is_available) {
         setCart((prev) => {
-          if (!prev[msg.menu_item_id]) return prev;
+          // F5-A2 : un article à options peut occuper plusieurs clés (une par
+          // sélection) — toutes doivent disparaître, pas seulement `String(id)`.
+          const keysToRemove = Object.entries(prev)
+            .filter(([, line]) => line.item.id === msg.menu_item_id)
+            .map(([key]) => key);
+          if (keysToRemove.length === 0) return prev;
           const next = { ...prev };
-          delete next[msg.menu_item_id];
+          for (const key of keysToRemove) delete next[key];
           if (Object.keys(next).length === 0) {
             setCartClearedNotice(true);
           }
@@ -695,17 +725,24 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
   }
 
-  function addToCart(item: MenuItem, fromSuggestion = false) {
+  function addToCart(item: MenuItem, fromSuggestion = false, selectedOptions: SelectedOption[] = []) {
     // L'identifiant naît avec le panier, pas à l'envoi : régénéré à chaque
     // tentative, il ne protégerait de rien. C'est lui qui fait qu'un double
     // clic sur « Valider », ou une file hors ligne rejouée, retombe sur la
     // même commande au lieu d'en faire préparer deux (Phase 19.2).
     setCartOrderId((prev) => prev ?? genererIdPanier());
+    // F5-A2 : un article à options ouvre toujours une NOUVELLE ligne — deux
+    // sélections différentes (ou identiques, si le client en reprend une
+    // deuxième) ne doivent jamais se confondre en une seule quantité, jamais
+    // vérifiable ensuite à l'écran cuisine. Un article sans options garde le
+    // comportement historique (une seule ligne, quantité incrémentée).
+    const key =
+      item.option_groups.length > 0 ? cartKey(item.id, genererIdPanier()) : cartKey(item.id);
     setCart((prev) => {
-      const existing = prev[item.id];
+      const existing = prev[key];
       return {
         ...prev,
-        [item.id]: {
+        [key]: {
           item,
           quantity: (existing?.quantity ?? 0) + 1,
           note: existing?.note ?? "",
@@ -715,6 +752,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           // pris le plat depuis la carte, en reprendre un depuis une suggestion
           // n'en fait pas une vente incitative.
           fromSuggestion: existing?.fromSuggestion ?? fromSuggestion,
+          selectedOptions: existing?.selectedOptions ?? selectedOptions,
         },
       };
     });
@@ -726,48 +764,57 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // d'un article lui-même issu d'une suggestion, pour ne pas enchaîner.
     if (!fromSuggestion) {
       const suggestedIds = suggestions[String(item.id)] ?? [];
-      const proposable = suggestedIds.filter((id) => !cart[id]);
+      const dejaAuPanier = new Set(Object.values(cart).map((l) => l.item.id));
+      const proposable = suggestedIds.filter((id) => !dejaAuPanier.has(id));
       setSuggestFor(proposable.length ? item : null);
     }
   }
 
-  function removeFromCart(itemId: number) {
+  function removeFromCart(key: string) {
     setCart((prev) => {
       const next = { ...prev };
-      if (next[itemId] && next[itemId].quantity > 1) {
-        next[itemId] = { ...next[itemId], quantity: next[itemId].quantity - 1 };
+      if (next[key] && next[key].quantity > 1) {
+        next[key] = { ...next[key], quantity: next[key].quantity - 1 };
       } else {
-        delete next[itemId];
+        delete next[key];
       }
       return next;
     });
   }
 
-  function setNote(itemId: number, note: string) {
-    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], note } } : prev));
+  // Contrairement à `addToCart`, incrémente TOUJOURS la même ligne — utilisé
+  // pour le "+" d'une ligne à options déjà au panier (`addToCart` en
+  // ouvrirait une nouvelle, voir son commentaire).
+  function incrementLine(key: string) {
+    setCart((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], quantity: prev[key].quantity + 1 } } : prev));
   }
 
-  function setShared(itemId: number, shared: boolean) {
+  function setNote(key: string, note: string) {
+    setCart((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], note } } : prev));
+  }
+
+  function setShared(key: string, shared: boolean) {
     setCart((prev) =>
-      prev[itemId]
-        ? { ...prev, [itemId]: { ...prev[itemId], shared, sharedWith: shared ? prev[itemId].sharedWith : [] } }
+      prev[key]
+        ? { ...prev, [key]: { ...prev[key], shared, sharedWith: shared ? prev[key].sharedWith : [] } }
         : prev
     );
   }
 
-  function toggleConvive(itemId: number, place: number) {
+  function toggleConvive(key: string, place: number) {
     setCart((prev) => {
-      const ligne = prev[itemId];
+      const ligne = prev[key];
       if (!ligne) return prev;
       const sharedWith = ligne.sharedWith.includes(place)
         ? ligne.sharedWith.filter((p) => p !== place)
         : [...ligne.sharedWith, place].sort((a, b) => a - b);
-      return { ...prev, [itemId]: { ...ligne, sharedWith } };
+      return { ...prev, [key]: { ...ligne, sharedWith } };
     });
   }
 
-  const cartLines = Object.values(cart);
-  const total = cartLines.reduce((sum, l) => sum + l.item.price * l.quantity, 0);
+  const cartLines = Object.entries(cart).map(([key, line]) => ({ key, ...line }));
+  const lineUnitPrice = (l: CartLine) => l.item.price + l.selectedOptions.reduce((s, o) => s + o.priceDelta, 0);
+  const total = cartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
 
   async function validateOrder() {
     if (!table || cartLines.length === 0) return;
@@ -782,6 +829,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         is_shared: l.shared,
         shared_with: l.shared ? l.sharedWith : [],
         from_suggestion: l.fromSuggestion,
+        selected_choice_ids: l.selectedOptions.map((o) => o.id),
       })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       loyalty_phone: loyaltyPhone.trim() || null,
@@ -1321,10 +1369,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // que l'escamoter (retour du premier service).
     const rupture = !item.is_available;
     const photo = mediaUrl(item.image_url);
-    const ligne = cart[item.id];
-    const perPerson = ligne
-      ? (ligne.item.price * ligne.quantity) / (ligne.sharedWith.length > 0 ? ligne.sharedWith.length : convives)
-      : 0;
+    // F5-A2 : un article à options peut occuper plusieurs lignes du panier
+    // (une par sélection) — les contrôles inline (quantité, note, partage) ne
+    // s'appliquent tels quels qu'à un article SANS options, qui n'en a jamais
+    // qu'une seule (voir cartKey). Un article à options les affiche une fois
+    // par ligne, juste en dessous.
+    const hasOptions = item.option_groups.length > 0;
+    const ligne = hasOptions ? undefined : cart[cartKey(item.id)];
+    const linesForItem = hasOptions ? cartLines.filter((l) => l.item.id === item.id) : [];
+    const totalQuantityForItem = linesForItem.reduce((s, l) => s + l.quantity, 0);
     return (
       <div
         key={item.id}
@@ -1426,10 +1479,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 {formatAmount(item.price)}
               </span>
               <div className="flex items-center gap-2 shrink-0">
-                {ligne && (
+                {!hasOptions && ligne && (
                   <>
                     <button
-                      onClick={() => removeFromCart(item.id)}
+                      onClick={() => removeFromCart(cartKey(item.id))}
                       aria-label={t.removeFromCartAria(item.name)}
                       className="w-[34px] h-[34px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
                     >
@@ -1444,8 +1497,18 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     </span>
                   </>
                 )}
+                {hasOptions && totalQuantityForItem > 0 && (
+                  <span
+                    className={`inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums ${
+                      bumpedItemId === item.id ? "animate-cart-bump" : ""
+                    }`}
+                  >
+                    {totalQuantityForItem}
+                  </span>
+                )}
+                {/* Picker ouvert depuis la carte : jamais une suggestion, `pickerFromSuggestion` reste à false. */}
                 <button
-                  onClick={() => addToCart(item)}
+                  onClick={() => (hasOptions ? setPickerItem(item) : addToCart(item))}
                   disabled={rupture}
                   aria-label={t.addToCartAria(item.name)}
                   className={`w-[34px] h-[34px] rounded-full text-[19px] leading-none shadow-sm transition-transform active:scale-90 disabled:cursor-not-allowed disabled:active:scale-100 ${
@@ -1460,80 +1523,120 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </div>
           </div>
         </div>
-        {ligne && (
-          <div className="mt-[10px] pt-[10px] border-t border-[var(--line)]">
-            <input
-              type="text"
-              value={ligne.note}
-              onChange={(e) => setNote(item.id, e.target.value)}
-              placeholder={t.notePlaceholder}
-              className="w-full text-xs bg-white border border-[var(--line)] rounded-[10px] px-[10px] py-2 placeholder:text-[var(--ink-soft)]"
-            />
-            <label className="mt-2 flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={ligne.shared}
-                onChange={(e) => setShared(item.id, e.target.checked)}
-                className="sr-only"
-              />
-              <span
-                className="w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0"
-                style={{
-                  backgroundColor: ligne.shared ? "var(--menthe)" : "#fff",
-                  borderColor: ligne.shared ? "var(--menthe)" : "var(--line-strong)",
-                }}
-              >
-                {ligne.shared && (
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="w-[11px] h-[11px]"
-                    fill="none"
-                    stroke="var(--semoule)"
-                    strokeWidth={3}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M4 12l5 5L20 6" />
-                  </svg>
-                )}
-              </span>
-              <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
-              <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
-            </label>
-            {ligne.shared && (
-              <div className="mt-2">
-                <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
-                <div className="mt-1 flex flex-wrap gap-[6px]">
-                  {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
-                    const choisi = ligne.sharedWith.includes(place);
-                    return (
+        {(() => {
+          // F5-A2 : un article sans options garde exactement le rendu
+          // historique (une seule ligne, clé = item.id). Un article à options
+          // répète ce même bloc une fois par ligne — chacune avec son propre
+          // récapitulatif de choix, sa propre quantité, sa propre note.
+          const entries: { key: string; l: CartLine }[] = ligne
+            ? [{ key: cartKey(item.id), l: ligne }]
+            : linesForItem.map((l) => ({ key: l.key, l }));
+          if (entries.length === 0) return null;
+          return entries.map(({ key, l }) => {
+            const perPersonLigne =
+              (lineUnitPrice(l) * l.quantity) / (l.sharedWith.length > 0 ? l.sharedWith.length : convives);
+            return (
+              <div key={key} className="mt-[10px] pt-[10px] border-t border-[var(--line)]">
+                {hasOptions && (
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p className="text-xs text-[var(--ink-soft)]">
+                      {l.selectedOptions.map((o) => o.name).join(", ") || "—"}
+                    </p>
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
-                        key={place}
                         type="button"
-                        onClick={() => toggleConvive(item.id, place)}
-                        aria-pressed={choisi}
-                        className={`rounded-full border px-[12px] py-[5px] text-sm transition-colors ${
-                          choisi
-                            ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
-                            : "border-[var(--line)] bg-white text-[var(--encre)]"
-                        }`}
+                        onClick={() => removeFromCart(key)}
+                        aria-label={t.removeFromCartAria(item.name)}
+                        className="w-[26px] h-[26px] rounded-full border border-[var(--line)] bg-white text-sm"
                       >
-                        {t.personLabel(place)}
+                        −
                       </button>
-                    );
-                  })}
-                </div>
-                {ligne.sharedWith.length === 0 ? (
-                  <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
-                ) : (
-                  <p className="mt-1 text-[11.5px] text-[var(--ink-soft)]">
-                    {t.sharedPerPersonAmount(perPerson)}
-                  </p>
+                      <span className="text-[13px] font-bold tabular-nums">{l.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => incrementLine(key)}
+                        aria-label={t.addToCartAria(item.name)}
+                        className="w-[26px] h-[26px] rounded-full bg-[var(--harissa)] text-[var(--semoule)] text-sm"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={l.note}
+                  onChange={(e) => setNote(key, e.target.value)}
+                  placeholder={t.notePlaceholder}
+                  className="w-full text-xs bg-white border border-[var(--line)] rounded-[10px] px-[10px] py-2 placeholder:text-[var(--ink-soft)]"
+                />
+                <label className="mt-2 flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={l.shared}
+                    onChange={(e) => setShared(key, e.target.checked)}
+                    className="sr-only"
+                  />
+                  <span
+                    className="w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0"
+                    style={{
+                      backgroundColor: l.shared ? "var(--menthe)" : "#fff",
+                      borderColor: l.shared ? "var(--menthe)" : "var(--line-strong)",
+                    }}
+                  >
+                    {l.shared && (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-[11px] h-[11px]"
+                        fill="none"
+                        stroke="var(--semoule)"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M4 12l5 5L20 6" />
+                      </svg>
+                    )}
+                  </span>
+                  <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
+                  <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
+                </label>
+                {l.shared && (
+                  <div className="mt-2">
+                    <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
+                    <div className="mt-1 flex flex-wrap gap-[6px]">
+                      {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
+                        const choisi = l.sharedWith.includes(place);
+                        return (
+                          <button
+                            key={place}
+                            type="button"
+                            onClick={() => toggleConvive(key, place)}
+                            aria-pressed={choisi}
+                            className={`rounded-full border px-[12px] py-[5px] text-sm transition-colors ${
+                              choisi
+                                ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
+                                : "border-[var(--line)] bg-white text-[var(--encre)]"
+                            }`}
+                          >
+                            {t.personLabel(place)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {l.sharedWith.length === 0 ? (
+                      <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
+                    ) : (
+                      <p className="mt-1 text-[11.5px] text-[var(--ink-soft)]">
+                        {t.sharedPerPersonAmount(perPersonLigne)}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        )}
+            );
+          });
+        })()}
       </div>
     );
   }
@@ -1767,6 +1870,19 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
         )}
 
+        {pickerItem && (
+          <OptionPicker
+            item={pickerItem}
+            t={t}
+            onClose={() => setPickerItem(null)}
+            onConfirm={(selected) => {
+              addToCart(pickerItem, pickerFromSuggestion, selected);
+              setPickerItem(null);
+              setPickerFromSuggestion(false);
+            }}
+          />
+        )}
+
         {suggestFor && (
           <div
             className={`fixed left-0 right-0 bg-[var(--semoule-raised)] border-t border-[var(--line)] p-[14px] shadow-[0_-8px_20px_rgba(36,24,17,.06)] ${
@@ -1790,14 +1906,29 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <ul className="mt-3 space-y-2">
                 {(suggestions[String(suggestFor.id)] ?? [])
                   .map((id) => menu.find((m) => m.id === id))
-                  .filter((item): item is MenuItem => !!item && item.is_available && !cart[item.id])
+                  .filter(
+                    (item): item is MenuItem =>
+                      !!item && item.is_available && !cartLines.some((l) => l.item.id === item.id)
+                  )
                   .map((item) => (
                     <li key={item.id} className="flex items-center gap-3">
                       <span className="flex-1 text-sm text-[var(--ink-soft)]">
                         <span className="text-[var(--encre)]">{item.name}</span> · {formatAmount(item.price)}
                       </span>
                       <button
-                        onClick={() => addToCart(item, true)}
+                        // F5-A2 : un article suggéré à options passe par le
+                        // même picker qu'une prise depuis la carte — sinon le
+                        // serveur rejette la commande à la validation
+                        // (OPTION_GROUP_REQUIRED), bien après que le client a
+                        // cru l'ajout réussi.
+                        onClick={() => {
+                          if (item.option_groups.length > 0) {
+                            setPickerFromSuggestion(true);
+                            setPickerItem(item);
+                          } else {
+                            addToCart(item, true);
+                          }
+                        }}
                         className="text-[12.5px] font-semibold px-[14px] py-2 rounded-[10px] bg-[var(--harissa)] text-[var(--semoule)]"
                       >
                         {t.suggestionAdd}

@@ -24,7 +24,7 @@ from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
-from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.models import Order, OrderItem, OrderItemOptionChoice, OrderStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
 from app.modules.tenants.models import Restaurant, SubscriptionTier
@@ -180,6 +180,69 @@ def purge_terminal_push_subscriptions(db: Session, dry_run: bool = False) -> int
     return len(stale)
 
 
+def _resolve_selected_options(
+    menu_item: MenuItem, selected_choice_ids: list[int]
+) -> tuple[list[OrderItemOptionChoice], float]:
+    """
+    F5-A2 (MARCHE_FRANCE.md) — revérifie intégralement les options choisies
+    pour CET article, jamais confiance au client (CLAUDE.md) : appartenance à
+    l'article, groupe requis satisfait, une seule valeur hors
+    `allow_multiple`. Renvoie les lignes figées à écrire sur l'`OrderItem`
+    (nom + supplément au moment T, voir `OrderItemOptionChoice`) et le
+    supplément total à ajouter au prix unitaire.
+    """
+    choice_to_group = {choice.id: group for group in menu_item.option_groups for choice in group.choices}
+
+    selected_by_group: dict[int, list[int]] = {}
+    for choice_id in selected_choice_ids:
+        group = choice_to_group.get(choice_id)
+        if group is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_OPTION_CHOICE",
+                    "message": f"choice {choice_id} does not belong to item {menu_item.id}",
+                },
+            )
+        selected_by_group.setdefault(group.id, []).append(choice_id)
+
+    for group in menu_item.option_groups:
+        chosen = selected_by_group.get(group.id, [])
+        if group.is_required and not chosen:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "OPTION_GROUP_REQUIRED",
+                    "message": f"'{group.name}' requires a choice",
+                    "group_id": group.id,
+                    "menu_item_id": menu_item.id,
+                },
+            )
+        if not group.allow_multiple and len(chosen) > 1:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "OPTION_GROUP_SINGLE_CHOICE",
+                    "message": f"'{group.name}' accepts only one choice",
+                    "group_id": group.id,
+                },
+            )
+
+    frozen: list[OrderItemOptionChoice] = []
+    total_delta = 0.0
+    for group in menu_item.option_groups:
+        for choice in group.choices:
+            if choice.id in selected_by_group.get(group.id, []):
+                delta = float(choice.price_delta)
+                total_delta += delta
+                frozen.append(
+                    OrderItemOptionChoice(
+                        choice_id=choice.id, group_name=group.name, choice_name=choice.name, price_delta=delta
+                    )
+                )
+    return frozen, total_delta
+
+
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # La table est retrouvée par son token de QR code, et le restaurant en est
     # déduit : aucun identifiant numérique n'est accepté du client, donc rien
@@ -251,17 +314,23 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 },
             )
 
+        # F5-A2 : options choisies revérifiées entièrement côté serveur —
+        # jamais le calcul de prix du client. `unit_price` inclut le
+        # supplément, exactement comme une ligne de caisse (base + options).
+        selected_options, options_delta = _resolve_selected_options(menu_item, line.selected_choice_ids)
+
         # Prix figé au moment T : voir commentaire dans models.py
         order.items.append(
             OrderItem(
                 menu_item_id=menu_item.id,
                 menu_item_name=menu_item.name,
-                unit_price=menu_item.price,
+                unit_price=float(menu_item.price) + options_delta,
                 quantity=line.quantity,
                 notes=line.notes,
                 is_shared=line.is_shared,
                 shared_with=",".join(str(p) for p in line.shared_with) or None,
                 from_suggestion=line.from_suggestion,
+                selected_options=selected_options,
             )
         )
 

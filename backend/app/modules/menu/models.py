@@ -1,5 +1,5 @@
 from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, Numeric, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -89,3 +89,58 @@ class MenuItem(Base):
     is_vegetarian: Mapped[bool] = mapped_column(Boolean, default=False)
     is_vegan: Mapped[bool] = mapped_column(Boolean, default=False)
     is_gluten_free: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    option_groups: Mapped[list["MenuItemOptionGroup"]] = relationship(
+        back_populates="menu_item", cascade="all, delete-orphan", order_by="MenuItemOptionGroup.display_order"
+    )
+
+
+class MenuItemOptionGroup(Base):
+    """
+    F5-A2 (MARCHE_FRANCE.md) — le manque fonctionnel le plus grave identifié
+    pour le marché français : jusqu'ici, un article ne portait qu'une note en
+    texte libre (`OrderItem.notes`, 300 caractères). Un steak sans cuisson
+    précisée ne part pas en cuisine en France.
+
+    Un groupe = une question posée au client sur CET article ("Cuisson ?",
+    "Accompagnement ?", "Taille ?"). Porté par l'article, pas par le
+    restaurant : deux plats différents n'ont presque jamais les mêmes
+    options.
+    """
+
+    __tablename__ = "menu_item_option_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Porté aussi par le groupe, comme MenuSuggestion.restaurant_id : les
+    # requêtes d'isolation n'ont pas besoin de remonter à l'article.
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    # Le client doit choisir au moins une valeur dans ce groupe avant de
+    # pouvoir ajouter l'article au panier — validé aussi côté serveur à la
+    # création de la commande (jamais confiance au client, voir CLAUDE.md).
+    is_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Une seule valeur (radio, ex: cuisson) ou plusieurs (cases, ex: garnitures).
+    allow_multiple: Mapped[bool] = mapped_column(Boolean, default=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    menu_item: Mapped["MenuItem"] = relationship(back_populates="option_groups")
+    choices: Mapped[list["MenuItemOptionChoice"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan", order_by="MenuItemOptionChoice.display_order"
+    )
+
+
+class MenuItemOptionChoice(Base):
+    """Une valeur possible dans un groupe ("Saignant", "Frites", "Grand") —
+    avec son propre supplément de prix, souvent nul (changer la cuisson ne
+    coûte rien, ajouter du fromage si)."""
+
+    __tablename__ = "menu_item_option_choices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("menu_item_option_groups.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    group: Mapped["MenuItemOptionGroup"] = relationship(back_populates="choices")

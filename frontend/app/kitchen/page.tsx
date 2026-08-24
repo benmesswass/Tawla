@@ -21,7 +21,17 @@ import TawlaMark from "@/components/brand/TawlaMark";
 type KitchenOrder = {
   order_id: number;
   table_label: string;
-  items: { name: string; quantity: number; notes: string | null; is_shared: boolean; shared_with: number[] }[];
+  items: {
+    name: string;
+    quantity: number;
+    notes: string | null;
+    is_shared: boolean;
+    shared_with: number[];
+    // F5-A2 (MARCHE_FRANCE.md) : "un steak sans cuisson précisée ne part pas
+    // en cuisine en France" — la cuisine doit voir les choix, pas juste le
+    // manager qui les a définis.
+    options: string | null;
+  }[];
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
   preparation_started_at: string | null;
@@ -48,6 +58,7 @@ function orderFromApi(o: Order): KitchenOrder {
       notes: i.notes,
       is_shared: i.is_shared,
       shared_with: i.shared_with ?? [],
+      options: i.selected_options.length > 0 ? i.selected_options.map((opt) => opt.choice_name).join(", ") : null,
     })),
     scheduled_for: o.scheduled_for,
     sent_to_kitchen_at: o.sent_to_kitchen_at,
@@ -241,7 +252,7 @@ export default function KitchenPage() {
           ${o.items
             .map(
               (it) =>
-                `<li>${it.quantity}× ${escapeHtml(it.name)}${it.is_shared ? " (à partager)" : ""}${it.notes ? " — " + escapeHtml(it.notes) : ""}</li>`
+                `<li>${it.quantity}× ${escapeHtml(it.name)}${it.options ? " — " + escapeHtml(it.options) : ""}${it.is_shared ? " (à partager)" : ""}${it.notes ? " — " + escapeHtml(it.notes) : ""}</li>`
             )
             .join("")}
         </ul>
@@ -436,6 +447,11 @@ export default function KitchenPage() {
                               <span className="ms-1.5 inline-flex items-center gap-1 align-middle rounded-full border border-[rgba(184,134,46,.7)] text-[#d8ae62] text-[13px] font-semibold px-[11px] py-[5px]">
                                 <UtensilsIcon className="w-3 h-3 shrink-0" />
                                 {it.shared_with.length > 0 ? `À partager · ${it.shared_with.length} couverts` : "À partager"}
+                              </span>
+                            )}
+                            {it.options && (
+                              <span className="block text-[15px] font-semibold text-[var(--note-cuisine)]">
+                                {it.options}
                               </span>
                             )}
                             {it.notes && (

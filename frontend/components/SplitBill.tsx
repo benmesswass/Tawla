@@ -97,6 +97,11 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
                     </span>
                   )}
                 </div>
+                {it.selected_options.length > 0 && (
+                  <div className="text-xs text-[var(--ink-soft)]">
+                    {it.selected_options.map((opt) => opt.choice_name).join(", ")}
+                  </div>
+                )}
                 {/* Des pastilles plutôt qu'une liste déroulante : un plat peut
                     être partagé entre deux convives sans l'être par toute la
                     table, ce qu'un choix unique ne savait pas dire. */}

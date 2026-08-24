@@ -29,6 +29,7 @@ import { MENU_CATEGORIES } from "@/lib/menuCategories";
 import { reduirePhoto } from "@/lib/photo";
 import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
 import AllergenPicker from "@/components/AllergenPicker";
+import MenuItemOptionsEditor from "@/components/MenuItemOptionsEditor";
 import { AllergenCode, formatAllergenCodes, parseAllergenCodes } from "@/lib/allergens";
 import { currentMarket } from "@/lib/market";
 import RecetteDuJour from "@/components/RecetteDuJour";
@@ -203,6 +204,7 @@ export default function DashboardPage() {
   const [newCredentials, setNewCredentials] = useState<{ email: string; password: string } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("menu");
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [optionsEditingItemId, setOptionsEditingItemId] = useState<number | null>(null);
   const [addingItem, setAddingItem] = useState(false);
   const [importing, setImporting] = useState(false);
   const [csvContent, setCsvContent] = useState("");
@@ -721,6 +723,18 @@ export default function DashboardPage() {
           onUpgraded={(updated) => setRestaurant(updated)}
         />
       )}
+      {optionsEditingItemId &&
+        (() => {
+          const item = items.find((i) => i.id === optionsEditingItemId);
+          if (!item) return null;
+          return (
+            <MenuItemOptionsEditor
+              item={item}
+              onClose={() => setOptionsEditingItemId(null)}
+              onSaved={(updated) => setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))}
+            />
+          );
+        })()}
       {restaurant && !restaurant.has_paid_for_subscription && !paymentReminderDismissed && (
         <SubscriptionReminderModal
           restaurant={restaurant}
@@ -812,6 +826,19 @@ export default function DashboardPage() {
                     <Badge tone={item.is_available ? "success" : "danger"} className="shrink-0 hidden sm:inline-flex">
                       {item.is_available ? "Disponible" : "Rupture"}
                     </Badge>
+                    {item.option_groups.length > 0 && (
+                      <Badge tone="info" className="shrink-0 hidden sm:inline-flex">
+                        {item.option_groups.length} option{item.option_groups.length > 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="shrink-0"
+                      onClick={() => setOptionsEditingItemId(item.id)}
+                    >
+                      Options
+                    </Button>
                     <Button
                       size="sm"
                       variant="secondary"

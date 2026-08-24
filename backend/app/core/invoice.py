@@ -49,6 +49,15 @@ def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
         pdf.cell(20, 8, str(item.quantity), align="R")
         pdf.cell(35, 8, format_amount(float(item.unit_price), use_iso_code=True), align="R")
         pdf.cell(35, 8, format_amount(line_total, use_iso_code=True), align="R", new_x="LMARGIN", new_y="NEXT")
+        if item.selected_options:
+            # F5-A2 : sans cette ligne, le prix unitaire (qui inclut déjà les
+            # suppléments) paraît incohérent avec le prix affiché sur le menu.
+            options_text = ", ".join(opt.choice_name for opt in item.selected_options)
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(180, 5, f"   {options_text}", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Helvetica", "", 10)
 
     pdf.ln(4)
     tip = float(order.tip_amount)

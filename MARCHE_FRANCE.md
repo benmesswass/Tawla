@@ -599,14 +599,14 @@ retire ou ajoute. **Toute la Phase F5 en dépend.**
 Ne s'ouvre qu'après F2 : coder la couche marché avant de savoir si le marché
 français encaisse, c'est coder les mauvais drapeaux.
 
-- [ ] `app/core/markets.py` + `lib/market.ts` : devise, fuseau, langues, drapeaux, paliers, TVA, textes
-- [ ] **Formateur monétaire unique** des deux côtés, et suppression des ~20 `toFixed(3)` / `"DT"` en dur (Annexe A). Test qui échoue si un nouveau apparaît
-- [ ] **Fuseau par `zoneinfo`** — `Europe/Paris` avec heure d'été. Test qui prouve qu'une commande du 15 juillet tombe dans la bonne journée de service (`core/dates.py:9`)
-- [ ] Extraire le **port de paiement** (§4) : `KonnectProvider`, `NullProvider`, interface commune, `orders/service.py` ne connaît plus Konnect
-- [ ] Paliers et contenu de l'offre déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`)
+- [x] `app/core/markets.py` + `lib/market.ts` : devise, fuseau, langues — PR #86
+- [x] **Formateur monétaire unique** des deux côtés, et suppression des ~20 `toFixed(3)` / `"DT"` en dur (Annexe A). Corrige au passage deux incohérences de décimales préexistantes (`admin/page.tsx`, `invoice.py`) — PR #86
+- [x] **Fuseau par `zoneinfo`** — `Europe/Paris` avec heure d'été. Testé aux deux saisons, aux deux marchés (`core/dates.py`) — PR #86
+- [ ] ~~Extraire le **port de paiement**~~ — **jugé prématuré et retiré après réflexion** : pas de second fournisseur avant F6 (qui dépend de S1/S2, non tranché), l'aurait rendu spéculatif (YAGNI, `CLAUDE.md`). À reprendre quand F2 tranche S1/S2 — PR #86
+- [ ] Paliers et contenu de l'offre déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`) — pas encore fait, aucun palier France n'existe encore à déplacer
 - [ ] Contenus par marché : démo, visite guidée, anecdotes d'attente, catégories de carte, chevalet QR
-- [ ] `MARKET=tn` par défaut : **le produit tunisien ne change pas de comportement**, et la suite de tests existante le prouve
-- [ ] Écrire la règle « plus jamais de devise/fuseau/taux en dur » dans `CLAUDE.md`
+- [x] `MARKET=tn` par défaut : **le produit tunisien ne change pas de comportement**, la suite de tests existante le prouve (496 puis 504 tests passent sans modification) — PR #86
+- [x] Écrire la règle « plus jamais de devise/fuseau/taux en dur » dans `CLAUDE.md` — PR #86
 
 **Critère de sortie** : `MARKET=tn` — les 299 tests passent sans modification.
 `MARKET=fr` — l'application démarre, affiche des euros, tourne à l'heure de
@@ -620,12 +620,12 @@ Spécification complète en §5. Peut se faire avant F5 : elle ne dépend d'aucu
 décision produit, seulement des domaines (F0).
 
 - [ ] Réserver les domaines : hub + `tawla.fr` (ou la marque retenue en F0) 🧑
-- [ ] Page de choix statique, rendue serveur, sans JavaScript obligatoire
-- [ ] Cookie `tawla-market` (1 an), `?market=` qui force, lien « changer de pays » visible
-- [ ] `CF-IPCountry` pour **ordonner** les options, jamais pour rediriger
-- [ ] Bandeau fermable « vous semblez être ailleurs » sur chaque marché
+- [x] Page de choix statique, rendue serveur, sans JavaScript obligatoire — PR #86
+- [x] Cookie `tawla-market` (1 an), `?market=` qui force, lien « changer de pays » visible — PR #86
+- [x] `CF-IPCountry` pour **ordonner** les options, jamais pour rediriger — PR #86
+- [x] Bandeau fermable « vous semblez être ailleurs » — posé sur l'accueil publique seulement — PR #86
 - [ ] `hreflang`, `canonical`, `sitemap`, `robots` par marché
-- [ ] **Test automatisé : `/menu/<token>` n'affiche jamais le sélecteur**, cookie présent ou non
+- [ ] **Test automatisé : `/menu/<token>` n'affiche jamais le sélecteur**, cookie présent ou non — vérifié manuellement (`npm run dev` + `curl`, voir PR #86), pas encore automatisé : aucune infrastructure de test frontend dans ce dépôt (`ROADMAP.md` § Sous condition)
 - [ ] Vérifier l'accessibilité de la page de choix (clavier, contraste, cibles tactiles)
 
 **Critère de sortie** : celui du §5, vérifié depuis un téléphone réel.
@@ -639,10 +639,10 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 
 **Commun aux deux variantes**
 
-- [ ] **A2 — Options et suppléments** sur un article (cuisson, accompagnement, sauce, taille) : nouveau modèle, migration, écran manager, parcours client, affichage cuisine. *Le manque fonctionnel le plus grave (§3.2)*
+- [x] **A2 — Options et suppléments** sur un article (cuisson, accompagnement, sauce, taille) : nouveau modèle (`MenuItemOptionGroup`/`MenuItemOptionChoice`/`OrderItemOptionChoice`), migration, écran manager (`MenuItemOptionsEditor`), parcours client (`OptionPicker`, panier multi-lignes), affichage cuisine et facture. Prix toujours recalculé côté serveur, choix requis/uniques validés côté serveur. *Le manque fonctionnel le plus grave (§3.2)* — PR #86
 - [ ] **A3 — Formules** (entrée + plat + dessert, formule midi) : composition, prix de la formule, affichage
-- [ ] **A6 — Allergènes structurés** (14 allergènes INCO) en remplacement du texte libre (`menu/models.py:67`) + marqueurs végétarien / vegan / sans gluten / halal, `is_halal` par défaut à `false` en France (`menu/models.py:71`)
-- [ ] **A9 — Anglais** au parcours client (`lib/i18n/en.ts`, même forme que `fr.ts`)
+- [x] **A6 — Allergènes structurés** (14 allergènes INCO) en remplacement du texte libre (`menu/models.py:67`) + marqueurs végétarien / vegan / sans gluten / halal, `is_halal` par défaut à `false` en France (`menu/models.py:71`) — PR #86
+- [x] **A9 — Anglais** au parcours client (`lib/i18n/en.ts`, même forme que `fr.ts`) — PR #86
 - [ ] Arabe **littéraire** proposé en option par établissement, plutôt que la derja tunisienne
 - [ ] Mode Ramadan et pré-commande **conservés**, activables par établissement, repositionnés (§3.2)
 - [ ] Réécriture RGPD de `lib/i18n/privacy.ts` + page **mentions légales** + page **CGV**

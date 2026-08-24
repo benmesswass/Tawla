@@ -37,6 +37,24 @@ class MenuItemCreate(BaseModel):
     is_gluten_free: bool = False
 
 
+class MenuItemOptionChoiceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    price_delta: float
+
+
+class MenuItemOptionGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    is_required: bool
+    allow_multiple: bool
+    choices: list[MenuItemOptionChoiceOut]
+
+
 class MenuItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,6 +73,7 @@ class MenuItemOut(BaseModel):
     is_vegetarian: bool
     is_vegan: bool
     is_gluten_free: bool
+    option_groups: list[MenuItemOptionGroupOut] = Field(default_factory=list)
 
 
 class MenuItemAvailability(BaseModel):
@@ -117,3 +136,31 @@ class MenuItemUpdate(BaseModel):
     is_vegetarian: bool | None = None
     is_vegan: bool | None = None
     is_gluten_free: bool | None = None
+
+
+class MenuItemOptionChoiceIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+    price_delta: float = 0
+
+
+class MenuItemOptionGroupIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+    is_required: bool = False
+    allow_multiple: bool = False
+    # Au moins un choix : un groupe vide ne poserait aucune question au
+    # client, autant ne pas créer le groupe.
+    choices: list[MenuItemOptionChoiceIn] = Field(min_length=1, max_length=20)
+
+
+class MenuItemOptionGroupsUpdate(BaseModel):
+    """
+    Remplace d'un bloc TOUS les groupes d'options de l'article — même
+    convention que `MenuSuggestionsUpdate` : le manager édite « les options de
+    ce plat » comme un ensemble cohérent, pas ligne par ligne.
+    """
+
+    groups: list[MenuItemOptionGroupIn] = Field(default_factory=list, max_length=10)

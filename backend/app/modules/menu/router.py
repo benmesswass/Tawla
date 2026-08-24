@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.logging import get_logger, log_event
 from app.core.subscription import require_tier
 from app.modules.menu import csv_import, schemas, suggestions
-from app.modules.menu.models import MenuItem
+from app.modules.menu.models import MenuItem, MenuItemOptionChoice, MenuItemOptionGroup
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -170,6 +170,47 @@ def set_suggestions(
         restaurant_id=staff.restaurant_id, menu_item_id=item_id, count=len(suggested),
     )
     return schemas.MenuItemSuggestionsOut(menu_item_id=item_id, suggested_items=suggested)
+
+
+@router.put("/{item_id}/options", response_model=schemas.MenuItemOut)
+def set_option_groups(
+    item_id: int,
+    payload: schemas.MenuItemOptionGroupsUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    F5-A2 (MARCHE_FRANCE.md) — options et suppléments d'un article (cuisson,
+    accompagnement, taille…). Remplacement en bloc, même convention que
+    `set_suggestions` : le manager édite « les options de ce plat » comme un
+    tout, l'appel reste rejouable sans effet de bord.
+
+    Pas de commandes déjà passées à modifier : `OrderItemOptionChoice` fige
+    nom et prix à la commande (voir orders/models.py), donc remplacer les
+    groupes ici ne touche jamais l'historique.
+    """
+    item = _get_item_in_scope(db, item_id, staff)
+    item.option_groups = [
+        MenuItemOptionGroup(
+            restaurant_id=staff.restaurant_id,
+            name=group.name,
+            is_required=group.is_required,
+            allow_multiple=group.allow_multiple,
+            display_order=group_index,
+            choices=[
+                MenuItemOptionChoice(name=choice.name, price_delta=choice.price_delta, display_order=choice_index)
+                for choice_index, choice in enumerate(group.choices)
+            ],
+        )
+        for group_index, group in enumerate(payload.groups)
+    ]
+    db.commit()
+    db.refresh(item)
+    log_event(
+        logger, "menu.option_groups_set",
+        restaurant_id=staff.restaurant_id, menu_item_id=item_id, group_count=len(payload.groups),
+    )
+    return item
 
 
 @router.patch("/{item_id}/availability", response_model=schemas.MenuItemOut)
