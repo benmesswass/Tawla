@@ -25,12 +25,12 @@ export type Market = {
   /** Langues du parcours client, dans l'ordre d'affichage du sélecteur. */
   languages: readonly string[];
   /**
-   * Faux tant que l'arbitrage S1 (ne pas être un système de caisse) / S2
-   * (être conforme ISCA) n'est pas tranché avec l'expert-comptable
-   * (MARCHE_FRANCE.md §3.1, C2) — le backend (Stripe Connect,
-   * core/stripe_provider.py) est câblé et testé, mais ce n'est PAS ce
-   * booléen qui l'active : il ne fait que griser le bouton client. Ne
-   * JAMAIS le passer à `true` sans cet arbitrage écrit.
+   * L'arbitrage S1 (ne pas être un système de caisse) / S2 (être conforme
+   * ISCA) n'est PAS tranché avec l'expert-comptable (MARCHE_FRANCE.md §3.1,
+   * C2). Passé à `true` le 2026-08-25 UNIQUEMENT pour la période de test
+   * technique (compte Stripe Connect de test, aucun restaurant réel, aucun
+   * vrai règlement) — à remettre à `false` avant toute exposition à de
+   * vrais clients français tant que S1/S2 n'est pas écrit.
    */
   onlinePaymentAvailable: boolean;
 };
@@ -48,7 +48,7 @@ const MARKETS: Record<MarketCode, Market> = {
     label: "France",
     currency: { code: "EUR", symbol: "€", decimals: 2, symbolBefore: false },
     languages: ["fr", "en"],
-    onlinePaymentAvailable: false,
+    onlinePaymentAvailable: true,
   },
 };
 
