@@ -56,6 +56,11 @@ class RestaurantOut(RestaurantPublicOut):
     # juste de quoi afficher "connecté" et le wallet, qui n'est pas un secret.
     konnect_configured: bool
     konnect_wallet_id: str | None
+    # Équivalent français (marché `fr`, core/stripe_provider.py) — pas de
+    # secret ici non plus : `stripe_account_id` est un identifiant de compte
+    # connecté, pas une clé.
+    stripe_configured: bool
+    stripe_account_id: str | None
 
 
 def serialize_restaurant(restaurant: Restaurant) -> RestaurantOut:
@@ -111,6 +116,18 @@ class KonnectCredentialsIn(BaseModel):
 
     api_key: str = Field(min_length=1)
     wallet_id: str = Field(min_length=1)
+
+
+class StripeAccountIn(BaseModel):
+    """
+    Connexion du compte Stripe Connect PROPRE au restaurant, équivalent
+    français de `KonnectCredentialsIn` — mais ce n'est pas un secret :
+    `account_id` (`acct_…`) s'affiche en clair dans le dashboard Stripe du
+    restaurant, pas besoin de chiffrement (voir
+    Restaurant.stripe_account_id).
+    """
+
+    account_id: str = Field(min_length=1)
 
 
 class SubscriptionCheckoutIn(BaseModel):

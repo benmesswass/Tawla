@@ -174,9 +174,23 @@ class Restaurant(Base):
     # bouton mort.
     google_review_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Stripe Connect propre au restaurant, équivalent français du wallet
+    # Konnect ci-dessus (paiement carte du CLIENT, marché `fr` uniquement —
+    # core/stripe_provider.py, MARCHE_FRANCE.md C2/S1-S2). Modèle DIRECT
+    # CHARGE : ce n'est qu'un identifiant de compte connecté (`acct_…`),
+    # jamais un secret — l'autorisation Stripe elle-même vit dans l'échange
+    # OAuth, pas ici, donc pas de chiffrement au repos (contrairement à
+    # `konnect_api_key_encrypted`). Null = paiement carte en mode démo pour
+    # ce restaurant, exactement comme Konnect non connecté.
+    stripe_account_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
     @property
     def konnect_configured(self) -> bool:
         return bool(self.konnect_api_key_encrypted and self.konnect_wallet_id)
+
+    @property
+    def stripe_configured(self) -> bool:
+        return bool(self.stripe_account_id)
 
     @property
     def is_usable(self) -> bool:

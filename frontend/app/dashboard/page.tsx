@@ -195,6 +195,8 @@ export default function DashboardPage() {
   const [konnectApiKeyInput, setKonnectApiKeyInput] = useState("");
   const [konnectWalletIdInput, setKonnectWalletIdInput] = useState("");
   const [savingKonnect, setSavingKonnect] = useState(false);
+  const [stripeAccountIdInput, setStripeAccountIdInput] = useState("");
+  const [savingStripe, setSavingStripe] = useState(false);
   const [tables, setTables] = useState<Table[]>([]);
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
@@ -395,6 +397,22 @@ export default function DashboardPage() {
       handleGatedError(e);
     } finally {
       setSavingKonnect(false);
+    }
+  }
+
+  async function saveStripeAccount() {
+    if (!restaurantId || !stripeAccountIdInput.trim()) return;
+    setError(null);
+    setSavingStripe(true);
+    try {
+      const updated = await api.setStripeAccount(restaurantId, stripeAccountIdInput.trim());
+      setRestaurant(updated);
+      setStripeAccountIdInput("");
+      flash("Compte Stripe connecté — le paiement en ligne reste grisé côté client (voir MARCHE_FRANCE.md §3.1).");
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingStripe(false);
     }
   }
 
@@ -1695,7 +1713,7 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {restaurant && (
+          {restaurant && currentMarket().code === "tn" && (
             <Card padding="sm" className="mt-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Paiement carte de vos clients</span>
@@ -1736,6 +1754,37 @@ export default function DashboardPage() {
                 Jamais réaffichée après coup, comme un mot de passe temporaire — vous pourrez toujours la
                 remplacer par une nouvelle.
               </p>
+            </Card>
+          )}
+
+          {restaurant && currentMarket().code === "fr" && (
+            <Card padding="sm" className="mt-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Paiement carte de vos clients (Stripe)</span>
+                <Badge tone={restaurant.stripe_configured ? "success" : "neutral"}>
+                  {restaurant.stripe_configured ? "Connecté" : "Non connecté"}
+                </Badge>
+              </div>
+              <p className="text-xs text-neutral-500 mt-2 mb-3">
+                Le bouton de paiement en ligne reste grisé côté client quel que soit l&apos;état de cette
+                connexion — l&apos;arbitrage sur le paiement en ligne en France n&apos;est pas encore tranché
+                (rendez-vous avec l&apos;expert-comptable). Cette connexion permet de tester l&apos;intégration
+                sans l&apos;activer.
+                {restaurant.stripe_configured && restaurant.stripe_account_id && (
+                  <> Compte connecté : <code className="text-neutral-700">{restaurant.stripe_account_id}</code>.</>
+                )}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-[2fr_auto] gap-2">
+                <input
+                  value={stripeAccountIdInput}
+                  onChange={(e) => setStripeAccountIdInput(e.target.value)}
+                  placeholder="ID de compte Stripe (acct_…)"
+                  className="border rounded px-2 py-1"
+                />
+                <Button onClick={saveStripeAccount} disabled={savingStripe || !stripeAccountIdInput.trim()}>
+                  {restaurant.stripe_configured ? "Remplacer" : "Connecter"}
+                </Button>
+              </div>
             </Card>
           )}
         </>

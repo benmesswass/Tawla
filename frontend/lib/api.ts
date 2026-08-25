@@ -123,6 +123,10 @@ export type Restaurant = RestaurantPublic & {
   // n'est jamais renvoyée, seulement ces deux champs.
   konnect_configured: boolean;
   konnect_wallet_id: string | null;
+  // Équivalent français (marché `fr`, core/stripe_provider.py) — pas de
+  // secret ici, `stripe_account_id` s'affiche déjà en clair côté Stripe.
+  stripe_configured: boolean;
+  stripe_account_id: string | null;
   // Activation du compte (2026-08-20) — Essentiel n'est jamais gratuit, voir
   // is_usable côté backend (tenants/models.py). Le dashboard bloque tout tant
   // que ce n'est pas vrai (une promo personnalisée à 100 % l'active comme un
@@ -770,6 +774,15 @@ export const api = {
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/konnect-credentials`, {
       method: "PUT",
       body: JSON.stringify({ api_key: apiKey, wallet_id: walletId }),
+    }),
+  // Équivalent français de setKonnectCredentials — voir Restaurant ci-dessus.
+  // Sans effet visible côté client (bouton grisé, lib/market.ts) tant que
+  // l'arbitrage S1/S2 n'est pas tranché ; existe pour rendre l'intégration
+  // Stripe testable de bout en bout dès maintenant.
+  setStripeAccount: (restaurantId: number, accountId: string) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/stripe-account`, {
+      method: "PUT",
+      body: JSON.stringify({ account_id: accountId }),
     }),
   startSubscriptionCheckout: (restaurantId: number, tier: SubscriptionTier) =>
     request<SubscriptionCheckoutResult>(`/api/v1/restaurants/${restaurantId}/subscription/checkout`, {

@@ -69,6 +69,7 @@ export const en = {
   emailLabel: "Email (optional, to receive your invoice)",
   emailPlaceholder: "you@example.com",
   payByCard: "Pay online",
+  payByCardUnavailable: "Online payment — coming soon",
   payByCardTerminal: "Card at the table (waiter's terminal)",
   payByCash: "Cash (a waiter will collect it)",
   paymentFailedRetry: "Payment failed. You can try again.",

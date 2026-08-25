@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,7 @@ from app.core.invoice import generate_invoice_pdf
 from app.core.konnect import is_konnect_enabled, verify_konnect_order_webhook
 from app.core.logging import get_logger, log_event
 from app.core.rate_limit import ORDER_VOLUME_MAX_REQUESTS, rate_limit
+from app.core.stripe_provider import is_stripe_enabled, verify_stripe_order_webhook
 from app.modules.orders import schemas, service
 from app.modules.orders.dependencies import get_order_by_token, get_paid_order_by_query_token
 from app.modules.orders.models import Order, OrderStatus
@@ -122,6 +123,30 @@ async def order_card_payment_webhook(
     if not is_konnect_enabled():
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "not found"})
     if not verify_konnect_order_webhook(order_id, sig):
+        log_event(logger, "order.card_payment_webhook_bad_signature", order_id=order_id)
+        raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"})
+
+    result = await service.settle_card_payment(db, order_id)
+    return {"received": True, "result": result}
+
+
+@router.post("/{order_id}/pay/card/webhook/stripe")
+async def order_card_payment_webhook_stripe(
+    order_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _rate: None = Depends(rate_limit()),
+):
+    """
+    Équivalent Stripe de `order_card_payment_webhook` ci-dessus, marché `fr`
+    uniquement — POST avec corps brut, signé par Stripe lui-même
+    (`Stripe-Signature`), jamais par une signature d'URL comme Konnect (voir
+    `core/stripe_provider.py::verify_stripe_order_webhook`).
+    """
+    if not is_stripe_enabled():
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "not found"})
+    payload = await request.body()
+    if not verify_stripe_order_webhook(payload, request.headers.get("stripe-signature")):
         log_event(logger, "order.card_payment_webhook_bad_signature", order_id=order_id)
         raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"})
 

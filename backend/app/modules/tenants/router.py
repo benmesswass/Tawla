@@ -184,6 +184,33 @@ def set_konnect_credentials(
     return schemas.serialize_restaurant(restaurant)
 
 
+@router.put("/{restaurant_id}/stripe-account", response_model=schemas.RestaurantOut)
+def set_stripe_account(
+    restaurant_id: int,
+    payload: schemas.StripeAccountIn,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Équivalent français de `set_konnect_credentials` — connecte le compte
+    Stripe Connect PROPRE au restaurant (marché `fr`, core/stripe_provider.py,
+    MARCHE_FRANCE.md C2/S1-S2). Sans effet visible pour le client tant que
+    `PAYMENT_MODE=stripe` n'est pas posé ET que le bouton de paiement en ligne
+    n'est pas réactivé côté frontend (`lib/market.ts::onlinePaymentAvailable`)
+    — cette route existe pour rendre l'intégration TESTABLE de bout en bout
+    dès maintenant, pas pour l'activer en prod.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    restaurant.stripe_account_id = payload.account_id
+    db.commit()
+    db.refresh(restaurant)
+    log_event(logger, "restaurant.stripe_account_set", restaurant_id=restaurant_id)
+    return schemas.serialize_restaurant(restaurant)
+
+
 @router.patch("/{restaurant_id}/google-review-url", response_model=schemas.RestaurantOut)
 def set_google_review_url(
     restaurant_id: int,

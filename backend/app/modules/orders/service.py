@@ -17,8 +17,15 @@ from app.core.konnect import (
     tnd_to_millimes,
 )
 from app.core.logging import get_logger, log_event
-from app.core.markets import format_amount
+from app.core.markets import current_market, format_amount
 from app.core.push import send_push_notification
+from app.core.stripe_provider import (
+    StripeError,
+    eur_to_cents,
+    get_stripe_payment,
+    init_stripe_payment,
+    is_stripe_enabled,
+)
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuFormula, MenuItem
@@ -785,6 +792,12 @@ async def start_card_payment(
     if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
         raise upgrade_required_error(SubscriptionTier.PRO)
 
+    if current_market().code == "fr":
+        if not is_stripe_enabled() or not restaurant.stripe_account_id:
+            order = await pay_by_card_simulated(db, order_id, tip_amount, customer_email)
+            return order, None
+        return await _start_stripe_card_payment(db, order, restaurant, tip_amount, customer_email)
+
     credentials = restaurant.konnect_credentials()
     if not is_konnect_enabled() or not credentials:
         order = await pay_by_card_simulated(db, order_id, tip_amount, customer_email)
@@ -836,29 +849,62 @@ async def start_card_payment(
     return order, pay_url
 
 
+async def _start_stripe_card_payment(
+    db: Session, order: Order, restaurant: Restaurant, tip_amount: float, customer_email: str | None
+) -> tuple[Order, str | None]:
+    """
+    Équivalent Stripe de la branche Konnect ci-dessus, marché `fr` uniquement
+    (voir `start_card_payment`) — DIRECT CHARGE sur le compte connecté du
+    restaurant (`Restaurant.stripe_account_id`), les fonds s'y déposent
+    directement, jamais chez Tawla.
+    """
+    amount = order.total_amount + tip_amount
+    qr_token = order.table.qr_token
+    try:
+        pay_url, payment_ref = init_stripe_payment(
+            amount_eur=amount,
+            order_id=str(order.id),
+            description=f"{order.table_label} — commande #{order.id}",
+            success_url=(
+                f"{settings.frontend_url}/menu/{qr_token}"
+                f"?stripe=success&order_id={order.id}&order_token={order.public_token}"
+            ),
+            fail_url=f"{settings.frontend_url}/menu/{qr_token}?stripe=fail",
+            connected_account_id=restaurant.stripe_account_id,
+            customer_email=customer_email,
+        )
+    except StripeError as err:
+        log_event(
+            logger, "order.card_payment_init_failed",
+            restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
+        )
+        raise HTTPException(
+            status_code=502, detail={"code": "PAYMENT_INIT_FAILED", "message": "could not start the payment"}
+        ) from err
+
+    order.payment_method = PaymentMethod.CARD
+    order.payment_status = PaymentStatus.PENDING
+    order.tip_amount = tip_amount
+    order.payment_ref = payment_ref
+    if customer_email:
+        order.customer_email = customer_email
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.card_payment_initiated",
+        restaurant_id=order.restaurant_id, order_id=order.id, payment_ref=payment_ref, amount=amount,
+    )
+    return order, pay_url
+
+
 SettleCardResult = Literal["paid", "pending", "not_found", "error"]
 
 
-async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
-    """
-    Règle un paiement carte Konnect en attente — appelée par le webhook ET par
-    le filet de sécurité `/pay/card/check`, même principe d'idempotence que
-    `settle_subscription_payment` : gardée par `payment_ref`, jamais réglée
-    deux fois pour la même référence.
-    """
-    order = db.get(Order, order_id)
-    if not order:
-        return "not_found"
-
-    # Rien à régler : déjà réglé par un appel concurrent (webhook + retour
-    # client arrivés en même temps), jamais initié, ou payé autrement.
-    if order.payment_method != PaymentMethod.CARD or order.payment_status != PaymentStatus.PENDING:
-        return "pending"
-    payment_ref = order.payment_ref
-    if not payment_ref:
-        return "pending"
-
-    restaurant = db.get(Restaurant, order.restaurant_id)
+def _settle_konnect_payment(order: Order, restaurant: Restaurant | None, payment_ref: str) -> SettleCardResult:
+    """Interroge Konnect pour un règlement en attente — extrait de
+    `settle_card_payment` pour partager sa mise à jour finale avec la branche
+    Stripe (`_settle_stripe_payment`) sans dupliquer la garde d'idempotence."""
     credentials = restaurant.konnect_credentials() if restaurant else None
     if not credentials:
         # Konnect déconnecté par le manager entre l'initiation et le règlement
@@ -893,6 +939,73 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
             expected_millimes=expected_millimes, reached_amount=payment.reached_amount,
         )
         return "error"
+    return "paid"
+
+
+def _settle_stripe_payment(order: Order, restaurant: Restaurant | None, payment_ref: str) -> SettleCardResult:
+    """Équivalent Stripe de `_settle_konnect_payment`, marché `fr` uniquement."""
+    if not restaurant or not restaurant.stripe_account_id:
+        # Compte Stripe déconnecté par le manager entre l'initiation et le
+        # règlement (rare) : rien à régler sans lui, mais ne pas planter le webhook.
+        log_event(
+            logger, "order.card_payment_settle_missing_credentials",
+            restaurant_id=order.restaurant_id, order_id=order.id,
+        )
+        return "error"
+
+    try:
+        payment = get_stripe_payment(payment_ref, restaurant.stripe_account_id)
+    except StripeError as err:
+        log_event(
+            logger, "order.card_payment_settle_fetch_failed",
+            restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
+        )
+        return "error"
+
+    if payment.status != "paid":
+        return "pending"
+
+    # Contrôle d'intégrité : même principe que Konnect, en centimes.
+    expected_cents = eur_to_cents(order.total_amount + float(order.tip_amount))
+    if payment.reached_amount < expected_cents:
+        log_event(
+            logger, "order.card_payment_amount_mismatch",
+            restaurant_id=order.restaurant_id, order_id=order.id,
+            expected_cents=expected_cents, reached_amount=payment.reached_amount,
+        )
+        return "error"
+    return "paid"
+
+
+async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
+    """
+    Règle un paiement carte en attente (Konnect en Tunisie, Stripe en France
+    — voir `_settle_konnect_payment`/`_settle_stripe_payment`) — appelée par
+    le webhook ET par le filet de sécurité `/pay/card/check`, même principe
+    d'idempotence que `settle_subscription_payment` : gardée par
+    `payment_ref`, jamais réglée deux fois pour la même référence.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        return "not_found"
+
+    # Rien à régler : déjà réglé par un appel concurrent (webhook + retour
+    # client arrivés en même temps), jamais initié, ou payé autrement.
+    if order.payment_method != PaymentMethod.CARD or order.payment_status != PaymentStatus.PENDING:
+        return "pending"
+    payment_ref = order.payment_ref
+    if not payment_ref:
+        return "pending"
+
+    restaurant = db.get(Restaurant, order.restaurant_id)
+
+    result = (
+        _settle_stripe_payment(order, restaurant, payment_ref)
+        if current_market().code == "fr"
+        else _settle_konnect_payment(order, restaurant, payment_ref)
+    )
+    if result != "paid":
+        return result
 
     # Mise à jour gardée par `payment_ref` (pas par id seul) : c'est la garde
     # d'idempotence — un règlement concurrent pour la MÊME référence ne peut

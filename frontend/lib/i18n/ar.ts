@@ -65,6 +65,7 @@ export const ar = {
   emailLabel: "الإيميل (إختياري، باش توصلك الفاتورة)",
   emailPlaceholder: "انت@مثال.com",
   payByCard: "خلص أونلاين",
+  payByCardUnavailable: "الخلاص أونلاين — قريبًا",
   payByCardTerminal: "خلص بالكارت (الجرسون يجيب الماكينة)",
   payByCash: "خلص كاش (الجرسون باش يجي يقبض)",
   paymentFailedRetry: "الخلاص ما نجحش. تنجم تعاود تجرب.",

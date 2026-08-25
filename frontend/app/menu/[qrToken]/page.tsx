@@ -394,9 +394,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     load();
   }, [load]);
 
-  // Page de retour du paiement carte Konnect (`?konnect=success` /
-  // `?konnect=fail`, voir orders/router.py::start_card_payment) : Konnect ne
-  // peut jamais joindre un webhook sur localhost en dev, ce filet de sécurité
+  // Page de retour du paiement carte (`?konnect=success|fail` en Tunisie,
+  // `?stripe=success|fail` en France — voir orders/router.py::start_card_payment
+  // et service.py::_start_stripe_card_payment) : ni Konnect ni Stripe ne
+  // peuvent joindre un webhook sur localhost en dev, ce filet de sécurité
   // (`api.checkCardPayment`) est donc le SEUL moyen de refléter le paiement —
   // même principe que la page de retour de l'abonnement (dashboard/page.tsx).
   // L'id et le token de la commande voyagent dans l'URL de retour : cette
@@ -404,17 +405,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // dit laquelle vient d'être payée.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const konnectResult = params.get("konnect");
-    if (!konnectResult) return;
+    const cardResult = params.get("konnect") ?? params.get("stripe");
+    if (!cardResult) return;
     const returnedOrderId = Number(params.get("order_id"));
     const returnedOrderToken = params.get("order_token");
     window.history.replaceState(null, "", window.location.pathname);
 
-    if (konnectResult === "fail") {
+    if (cardResult === "fail") {
       setPaymentError(t.paymentFailedRetry);
       return;
     }
-    if (konnectResult !== "success" || !returnedOrderId || !returnedOrderToken) return;
+    if (cardResult !== "success" || !returnedOrderId || !returnedOrderToken) return;
 
     api
       .checkCardPayment(returnedOrderId, returnedOrderToken)
@@ -1422,13 +1423,28 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     className="mt-1 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
                   />
                 </div>
-                <button
-                  onClick={payByCard}
-                  disabled={paying}
-                  className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-[15px] text-[15px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
-                >
-                  {t.payByCard}
-                </button>
+                {currentMarket().onlinePaymentAvailable ? (
+                  <button
+                    onClick={payByCard}
+                    disabled={paying}
+                    className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-[15px] text-[15px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
+                  >
+                    {t.payByCard}
+                  </button>
+                ) : (
+                  // Marché sans paiement en ligne activé (arbitrage S1/S2 pas
+                  // encore tranché, MARCHE_FRANCE.md §3.1, C2) : le backend
+                  // Stripe est câblé (core/stripe_provider.py) mais ce bouton
+                  // reste volontairement inerte, jamais cliquable — voir
+                  // lib/market.ts::onlinePaymentAvailable.
+                  <button
+                    disabled
+                    aria-disabled="true"
+                    className="w-full bg-[var(--line)] text-[var(--ink-soft)] rounded-xl py-[15px] text-[15px] font-bold cursor-not-allowed opacity-60"
+                  >
+                    {t.payByCardUnavailable}
+                  </button>
+                )}
                 <button
                   onClick={payByCardTerminal}
                   disabled={paying}
