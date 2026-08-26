@@ -29,20 +29,32 @@ def test_france_market_shape():
     assert market.payment_provider == "none"
     assert market.invoice_threshold == 25.0
     assert market.vat_rates is not None
+    assert market.tier_prices == {
+        SubscriptionTier.ESSENTIEL: 49,
+        SubscriptionTier.PRO: 89,
+        SubscriptionTier.BUSINESS: 149,
+    }
 
 
-def test_tunisia_market_shape_unchanged():
-    """Garde-fou explicite sur les valeurs déjà en dur ailleurs dans le code
-    (TIER_PRICES_TND, TUNIS timezone) : la couche marché doit les reproduire
-    à l'identique, jamais improviser une nouvelle valeur."""
+def test_tunisia_market_shape():
+    """`currency`/`timezone`/`vat_rates`/`invoice_threshold` sont des faits
+    structurels migrés à l'identique depuis l'avant-Phase F3
+    (`TIER_PRICES_TND`, `TUNIS` — désormais supprimés) : ce test garantit
+    qu'ils ne dérivent jamais en silence.
+
+    `tier_prices`, en revanche, est un prix produit, pas un fait figé —
+    changé de 50/100/150 à 49/89/149 le 2026-08-26 (décision de Wassim,
+    dernier chiffre aligné sur les paliers français). Cette assertion se
+    met à jour avec chaque vraie décision de prix ; jamais en silence non
+    plus."""
     assert TUNISIA.currency.code == "TND"
     assert TUNISIA.currency.decimals == 3
     assert TUNISIA.currency.decimal_separator == "."
     assert str(TUNISIA.timezone) == "Africa/Tunis"
     assert TUNISIA.tier_prices == {
-        SubscriptionTier.ESSENTIEL: 50,
-        SubscriptionTier.PRO: 100,
-        SubscriptionTier.BUSINESS: 150,
+        SubscriptionTier.ESSENTIEL: 49,
+        SubscriptionTier.PRO: 89,
+        SubscriptionTier.BUSINESS: 149,
     }
     assert TUNISIA.vat_rates is None
     assert TUNISIA.invoice_threshold is None

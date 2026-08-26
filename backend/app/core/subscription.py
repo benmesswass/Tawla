@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dates import as_utc
+from app.core.markets import current_market
 from app.modules.staff.dependencies import require_active_restaurant
 from app.modules.staff.models import Staff
 from app.modules.tenants.models import LaunchCampaignConfig, Restaurant, SubscriptionTier
@@ -17,12 +18,16 @@ _TIER_RANK = {
     SubscriptionTier.BUSINESS: 2,
 }
 
-# Prix payé en ligne (voir konnect.py / subscription_payments.py). Montants
-# alignés sur lib/offer.ts (frontend) — source de vérité CÔTÉ SERVEUR : ne
-# jamais faire confiance à un montant transmis par le client.
+# Prix payé en ligne (voir konnect.py / subscription_payments.py), dans la
+# devise du marché — `current_market.tier_prices` (France, MARCHE_FRANCE.md
+# Phase F3 étape 5 : plus jamais de prix de palier en dur ici, la couche
+# marché est l'unique source, alignée sur lib/offer.ts côté frontend, lui
+# aussi lu depuis `currentMarket.tierPrices`). Source de vérité CÔTÉ SERVEUR
+# dans tous les cas : ne jamais faire confiance à un montant transmis par le
+# client.
 #
 # ESSENTIEL est un abonnement de 30 jours comme PRO/BUSINESS (2026-08-20, voir
-# CLAUDE.md — "chaque client doit payer 50 DT pour l'Essentiel, jamais
+# CLAUDE.md — "chaque client doit payer 49 DT pour l'Essentiel, jamais
 # gratuit, sauf promo activée par l'admin") : même mécanique de
 # `subscription_period_end` que les deux autres. La seule différence est
 # `Restaurant.is_active`/`is_usable` (tenants/models.py) : Essentiel étant le
@@ -30,11 +35,6 @@ _TIER_RANK = {
 # expire sans renouvellement — le compte redevient bloqué plutôt que de
 # retomber sur un palier gratuit, contrairement à PRO/BUSINESS qui retombent
 # sur Essentiel (`effective_tier()`).
-TIER_PRICES_TND = {
-    SubscriptionTier.ESSENTIEL: 50,
-    SubscriptionTier.PRO: 100,
-    SubscriptionTier.BUSINESS: 150,
-}
 
 # Durée d'une période payée en ligne (offre à trois paliers, paiement en
 # ligne du 2026-08-18 : palier unique, pas de prélèvement récurrent — Konnect
@@ -82,12 +82,12 @@ def launch_promo_grants_used(db: Session) -> int:
     return db.query(Restaurant).filter(Restaurant.launch_promo_discount_percent.is_not(None)).count()
 
 
-def tier_price_tnd(restaurant: Restaurant, tier: SubscriptionTier) -> int:
+def tier_price(restaurant: Restaurant, tier: SubscriptionTier) -> int:
     """
-    Le prix RÉEL à payer pour `tier`, réduction comprise — toujours cette
-    fonction pour calculer un montant, jamais `TIER_PRICES_TND[...]` en
-    lecture directe dès qu'un restaurant est en jeu (checkout, vérification
-    de règlement).
+    Le prix RÉEL à payer pour `tier`, dans la devise du marché courant,
+    réduction comprise — toujours cette fonction pour calculer un montant,
+    jamais `current_market.tier_prices[...]` en lecture directe dès qu'un
+    restaurant est en jeu (checkout, vérification de règlement).
 
     Deux sources de réduction, jamais cumulées (la promo personnalisée gagne
     si les deux existent — c'est la plus récente, décidée à la main) :
@@ -106,7 +106,7 @@ def tier_price_tnd(restaurant: Restaurant, tier: SubscriptionTier) -> int:
     activation, jamais à un rachat "à prix cassé" lors d'un renouvellement —
     voir Restaurant.is_active.
     """
-    base = TIER_PRICES_TND[tier]
+    base = current_market.tier_prices[tier]
     if restaurant.is_active or tier != restaurant.subscription_tier:
         return base
     if (

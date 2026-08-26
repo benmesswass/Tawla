@@ -16,12 +16,12 @@ from app.core.konnect import (
     verify_konnect_webhook,
 )
 from app.core.logging import get_logger, log_event
+from app.core.markets import current_market
 from app.core.rate_limit import rate_limit
 from app.core.subscription import (
     SUBSCRIPTION_DURATION_DAYS,
-    TIER_PRICES_TND,
     effective_tier,
-    tier_price_tnd,
+    tier_price,
     require_tier,
     tier_includes,
 )
@@ -204,7 +204,7 @@ def start_subscription_checkout(
     Deux usages distincts derrière ce même endpoint (2026-08-20, revu le
     2026-08-21 pour l'offre de lancement) :
 
-    - `tier=essentiel` : abonnement de 30 jours (50 DT, jamais gratuit — voir
+    - `tier=essentiel` : abonnement de 30 jours (49 DT, jamais gratuit — voir
       CLAUDE.md) — TOUJOURS payable, contrairement à Pro/Business ci-dessous.
       Pas de règle "déjà actif, refusé" : payer avant l'échéance ne fait que
       prolonger la période depuis le reste courant (voir le calcul plus bas),
@@ -224,7 +224,7 @@ def start_subscription_checkout(
     restaurant = _restaurant_or_404(db, restaurant_id)
 
     target = payload.tier
-    if target not in TIER_PRICES_TND:
+    if target not in current_market.tier_prices:
         raise HTTPException(status_code=400, detail={"code": "INVALID_TIER", "message": "unknown tier"})
     if target != SubscriptionTier.ESSENTIEL:
         current = effective_tier(restaurant)
@@ -268,7 +268,7 @@ def start_subscription_checkout(
         )
         return schemas.SubscriptionCheckoutOut(mode="demo", restaurant=schemas.serialize_restaurant(restaurant))
 
-    price = tier_price_tnd(restaurant, target)
+    price = tier_price(restaurant, target)
     try:
         pay_url, payment_ref = init_konnect_payment(
             amount_tnd=price,

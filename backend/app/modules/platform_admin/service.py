@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.core.dates import as_utc
-from app.core.subscription import TIER_PRICES_TND, effective_tier
+from app.core.markets import current_market
+from app.core.subscription import effective_tier
 from app.modules.orders.models import Order
 from app.modules.platform_admin import schemas
 from app.modules.stats.models import DashboardView
@@ -81,6 +82,11 @@ async def get_overview(db: Session) -> schemas.PlatformOverview:
         views_by_restaurant[view.restaurant_id] += 1
 
     restaurants_by_tier = {tier.value: 0 for tier in SubscriptionTier}
+    # Nommé `_tnd` pour le déploiement tunisien d'aujourd'hui — le calcul lui
+    # même vient déjà de current_market.tier_prices, donc juste dans la
+    # devise du marché en service. Renommer ce champ (schemas.py, admin/
+    # page.tsx) est un chantier séparé, à faire si un déploiement France
+    # tourne un jour ce dashboard.
     mrr_tnd = 0.0
     paying_restaurants_count = 0
     restaurant_summaries: list[schemas.RestaurantSummary] = []
@@ -90,7 +96,7 @@ async def get_overview(db: Session) -> schemas.PlatformOverview:
         restaurants_by_tier[tier.value] += 1
         if _is_paying_online(restaurant, now):
             paying_restaurants_count += 1
-            mrr_tnd += TIER_PRICES_TND.get(tier, 0)
+            mrr_tnd += current_market.tier_prices.get(tier, 0)
 
         restaurant_orders = orders_by_restaurant.get(restaurant.id, [])
         restaurant_paid_orders = paid_orders(restaurant_orders)

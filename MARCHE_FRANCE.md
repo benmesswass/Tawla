@@ -290,7 +290,7 @@ Verdict par fonctionnalité, sur l'état réel du code.
 | **Chevalet QR** | Bilingue fr/ar avec police Kufi (`tables/poster.py`) | Français seul par défaut, anglais optionnel (touristes), arabe seulement sur le segment concerné |
 | **Démo** | Restaurant « Dar Chaabane », carte tunisienne (`demo/service.py:158`) | Brasserie française : formule du jour, entrée/plat/dessert, carte des vins. Un restaurateur français qui voit une carte tunisienne en démo comprend que le produit n'est pas pour lui, en trois secondes |
 | **Visite guidée** | 20 étapes, contenu tunisien (`lib/visite/etapes.ts`) | Moteur conservé tel quel (excellent), contenu par marché |
-| **Prix des paliers** | 50 / 100 / 150 DT | À re-dériver, jamais à convertir (§3.4) |
+| **Prix des paliers** | 49 / 89 / 149 DT | À re-dériver, jamais à convertir (§3.4) |
 | **Politique de confidentialité** | fr/ar, loi 2004-63 (`lib/i18n/privacy.ts`) | Réécriture RGPD complète |
 | **Page publique** | « pour les restaurants et brasseries à partir de 6 tables, **en Tunisie** » (`app/page.tsx`), `contact@tawla.tn` | Copie, promesse, mentions légales, e-mail : tout change (§3.4) |
 
@@ -603,7 +603,7 @@ français encaisse, c'est coder les mauvais drapeaux.
 - [x] **Formateur monétaire unique** des deux côtés, et suppression des ~20 `toFixed(3)` / `"DT"` en dur (Annexe A). Test qui échoue si un nouveau apparaît — [PR #88](https://github.com/benmesswass/Tawla/pull/88)
 - [x] **Fuseau par `zoneinfo`** — `Europe/Paris` avec heure d'été. Test qui prouve qu'une commande du 15 juillet tombe dans la bonne journée de service (`core/dates.py:9`) — [PR #89](https://github.com/benmesswass/Tawla/pull/89)
 - [x] Extraire le **port de paiement** (§4) : `KonnectProvider`, `NullProvider`, interface commune, `orders/service.py` ne connaît plus Konnect — [PR #90](https://github.com/benmesswass/Tawla/pull/90)
-- [ ] Paliers et contenu de l'offre déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`)
+- [x] Paliers déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`) — [PR #91](https://github.com/benmesswass/Tawla/pull/91). Scope réduit au prix : `name`/`tagline`/`features` restent la copie tunisienne, le contenu de l'offre par marché reste la ligne suivante, non encore fait
 - [ ] Contenus par marché : démo, visite guidée, anecdotes d'attente, catégories de carte, chevalet QR
 - [ ] `MARKET=tn` par défaut : **le produit tunisien ne change pas de comportement**, et la suite de tests existante le prouve
 - [x] Écrire la règle « plus jamais de devise/fuseau/taux en dur » dans `CLAUDE.md` — [PR #89](https://github.com/benmesswass/Tawla/pull/89)

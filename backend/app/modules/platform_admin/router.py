@@ -179,7 +179,7 @@ def set_restaurant_promo(
     expiration naturelle ou une nouvelle décision de Wassim y met fin.
 
     Sous 100 %, la réduction ne s'applique qu'au prochain paiement (voir
-    `core/subscription.py::tier_price_tnd`) — n'active jamais le compte
+    `core/subscription.py::tier_price`) — n'active jamais le compte
     elle-même, même logique que l'offre de lancement globale. À 100 %,
     active le compte immédiatement pour `duration_days` en PROLONGEANT
     l'échéance existante plutôt qu'en l'écrasant : un restaurant qui a déjà

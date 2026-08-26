@@ -61,9 +61,9 @@ TUNISIA = Market(
     languages=("fr", "ar"),
     payment_provider="konnect",
     tier_prices={
-        SubscriptionTier.ESSENTIEL: 50,
-        SubscriptionTier.PRO: 100,
-        SubscriptionTier.BUSINESS: 150,
+        SubscriptionTier.ESSENTIEL: 49,
+        SubscriptionTier.PRO: 89,
+        SubscriptionTier.BUSINESS: 149,
     },
     vat_rates=None,
     invoice_threshold=None,
