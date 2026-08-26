@@ -621,11 +621,12 @@ décision produit, seulement des domaines (F0).
 
 - [ ] Réserver les domaines : hub + `tawla.fr` (ou la marque retenue en F0) 🧑
 - [x] Page de choix statique, rendue serveur, sans JavaScript obligatoire — `app/choisir-pays` (étape 1, [PR #92](https://github.com/benmesswass/Tawla/pull/92))
-- [x] Cookie `tawla-market` (1 an), `?market=` qui force — `app/api/choisir-marche` (étape 1, [PR #92](https://github.com/benmesswass/Tawla/pull/92)). Lien « changer de pays » visible : étape 2, avec le bandeau
+- [x] Cookie `tawla-market` (1 an), `?market=` qui force — `app/api/choisir-marche` (étape 1, [PR #92](https://github.com/benmesswass/Tawla/pull/92))
 - [x] `CF-IPCountry` pour **ordonner** les options, jamais pour rediriger — `lib/geoMarket.ts` (`x-vercel-ip-country` géré en repli, l'hébergeur réel du frontend) (étape 1, [PR #92](https://github.com/benmesswass/Tawla/pull/92))
-- [ ] Bandeau fermable « vous semblez être ailleurs » sur chaque marché
+- [x] Bandeau fermable « vous semblez être ailleurs » sur chaque marché — `components/BandeauAutreMarche.tsx`, détection via une route API dédiée (`app/api/geo`) pour ne pas sortir tout le site du rendu statique (étape 2, PR à venir)
+- [x] **Test automatisé : `/menu/<token>` n'affiche jamais le sélecteur**, cookie présent ou non — `lib/marketBanner.ts::selecteurAutorise()` + `marketBanner.test.ts`, vérifié aussi par Playwright (bandeau invisible sur `/menu/xxx` même avec en-tête de géoloc simulé) (étape 2, PR à venir)
+- [ ] Lien « changer de pays » visible en permanence (pas seulement quand le bandeau se déclenche) — pas de footer partagé existant sur le site pour l'accrocher proprement, reporté à une étape 3 avec `hreflang`/`canonical`/`sitemap`/`robots`
 - [ ] `hreflang`, `canonical`, `sitemap`, `robots` par marché
-- [ ] **Test automatisé : `/menu/<token>` n'affiche jamais le sélecteur**, cookie présent ou non
 - [ ] Vérifier l'accessibilité de la page de choix (clavier, contraste, cibles tactiles)
 
 **Critère de sortie** : celui du §5, vérifié depuis un téléphone réel.
