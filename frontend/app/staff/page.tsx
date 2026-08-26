@@ -9,6 +9,7 @@ import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { useAccesDemoParLien } from "@/lib/demoLien";
 import { clearToken } from "@/lib/auth";
+import { urlBase64ToUint8Array } from "@/lib/webPush";
 import { useRouter } from "next/navigation";
 import ConnectionBadge from "@/components/ConnectionBadge";
 import Button from "@/components/ui/Button";
@@ -120,11 +121,50 @@ export default function StaffPage() {
   const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [pushState, setPushState] = useState<
+    "idle" | "subscribing" | "subscribed" | "unsupported" | "denied" | "error"
+  >("idle");
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(tick);
   }, []);
+
+  // Opt-in explicite pour être alerté d'une nouvelle commande ou d'un appel
+  // serveur même écran éteint/onglet en arrière-plan (demande de Wassim,
+  // 2026-08-26) — pendant de subscribeToPush côté client
+  // (menu/[qrToken]/page.tsx), voir backend/app/core/push.py.
+  async function subscribeToPush() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      setPushState("unsupported");
+      return;
+    }
+
+    setPushState("subscribing");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState(permission === "denied" ? "denied" : "idle");
+        return;
+      }
+
+      const { public_key } = await api.getVapidPublicKey();
+      if (!public_key) {
+        setPushState("unsupported");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(public_key),
+      });
+      await api.saveStaffPushSubscription(subscription.toJSON() as PushSubscriptionJSON);
+      setPushState("subscribed");
+    } catch {
+      setPushState("error");
+    }
+  }
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -608,6 +648,25 @@ export default function StaffPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <ConnectionBadge status={status} dark />
           <span className="text-[18px] font-semibold tabular-nums text-[var(--semoule)]">{clock}</span>
+          {pushState !== "unsupported" &&
+            (pushState === "subscribed" ? (
+              <span className="text-sm text-[var(--menthe-on-espresso-text)] flex items-center gap-1.5" title="Notifications activées">
+                <BellIcon className="w-4 h-4 shrink-0" />
+              </span>
+            ) : pushState === "denied" ? (
+              <span className="text-sm text-[var(--ink-on-espresso)]" title="Notifications refusées par le navigateur">
+                <BellIcon className="w-4 h-4 shrink-0 opacity-50" />
+              </span>
+            ) : (
+              <button
+                onClick={subscribeToPush}
+                disabled={pushState === "subscribing"}
+                className="text-sm text-[var(--ink-on-espresso)] underline flex items-center gap-1.5 disabled:opacity-70"
+              >
+                <BellIcon className="w-4 h-4 shrink-0" />
+                {pushState === "subscribing" ? "Activation…" : "Activer les notifications"}
+              </button>
+            ))}
           <button
             onClick={printPending}
             data-visite="staff-filet"

@@ -71,6 +71,15 @@ class StaffUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class PushSubscriptionIn(BaseModel):
+    """Même forme que `orders.schemas.PushSubscriptionIn` (objet PushSubscription
+    du navigateur) — dupliquée plutôt qu'importée depuis `orders`, module d'un
+    domaine métier différent."""
+
+    endpoint: str
+    keys: dict[str, str]
+
+
 class StaffCreatedOut(BaseModel):
     """
     Réponse de création / réinitialisation : le mot de passe temporaire n'est

@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger, log_event
+from app.core.push import send_push_notification
 from app.modules.staff import schemas, security
 from app.modules.staff.models import Staff, StaffRole
 
@@ -124,6 +125,69 @@ def update_staff(db: Session, staff_id: int, payload: schemas.StaffUpdate, manag
         role=target.role.value, is_active=target.is_active, updated_by=manager.id,
     )
     return target
+
+
+def save_push_subscription(db: Session, staff: Staff, subscription: schemas.PushSubscriptionIn) -> None:
+    """
+    Opt-in explicite du membre du personnel sur l'écran serveur — jamais
+    déclenché automatiquement (même règle que orders/service.py::
+    save_push_subscription, dont c'est le pendant côté équipe).
+    """
+    staff.push_subscription = subscription.model_dump_json()
+    db.commit()
+
+
+def notify_restaurant_staff(db: Session, restaurant_id: int, title: str, body: str) -> None:
+    """
+    Alerte, même écran éteint ou onglet en arrière-plan, tout le personnel
+    abonné de ce restaurant — nouvelle commande à prendre en charge ou appel
+    serveur (demande de Wassim, 2026-08-26). Disponible à TOUS les paliers,
+    contrairement à la notification client (« commande prête », réservée à
+    Business) : rater une commande ou un appel a un coût opérationnel direct,
+    quel que soit le palier payé.
+
+    Pas de filtre par rôle : seul l'opt-in compte, et seul l'écran serveur
+    (`/staff`, partagé serveur+manager) propose le bouton d'abonnement — la
+    cuisine, sur un écran différent, n'a simplement jamais l'occasion de
+    s'abonner ici.
+
+    Best-effort comme send_push_notification lui-même : une erreur pour un
+    abonné ne doit jamais empêcher les suivants.
+    """
+    subscribers = (
+        db.query(Staff)
+        .filter(
+            Staff.restaurant_id == restaurant_id,
+            Staff.is_active.is_(True),
+            Staff.push_subscription.isnot(None),
+        )
+        .all()
+    )
+    for member in subscribers:
+        send_push_notification(member.push_subscription, title, body)
+
+
+def purge_push_subscriptions_of_inactive_staff(db: Session, dry_run: bool = False) -> int:
+    """
+    Un salarié désactivé (parti de l'établissement) n'a plus de raison
+    d'être notifié — son abonnement push devient une donnée personnelle sans
+    finalité (Phase 16, même principe que orders/service.py::
+    purge_terminal_push_subscriptions).
+    """
+    stale = (
+        db.query(Staff)
+        .filter(Staff.is_active.is_(False), Staff.push_subscription.isnot(None))
+        .all()
+    )
+    if dry_run:
+        return len(stale)
+
+    for member in stale:
+        member.push_subscription = None
+    db.commit()
+    if stale:
+        log_event(logger, "staff.push_subscriptions_purged", count=len(stale))
+    return len(stale)
 
 
 def reset_password(db: Session, staff_id: int, manager: Staff) -> tuple[Staff, str]:
