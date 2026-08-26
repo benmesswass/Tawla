@@ -604,7 +604,12 @@ français encaisse, c'est coder les mauvais drapeaux.
 - [x] **Fuseau par `zoneinfo`** — `Europe/Paris` avec heure d'été. Test qui prouve qu'une commande du 15 juillet tombe dans la bonne journée de service (`core/dates.py:9`) — [PR #89](https://github.com/benmesswass/Tawla/pull/89)
 - [x] Extraire le **port de paiement** (§4) : `KonnectProvider`, `NullProvider`, interface commune, `orders/service.py` ne connaît plus Konnect — [PR #90](https://github.com/benmesswass/Tawla/pull/90)
 - [x] Paliers déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`) — [PR #91](https://github.com/benmesswass/Tawla/pull/91). Scope réduit au prix : `name`/`tagline`/`features` restent la copie tunisienne, le contenu de l'offre par marché reste la ligne suivante, non encore fait
-- [ ] Contenus par marché : démo, visite guidée, anecdotes d'attente, catégories de carte, chevalet QR
+- Contenus par marché — découpé en étapes, comme F4 (démo/visite guidée touchent une zone où la marque française n'est pas encore tranchée, §3.4, 🧑)
+  - [x] Catégories de carte : « Ftour » remplacé par « Formules »/« Vins »/« À emporter » (`lib/market.ts::menuCategories`) — étape 6, [PR #96](https://github.com/benmesswass/Tawla/pull/96)
+  - [ ] Démo (brasserie française, formule du jour, carte des vins — plus jamais « Dar Chaabane »)
+  - [ ] Visite guidée (moteur conservé, contenu par marché)
+  - [ ] Anecdotes d'attente (`lib/culturalFacts.ts`) — remplacer par du contenu propre au restaurant, ou retirer par drapeau de marché
+  - [ ] Chevalet QR (français seul par défaut, anglais optionnel, arabe seulement sur le segment concerné)
 - [ ] `MARKET=tn` par défaut : **le produit tunisien ne change pas de comportement**, et la suite de tests existante le prouve
 - [x] Écrire la règle « plus jamais de devise/fuseau/taux en dur » dans `CLAUDE.md` — [PR #89](https://github.com/benmesswass/Tawla/pull/89)
 

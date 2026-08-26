@@ -25,3 +25,20 @@ describe("getMarket", () => {
     expect(() => getMarket("xx")).toThrow();
   });
 });
+
+describe("menuCategories", () => {
+  it("keeps Ftour for Tunisia, without any French-only category", () => {
+    const tn = getMarket("tn");
+    expect(tn.menuCategories).toContain("Ftour");
+    expect(tn.menuCategories).not.toContain("Formules");
+    expect(tn.menuCategories).not.toContain("Vins");
+  });
+
+  it("replaces Ftour with French menu categories for France", () => {
+    const fr = getMarket("fr");
+    expect(fr.menuCategories).not.toContain("Ftour");
+    expect(fr.menuCategories).toEqual(
+      expect.arrayContaining(["Entrées", "Plats", "Desserts", "Boissons", "Formules", "Vins", "À emporter", "Autre"])
+    );
+  });
+});

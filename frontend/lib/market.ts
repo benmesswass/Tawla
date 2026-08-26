@@ -39,6 +39,10 @@ export type MarketConfig = {
   tierPrices: Record<SubscriptionTier, number>;
   vatRates: Record<string, number> | null;
   invoiceThreshold: number | null;
+  // Liste fermée proposée dans le formulaire du dashboard manager (lib/menuCategories.ts)
+  // — jamais validée côté backend (MenuItem.category est du texte libre), donc pas de
+  // miroir dans core/markets.py : rien côté serveur n'en a besoin.
+  menuCategories: readonly string[];
 };
 
 const TUNISIA: MarketConfig = {
@@ -51,6 +55,7 @@ const TUNISIA: MarketConfig = {
   tierPrices: { essentiel: 49, pro: 89, business: 149 },
   vatRates: null,
   invoiceThreshold: null,
+  menuCategories: ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"],
 };
 
 const FRANCE: MarketConfig = {
@@ -63,6 +68,9 @@ const FRANCE: MarketConfig = {
   tierPrices: { essentiel: 49, pro: 89, business: 149 },
   vatRates: { sur_place: 0.10, a_emporter: 0.055, alcool: 0.20 },
   invoiceThreshold: 25.0,
+  // "Ftour" (Ramadan tunisien) retiré, sans objet en France ; remplacé par les
+  // trois catégories de carte françaises usuelles (MARCHE_FRANCE.md §3.2).
+  menuCategories: ["Entrées", "Plats", "Desserts", "Boissons", "Formules", "Vins", "À emporter", "Autre"],
 };
 
 const MARKETS: Record<string, MarketConfig> = { tn: TUNISIA, fr: FRANCE };
