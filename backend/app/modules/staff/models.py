@@ -29,3 +29,11 @@ class Staff(Base):
     # Vérifié dans get_current_staff, pas seulement au login : sinon un JWT
     # déjà émis resterait valide jusqu'à 12h après le départ du salarié.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Abonnement Web Push du navigateur de CE membre du personnel (JSON brut
+    # du PushSubscription, opt-in explicite depuis l'écran serveur) — même
+    # forme que Order.push_subscription, mais lié à la personne plutôt qu'à
+    # une commande : sert à alerter même écran éteint/onglet en arrière-plan
+    # pour une nouvelle commande à prendre en charge ou un appel serveur
+    # (demande de Wassim, 2026-08-26 — voir staff/service.py::notify_restaurant_staff).
+    push_subscription: Mapped[str | None] = mapped_column(String(2000), nullable=True)

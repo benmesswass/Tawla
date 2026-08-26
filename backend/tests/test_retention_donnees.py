@@ -25,7 +25,8 @@ from app.modules.loyalty.models import LoyaltyMember
 from app.modules.menu.models import MenuItem
 from app.modules.orders import service as orders_service
 from app.modules.orders.models import Order, OrderStatus
-from app.modules.staff.models import StaffRole
+from app.modules.staff import service as staff_service
+from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables.models import Table
 
 SUBSCRIPTION = {
@@ -161,6 +162,34 @@ def test_purge_catches_subscriptions_left_on_already_terminal_orders(db_session,
     db_session.expire_all()
     assert db_session.get(Order, served.id).push_subscription is None
     assert db_session.get(Order, active.id).push_subscription is not None, "commande en cours touchée"
+
+
+# --- Abonnement push d'un membre du personnel : effacé une fois parti ------
+
+
+def test_purge_catches_push_subscriptions_of_inactive_staff_only(db_session, resto):
+    restaurant, _table, _item = resto
+    parti = Staff(
+        restaurant_id=restaurant.id, name="Ancien serveur", role=StaffRole.WAITER,
+        email="parti@chez-slah.test", password_hash="x", is_active=False,
+        push_subscription='{"endpoint": "https://push.example.test/parti"}',
+    )
+    en_poste = Staff(
+        restaurant_id=restaurant.id, name="Serveur actuel", role=StaffRole.WAITER,
+        email="en-poste@chez-slah.test", password_hash="x", is_active=True,
+        push_subscription='{"endpoint": "https://push.example.test/en-poste"}',
+    )
+    db_session.add_all([parti, en_poste])
+    db_session.commit()
+
+    assert staff_service.purge_push_subscriptions_of_inactive_staff(db_session, dry_run=True) == 1
+    db_session.expire_all()
+    assert db_session.get(Staff, parti.id).push_subscription is not None, "le dry-run a supprimé"
+
+    assert staff_service.purge_push_subscriptions_of_inactive_staff(db_session) == 1
+    db_session.expire_all()
+    assert db_session.get(Staff, parti.id).push_subscription is None
+    assert db_session.get(Staff, en_poste.id).push_subscription is not None, "personnel en poste touché"
 
 
 # --- Fidélité : la fiche disparaît après 24 mois sans commande ---------------

@@ -743,6 +743,14 @@ export const api = {
       body: JSON.stringify(subscription),
       headers: orderHeaders(orderToken),
     }),
+  // Abonnement du membre du personnel connecté (JWT déjà attaché par
+  // request()) — pendant de savePushSubscription côté équipe, voir
+  // app/staff/page.tsx.
+  saveStaffPushSubscription: (subscription: PushSubscriptionJSON) =>
+    request<void>("/api/v1/auth/push-subscription", {
+      method: "POST",
+      body: JSON.stringify(subscription),
+    }),
 };
 
 export function wsUrl(path: string): string {

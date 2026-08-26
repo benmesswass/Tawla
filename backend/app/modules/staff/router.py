@@ -173,6 +173,21 @@ def me(staff: Staff = Depends(get_current_staff)):
     return staff
 
 
+@router.post("/push-subscription", status_code=204)
+def save_push_subscription(
+    payload: schemas.PushSubscriptionIn,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(get_current_staff),
+):
+    """
+    Opt-in du membre du personnel connecté pour être alerté d'une nouvelle
+    commande à prendre en charge ou d'un appel serveur, même écran éteint —
+    voir service.py::notify_restaurant_staff. Authentifié par JWT (pas de
+    token séparé comme côté client : le staff est déjà identifié).
+    """
+    service.save_push_subscription(db, staff, payload)
+
+
 @management_router.post("", response_model=schemas.StaffCreatedOut, status_code=201)
 def create_staff(payload: schemas.StaffCreate, db: Session = Depends(get_db), manager: Staff = Depends(_MANAGER)):
     """

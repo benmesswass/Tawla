@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.dates import service_day_start
 from app.core.logging import get_logger, log_event
 from app.modules.notifications.manager import manager, table_channel
+from app.modules.staff import service as staff_service
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
 from app.modules.waiter_calls import schemas
@@ -34,6 +35,13 @@ async def create_call(db: Session, payload: schemas.WaiterCallCreate) -> WaiterC
             "table_id": call.table_id,
             "table_label": call.table_label,
         },
+    )
+    # Alerte même écran éteint (demande de Wassim, 2026-08-26) — un appel
+    # serveur est justement pensé comme urgent, indépendant du flux commande.
+    staff_service.notify_restaurant_staff(
+        db, call.restaurant_id,
+        title="Appel serveur",
+        body=f"Table {call.table_label} demande de l'aide.",
     )
     return call
 

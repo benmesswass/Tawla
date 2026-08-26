@@ -18,6 +18,7 @@ from app.modules.menu.models import MenuItem, MenuItemOption
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
 from app.modules.orders.models import Order, OrderItem, OrderItemOption, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.staff import service as staff_service
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
 from app.modules.tenants.models import Restaurant, SubscriptionTier
@@ -347,6 +348,15 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
         },
     )
+    # Alerte même écran éteint (demande de Wassim, 2026-08-26) — jamais pour
+    # une pré-commande programmée (mode Ramadan) : "à anticiper", pas à
+    # prendre en charge maintenant, ce serait une fausse alerte.
+    if not order.scheduled_for:
+        staff_service.notify_restaurant_staff(
+            db, order.restaurant_id,
+            title="Nouvelle commande",
+            body=f"Table {order.table_label} vient de commander.",
+        )
     return order
 
 

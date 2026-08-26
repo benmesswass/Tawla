@@ -18,6 +18,7 @@ import {
   RestaurantPublic,
   Table,
 } from "@/lib/api";
+import { urlBase64ToUint8Array } from "@/lib/webPush";
 import { toLocalizedMessage } from "@/lib/errors";
 import { formatAmount } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
@@ -151,15 +152,6 @@ function offlineQueueStorageKey(qrToken: string): string {
 
 function loyaltyPhoneStorageKey(restaurantId: number): string {
   return `resto-qr-menu:loyalty-phone:${restaurantId}`;
-}
-
-// Web Push exige la clé VAPID en Uint8Array, pas en base64url brut —
-// conversion standard, aucune lib externe nécessaire pour ça.
-function urlBase64ToUint8Array(base64url: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
-  const base64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64);
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
 // `crypto.randomUUID` n'existe qu'en contexte sécurisé (HTTPS) : absent, il
