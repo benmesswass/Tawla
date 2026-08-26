@@ -9,6 +9,7 @@ commande de l'un serait tombée sur l'écran cuisine de l'autre.
 """
 from datetime import datetime, timedelta, timezone
 
+from app.core.markets import FRANCE, TUNISIA
 from app.modules.demo import service
 from app.modules.menu.models import MenuItem
 from app.modules.orders.models import Order, OrderItem
@@ -200,3 +201,41 @@ def test_une_demo_nest_pas_comptee_comme_un_client_payant(client, db_session):
     # admin cross-tenant ne doit pas prendre une démo pour un client acquis.
     assert restaurant.is_active is True
     assert restaurant.has_paid_for_subscription is False
+
+
+# --- Démo française : une brasserie, pas une carte tunisienne traduite ---
+# (MARCHE_FRANCE.md §3.2, étape 7) — `market=FRANCE` explicite plutôt que de
+# dépendre de `MARKET` au démarrage du process de test (même patron que
+# `format_money(amount, market=...)`, core/currency.py).
+
+
+def test_la_demo_francaise_ne_montre_jamais_dar_chaabane(db_session):
+    restaurant, _, _ = service.creer_demo(db_session, market=FRANCE)
+    assert "Dar Chaabane" not in restaurant.name
+    assert restaurant.name == "Brasserie du Vieux Marché (démo)"
+
+
+def test_la_demo_francaise_a_une_formule_et_une_carte_des_vins(db_session):
+    restaurant, _, _ = service.creer_demo(db_session, market=FRANCE)
+    items = db_session.query(MenuItem).filter(MenuItem.restaurant_id == restaurant.id).all()
+    categories = {item.category for item in items}
+    assert "Formules" in categories
+    assert "Vins" in categories
+    assert "Ftour" not in categories
+    assert len(items) == len(service.CARTE_FR)
+
+
+def test_la_demo_tunisienne_reste_inchangee_par_defaut(db_session):
+    restaurant, _, _ = service.creer_demo(db_session, market=TUNISIA)
+    assert restaurant.name == "Dar Chaabane (démo)"
+    items = db_session.query(MenuItem).filter(MenuItem.restaurant_id == restaurant.id).all()
+    assert len(items) == len(service.CARTE)
+    assert {item.category for item in items} == {"Entrées", "Plats", "Desserts", "Boissons"}
+
+
+def test_la_demo_francaise_a_une_equipe_aux_prenoms_francais(db_session):
+    _, par_role, _ = service.creer_demo(db_session, market=FRANCE)
+    noms = {compte.name for compte in par_role.values()}
+    assert noms == {"Julie (manager)", "Thomas (serveur)", "Nicolas (cuisine)"}
+    for compte in par_role.values():
+        assert compte.email.endswith(".demo.tawla.fr")
