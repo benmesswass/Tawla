@@ -9,15 +9,8 @@ from app.core.currency import format_money
 from app.core.dates import service_day_start
 from app.core.email import is_email_enabled, send_email_with_attachment
 from app.core.invoice import generate_invoice_pdf
-from app.core.konnect import (
-    KonnectError,
-    get_konnect_payment,
-    init_konnect_payment,
-    is_konnect_enabled,
-    sign_konnect_order_webhook,
-    tnd_to_millimes,
-)
 from app.core.logging import get_logger, log_event
+from app.core.payment_provider import PaymentProviderError, get_payment_provider
 from app.core.push import send_push_notification
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
@@ -671,24 +664,18 @@ async def start_card_payment(
         raise upgrade_required_error(SubscriptionTier.PRO)
 
     credentials = restaurant.konnect_credentials()
-    if not is_konnect_enabled() or not credentials:
+    provider = get_payment_provider(credentials)
+    if not provider.is_available():
         order = await pay_by_card_simulated(db, order_id, tip_amount, customer_email)
         return order, None
 
-    api_key, wallet_id = credentials
     amount = order.total_amount + tip_amount
     qr_token = order.table.qr_token
     try:
-        pay_url, payment_ref = init_konnect_payment(
-            api_key=api_key,
-            receiver_wallet_id=wallet_id,
-            amount_tnd=amount,
+        result = provider.init_payment(
+            amount=amount,
             order_id=str(order.id),
             description=f"{order.table_label} — commande #{order.id}",
-            webhook=(
-                f"{settings.backend_url}/api/v1/orders/{order.id}/pay/card/webhook"
-                f"?sig={sign_konnect_order_webhook(order.id)}"
-            ),
             success_url=(
                 f"{settings.frontend_url}/menu/{qr_token}"
                 f"?konnect=success&order_id={order.id}&order_token={order.public_token}"
@@ -696,7 +683,7 @@ async def start_card_payment(
             fail_url=f"{settings.frontend_url}/menu/{qr_token}?konnect=fail",
             lifespan_minutes=30,
         )
-    except KonnectError as err:
+    except PaymentProviderError as err:
         log_event(
             logger, "order.card_payment_init_failed",
             restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
@@ -708,7 +695,7 @@ async def start_card_payment(
     order.payment_method = PaymentMethod.CARD
     order.payment_status = PaymentStatus.PENDING
     order.tip_amount = tip_amount
-    order.payment_ref = payment_ref
+    order.payment_ref = result.payment_ref
     if customer_email:
         order.customer_email = customer_email
     db.commit()
@@ -716,9 +703,9 @@ async def start_card_payment(
 
     log_event(
         logger, "order.card_payment_initiated",
-        restaurant_id=order.restaurant_id, order_id=order.id, payment_ref=payment_ref, amount=amount,
+        restaurant_id=order.restaurant_id, order_id=order.id, payment_ref=result.payment_ref, amount=amount,
     )
-    return order, pay_url
+    return order, result.pay_url
 
 
 SettleCardResult = Literal["paid", "pending", "not_found", "error"]
@@ -748,16 +735,20 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
     if not credentials:
         # Konnect déconnecté par le manager entre l'initiation et le règlement
         # (rare) : rien à régler sans la clé, mais ne pas planter le webhook.
+        # Volontairement PAS `provider.is_available()` ici (voir sa docstring
+        # dans payment_provider.py) : un paiement déjà initié se règle même si
+        # le drapeau global a été désactivé entre-temps, seuls les
+        # identifiants du restaurant comptent à ce stade.
         log_event(
             logger, "order.card_payment_settle_missing_credentials",
             restaurant_id=order.restaurant_id, order_id=order.id,
         )
         return "error"
-    api_key, _wallet_id = credentials
+    provider = get_payment_provider(credentials)
 
     try:
-        payment = get_konnect_payment(payment_ref, api_key=api_key)
-    except KonnectError as err:
+        payment = provider.get_payment(payment_ref)
+    except PaymentProviderError as err:
         log_event(
             logger, "order.card_payment_settle_fetch_failed",
             restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
@@ -770,12 +761,12 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
     # Contrôle d'intégrité : montant réellement reçu jamais inférieur au
     # total + pourboire figés à l'initiation — jamais un montant transmis par
     # le client ou par le webhook lui-même.
-    expected_millimes = tnd_to_millimes(order.total_amount + float(order.tip_amount))
-    if payment.reached_amount < expected_millimes:
+    expected_smallest_unit = provider.to_smallest_unit(order.total_amount + float(order.tip_amount))
+    if payment.reached_amount < expected_smallest_unit:
         log_event(
             logger, "order.card_payment_amount_mismatch",
             restaurant_id=order.restaurant_id, order_id=order.id,
-            expected_millimes=expected_millimes, reached_amount=payment.reached_amount,
+            expected_smallest_unit=expected_smallest_unit, reached_amount=payment.reached_amount,
         )
         return "error"
 

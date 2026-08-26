@@ -7,6 +7,7 @@ le mode démonstration, exercé par tout restaurant n'ayant rien connecté.
 précis n'a pas sa propre clé — Konnect lui-même est simulé via monkeypatch,
 jamais un vrai appel réseau.
 """
+from app.core import konnect
 from app.core.crypto import encrypt_field
 from app.core.konnect import KonnectError, KonnectPayment
 from app.modules.orders import service as orders_service
@@ -90,7 +91,7 @@ def test_konnect_card_payment_stays_pending_and_uses_the_restaurants_own_wallet(
         captured.update(kwargs)
         return "https://pay.konnect.example/x", "ref-123"
 
-    monkeypatch.setattr(orders_service, "init_konnect_payment", _fake_init)
+    monkeypatch.setattr(konnect, "init_konnect_payment", _fake_init)
 
     res = client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 5}, headers=order_headers(order))
 
@@ -120,7 +121,7 @@ def test_konnect_card_payment_init_failure_returns_502(client, monkeypatch):
     def _boom(**kwargs):
         raise KonnectError("réseau indisponible")
 
-    monkeypatch.setattr(orders_service, "init_konnect_payment", _boom)
+    monkeypatch.setattr(konnect, "init_konnect_payment", _boom)
 
     res = client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
 
@@ -164,7 +165,7 @@ def test_settle_applies_paid_and_clears_the_pending_state(client, db_session, mo
     restaurant = create_restaurant(slug="card-settle-completed")
     order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
-        orders_service, "get_konnect_payment",
+        konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
     )
 
@@ -182,7 +183,7 @@ def test_settle_is_a_noop_when_payment_still_pending(client, db_session, monkeyp
     restaurant = create_restaurant(slug="card-settle-pending")
     order = _pending_konnect_order(client, restaurant)
     monkeypatch.setattr(
-        orders_service, "get_konnect_payment",
+        konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="pending", amount=20_000, reached_amount=0),
     )
 
@@ -199,7 +200,7 @@ def test_settle_rejects_an_amount_lower_than_the_order_total(client, db_session,
     restaurant = create_restaurant(slug="card-settle-amount-mismatch")
     order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
-        orders_service, "get_konnect_payment",
+        konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=1_000),
     )
 
@@ -216,7 +217,7 @@ def test_settle_is_idempotent_against_a_concurrent_replay(client, db_session, mo
     restaurant = create_restaurant(slug="card-settle-idempotent")
     order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
-        orders_service, "get_konnect_payment",
+        konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
     )
 
@@ -236,7 +237,7 @@ def test_settle_returns_error_on_konnect_fetch_failure(client, db_session, monke
     def _boom(ref, api_key=None):
         raise KonnectError("réseau indisponible")
 
-    monkeypatch.setattr(orders_service, "get_konnect_payment", _boom)
+    monkeypatch.setattr(konnect, "get_konnect_payment", _boom)
 
     import asyncio
 
@@ -249,7 +250,7 @@ def test_check_endpoint_settles_a_completed_pending_payment(client, monkeypatch)
     restaurant = create_restaurant(slug="card-check-endpoint-settles")
     order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
-        orders_service, "get_konnect_payment",
+        konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
     )
 
