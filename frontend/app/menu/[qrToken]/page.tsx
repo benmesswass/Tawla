@@ -12,6 +12,7 @@ import {
   ApiError,
   LoyaltyMember,
   MenuItem,
+  MenuItemOptionGroup,
   Order,
   OrderStatus,
   RestaurantPublic,
@@ -55,7 +56,13 @@ type CartLine = {
   // Ajoutée depuis une proposition « avec ce plat » plutôt que depuis la carte.
   // Sert uniquement à mesurer l'effet de la vente incitative (Phase 14.1).
   fromSuggestion: boolean;
+  // Choix faits dans le sélecteur d'options (France, MARCHE_FRANCE.md phase
+  // F5/A2) — un seul jeu de choix par article au panier (v1) : rouvrir le
+  // sélecteur remplace la sélection plutôt que d'ajouter une seconde ligne.
+  selectedOptions: SelectedOption[];
 };
+
+type SelectedOption = { optionId: number; groupName: string; optionName: string; priceDelta: number };
 
 type StepStatus = Exclude<OrderStatus, "cancelled">;
 
@@ -172,6 +179,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, CartLine>>({});
   const [cartOrderId, setCartOrderId] = useState<string | null>(null);
+  // Article en cours de configuration dans le sélecteur d'options (France,
+  // MARCHE_FRANCE.md phase F5/A2) — un seul à la fois, comme suggestFor.
+  const [optionChooserFor, setOptionChooserFor] = useState<MenuItem | null>(null);
+  // groupId -> ids des options choisies dans ce groupe, pendant la composition.
+  const [chooserSelection, setChooserSelection] = useState<Record<number, number[]>>({});
   // Nombre de personnes à table, demandé seulement quand un plat est marqué
   // « à partager » — jamais à l'ouverture du menu, où la question n'a pas
   // encore de raison d'être posée.
@@ -687,7 +699,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
   }
 
-  function addToCart(item: MenuItem, fromSuggestion = false) {
+  function addToCart(item: MenuItem, fromSuggestion = false, selectedOptions?: SelectedOption[]) {
     // L'identifiant naît avec le panier, pas à l'envoi : régénéré à chaque
     // tentative, il ne protégerait de rien. C'est lui qui fait qu'un double
     // clic sur « Valider », ou une file hors ligne rejouée, retombe sur la
@@ -707,6 +719,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           // pris le plat depuis la carte, en reprendre un depuis une suggestion
           // n'en fait pas une vente incitative.
           fromSuggestion: existing?.fromSuggestion ?? fromSuggestion,
+          // Choix du sélecteur d'options, gardés à l'identique tant qu'on ne
+          // fait qu'incrémenter la quantité (voir openOptionChooser).
+          selectedOptions: selectedOptions ?? existing?.selectedOptions ?? [],
         },
       };
     });
@@ -721,6 +736,56 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       const proposable = suggestedIds.filter((id) => !cart[id]);
       setSuggestFor(proposable.length ? item : null);
     }
+  }
+
+  // --- Sélecteur d'options (France, MARCHE_FRANCE.md phase F5/A2) ----------
+  // v1 volontairement simple : un seul jeu de choix par article au panier.
+  // Rouvrir le sélecteur (bouton "+" tant que rien n'est encore au panier)
+  // sert aussi à corriger un choix avant validation ; ajouter un DEUXIÈME
+  // article identique avec une combinaison différente n'est pas couvert —
+  // limitation connue, pas un oubli.
+
+  function openOptionChooser(item: MenuItem) {
+    const initial: Record<number, number[]> = {};
+    for (const group of item.option_groups) initial[group.id] = [];
+    setChooserSelection(initial);
+    setOptionChooserFor(item);
+  }
+
+  function toggleChooserOption(group: MenuItemOptionGroup, optionId: number) {
+    setChooserSelection((prev) => {
+      const current = prev[group.id] ?? [];
+      if (current.includes(optionId)) {
+        return { ...prev, [group.id]: current.filter((id) => id !== optionId) };
+      }
+      // Choix unique (max 1) : le nouveau remplace l'ancien, comme un bouton
+      // radio. Choix multiple : s'ajoute tant que max_select n'est pas atteint.
+      const next = group.max_select <= 1 ? [optionId] : [...current, optionId].slice(-group.max_select);
+      return { ...prev, [group.id]: next };
+    });
+  }
+
+  function chooserSatisfiesMinimums(item: MenuItem): boolean {
+    return item.option_groups.every((g) => (chooserSelection[g.id]?.length ?? 0) >= g.min_select);
+  }
+
+  function chooserTotalPrice(item: MenuItem): number {
+    const delta = item.option_groups
+      .flatMap((g) => g.options.filter((o) => (chooserSelection[g.id] ?? []).includes(o.id)))
+      .reduce((sum, o) => sum + o.price_delta, 0);
+    return item.price + delta;
+  }
+
+  function confirmOptionChooser() {
+    const item = optionChooserFor;
+    if (!item || !chooserSatisfiesMinimums(item)) return;
+    const selected: SelectedOption[] = item.option_groups.flatMap((g) =>
+      g.options
+        .filter((o) => (chooserSelection[g.id] ?? []).includes(o.id))
+        .map((o) => ({ optionId: o.id, groupName: g.name, optionName: o.name, priceDelta: o.price_delta }))
+    );
+    addToCart(item, false, selected);
+    setOptionChooserFor(null);
   }
 
   function removeFromCart(itemId: number) {
@@ -759,7 +824,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   const cartLines = Object.values(cart);
-  const total = cartLines.reduce((sum, l) => sum + l.item.price * l.quantity, 0);
+  // Prix de base + suppléments des options choisies (France, F5/A2) — jamais
+  // relu ailleurs que dans le panier : le serveur refige tout à la création
+  // de la commande (voir orders/service.py::create_order côté backend).
+  function lineUnitPrice(line: CartLine): number {
+    return line.item.price + line.selectedOptions.reduce((sum, o) => sum + o.priceDelta, 0);
+  }
+  const total = cartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
 
   async function validateOrder() {
     if (!table || cartLines.length === 0) return;
@@ -774,6 +845,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         is_shared: l.shared,
         shared_with: l.shared ? l.sharedWith : [],
         from_suggestion: l.fromSuggestion,
+        selected_option_ids: l.selectedOptions.map((o) => o.optionId),
       })),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       loyalty_phone: loyaltyPhone.trim() || null,
@@ -1113,6 +1185,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
                   </span>
                 )}
+                {it.options.length > 0 && (
+                  <span className="text-[var(--ink-faint)]"> — {it.options.map((o) => o.option_name).join(", ")}</span>
+                )}
                 {it.notes && <span className="text-[var(--ink-faint)]"> — {it.notes}</span>}
               </li>
             ))}
@@ -1321,8 +1396,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     const photo = mediaUrl(item.image_url);
     const ligne = cart[item.id];
     const perPerson = ligne
-      ? (ligne.item.price * ligne.quantity) / (ligne.sharedWith.length > 0 ? ligne.sharedWith.length : convives)
+      ? (lineUnitPrice(ligne) * ligne.quantity) / (ligne.sharedWith.length > 0 ? ligne.sharedWith.length : convives)
       : 0;
+    const hasOptionGroups = item.option_groups.length > 0;
     return (
       <div
         key={item.id}
@@ -1385,6 +1461,18 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {item.allergens && (
               <div className="text-xs text-[var(--ink-soft)]/70 mt-0.5">{t.allergensLabel(item.allergens)}</div>
             )}
+            {item.regimes.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {item.regimes.map((r) => (
+                  <span
+                    key={r.id}
+                    className="text-[10.5px] font-medium text-[var(--menthe)] border border-[var(--menthe)] rounded px-1.5 py-[1px]"
+                  >
+                    {r.name}
+                  </span>
+                ))}
+              </div>
+            )}
             {rupture && (
               <div className="text-[11.5px] font-semibold text-[var(--harissa)] mt-1">{t.itemOutOfStock}</div>
             )}
@@ -1420,7 +1508,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   </>
                 )}
                 <button
-                  onClick={() => addToCart(item)}
+                  onClick={() => (hasOptionGroups && !ligne ? openOptionChooser(item) : addToCart(item))}
                   disabled={rupture}
                   aria-label={t.addToCartAria(item.name)}
                   className={`w-[34px] h-[34px] rounded-full text-[19px] leading-none shadow-sm transition-transform active:scale-90 disabled:cursor-not-allowed disabled:active:scale-100 ${
@@ -1437,6 +1525,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         </div>
         {ligne && (
           <div className="mt-[10px] pt-[10px] border-t border-[var(--line)]">
+            {ligne.selectedOptions.length > 0 && (
+              <p className="text-xs text-[var(--ink-soft)] mb-2">
+                {ligne.selectedOptions.map((o) => o.optionName).join(" · ")}
+              </p>
+            )}
             <input
               type="text"
               value={ligne.note}
@@ -1787,6 +1880,88 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 className="mt-3 text-sm text-[var(--ink-soft)] underline"
               >
                 {t.suggestionDismiss}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {optionChooserFor && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setOptionChooserFor(null)}
+          >
+            <div
+              className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-[var(--semoule-raised)] p-[16px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[15px] font-bold text-[var(--encre)]">{t.optionsChooseTitle(optionChooserFor.name)}</p>
+                <button
+                  onClick={() => setOptionChooserFor(null)}
+                  aria-label={t.closeErrorAria}
+                  className="text-[var(--ink-soft)] shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-4">
+                {optionChooserFor.option_groups.map((group) => (
+                  <div key={group.id}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="text-sm font-semibold text-[var(--encre)]">{group.name}</p>
+                      <p className="text-xs text-[var(--ink-soft)] shrink-0">
+                        {t.optionsGroupHint(group.min_select, group.max_select)}
+                      </p>
+                    </div>
+                    <div className="mt-1.5 space-y-1.5">
+                      {group.options.map((option) => {
+                        const selected = (chooserSelection[group.id] ?? []).includes(option.id);
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => toggleChooserOption(group, option.id)}
+                            aria-pressed={selected}
+                            className={`w-full flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm text-start transition-colors ${
+                              selected
+                                ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
+                                : "border-[var(--line)] bg-white text-[var(--encre)]"
+                            }`}
+                          >
+                            <span>{option.name}</span>
+                            {option.price_delta > 0 && (
+                              <span className="tabular-nums shrink-0">
+                                +{option.price_delta.toFixed(3)} {t.currency}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <span className="text-[17px] font-bold tabular-nums text-[var(--encre)]">
+                  {chooserTotalPrice(optionChooserFor).toFixed(3)} {t.currency}
+                </span>
+                <button
+                  onClick={confirmOptionChooser}
+                  disabled={!chooserSatisfiesMinimums(optionChooserFor)}
+                  className="shrink-0 bg-[var(--harissa)] text-[var(--semoule)] rounded-full px-[22px] py-[14px] text-[14.5px] font-bold disabled:opacity-50"
+                >
+                  {t.optionsConfirmAdd}
+                </button>
+              </div>
+              <button
+                onClick={() => setOptionChooserFor(null)}
+                className="mt-3 text-sm text-[var(--ink-soft)] underline"
+              >
+                {t.optionsCancelChoice}
               </button>
             </div>
           </div>

@@ -37,6 +37,11 @@ class OrderItemCreate(BaseModel):
     # mentirait sur ce drapeau ne fausserait qu'une statistique de son propre
     # restaurant.
     from_suggestion: bool = False
+    # Un id par choix (« à point », « sans oignons »...) — le client n'envoie
+    # que des ids, jamais un nom ni un prix : c'est le serveur qui les relit
+    # depuis MenuItemOption, vérifie qu'ils appartiennent bien à cet article et
+    # respectent min/max par groupe, puis fige le tout (voir orders/service.py).
+    selected_option_ids: list[int] = Field(default_factory=list)
 
 
 class OrderCreate(BaseModel):
@@ -64,6 +69,17 @@ class OrderCreate(BaseModel):
     loyalty_birth_date: date | None = None
 
 
+class OrderItemOptionOut(BaseModel):
+    """Choix figé au moment de la commande (« Cuisson : à point ») — le
+    supplément est indicatif, il est déjà compté dans `unit_price`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    group_name: str
+    option_name: str
+    price_delta: float
+
+
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,6 +92,7 @@ class OrderItemOut(BaseModel):
     is_shared: bool
     shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
     from_suggestion: bool
+    options: list[OrderItemOptionOut] = Field(default_factory=list)
 
 
 class PayCardRequest(BaseModel):

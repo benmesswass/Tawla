@@ -1,7 +1,20 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, Numeric, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, Numeric, String, Table, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+# Association pure (aucune donnée propre à la ligne) : un article porte 0..N
+# régimes du vocabulaire de son restaurant. `ondelete="CASCADE"` des deux
+# côtés — la leçon du bulk-delete sur MenuItemOptionGroup (voir menu/options.py) :
+# une suppression brute de MenuRegime ou de MenuItem doit être nettoyée par
+# Postgres lui-même, jamais supposée passer par un cascade ORM qu'une requête
+# de remplacement en bloc pourrait contourner.
+menu_item_regimes = Table(
+    "menu_item_regimes",
+    Base.metadata,
+    Column("menu_item_id", ForeignKey("menu_items.id", ondelete="CASCADE"), primary_key=True),
+    Column("regime_id", ForeignKey("menu_regimes.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class MenuSuggestion(Base):
@@ -69,3 +82,80 @@ class MenuItem(Base):
     # halal — le champ sert surtout à signaler l'exception (établissement
     # touristique servant alcool/porc), pas la norme.
     is_halal: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    option_groups: Mapped[list["MenuItemOptionGroup"]] = relationship(
+        back_populates="menu_item", cascade="all, delete-orphan", order_by="MenuItemOptionGroup.display_order"
+    )
+    # Régimes cochés pour cet article (« Halal », « Végétarien »...), choisis
+    # parmi le vocabulaire du restaurant — voir MenuRegime. Coexiste avec
+    # `is_halal` ci-dessus plutôt que de le remplacer : la Tunisie s'en sert
+    # tel quel (case à cocher unique, réglage par défaut), ce vocabulaire
+    # libre est la demande de Wassim pour le marché français, où « halal »
+    # n'est qu'un régime parmi d'autres et pas la norme par défaut.
+    regimes: Mapped[list["MenuRegime"]] = relationship(
+        secondary=menu_item_regimes, order_by="MenuRegime.display_order"
+    )
+
+
+class MenuRegime(Base):
+    """
+    Vocabulaire de régimes alimentaires **propre à chaque restaurant** (pas une
+    liste fermée) : le manager crée « Halal », « Végétarien », « Vegan », ou
+    tout autre régime de son choix (« Sans porc », « Casher »...), puis coche
+    ceux qui s'appliquent à chaque article. Demande de Wassim (2026-08-26) —
+    remplace l'idée d'une liste figée de marqueurs (§A6 de MARCHE_FRANCE.md) :
+    « halal » n'est pas central hors de Tunisie, la liste doit rester ouverte.
+    """
+
+    __tablename__ = "menu_regimes"
+    __table_args__ = (UniqueConstraint("restaurant_id", "name", name="uq_menu_regime_restaurant_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(40), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class MenuItemOptionGroup(Base):
+    """
+    Un groupe de choix sur un article (« Cuisson », « Sauce », « Accompagnement »)
+    — France, phase F5/A2 : « un steak sans cuisson ne part pas en cuisine ».
+
+    `min_select`/`max_select` couvrent les trois formes courantes sans avoir
+    besoin d'un champ `is_required` séparé (redondant) : obligatoire à choix
+    unique (1, 1), optionnel à choix unique (0, 1), optionnel à choix multiple
+    borné (0, N).
+    """
+
+    __tablename__ = "menu_item_option_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Porté aussi par le groupe, comme `MenuSuggestion.restaurant_id` : les
+    # routes manager n'ont ainsi jamais besoin de remonter à l'article pour
+    # vérifier l'appartenance au bon restaurant.
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    min_select: Mapped[int] = mapped_column(Integer, default=0)
+    max_select: Mapped[int] = mapped_column(Integer, default=1)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    menu_item: Mapped["MenuItem"] = relationship(back_populates="option_groups")
+    options: Mapped[list["MenuItemOption"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan", order_by="MenuItemOption.display_order"
+    )
+
+
+class MenuItemOption(Base):
+    """Un choix à l'intérieur d'un groupe (« À point », « Sans oignons »),
+    avec son propre supplément de prix éventuel (« Frites +2 DT »)."""
+
+    __tablename__ = "menu_item_options"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("menu_item_option_groups.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    group: Mapped["MenuItemOptionGroup"] = relationship(back_populates="options")

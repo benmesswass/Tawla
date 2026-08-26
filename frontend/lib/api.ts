@@ -14,6 +14,25 @@ export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:8000` : "http://localhost:8000");
 
+export type MenuItemOption = {
+  id: number;
+  name: string;
+  price_delta: number;
+};
+
+export type MenuItemOptionGroup = {
+  id: number;
+  name: string;
+  min_select: number;
+  max_select: number;
+  options: MenuItemOption[];
+};
+
+export type MenuRegime = {
+  id: number;
+  name: string;
+};
+
 export type MenuItem = {
   id: number;
   restaurant_id: number;
@@ -26,6 +45,13 @@ export type MenuItem = {
   spice_level: number;
   allergens: string | null;
   is_halal: boolean;
+  // Cuisson, sauce, accompagnement... (France, MARCHE_FRANCE.md phase F5/A2).
+  // Toujours présent (liste vide par défaut) : la quasi-totalité des articles
+  // n'en ont aucun tant qu'un manager ne les configure pas.
+  option_groups: MenuItemOptionGroup[];
+  // Régimes cochés parmi le vocabulaire du restaurant (« Halal »,
+  // « Végétarien »...) — coexiste avec is_halal, ne le remplace pas.
+  regimes: MenuRegime[];
 };
 
 export type Table = {
@@ -202,6 +228,9 @@ export type Order = {
     /** Numéros de places entre lesquelles le plat est partagé. Vide = toute la table. */
     shared_with: number[];
     from_suggestion: boolean;
+    /** Choix figés au moment de la commande (« Cuisson : à point »). Le
+     *  supplément est indicatif, déjà compté dans unit_price. */
+    options: { group_name: string; option_name: string; price_delta: number }[];
   }[];
 };
 
@@ -475,6 +504,30 @@ export const api = {
       `/api/v1/menu-items/${itemId}/suggestions`,
       { method: "PUT", body: JSON.stringify({ suggested_item_ids: suggestedItemIds }) }
     ),
+  // Remplacement en bloc de tous les groupes d'options d'un article — même
+  // principe que setMenuSuggestions (France, MARCHE_FRANCE.md phase F5/A2).
+  setMenuItemOptionGroups: (
+    itemId: number,
+    groups: { name: string; min_select: number; max_select: number; options: { name: string; price_delta: number }[] }[]
+  ) =>
+    request<MenuItem>(`/api/v1/menu-items/${itemId}/option-groups`, {
+      method: "PUT",
+      body: JSON.stringify({ groups }),
+    }),
+  // Vocabulaire de régimes du restaurant, remplacement en bloc (France,
+  // 2026-08-26 : demande de Wassim).
+  getMenuRegimes: (restaurantId: number) =>
+    request<MenuRegime[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}/regimes`),
+  setMenuRegimes: (restaurantId: number, names: string[]) =>
+    request<MenuRegime[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}/regimes`, {
+      method: "PUT",
+      body: JSON.stringify({ names }),
+    }),
+  setMenuItemRegimes: (itemId: number, regimeIds: number[]) =>
+    request<MenuItem>(`/api/v1/menu-items/${itemId}/regimes`, {
+      method: "PUT",
+      body: JSON.stringify({ regime_ids: regimeIds }),
+    }),
   login: (email: string, password: string) =>
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (payload: {
@@ -541,6 +594,7 @@ export const api = {
       is_shared?: boolean;
       shared_with?: number[];
       from_suggestion?: boolean;
+      selected_option_ids?: number[];
     }[];
     scheduled_for?: string | null;
     loyalty_phone?: string | null;

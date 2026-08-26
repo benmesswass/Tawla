@@ -639,9 +639,9 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 
 **Commun aux deux variantes**
 
-- [ ] **A2 — Options et suppléments** sur un article (cuisson, accompagnement, sauce, taille) : nouveau modèle, migration, écran manager, parcours client, affichage cuisine. *Le manque fonctionnel le plus grave (§3.2)*
+- [x] **A2 — Options et suppléments** sur un article (cuisson, accompagnement, sauce, taille) : nouveau modèle, migration, écran manager, parcours client, affichage cuisine. *Le manque fonctionnel le plus grave (§3.2)* — [PR #87](https://github.com/benmesswass/Tawla/pull/87). v1 : un seul jeu de choix par article au panier (pas de lignes multiples pour deux combinaisons différentes du même plat)
 - [ ] **A3 — Formules** (entrée + plat + dessert, formule midi) : composition, prix de la formule, affichage
-- [ ] **A6 — Allergènes structurés** (14 allergènes INCO) en remplacement du texte libre (`menu/models.py:67`) + marqueurs végétarien / vegan / sans gluten / halal, `is_halal` par défaut à `false` en France (`menu/models.py:71`)
+- [ ] **A6 — Allergènes structurés** (14 allergènes INCO) en remplacement du texte libre (`menu/models.py:67`), `is_halal` par défaut à `false` en France (`menu/models.py:71`) — **reste ouvert**. Le volet « marqueurs » est livré différemment de la spec d'origine : plutôt qu'une liste figée (végétarien/vegan/sans gluten/halal), [PR #87](https://github.com/benmesswass/Tawla/pull/87) donne au manager un **vocabulaire de régimes libre par restaurant** (décision de Wassim, 2026-08-26 — halal n'est pas central hors de Tunisie), coexistant avec `is_halal` plutôt que de le remplacer
 - [ ] **A9 — Anglais** au parcours client (`lib/i18n/en.ts`, même forme que `fr.ts`)
 - [ ] Arabe **littéraire** proposé en option par établissement, plutôt que la derja tunisienne
 - [ ] Mode Ramadan et pré-commande **conservés**, activables par établissement, repositionnés (§3.2)
@@ -896,7 +896,7 @@ sont listées ici pour qu'aucune ne se règle par défaut, en silence.
 | # | Décision | Bloque | Statut |
 |---|---|---|---|
 | ~~C1~~ | ~~Scénario A, B ou C du §1~~ | — | ✅ Tranchée 2026-08-24 : **C** (§ Phase F0) |
-| **C2** | S1 (ne pas encaisser) ou S2 (être conforme au fisc) | F5, F6, et la promesse commerciale | Ouverte — se tranche en F2, avec l'expert-comptable |
+| **C2** | S1 (ne pas encaisser) ou S2 (être conforme au fisc) | F5, F6, et la promesse commerciale | **Décision de travail de Wassim (2026-08-26) : S2** — construit techniquement en entier, mais l'encaissement réel reste **désactivé par défaut en production** (drapeau de marché, § « Le port de paiement ») tant que la confirmation professionnelle (expert-comptable, ISCA) n'est pas faite ; actif en démo. Ne remplace pas F2 : le rendez-vous comptable + la revérification ISCA restent dus avant toute activation réelle |
 | **C3** | Segment prioritaire : brasserie de quartier, ou restaurants à clientèle maghrébine | Le positionnement, la démo, la langue, la carte | Ouverte — se tranche en F1, à l'écoute des entretiens |
 | **C4** | La marque internationale : « Tawla » ou un autre nom ; recherche INPI ; domaines | F4 | Amorcée 2026-08-24 : « MyTable » proposé, disponibilité à vérifier (§ Phase F0) |
 | **C5** | Le prix français (hypothèse 49/89/149 €, à ne pas annoncer avant F1) | F1 | Ouverte |

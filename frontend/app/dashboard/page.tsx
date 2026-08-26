@@ -8,6 +8,7 @@ import {
   DashboardStats,
   MenuCsvImportResult,
   MenuItem,
+  MenuRegime,
   Restaurant,
   Staff,
   StaffRole,
@@ -113,6 +114,23 @@ const EMPTY_DRAFT: Draft = {
   isHalal: true,
 };
 
+// Options et suppléments sur un article (« Cuisson », « Sauce »...) — France,
+// MARCHE_FRANCE.md phase F5/A2. Prix en texte (comme Draft.price) pour un
+// champ contrôlable pendant la saisie ; converti au moment d'enregistrer.
+type OptionDraft = { name: string; priceDelta: string };
+type OptionGroupDraft = { name: string; minSelect: string; maxSelect: string; options: OptionDraft[] };
+
+function optionGroupsToDrafts(item: MenuItem): OptionGroupDraft[] {
+  return item.option_groups.map((g) => ({
+    name: g.name,
+    minSelect: String(g.min_select),
+    maxSelect: String(g.max_select),
+    options: g.options.map((o) => ({ name: o.name, priceDelta: String(o.price_delta) })),
+  }));
+}
+
+const EMPTY_OPTION_GROUP: OptionGroupDraft = { name: "", minSelect: "0", maxSelect: "1", options: [] };
+
 type Tab = "menu" | "tables" | "team" | "settings";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -193,6 +211,18 @@ export default function DashboardPage() {
   const [savingCsv, setSavingCsv] = useState(false);
   const [suggestions, setSuggestions] = useState<Record<string, number[]>>({});
   const [savingSuggestionsFor, setSavingSuggestionsFor] = useState<number | null>(null);
+  // Brouillon des groupes d'options par article — initialisé à l'ouverture de
+  // l'édition depuis item.option_groups (voir optionGroupsToDrafts), jamais
+  // au chargement de la carte entière (France, MARCHE_FRANCE.md phase F5/A2).
+  const [optionDrafts, setOptionDrafts] = useState<Record<number, OptionGroupDraft[]>>({});
+  const [savingOptionsFor, setSavingOptionsFor] = useState<number | null>(null);
+  // Vocabulaire de régimes du restaurant (« Halal », « Végétarien »...),
+  // propre à chaque établissement plutôt qu'une liste figée — demande de
+  // Wassim, 2026-08-26. Coexiste avec la case « Halal » existante.
+  const [regimeVocabulary, setRegimeVocabulary] = useState<MenuRegime[]>([]);
+  const [newRegimeName, setNewRegimeName] = useState("");
+  const [savingVocab, setSavingVocab] = useState(false);
+  const [savingItemRegimesFor, setSavingItemRegimesFor] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
@@ -215,11 +245,12 @@ export default function DashboardPage() {
       setKitchenSoundEnabled(rest.kitchen_sound_enabled);
       if (!rest.is_active) return;
 
-      const [menu, tableList, teamList, suggested, dayStats] = await Promise.all([
+      const [menu, tableList, teamList, suggested, regimeList, dayStats] = await Promise.all([
         api.getMenu(restaurantId),
         api.listTables(restaurantId),
         api.listStaff(restaurantId),
         api.getMenuSuggestions(restaurantId),
+        api.getMenuRegimes(restaurantId),
         // Best-effort : si les chiffres du jour échouent, le manager doit
         // quand même pouvoir gérer sa carte et ses tables.
         api.getDashboardStats(restaurantId).catch(() => null),
@@ -232,6 +263,7 @@ export default function DashboardPage() {
       setTeam(teamList);
       setStaffDrafts(Object.fromEntries(teamList.map((m) => [m.id, staffToDraft(m)])));
       setSuggestions(suggested);
+      setRegimeVocabulary(regimeList);
     } catch (e) {
       handleGatedError(e);
     }
@@ -556,6 +588,146 @@ export default function DashboardPage() {
     }
   }
 
+  // --- Options et suppléments (France, MARCHE_FRANCE.md phase F5/A2) -------
+
+  function optionGroupsFor(item: MenuItem): OptionGroupDraft[] {
+    return optionDrafts[item.id] ?? optionGroupsToDrafts(item);
+  }
+
+  function updateOptionGroups(itemId: number, next: OptionGroupDraft[]) {
+    setOptionDrafts((prev) => ({ ...prev, [itemId]: next }));
+  }
+
+  function addOptionGroup(item: MenuItem) {
+    updateOptionGroups(item.id, [...optionGroupsFor(item), { ...EMPTY_OPTION_GROUP }]);
+  }
+
+  function removeOptionGroup(item: MenuItem, groupIndex: number) {
+    updateOptionGroups(item.id, optionGroupsFor(item).filter((_, i) => i !== groupIndex));
+  }
+
+  function updateOptionGroupField(
+    item: MenuItem, groupIndex: number, field: "name" | "minSelect" | "maxSelect", value: string
+  ) {
+    const groups = optionGroupsFor(item).map((g, i) => (i === groupIndex ? { ...g, [field]: value } : g));
+    updateOptionGroups(item.id, groups);
+  }
+
+  function addOption(item: MenuItem, groupIndex: number) {
+    const groups = optionGroupsFor(item).map((g, i) =>
+      i === groupIndex ? { ...g, options: [...g.options, { name: "", priceDelta: "0" }] } : g
+    );
+    updateOptionGroups(item.id, groups);
+  }
+
+  function removeOption(item: MenuItem, groupIndex: number, optionIndex: number) {
+    const groups = optionGroupsFor(item).map((g, i) =>
+      i === groupIndex ? { ...g, options: g.options.filter((_, oi) => oi !== optionIndex) } : g
+    );
+    updateOptionGroups(item.id, groups);
+  }
+
+  function updateOptionField(
+    item: MenuItem, groupIndex: number, optionIndex: number, field: "name" | "priceDelta", value: string
+  ) {
+    const groups = optionGroupsFor(item).map((g, i) =>
+      i === groupIndex
+        ? { ...g, options: g.options.map((o, oi) => (oi === optionIndex ? { ...o, [field]: value } : o)) }
+        : g
+    );
+    updateOptionGroups(item.id, groups);
+  }
+
+  async function saveOptionGroups(item: MenuItem) {
+    setError(null);
+    const drafts = optionGroupsFor(item);
+    for (const g of drafts) {
+      const min = Number(g.minSelect);
+      const max = Number(g.maxSelect);
+      if (!g.name.trim()) {
+        setError("Chaque groupe d'options doit avoir un nom (ex : « Cuisson »).");
+        return;
+      }
+      if (g.options.length === 0) {
+        setError(`Le groupe « ${g.name} » doit contenir au moins un choix.`);
+        return;
+      }
+      if (g.options.some((o) => !o.name.trim())) {
+        setError(`Un choix du groupe « ${g.name} » n'a pas de nom.`);
+        return;
+      }
+      if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < 1 || min > max) {
+        setError(`« ${g.name} » : le minimum et le maximum de choix ne sont pas valides.`);
+        return;
+      }
+    }
+    setSavingOptionsFor(item.id);
+    try {
+      await api.setMenuItemOptionGroups(
+        item.id,
+        drafts.map((g) => ({
+          name: g.name.trim(),
+          min_select: Number(g.minSelect),
+          max_select: Number(g.maxSelect),
+          options: g.options.map((o) => ({ name: o.name.trim(), price_delta: Number(o.priceDelta) || 0 })),
+        }))
+      );
+      flash("Options enregistrées.");
+      await load();
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingOptionsFor(null);
+    }
+  }
+
+  // --- Régimes alimentaires (France, demande de Wassim 2026-08-26) ---------
+  // Vocabulaire propre au restaurant (pas une liste figée), coexiste avec la
+  // case "Halal" existante plutôt que de la remplacer.
+
+  async function saveRegimeVocabulary(names: string[]) {
+    setError(null);
+    setSavingVocab(true);
+    try {
+      const next = await api.setMenuRegimes(restaurantId!, names);
+      setRegimeVocabulary(next);
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingVocab(false);
+    }
+  }
+
+  async function addRegimeToVocab() {
+    const name = newRegimeName.trim();
+    if (!name) return;
+    if (regimeVocabulary.some((r) => r.name === name)) {
+      setNewRegimeName("");
+      return;
+    }
+    await saveRegimeVocabulary([...regimeVocabulary.map((r) => r.name), name]);
+    setNewRegimeName("");
+  }
+
+  async function removeRegimeFromVocab(name: string) {
+    await saveRegimeVocabulary(regimeVocabulary.filter((r) => r.name !== name).map((r) => r.name));
+  }
+
+  async function toggleItemRegime(item: MenuItem, regimeId: number) {
+    setError(null);
+    const current = item.regimes.map((r) => r.id);
+    const next = current.includes(regimeId) ? current.filter((id) => id !== regimeId) : [...current, regimeId];
+    setSavingItemRegimesFor(item.id);
+    try {
+      const updated = await api.setMenuItemRegimes(item.id, next);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingItemRegimesFor(null);
+    }
+  }
+
   async function importMenuCsv() {
     setError(null);
     setCsvResult(null);
@@ -743,6 +915,47 @@ export default function DashboardPage() {
 
       {activeTab === "menu" && (
         <>
+          <Card padding="sm" className="mb-3">
+            <p className="text-sm font-medium">Régimes proposés</p>
+            <p className="text-xs text-neutral-500 mb-2">
+              Halal, végétarien, vegan, ou tout régime de votre choix — visibles des clients, à cocher
+              plat par plat plus bas.
+            </p>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {regimeVocabulary.map((r) => (
+                <span
+                  key={r.id}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-[var(--line)] bg-white"
+                >
+                  {r.name}
+                  <button
+                    onClick={() => removeRegimeFromVocab(r.name)}
+                    disabled={savingVocab}
+                    aria-label={`Retirer ${r.name} du vocabulaire`}
+                    className="text-neutral-400 hover:text-[var(--harissa)] disabled:opacity-50"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+              <input
+                value={newRegimeName}
+                onChange={(e) => setNewRegimeName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addRegimeToVocab();
+                  }
+                }}
+                placeholder="Nouveau régime (ex : Sans porc)"
+                className="border rounded px-2 py-1 text-xs w-48"
+              />
+              <Button size="sm" variant="secondary" onClick={addRegimeToVocab} disabled={savingVocab}>
+                + Ajouter
+              </Button>
+            </div>
+          </Card>
+
           <div className="flex flex-col sm:flex-row gap-2 mb-3">
             <input
               value={searchQuery}
@@ -927,6 +1140,122 @@ export default function DashboardPage() {
                             })}
                         </div>
                       </div>
+
+                      <div className="mt-4 pt-3 border-t border-[var(--line)]">
+                        <p className="text-sm font-medium">Options et suppléments</p>
+                        <p className="text-xs text-neutral-500 mb-2">
+                          Cuisson, sauce, accompagnement, taille... Un groupe obligatoire à choix
+                          unique (min 1, max 1) bloque la commande tant que le client n&apos;a rien
+                          choisi — utile pour une cuisson qui doit toujours être précisée.
+                        </p>
+                        <div className="space-y-3">
+                          {optionGroupsFor(item).map((group, groupIndex) => (
+                            <div key={groupIndex} className="rounded-lg border border-[var(--line)] p-2.5">
+                              <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-center">
+                                <input
+                                  value={group.name}
+                                  onChange={(e) => updateOptionGroupField(item, groupIndex, "name", e.target.value)}
+                                  className="border rounded px-2 py-1 text-sm"
+                                  placeholder="Nom du groupe (ex : Cuisson)"
+                                />
+                                <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+                                  Min
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={group.minSelect}
+                                    onChange={(e) => updateOptionGroupField(item, groupIndex, "minSelect", e.target.value)}
+                                    className="border rounded px-2 py-1 text-sm w-16"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+                                  Max
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={group.maxSelect}
+                                    onChange={(e) => updateOptionGroupField(item, groupIndex, "maxSelect", e.target.value)}
+                                    className="border rounded px-2 py-1 text-sm w-16"
+                                  />
+                                </label>
+                                <Button size="sm" variant="danger" onClick={() => removeOptionGroup(item, groupIndex)}>
+                                  Retirer
+                                </Button>
+                              </div>
+                              <div className="mt-2 space-y-1.5">
+                                {group.options.map((option, optionIndex) => (
+                                  <div key={optionIndex} className="grid grid-cols-[2fr_1fr_auto] gap-2 items-center">
+                                    <input
+                                      value={option.name}
+                                      onChange={(e) => updateOptionField(item, groupIndex, optionIndex, "name", e.target.value)}
+                                      className="border rounded px-2 py-1 text-sm"
+                                      placeholder="Choix (ex : À point)"
+                                    />
+                                    <input
+                                      value={option.priceDelta}
+                                      onChange={(e) => updateOptionField(item, groupIndex, optionIndex, "priceDelta", e.target.value)}
+                                      className="border rounded px-2 py-1 text-sm"
+                                      placeholder="Supplément (DT)"
+                                      inputMode="decimal"
+                                    />
+                                    <button
+                                      onClick={() => removeOption(item, groupIndex, optionIndex)}
+                                      aria-label={`Retirer ${option.name || "ce choix"}`}
+                                      className="text-neutral-400 hover:text-[var(--harissa)] text-sm px-1"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              <Button
+                                size="sm" variant="secondary" className="mt-2"
+                                onClick={() => addOption(item, groupIndex)}
+                              >
+                                + Ajouter un choix
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between mt-2.5 flex-wrap gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => addOptionGroup(item)}>
+                            + Ajouter un groupe d&apos;options
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => saveOptionGroups(item)}
+                            disabled={savingOptionsFor === item.id}
+                          >
+                            {savingOptionsFor === item.id ? "Enregistrement..." : "Enregistrer les options"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {regimeVocabulary.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-[var(--line)]">
+                          <p className="text-sm font-medium">Régimes de ce plat</p>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {regimeVocabulary.map((r) => {
+                              const selected = item.regimes.some((ir) => ir.id === r.id);
+                              return (
+                                <button
+                                  key={r.id}
+                                  onClick={() => toggleItemRegime(item, r.id)}
+                                  disabled={savingItemRegimesFor === item.id}
+                                  aria-pressed={selected}
+                                  className={`text-xs px-2 py-1 rounded-full border transition-colors disabled:opacity-50 ${
+                                    selected
+                                      ? "bg-[var(--harissa)] text-white border-[var(--harissa)]"
+                                      : "border-[var(--line)] text-neutral-600 hover:bg-[var(--semoule)]"
+                                  }`}
+                                >
+                                  {r.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>

@@ -123,6 +123,11 @@ export const ar = {
   suggestionHint: "المطعم ينصحك بيه — تنجم تتجاوز.",
   suggestionAdd: "زيدها",
   suggestionDismiss: "لا شكرا",
+
+  optionsChooseTitle: (name) => `اختار لـ « ${name} »`,
+  optionsGroupHint: (min, max) => (min === max ? `اختار ${min}` : min === 0 ? `اختار حتى ${max}` : `اختار بين ${min} و ${max}`),
+  optionsConfirmAdd: "زيد للقفة",
+  optionsCancelChoice: "الغي",
   cartClearedNotice: "أكلة من القفة تاعك ماعادتش موجودة ونحاتلك. القفة تاعك دلوقتي فاضية.",
 
   shareOrderButton: "شارك الطلبية تاعك",

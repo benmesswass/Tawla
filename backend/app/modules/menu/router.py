@@ -1,13 +1,13 @@
 from hashlib import sha256
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.logging import get_logger, log_event
 from app.core.subscription import require_tier
-from app.modules.menu import csv_import, schemas, suggestions
-from app.modules.menu.models import MenuItem
+from app.modules.menu import csv_import, options, regimes, schemas, suggestions
+from app.modules.menu.models import MenuItem, MenuItemOptionGroup, MenuRegime
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -99,6 +99,14 @@ def import_menu_csv(
 def _sorted_menu(db: Session, restaurant_id: int) -> list[MenuItem]:
     items = (
         db.query(MenuItem)
+        # Groupes d'options et régimes chargés en une fois : cet écran liste
+        # toute la carte d'un coup (dashboard manager comme parcours client),
+        # une requête par article n'y a pas sa place (même principe que
+        # list_active_orders côté commandes).
+        .options(
+            selectinload(MenuItem.option_groups).selectinload(MenuItemOptionGroup.options),
+            selectinload(MenuItem.regimes),
+        )
         .filter(MenuItem.restaurant_id == restaurant_id)
         .order_by(MenuItem.name)
         .all()
@@ -152,6 +160,55 @@ def list_suggestions_by_table(qr_token: str, db: Session = Depends(get_db)):
     return suggestions.get_suggestions_map(db, table.restaurant_id, only_available=True)
 
 
+@router.get("/by-restaurant/{restaurant_id}/regimes", response_model=list[schemas.MenuRegimeOut])
+def list_regimes(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """Vocabulaire de régimes du restaurant (« Halal », « Végétarien »...),
+    pour l'écran manager qui coche ensuite ceux qui s'appliquent à chaque
+    article — voir menu/regimes.py. Demande de Wassim, 2026-08-26."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return (
+        db.query(MenuRegime)
+        .filter(MenuRegime.restaurant_id == restaurant_id)
+        .order_by(MenuRegime.display_order)
+        .all()
+    )
+
+
+@router.put("/by-restaurant/{restaurant_id}/regimes", response_model=list[schemas.MenuRegimeOut])
+def set_regimes(
+    restaurant_id: int,
+    payload: schemas.MenuRegimesUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """Le manager définit le vocabulaire de régimes de son restaurant. Un nom
+    déjà présent garde sa ligne (et donc ses articles tagués) — voir la
+    docstring de regimes.set_restaurant_regimes pour la raison."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    result = regimes.set_restaurant_regimes(db, restaurant_id, payload.names)
+    log_event(logger, "menu.regimes_set", restaurant_id=restaurant_id, count=len(result))
+    return result
+
+
+@router.put("/{item_id}/regimes", response_model=schemas.MenuItemOut)
+def set_item_regimes(
+    item_id: int,
+    payload: schemas.MenuItemRegimesUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """Le manager coche, pour cet article, un sous-ensemble du vocabulaire
+    déjà défini pour le restaurant."""
+    item = regimes.set_item_regimes(db, item_id, payload.regime_ids, staff.restaurant_id)
+    log_event(
+        logger, "menu.item_regimes_set",
+        restaurant_id=staff.restaurant_id, menu_item_id=item_id, count=len(item.regimes),
+    )
+    return item
+
+
 @router.put("/{item_id}/suggestions", response_model=schemas.MenuItemSuggestionsOut)
 def set_suggestions(
     item_id: int,
@@ -170,6 +227,23 @@ def set_suggestions(
         restaurant_id=staff.restaurant_id, menu_item_id=item_id, count=len(suggested),
     )
     return schemas.MenuItemSuggestionsOut(menu_item_id=item_id, suggested_items=suggested)
+
+
+@router.put("/{item_id}/option-groups", response_model=schemas.MenuItemOut)
+def set_option_groups(
+    item_id: int,
+    payload: schemas.MenuItemOptionGroupsUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """Le manager configure les groupes d'options d'un article (cuisson,
+    sauce, accompagnement...) — remplacement en bloc, voir menu/options.py."""
+    item = options.set_option_groups(db, item_id, payload.groups, staff.restaurant_id)
+    log_event(
+        logger, "menu.option_groups_set",
+        restaurant_id=staff.restaurant_id, menu_item_id=item_id, group_count=len(payload.groups),
+    )
+    return item
 
 
 @router.patch("/{item_id}/availability", response_model=schemas.MenuItemOut)

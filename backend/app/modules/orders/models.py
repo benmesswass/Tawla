@@ -194,3 +194,27 @@ class OrderItem(Base):
     from_suggestion: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     order: Mapped["Order"] = relationship(back_populates="items")
+    options: Mapped[list["OrderItemOption"]] = relationship(back_populates="order_item", cascade="all, delete-orphan")
+
+
+class OrderItemOption(Base):
+    """
+    Choix figé d'un groupe d'options au moment de la commande (« Cuisson : à
+    point ») — France, phase F5/A2. Même principe que `menu_item_name`/
+    `unit_price` sur `OrderItem` : le nom du groupe, le nom de l'option et son
+    supplément de prix sont copiés ici tels quels, jamais relus depuis
+    `MenuItemOptionGroup`/`MenuItemOption`, qui peuvent changer ou disparaître
+    après coup sans que ça n'altère une commande déjà passée. Le supplément est
+    en outre déjà comptabilisé dans `OrderItem.unit_price` — cette ligne ne sert
+    qu'à l'affichage (cuisine, suivi client, facture), jamais à un recalcul.
+    """
+
+    __tablename__ = "order_item_options"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"), nullable=False, index=True)
+    group_name: Mapped[str] = mapped_column(String(60), nullable=False)
+    option_name: Mapped[str] = mapped_column(String(60), nullable=False)
+    price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+
+    order_item: Mapped["OrderItem"] = relationship(back_populates="options")
