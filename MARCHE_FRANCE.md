@@ -602,7 +602,7 @@ français encaisse, c'est coder les mauvais drapeaux.
 - [x] `app/core/markets.py` + `lib/market.ts` : devise, fuseau, langues, drapeaux, paliers, TVA, textes — [PR #88](https://github.com/benmesswass/Tawla/pull/88)
 - [x] **Formateur monétaire unique** des deux côtés, et suppression des ~20 `toFixed(3)` / `"DT"` en dur (Annexe A). Test qui échoue si un nouveau apparaît — [PR #88](https://github.com/benmesswass/Tawla/pull/88)
 - [x] **Fuseau par `zoneinfo`** — `Europe/Paris` avec heure d'été. Test qui prouve qu'une commande du 15 juillet tombe dans la bonne journée de service (`core/dates.py:9`) — [PR #89](https://github.com/benmesswass/Tawla/pull/89)
-- [ ] Extraire le **port de paiement** (§4) : `KonnectProvider`, `NullProvider`, interface commune, `orders/service.py` ne connaît plus Konnect
+- [x] Extraire le **port de paiement** (§4) : `KonnectProvider`, `NullProvider`, interface commune, `orders/service.py` ne connaît plus Konnect — [PR #90](https://github.com/benmesswass/Tawla/pull/90)
 - [ ] Paliers et contenu de l'offre déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`)
 - [ ] Contenus par marché : démo, visite guidée, anecdotes d'attente, catégories de carte, chevalet QR
 - [ ] `MARKET=tn` par défaut : **le produit tunisien ne change pas de comportement**, et la suite de tests existante le prouve
