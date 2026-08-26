@@ -278,7 +278,7 @@ def test_mrr_counts_only_active_online_paid_tiers(client, db_session):
     now = datetime.now(timezone.utc)
     admin = _create_admin(db_session)
 
-    # Payé en ligne, encore actif : compte dans le MRR (100 DT = palier Pro).
+    # Payé en ligne, encore actif : compte dans le MRR (89 DT = palier Pro).
     paying_pro = create_restaurant(
         name="Le Marsa Café", slug="le-marsa-cafe",
         subscription_tier=SubscriptionTier.PRO, subscription_period_end=now + timedelta(days=15),
@@ -297,7 +297,7 @@ def test_mrr_counts_only_active_online_paid_tiers(client, db_session):
 
     body = client.get("/api/v1/platform-admin/overview", headers=_admin_headers(admin)).json()
 
-    assert body["mrr_tnd"] == pytest.approx(100.0)
+    assert body["mrr_tnd"] == pytest.approx(89.0)
     assert body["paying_restaurants_count"] == 1
     assert body["restaurants_by_tier"]["pro"] == 1
     assert body["restaurants_by_tier"]["business"] == 1
@@ -619,4 +619,4 @@ def test_set_restaurant_promo_under_100_percent_only_discounts_the_next_checkout
     restaurant = db_session.get(Restaurant, restaurant.id)
     # Ne jamais activer sous 100 % — même logique que l'offre de lancement.
     assert restaurant.is_active is False
-    assert tier_price(restaurant, SubscriptionTier.ESSENTIEL) == 25
+    assert tier_price(restaurant, SubscriptionTier.ESSENTIEL) == 24

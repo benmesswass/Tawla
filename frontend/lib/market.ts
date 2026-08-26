@@ -42,7 +42,7 @@ const TUNISIA: MarketConfig = {
   timezone: "Africa/Tunis",
   languages: ["fr", "ar"],
   paymentProvider: "konnect",
-  tierPrices: { essentiel: 50, pro: 100, business: 150 },
+  tierPrices: { essentiel: 49, pro: 89, business: 149 },
   vatRates: null,
   invoiceThreshold: null,
 };

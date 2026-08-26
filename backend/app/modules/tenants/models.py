@@ -55,7 +55,7 @@ class Restaurant(Base):
     # Palier d'abonnement — conditionne l'accès aux fonctionnalités Pro/Business,
     # voir app/core/subscription.py. Essentiel par défaut, mais un palier ne
     # dit rien de si le compte est UTILISABLE (voir `is_active`/`is_usable`
-    # ci-dessous) : Essentiel reste un palier payant (50 DT), jamais gratuit.
+    # ci-dessous) : Essentiel reste un palier payant (49 DT), jamais gratuit.
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
         Enum(SubscriptionTier), default=SubscriptionTier.ESSENTIEL
     )

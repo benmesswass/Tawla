@@ -204,7 +204,7 @@ def start_subscription_checkout(
     Deux usages distincts derrière ce même endpoint (2026-08-20, revu le
     2026-08-21 pour l'offre de lancement) :
 
-    - `tier=essentiel` : abonnement de 30 jours (50 DT, jamais gratuit — voir
+    - `tier=essentiel` : abonnement de 30 jours (49 DT, jamais gratuit — voir
       CLAUDE.md) — TOUJOURS payable, contrairement à Pro/Business ci-dessous.
       Pas de règle "déjà actif, refusé" : payer avant l'échéance ne fait que
       prolonger la période depuis le reste courant (voir le calcul plus bas),

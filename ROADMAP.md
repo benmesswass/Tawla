@@ -241,6 +241,14 @@ livrés en PR #63** (`app/core/subscription.py`, `app/core/konnect.py`,
 n'existe plus nulle part dans le code ; cette section ne doit plus s'y
 référer, seul l'historique git le garde.
 
+**Amendement du 2026-08-26** (décision de Wassim, PR #91) : prix Tunisie
+changés de 50/100/150 DT à **49/89/149 DT** — dernier chiffre aligné sur les
+paliers français (MARCHE_FRANCE.md §3.4), posés dans la couche marché
+(`core/markets.py::TUNISIA.tier_prices`) plutôt qu'en dur. Aucun paiement réel
+n'était encore encaissé sur l'ancien prix (compte Konnect Tawla toujours pas
+ouvert, item juste en dessous) — pas de restaurant déjà facturé à l'ancien
+tarif.
+
 - [x] Trois paliers d'abonnement, gating réel (import CSV, suggestions, photos, plan de salle, mode Ramadan, rapport d'équipe, notifications push, paiement carte et fidélité au parcours client), page tarifaire publique réécrite en conséquence (PR #63)
 - [x] Paiement en ligne du passage à un palier supérieur — écran d'incitation avec prix et fonctionnalités débloquées, réutilise le contenu de la page tarifaire ; palier payé en ligne expire après 30 jours sans renouvellement (`effective_tier()`), palier fixé à la main par `setup_restaurant.py` reste sans expiration (PR #63)
 - [ ] **Ouvrir le compte Konnect réel** 🧑 (décidé le 2026-08-19 : Konnect plutôt que ClicToPay/SMT — self-service, déjà intégré côté Tawla, contre une adhésion bancaire à négocier au cas par cas et une intégration entière à écrire pour ClicToPay, sans qu'aucun pilote n'ait demandé un autre moyen de paiement) — inscription sur konnect.network, KYC (identité, RIB tunisien), récupérer `KONNECT_API_KEY` et `KONNECT_RECEIVER_WALLET_ID`, puis poser `PAYMENT_MODE=konnect` + les deux clés en variables d'environnement de production (Phase 20). Tant que ce n'est pas fait, tout paiement de palier reste en mode démonstration (`backend/.env.example:47-51`)

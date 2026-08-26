@@ -290,7 +290,7 @@ Verdict par fonctionnalité, sur l'état réel du code.
 | **Chevalet QR** | Bilingue fr/ar avec police Kufi (`tables/poster.py`) | Français seul par défaut, anglais optionnel (touristes), arabe seulement sur le segment concerné |
 | **Démo** | Restaurant « Dar Chaabane », carte tunisienne (`demo/service.py:158`) | Brasserie française : formule du jour, entrée/plat/dessert, carte des vins. Un restaurateur français qui voit une carte tunisienne en démo comprend que le produit n'est pas pour lui, en trois secondes |
 | **Visite guidée** | 20 étapes, contenu tunisien (`lib/visite/etapes.ts`) | Moteur conservé tel quel (excellent), contenu par marché |
-| **Prix des paliers** | 50 / 100 / 150 DT | À re-dériver, jamais à convertir (§3.4) |
+| **Prix des paliers** | 49 / 89 / 149 DT | À re-dériver, jamais à convertir (§3.4) |
 | **Politique de confidentialité** | fr/ar, loi 2004-63 (`lib/i18n/privacy.ts`) | Réécriture RGPD complète |
 | **Page publique** | « pour les restaurants et brasseries à partir de 6 tables, **en Tunisie** » (`app/page.tsx`), `contact@tawla.tn` | Copie, promesse, mentions légales, e-mail : tout change (§3.4) |
 

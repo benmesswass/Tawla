@@ -263,7 +263,7 @@ def test_konnect_checkout_uses_the_discounted_essentiel_price(client, monkeypatc
     )
 
     assert res.status_code == 200
-    assert captured["amount_tnd"] == 25
+    assert captured["amount_tnd"] == 24
 
 
 def test_konnect_checkout_uses_the_full_price_once_already_active(client, monkeypatch):
@@ -293,7 +293,7 @@ def test_konnect_checkout_uses_the_full_price_once_already_active(client, monkey
     )
 
     assert res.status_code == 200
-    assert captured["amount_tnd"] == 50
+    assert captured["amount_tnd"] == 49
 
 
 def test_settle_accepts_the_discounted_essentiel_amount(db_session, monkeypatch):

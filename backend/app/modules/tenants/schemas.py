@@ -40,7 +40,7 @@ class RestaurantOut(RestaurantPublicOut):
     subscription_period_end: UtcDatetime | None
     # Activation du compte (2026-08-20) — jamais sur RestaurantPublicOut,
     # donnée commerciale comme subscription_tier. Le frontend s'en sert pour
-    # afficher l'écran de paiement (50 DT) tant que ce n'est pas vrai — voir
+    # afficher l'écran de paiement (49 DT) tant que ce n'est pas vrai — voir
     # Restaurant.is_usable.
     is_active: bool
     # Offre de lancement (2026-08-21, réglages configurables — voir

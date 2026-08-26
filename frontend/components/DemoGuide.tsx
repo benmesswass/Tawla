@@ -40,7 +40,7 @@ const STEPS = [
   {
     route: "/signup",
     title: "Si la question du prix arrive",
-    body: `Les 3 paliers cliquables (Essentiel 50 / Pro 100 / Business 150 ${currentMarket.currency.symbol}). Le prix ne bouge jamais une fois annoncé à un restaurateur.`,
+    body: `Les 3 paliers cliquables (Essentiel 49 / Pro 89 / Business 149 ${currentMarket.currency.symbol}). Le prix ne bouge jamais une fois annoncé à un restaurateur.`,
   },
 ];
 

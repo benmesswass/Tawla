@@ -27,7 +27,7 @@ _TIER_RANK = {
 # client.
 #
 # ESSENTIEL est un abonnement de 30 jours comme PRO/BUSINESS (2026-08-20, voir
-# CLAUDE.md — "chaque client doit payer 50 DT pour l'Essentiel, jamais
+# CLAUDE.md — "chaque client doit payer 49 DT pour l'Essentiel, jamais
 # gratuit, sauf promo activée par l'admin") : même mécanique de
 # `subscription_period_end` que les deux autres. La seule différence est
 # `Restaurant.is_active`/`is_usable` (tenants/models.py) : Essentiel étant le
