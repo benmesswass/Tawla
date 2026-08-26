@@ -97,7 +97,7 @@ class KonnectCredentialsIn(BaseModel):
 
 class SubscriptionCheckoutIn(BaseModel):
     """Le palier VISÉ — jamais un montant : le prix est toujours recalculé
-    côté serveur depuis TIER_PRICES_TND (app/core/subscription.py)."""
+    côté serveur depuis current_market.tier_prices (app/core/markets.py)."""
 
     tier: SubscriptionTier
 

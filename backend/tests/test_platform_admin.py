@@ -13,7 +13,7 @@ from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.core.config import settings
 from app.core.dates import as_utc
-from app.core.subscription import tier_price_tnd
+from app.core.subscription import tier_price
 from app.modules.menu.models import MenuItem
 from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentStatus
 from app.modules.platform_admin import security as admin_security
@@ -619,4 +619,4 @@ def test_set_restaurant_promo_under_100_percent_only_discounts_the_next_checkout
     restaurant = db_session.get(Restaurant, restaurant.id)
     # Ne jamais activer sous 100 % — même logique que l'offre de lancement.
     assert restaurant.is_active is False
-    assert tier_price_tnd(restaurant, SubscriptionTier.ESSENTIEL) == 25
+    assert tier_price(restaurant, SubscriptionTier.ESSENTIEL) == 25

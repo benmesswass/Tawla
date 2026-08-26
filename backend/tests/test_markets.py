@@ -29,12 +29,19 @@ def test_france_market_shape():
     assert market.payment_provider == "none"
     assert market.invoice_threshold == 25.0
     assert market.vat_rates is not None
+    assert market.tier_prices == {
+        SubscriptionTier.ESSENTIEL: 49,
+        SubscriptionTier.PRO: 89,
+        SubscriptionTier.BUSINESS: 149,
+    }
 
 
 def test_tunisia_market_shape_unchanged():
-    """Garde-fou explicite sur les valeurs déjà en dur ailleurs dans le code
-    (TIER_PRICES_TND, TUNIS timezone) : la couche marché doit les reproduire
-    à l'identique, jamais improviser une nouvelle valeur."""
+    """Garde-fou explicite sur les valeurs qui étaient en dur ailleurs dans
+    le code avant la Phase F3 (`TIER_PRICES_TND`, `TUNIS` — désormais
+    supprimés, migrés vers cet objet) : la couche marché devait les
+    reproduire à l'identique lors de la migration, jamais improviser une
+    nouvelle valeur — ce test le garantit dans la durée."""
     assert TUNISIA.currency.code == "TND"
     assert TUNISIA.currency.decimals == 3
     assert TUNISIA.currency.decimal_separator == "."

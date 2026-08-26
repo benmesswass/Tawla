@@ -4,7 +4,15 @@
  * Rassemblé ici plutôt que dispersé dans la page : ce sont des engagements
  * commerciaux, pas de la mise en page. Ils se relisent d'un coup d'œil avant
  * une mise en ligne.
+ *
+ * `priceDT` vient de `currentMarket.tierPrices` (France, MARCHE_FRANCE.md
+ * Phase F3) — plus jamais un deuxième 50/100/150 en dur ici, qui pourrait
+ * diverger de la valeur réellement facturée côté serveur
+ * (`core/subscription.py::tier_price`). `name`/`tagline`/`features` restent
+ * la copie tunisienne telle quelle : les contenus par marché (démo, visite
+ * guidée, catégories, chevalet QR) sont un chantier séparé, pas encore fait.
  */
+import { currentMarket } from "./market";
 
 /**
  * Trois paliers d'abonnement (offre tranchée le 2026-08-18, remplace le prix
@@ -29,7 +37,7 @@ export const TIERS: OfferTier[] = [
   {
     id: "essentiel",
     name: "Essentiel",
-    priceDT: 50,
+    priceDT: currentMarket.tierPrices.essentiel,
     tagline: "Pour un petit café, une seule salle",
     features: [
       "QR, menu et commande client",
@@ -44,7 +52,7 @@ export const TIERS: OfferTier[] = [
   {
     id: "pro",
     name: "Pro",
-    priceDT: 100,
+    priceDT: currentMarket.tierPrices.pro,
     tagline: "Pour vendre plus et fidéliser vos clients",
     recommended: true,
     features: [
@@ -61,7 +69,7 @@ export const TIERS: OfferTier[] = [
   {
     id: "business",
     name: "Business",
-    priceDT: 150,
+    priceDT: currentMarket.tierPrices.business,
     tagline: "Pour une équipe, plusieurs adresses",
     features: [
       "Tout Pro",

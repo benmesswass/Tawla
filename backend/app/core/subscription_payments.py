@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.dates import as_utc
 from app.core.konnect import KonnectError, get_konnect_payment, tnd_to_millimes
 from app.core.logging import get_logger, log_event
-from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, tier_price_tnd
+from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, tier_price
 from app.modules.tenants.models import Restaurant
 
 logger = get_logger("subscription_payments")
@@ -52,13 +52,13 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
 
     # Contrôle d'intégrité : montant réellement reçu jamais inférieur au prix
     # du palier — toujours recalculé côté serveur (jamais un montant transmis
-    # par le client ou par le webhook lui-même). tier_price_tnd() : peut être
+    # par le client ou par le webhook lui-même). tier_price() : peut être
     # réduit par l'offre de lancement, voir
     # Restaurant.launch_promo_discount_percent — calculé ICI, avant la mise à
     # jour plus bas, tant que `restaurant.is_active` reflète encore l'état
     # PRÉ-paiement (la réduction ne s'applique qu'une fois, jamais à un
     # renouvellement).
-    price = tier_price_tnd(restaurant, pending_tier)
+    price = tier_price(restaurant, pending_tier)
     expected_millimes = tnd_to_millimes(price)
     if payment.reached_amount < expected_millimes:
         log_event(

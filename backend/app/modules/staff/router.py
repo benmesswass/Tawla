@@ -93,7 +93,7 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     historique, jamais recalculé si la campagne change ensuite (voir
     Restaurant.launch_promo_discount_percent). Seule une réduction de 100 %
     active le compte immédiatement, au palier choisi (0 DT ne se facture pas
-    via Konnect, voir core/subscription.py::tier_price_tnd) — même mécanique
+    via Konnect, voir core/subscription.py::tier_price) — même mécanique
     qu'un paiement (`subscription_period_end` à 30 jours) sauf que
     `has_paid_for_subscription` reste `False`, ce n'est pas un vrai paiement.
     En dessous de 100 %, le compte reste inactif comme d'habitude : le

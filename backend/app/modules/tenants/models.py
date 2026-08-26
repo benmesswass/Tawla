@@ -121,7 +121,7 @@ class Restaurant(Base):
     # active le compte pour la durée choisie via `is_active`/
     # `subscription_period_end` ci-dessus — `is_usable` n'a donc besoin
     # d'aucune branche dédiée. Sous 100 %, sert uniquement à réduire le prix
-    # au prochain paiement (voir `core/subscription.py::tier_price_tnd`).
+    # au prochain paiement (voir `core/subscription.py::tier_price`).
     custom_promo_discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     custom_promo_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -139,7 +139,7 @@ class Restaurant(Base):
     # paiement/activation (`is_active` passe à `True`, que ce soit via
     # l'octroi automatique à 100 % ou via un checkout réglé à un taux
     # partiel) — jamais réappliqué à un renouvellement, voir
-    # `core/subscription.py::tier_price_tnd`.
+    # `core/subscription.py::tier_price`.
     launch_promo_discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # A-t-il payé pour de vrai au moins une fois (Konnect réel OU mode démo,
