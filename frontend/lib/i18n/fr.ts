@@ -3,10 +3,16 @@
 // parcours client (page /menu/[qrToken] + SplitBill) : les écrans
 // staff/cuisine/manager restent en français pour l'instant (back-office
 // interne, cf. ROADMAP.md).
+import { formatMoney } from "@/lib/currency";
+import { currentMarket } from "@/lib/market";
+
 export const fr = {
   locale: "fr" as "fr" | "ar",
   dir: "ltr" as "ltr" | "rtl",
-  currency: "DT",
+  // Symbole du marché courant, jamais "DT" en dur : le français sert les deux
+  // marchés (TN et FR), l'arabe (ar.ts) reste écrit pour la Tunisie seule
+  // pour l'instant — voir sa propre valeur, fixe, à cet endroit.
+  currency: currentMarket.currency.symbol,
   localeSwitchLabel: "عربي",
 
   retry: "Réessayer",
@@ -51,14 +57,14 @@ export const fr = {
   paymentTitle: "Paiement",
   paidMessage: (method: "card" | "card_terminal" | "cash", tipAmount: number) =>
     `Payé ✓ ${method === "cash" ? "en espèces" : "par carte"}` +
-    (tipAmount > 0 ? ` (dont ${tipAmount.toFixed(3)} DT de pourboire)` : ""),
+    (tipAmount > 0 ? ` (dont ${formatMoney(tipAmount)} de pourboire)` : ""),
   cashPendingMessage: (amount: number) =>
-    `Paiement en espèces demandé — un serveur va passer encaisser ${amount.toFixed(3)} DT.`,
+    `Paiement en espèces demandé — un serveur va passer encaisser ${formatMoney(amount)}.`,
   cardTerminalPendingMessage: (amount: number) =>
-    `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${amount.toFixed(3)} DT.`,
+    `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${formatMoney(amount)}.`,
   tipLabel: "Pourboire (facultatif, pour un paiement par carte)",
   tipNone: "Sans",
-  tipPlaceholder: "0.00 DT",
+  tipPlaceholder: formatMoney(0),
   emailLabel: "E-mail (facultatif, pour recevoir votre facture)",
   emailPlaceholder: "vous@exemple.com",
   payByCard: "Payer en ligne — Konnect",
@@ -108,12 +114,12 @@ export const fr = {
     "Le paiement ci-dessous règle uniquement la commande affichée. Revenez sur les autres pour les régler à leur tour, ou demandez au serveur de tout encaisser en une fois.",
   sharedWithLabel: "Partagé entre :",
   sharedWithEveryone: "Personne de sélectionnée : partagé par toute la table.",
-  sharedPerPersonAmount: (amount: number) => `${amount.toFixed(3)} DT par personne`,
+  sharedPerPersonAmount: (amount: number) => `${formatMoney(amount)} par personne`,
   dinersLabel: "Personnes à table",
   openOrdersTitle: (count: number, reste: number) =>
     count > 1
-      ? `${count} commandes en cours — ${reste.toFixed(3)} DT restent à régler`
-      : `Une commande en cours — ${reste.toFixed(3)} DT restent à régler`,
+      ? `${count} commandes en cours — ${formatMoney(reste)} restent à régler`
+      : `Une commande en cours — ${formatMoney(reste)} restent à régler`,
   openOrderLine: (id: number, lines: number) =>
     `Commande #${id} — ${lines} article${lines > 1 ? "s" : ""}`,
   loyaltyFirstVisit: "Première visite — votre carte démarre avec cette commande.",

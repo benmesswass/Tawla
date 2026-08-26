@@ -16,16 +16,13 @@ import {
   type PlatformOverview,
   type SubscriptionTier,
 } from "@/lib/platformAdmin";
+import { formatMoney } from "@/lib/currency";
 
 const TIER_LABELS: Record<SubscriptionTier, string> = {
   essentiel: "Essentiel",
   pro: "Pro",
   business: "Business",
 };
-
-function formatMoney(amount: number): string {
-  return `${amount.toFixed(2)} DT`;
-}
 
 function formatPercent(rate: number | null): string {
   return rate === null ? "—" : `${(rate * 100).toFixed(0)} %`;

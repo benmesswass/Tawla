@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { EVENEMENT_VISITE, visiteEnCours } from "@/lib/visite/etat";
+import { currentMarket } from "@/lib/market";
 
 const STEPS = [
   {
@@ -39,7 +40,7 @@ const STEPS = [
   {
     route: "/signup",
     title: "Si la question du prix arrive",
-    body: "Les 3 paliers cliquables (Essentiel 50 / Pro 100 / Business 150 DT). Le prix ne bouge jamais une fois annoncé à un restaurateur.",
+    body: `Les 3 paliers cliquables (Essentiel 50 / Pro 100 / Business 150 ${currentMarket.currency.symbol}). Le prix ne bouge jamais une fois annoncé à un restaurateur.`,
   },
 ];
 

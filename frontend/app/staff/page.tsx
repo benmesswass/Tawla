@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { lalezar } from "@/lib/fonts";
 import { api, staffWsUrl, LoyaltyMember, MyShift, Order, PlanTable } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
+import { formatMoney } from "@/lib/currency";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { useAccesDemoParLien } from "@/lib/demoLien";
@@ -537,7 +538,7 @@ export default function StaffPage() {
       .join("");
     const cash = cashRequests
       .map(
-        (c) => `<div>${escapeHtml(c.table_label)} — addition ${c.amount.toFixed(3)} DT (espèces)</div>`
+        (c) => `<div>${escapeHtml(c.table_label)} — addition ${formatMoney(c.amount)} (espèces)</div>`
       )
       .join("");
     win.document.write(
@@ -811,7 +812,7 @@ export default function StaffPage() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="text-[13.5px] font-semibold text-[var(--encre)]">
-                          Commande #{o.order_id} — {o.amount.toFixed(3)} DT
+                          Commande #{o.order_id} — {formatMoney(o.amount)}
                         </div>
                         <div className="text-xs text-[var(--ink-soft)] mt-0.5">{o.methode === "espèces" ? "Espèces" : "Carte (terminal)"}</div>
                       </div>

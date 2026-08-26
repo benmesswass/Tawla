@@ -13,6 +13,7 @@ export type CurrencyConfig = {
   code: "TND" | "EUR";
   symbol: string;
   decimals: number;
+  decimalSeparator: "." | ",";
 };
 
 export type MarketConfig = {
@@ -37,7 +38,7 @@ export type MarketConfig = {
 const TUNISIA: MarketConfig = {
   code: "tn",
   name: "Tunisie",
-  currency: { code: "TND", symbol: "DT", decimals: 3 },
+  currency: { code: "TND", symbol: "DT", decimals: 3, decimalSeparator: "." },
   timezone: "Africa/Tunis",
   languages: ["fr", "ar"],
   paymentProvider: "konnect",
@@ -49,7 +50,7 @@ const TUNISIA: MarketConfig = {
 const FRANCE: MarketConfig = {
   code: "fr",
   name: "France",
-  currency: { code: "EUR", symbol: "€", decimals: 2 },
+  currency: { code: "EUR", symbol: "€", decimals: 2, decimalSeparator: "," },
   timezone: "Europe/Paris",
   languages: ["fr", "en"],
   paymentProvider: "none",

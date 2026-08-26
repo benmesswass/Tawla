@@ -21,6 +21,7 @@ def test_france_market_shape():
     assert market is FRANCE
     assert market.currency.code == "EUR"
     assert market.currency.decimals == 2
+    assert market.currency.decimal_separator == ","
     assert str(market.timezone) == "Europe/Paris"
     assert market.payment_provider == "none"
     assert market.invoice_threshold == 25.0
@@ -33,6 +34,7 @@ def test_tunisia_market_shape_unchanged():
     à l'identique, jamais improviser une nouvelle valeur."""
     assert TUNISIA.currency.code == "TND"
     assert TUNISIA.currency.decimals == 3
+    assert TUNISIA.currency.decimal_separator == "."
     assert str(TUNISIA.timezone) == "Africa/Tunis"
     assert TUNISIA.tier_prices == {
         SubscriptionTier.ESSENTIEL: 50,

@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
+from app.core.currency import format_money
 from app.core.dates import service_day_start
 from app.core.email import is_email_enabled, send_email_with_attachment
 from app.core.invoice import generate_invoice_pdf
@@ -599,7 +600,7 @@ def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> N
             html_body=(
                 f"<p>Bonjour,</p>"
                 f"<p>Votre commande #{order.id} chez {restaurant.name} a bien été payée "
-                f"({total:.2f} DT). Vous trouverez la facture détaillée en pièce jointe.</p>"
+                f"({format_money(total)}). Vous trouverez la facture détaillée en pièce jointe.</p>"
                 f"<p>Merci de votre visite !</p>"
             ),
             attachment_filename=f"facture-commande-{order.id}.pdf",

@@ -87,8 +87,8 @@ cd backend && python scripts/setup_restaurant.py --config mon-pilote.json \
   --frontend-url https://tawla.tn
 # Modèle de configuration : backend/scripts/pilote-exemple.json
 
-# Frontend — lint / typecheck / build
-cd frontend && npm run lint && npx tsc --noEmit && npm run build
+# Frontend — lint / typecheck / tests / build
+cd frontend && npm run lint && npx tsc --noEmit && npm test && npm run build
 
 # Générer le QR d'une table (après création via API)
 python backend/scripts/generate_table_qr.py --qr-token <token> --label "Table 5"

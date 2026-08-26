@@ -23,6 +23,7 @@ class CurrencyConfig:
     code: str  # code ISO 4217 ("TND", "EUR")
     symbol: str
     decimals: int  # 3 en Tunisie, 2 en France
+    decimal_separator: str  # "." en Tunisie, "," en France (MARCHE_FRANCE.md §3.2)
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,7 @@ class Market:
 TUNISIA = Market(
     code="tn",
     name="Tunisie",
-    currency=CurrencyConfig(code="TND", symbol="DT", decimals=3),
+    currency=CurrencyConfig(code="TND", symbol="DT", decimals=3, decimal_separator="."),
     timezone=ZoneInfo("Africa/Tunis"),
     languages=("fr", "ar"),
     payment_provider="konnect",
@@ -70,7 +71,7 @@ TUNISIA = Market(
 FRANCE = Market(
     code="fr",
     name="France",
-    currency=CurrencyConfig(code="EUR", symbol="€", decimals=2),
+    currency=CurrencyConfig(code="EUR", symbol="€", decimals=2, decimal_separator=","),
     timezone=ZoneInfo("Europe/Paris"),
     languages=("fr", "en"),
     payment_provider="none",
