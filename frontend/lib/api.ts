@@ -28,6 +28,11 @@ export type MenuItemOptionGroup = {
   options: MenuItemOption[];
 };
 
+export type MenuRegime = {
+  id: number;
+  name: string;
+};
+
 export type MenuItem = {
   id: number;
   restaurant_id: number;
@@ -44,6 +49,9 @@ export type MenuItem = {
   // Toujours présent (liste vide par défaut) : la quasi-totalité des articles
   // n'en ont aucun tant qu'un manager ne les configure pas.
   option_groups: MenuItemOptionGroup[];
+  // Régimes cochés parmi le vocabulaire du restaurant (« Halal »,
+  // « Végétarien »...) — coexiste avec is_halal, ne le remplace pas.
+  regimes: MenuRegime[];
 };
 
 export type Table = {
@@ -505,6 +513,20 @@ export const api = {
     request<MenuItem>(`/api/v1/menu-items/${itemId}/option-groups`, {
       method: "PUT",
       body: JSON.stringify({ groups }),
+    }),
+  // Vocabulaire de régimes du restaurant, remplacement en bloc (France,
+  // 2026-08-26 : demande de Wassim).
+  getMenuRegimes: (restaurantId: number) =>
+    request<MenuRegime[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}/regimes`),
+  setMenuRegimes: (restaurantId: number, names: string[]) =>
+    request<MenuRegime[]>(`/api/v1/menu-items/by-restaurant/${restaurantId}/regimes`, {
+      method: "PUT",
+      body: JSON.stringify({ names }),
+    }),
+  setMenuItemRegimes: (itemId: number, regimeIds: number[]) =>
+    request<MenuItem>(`/api/v1/menu-items/${itemId}/regimes`, {
+      method: "PUT",
+      body: JSON.stringify({ regime_ids: regimeIds }),
     }),
   login: (email: string, password: string) =>
     request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),

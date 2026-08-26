@@ -1,7 +1,20 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, Numeric, String, Table, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+# Association pure (aucune donnée propre à la ligne) : un article porte 0..N
+# régimes du vocabulaire de son restaurant. `ondelete="CASCADE"` des deux
+# côtés — la leçon du bulk-delete sur MenuItemOptionGroup (voir menu/options.py) :
+# une suppression brute de MenuRegime ou de MenuItem doit être nettoyée par
+# Postgres lui-même, jamais supposée passer par un cascade ORM qu'une requête
+# de remplacement en bloc pourrait contourner.
+menu_item_regimes = Table(
+    "menu_item_regimes",
+    Base.metadata,
+    Column("menu_item_id", ForeignKey("menu_items.id", ondelete="CASCADE"), primary_key=True),
+    Column("regime_id", ForeignKey("menu_regimes.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class MenuSuggestion(Base):
@@ -73,6 +86,34 @@ class MenuItem(Base):
     option_groups: Mapped[list["MenuItemOptionGroup"]] = relationship(
         back_populates="menu_item", cascade="all, delete-orphan", order_by="MenuItemOptionGroup.display_order"
     )
+    # Régimes cochés pour cet article (« Halal », « Végétarien »...), choisis
+    # parmi le vocabulaire du restaurant — voir MenuRegime. Coexiste avec
+    # `is_halal` ci-dessus plutôt que de le remplacer : la Tunisie s'en sert
+    # tel quel (case à cocher unique, réglage par défaut), ce vocabulaire
+    # libre est la demande de Wassim pour le marché français, où « halal »
+    # n'est qu'un régime parmi d'autres et pas la norme par défaut.
+    regimes: Mapped[list["MenuRegime"]] = relationship(
+        secondary=menu_item_regimes, order_by="MenuRegime.display_order"
+    )
+
+
+class MenuRegime(Base):
+    """
+    Vocabulaire de régimes alimentaires **propre à chaque restaurant** (pas une
+    liste fermée) : le manager crée « Halal », « Végétarien », « Vegan », ou
+    tout autre régime de son choix (« Sans porc », « Casher »...), puis coche
+    ceux qui s'appliquent à chaque article. Demande de Wassim (2026-08-26) —
+    remplace l'idée d'une liste figée de marqueurs (§A6 de MARCHE_FRANCE.md) :
+    « halal » n'est pas central hors de Tunisie, la liste doit rester ouverte.
+    """
+
+    __tablename__ = "menu_regimes"
+    __table_args__ = (UniqueConstraint("restaurant_id", "name", name="uq_menu_regime_restaurant_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(40), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class MenuItemOptionGroup(Base):

@@ -53,6 +53,35 @@ class MenuItemOptionGroupsUpdate(BaseModel):
     groups: list[MenuItemOptionGroupIn]
 
 
+class MenuRegimeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class MenuRegimesUpdate(BaseModel):
+    """
+    Remplace en bloc le vocabulaire de régimes du restaurant (« Halal »,
+    « Végétarien », ou tout nom choisi par le manager) — même principe de
+    remplacement en bloc que les suggestions et les groupes d'options.
+    L'ordre envoyé devient l'ordre d'affichage.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    names: list[str] = Field(default_factory=list)
+
+
+class MenuItemRegimesUpdate(BaseModel):
+    """Remplace en bloc les régimes cochés pour UN article, parmi le
+    vocabulaire déjà défini pour le restaurant (voir MenuRegimesUpdate)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    regime_ids: list[int] = Field(default_factory=list)
+
+
 class MenuItemCreate(BaseModel):
     # `image_url` n'est pas un champ que le client écrit : il est calculé par la
     # route de dépôt de photo, qui seule vérifie le format et la taille. Le
@@ -86,6 +115,7 @@ class MenuItemOut(BaseModel):
     allergens: str | None
     is_halal: bool
     option_groups: list[MenuItemOptionGroupOut] = Field(default_factory=list)
+    regimes: list[MenuRegimeOut] = Field(default_factory=list)
 
 
 class MenuItemAvailability(BaseModel):

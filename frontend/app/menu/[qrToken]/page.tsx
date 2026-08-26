@@ -1461,6 +1461,18 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {item.allergens && (
               <div className="text-xs text-[var(--ink-soft)]/70 mt-0.5">{t.allergensLabel(item.allergens)}</div>
             )}
+            {item.regimes.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {item.regimes.map((r) => (
+                  <span
+                    key={r.id}
+                    className="text-[10.5px] font-medium text-[var(--menthe)] border border-[var(--menthe)] rounded px-1.5 py-[1px]"
+                  >
+                    {r.name}
+                  </span>
+                ))}
+              </div>
+            )}
             {rupture && (
               <div className="text-[11.5px] font-semibold text-[var(--harissa)] mt-1">{t.itemOutOfStock}</div>
             )}

@@ -8,6 +8,7 @@ import {
   DashboardStats,
   MenuCsvImportResult,
   MenuItem,
+  MenuRegime,
   Restaurant,
   Staff,
   StaffRole,
@@ -215,6 +216,13 @@ export default function DashboardPage() {
   // au chargement de la carte entière (France, MARCHE_FRANCE.md phase F5/A2).
   const [optionDrafts, setOptionDrafts] = useState<Record<number, OptionGroupDraft[]>>({});
   const [savingOptionsFor, setSavingOptionsFor] = useState<number | null>(null);
+  // Vocabulaire de régimes du restaurant (« Halal », « Végétarien »...),
+  // propre à chaque établissement plutôt qu'une liste figée — demande de
+  // Wassim, 2026-08-26. Coexiste avec la case « Halal » existante.
+  const [regimeVocabulary, setRegimeVocabulary] = useState<MenuRegime[]>([]);
+  const [newRegimeName, setNewRegimeName] = useState("");
+  const [savingVocab, setSavingVocab] = useState(false);
+  const [savingItemRegimesFor, setSavingItemRegimesFor] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
@@ -237,11 +245,12 @@ export default function DashboardPage() {
       setKitchenSoundEnabled(rest.kitchen_sound_enabled);
       if (!rest.is_active) return;
 
-      const [menu, tableList, teamList, suggested, dayStats] = await Promise.all([
+      const [menu, tableList, teamList, suggested, regimeList, dayStats] = await Promise.all([
         api.getMenu(restaurantId),
         api.listTables(restaurantId),
         api.listStaff(restaurantId),
         api.getMenuSuggestions(restaurantId),
+        api.getMenuRegimes(restaurantId),
         // Best-effort : si les chiffres du jour échouent, le manager doit
         // quand même pouvoir gérer sa carte et ses tables.
         api.getDashboardStats(restaurantId).catch(() => null),
@@ -254,6 +263,7 @@ export default function DashboardPage() {
       setTeam(teamList);
       setStaffDrafts(Object.fromEntries(teamList.map((m) => [m.id, staffToDraft(m)])));
       setSuggestions(suggested);
+      setRegimeVocabulary(regimeList);
     } catch (e) {
       handleGatedError(e);
     }
@@ -671,6 +681,53 @@ export default function DashboardPage() {
     }
   }
 
+  // --- Régimes alimentaires (France, demande de Wassim 2026-08-26) ---------
+  // Vocabulaire propre au restaurant (pas une liste figée), coexiste avec la
+  // case "Halal" existante plutôt que de la remplacer.
+
+  async function saveRegimeVocabulary(names: string[]) {
+    setError(null);
+    setSavingVocab(true);
+    try {
+      const next = await api.setMenuRegimes(restaurantId!, names);
+      setRegimeVocabulary(next);
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingVocab(false);
+    }
+  }
+
+  async function addRegimeToVocab() {
+    const name = newRegimeName.trim();
+    if (!name) return;
+    if (regimeVocabulary.some((r) => r.name === name)) {
+      setNewRegimeName("");
+      return;
+    }
+    await saveRegimeVocabulary([...regimeVocabulary.map((r) => r.name), name]);
+    setNewRegimeName("");
+  }
+
+  async function removeRegimeFromVocab(name: string) {
+    await saveRegimeVocabulary(regimeVocabulary.filter((r) => r.name !== name).map((r) => r.name));
+  }
+
+  async function toggleItemRegime(item: MenuItem, regimeId: number) {
+    setError(null);
+    const current = item.regimes.map((r) => r.id);
+    const next = current.includes(regimeId) ? current.filter((id) => id !== regimeId) : [...current, regimeId];
+    setSavingItemRegimesFor(item.id);
+    try {
+      const updated = await api.setMenuItemRegimes(item.id, next);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingItemRegimesFor(null);
+    }
+  }
+
   async function importMenuCsv() {
     setError(null);
     setCsvResult(null);
@@ -858,6 +915,47 @@ export default function DashboardPage() {
 
       {activeTab === "menu" && (
         <>
+          <Card padding="sm" className="mb-3">
+            <p className="text-sm font-medium">Régimes proposés</p>
+            <p className="text-xs text-neutral-500 mb-2">
+              Halal, végétarien, vegan, ou tout régime de votre choix — visibles des clients, à cocher
+              plat par plat plus bas.
+            </p>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {regimeVocabulary.map((r) => (
+                <span
+                  key={r.id}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-[var(--line)] bg-white"
+                >
+                  {r.name}
+                  <button
+                    onClick={() => removeRegimeFromVocab(r.name)}
+                    disabled={savingVocab}
+                    aria-label={`Retirer ${r.name} du vocabulaire`}
+                    className="text-neutral-400 hover:text-[var(--harissa)] disabled:opacity-50"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+              <input
+                value={newRegimeName}
+                onChange={(e) => setNewRegimeName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addRegimeToVocab();
+                  }
+                }}
+                placeholder="Nouveau régime (ex : Sans porc)"
+                className="border rounded px-2 py-1 text-xs w-48"
+              />
+              <Button size="sm" variant="secondary" onClick={addRegimeToVocab} disabled={savingVocab}>
+                + Ajouter
+              </Button>
+            </div>
+          </Card>
+
           <div className="flex flex-col sm:flex-row gap-2 mb-3">
             <input
               value={searchQuery}
@@ -1132,6 +1230,32 @@ export default function DashboardPage() {
                           </Button>
                         </div>
                       </div>
+
+                      {regimeVocabulary.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-[var(--line)]">
+                          <p className="text-sm font-medium">Régimes de ce plat</p>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {regimeVocabulary.map((r) => {
+                              const selected = item.regimes.some((ir) => ir.id === r.id);
+                              return (
+                                <button
+                                  key={r.id}
+                                  onClick={() => toggleItemRegime(item, r.id)}
+                                  disabled={savingItemRegimesFor === item.id}
+                                  aria-pressed={selected}
+                                  className={`text-xs px-2 py-1 rounded-full border transition-colors disabled:opacity-50 ${
+                                    selected
+                                      ? "bg-[var(--harissa)] text-white border-[var(--harissa)]"
+                                      : "border-[var(--line)] text-neutral-600 hover:bg-[var(--semoule)]"
+                                  }`}
+                                >
+                                  {r.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>
