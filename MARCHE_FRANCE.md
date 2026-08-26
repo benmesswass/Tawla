@@ -639,7 +639,7 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 
 **Commun aux deux variantes**
 
-- [ ] **A2 — Options et suppléments** sur un article (cuisson, accompagnement, sauce, taille) : nouveau modèle, migration, écran manager, parcours client, affichage cuisine. *Le manque fonctionnel le plus grave (§3.2)*
+- [x] **A2 — Options et suppléments** sur un article (cuisson, accompagnement, sauce, taille) : nouveau modèle, migration, écran manager, parcours client, affichage cuisine. *Le manque fonctionnel le plus grave (§3.2)* — [PR #87](https://github.com/benmesswass/Tawla/pull/87). v1 : un seul jeu de choix par article au panier (pas de lignes multiples pour deux combinaisons différentes du même plat)
 - [ ] **A3 — Formules** (entrée + plat + dessert, formule midi) : composition, prix de la formule, affichage
 - [ ] **A6 — Allergènes structurés** (14 allergènes INCO) en remplacement du texte libre (`menu/models.py:67`) + marqueurs végétarien / vegan / sans gluten / halal, `is_halal` par défaut à `false` en France (`menu/models.py:71`)
 - [ ] **A9 — Anglais** au parcours client (`lib/i18n/en.ts`, même forme que `fr.ts`)
