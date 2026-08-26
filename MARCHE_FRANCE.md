@@ -173,6 +173,25 @@ fonctionnalités du produit français**. C'est contre-intuitif et c'est le point
 le plus important de tout ce fichier : le produit français est, au premier jour,
 **plus petit** que le produit tunisien.
 
+> **Décision (tranchée le 2026-08-25) : S2 retenue, S1 abandonnée.** Wassim
+> tranche directement en session Claude Code — **pas** après le rendez-vous
+> expert-comptable de F2, contrairement à ce que ce fichier recommandait plus
+> haut (« aucun [de ces cinq points] ne doit être tranché par une session
+> Claude »). Décision consciente, prise en connaissance de cette règle, pas un
+> oubli. Déclencheur de sortie de §7 satisfait par cet abandon explicite de
+> S1, sans attendre un client payant qui l'exige.
+>
+> **Ce qui reste vrai malgré ça** : l'implémentation technique (ci-dessous,
+> §6 Phase F5bis/F6) peut avancer sans expert-comptable — ce sont des
+> mécanismes génériques (inaltérabilité, clôtures, numérotation) qui ne
+> dépendent d'aucun avis fiscal spécifique. Deux points précis restent
+> bloqués sur un professionnel avant mise en production réelle, jamais
+> avant : (1) la répartition exacte des taux de TVA par catégorie de produit
+> (la frontière citée en §3.1(3) est « un piège classique ») et (2)
+> l'attestation individuelle de l'éditeur elle-même — sa forme légale a
+> changé deux fois en dix-huit mois, se revérifier au moment de la signer, et
+> **jamais avant qu'un professionnel ait relu le code livré ici**.
+
 #### (2) RGPD — remplace intégralement la loi 2004-63 et l'INPDP
 
 `ROADMAP.md` Phase 20 prévoit une déclaration INPDP. Sans objet en France.
@@ -648,20 +667,56 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 - [x] Réécriture RGPD de `lib/i18n/privacy.ts` — `getPrivacyPage()` bascule sur le CADRE LÉGAL entier selon `currentMarket()` (RGPD/CNIL vs loi 2004-63/INPDP), pas seulement la langue ; droits RGPD ajoutés (portabilité, opposition, limitation, absents côté Tunisie) ; anglais ajouté (F5-A9). Coordonnées du responsable de traitement et adresse de contact volontairement marquées `[[À COMPLÉTER]]` dans le texte plutôt qu'inventées — la structure juridique française (F2) et le nom de domaine (F0, "MyTable") ne sont pas encore tranchés, aucun des deux ne se devine depuis une session de code. **Page mentions légales et page CGV non construites** — mêmes deux faits manquants, et la CGV recoupe C2/S1-S2 (paiement) ; F2 les possède déjà explicitement ("Rédiger les trois documents contractuels", ligne 588) — PR #86
 - [ ] Réglage de l'agrégation par défaut du rapport d'équipe + notice d'information des salariés (§3.1 (6))
 
-**Si S1 — Tawla n'encaisse pas** (le plus probable)
+**Si S1 — Tawla n'encaisse pas** — **abandonnée le 2026-08-25** (voir §3.1(1)
+Décision). Conservé ci-dessous pour mémoire seulement, aucune de ces trois
+lignes n'est à exécuter :
 
-- [ ] Retirer du marché français : paiement carte en ligne, espèces, terminal, pourboire, recette du jour, encaissé par serveur — par **drapeau de marché**, jamais par suppression de code (la Tunisie s'en sert)
-- [ ] **A1 — Intégration caisse** : une seule cible, celle du premier pilote de F1. À défaut, impression cuisine
-- [ ] Réécrire la promesse publique : « Tawla ne remplace pas votre caisse, il remplit votre cuisine » 🧑
+- [ ] ~~Retirer du marché français : paiement carte en ligne, espèces, terminal, pourboire, recette du jour, encaissé par serveur~~
+- [ ] ~~A1 — Intégration caisse~~
+- [ ] ~~Réécrire la promesse publique : « Tawla ne remplace pas votre caisse, il remplit votre cuisine »~~
 
-**Si S2 — Tawla encaisse et devient conforme**
+**Si S2 — Tawla encaisse et devient conforme — stratégie retenue (§3.1(1)).**
+Détail technique pour une session qui n'a pas cette conversation en mémoire :
+chaque tâche cite le fichier exact à créer ou modifier, dans un ordre où
+chacune peut s'appuyer sur la précédente.
 
-- [ ] **A4 — TVA multi-taux** : `MenuItem.vat_rate`, migration, ventilation HT/TVA/TTC
-- [ ] **Note conforme** dès 25 € TTC : détail, prix unitaire, totaux HT et TTC, numérotation continue (`core/invoice.py` entièrement réécrit)
-- [ ] **A5 — Addition par table et paiement par convive** (aujourd'hui `payment_status` est porté par `Order`, et `SplitBill` n'est qu'un calculateur)
-- [ ] **Conditions ISCA** : journal inaltérable chaîné, clôtures Z/JJ/MM/AA, archivage, attestation éditeur 🧑 ⛔
-- [ ] **A8 — Titres-restaurant** : réponse écrite pour les rendez-vous, intégration seulement si un pilote la paie
-- [ ] Pourboire en montants ronds (0 / 1 € / 2 € / autre) plutôt qu'en pourcentages (`menu/[qrToken]/page.tsx:1215`)
+- [ ] **A4 — TVA multi-taux**
+  - `MenuItem.vat_rate: Numeric(4,2)` (ex. `10.00`, `20.00`, `5.50`) + migration Alembic, défaut `10.00` (taux standard restauration sur place)
+  - `OrderItem` fige `vat_rate` ET les montants HT/TVA/TTC calculés **au moment de la commande** — jamais recalculés après coup si le taux du `MenuItem` change ensuite, même principe que `unit_price` déjà figé aujourd'hui
+  - `core/invoice.py` entièrement réécrit : ventilation par taux (plusieurs sous-totaux HT/TVA/TTC si l'addition mélange 10 %/20 %), détail par article avec prix unitaire, numéro de ticket (voir journal fiscal ci-dessous)
+  - **Confirmation expert-comptable obligatoire avant mise en prod réelle, jamais avant** : la frontière exacte 10 %/20 %/5,5 % selon ce qui est vendu (alcool, à emporter…) — §3.1(3), « un piège classique »
+
+- [ ] **Journal fiscal inaltérable et chaîné — le cœur d'ISCA**
+  - Nouveau module `app/modules/fiscal/` (`models.py`, `service.py`, `schemas.py`, `router.py`), même structure que les modules existants (`orders/`, `tenants/`)
+  - Table `fiscal_ledger_entries` (append-only) : `id`, `restaurant_id`, `sequence_number` (monotone et continu par restaurant), `event_type` (`vente` / `annulation` / `cloture_jour` / `cloture_mois` / `cloture_annee`), `order_id` nullable, `receipt_number` nullable, `occurred_at` (horodatage **serveur**, jamais transmis par le client), `amount_ht`, `amount_ttc`, `vat_breakdown` (JSON), `payment_method`, `payload_hash`, `previous_hash`, `chain_hash`, `created_at`
+  - **Inaltérabilité imposée en base, pas seulement en discipline applicative** : migration Alembic posant un trigger Postgres `BEFORE UPDATE OR DELETE` sur `fiscal_ledger_entries` qui lève systématiquement une exception — aucun chemin de code, aucun accès admin, aucun bug ne doit pouvoir la contourner. Toute correction devient une **nouvelle** entrée `annulation` référençant l'originale, jamais une modification de l'existante
+  - `payload_hash = SHA256(sérialisation canonique des champs métier)`, `chain_hash = SHA256(previous_hash + payload_hash)` — fonction `verify_chain(restaurant_id)` qui reparcourt tout le journal et revérifie chaque maillon, exposée en diagnostic manager/plateforme ET en vérification programmée récurrente
+  - Une seule fonction d'écriture, appelée depuis CHAQUE point de `orders/service.py` où `payment_status` passe à `PaymentStatus.PAID` (carte Stripe réglée, espèces confirmées, terminal confirmé) — jamais dupliquée à chaque fonction de règlement
+  - Test obligatoire, pas seulement applicatif : une tentative d'`UPDATE`/`DELETE` SQL brute sur la table doit lever une erreur — le test doit vérifier la garantie au niveau base, pas seulement que le code applicatif s'abstient d'y toucher
+
+- [ ] **Numérotation continue des tickets**
+  - Compteur atomique par restaurant et par année civile (verrou `SELECT ... FOR UPDATE` ou séquence Postgres dédiée), format `{slug}-{année}-{numéro:06d}`
+  - Jamais de trou, jamais de réutilisation, assigné au moment exact de l'écriture du journal — jamais pré-alloué
+  - Test de concurrence obligatoire : deux règlements simultanés sur le même restaurant ne doivent jamais produire le même numéro ni en sauter un
+
+- [ ] **Clôtures Z (jour) / X (mois) / annuelle**
+  - Par restaurant et par fuseau du marché (`Europe/Paris`, voir `core/markets.py`) : verrouille les entrées `vente`/`annulation` de la période, calcule les totaux (HT/TVA/TTC par taux, par moyen de paiement, nombre de tickets), écrit une entrée `cloture_jour` dans le **même** journal chaîné — la clôture est elle-même inaltérable, pas un rapport séparé
+  - Une fois une journée clôturée, aucune nouvelle entrée `vente` avec un `occurred_at` dans cette période n'est acceptée (garde applicative + test)
+  - Clôtures mensuelle et annuelle : mêmes garanties, agrégées depuis les clôtures journalières déjà posées — jamais recalculées depuis les ventes brutes une fois la clôture journalière actée
+
+- [ ] **Archivage exportable**
+  - Endpoint manager/plateforme : export du journal et des clôtures d'une période donnée (CSV a minima ; format exact exigé par la DGFiP **à confirmer par l'expert-comptable** avant mise en prod réelle, jamais avant)
+  - Conservation légale minimale : 6 ans (documents comptables, Code de commerce) — **jamais purgé par le script RGPD existant** (`scripts/purge_donnees_personnelles.py`, conçu pour les données de fidélité, 730 jours) : le journal fiscal ne doit contenir aucune donnée personnelle directement identifiante — seulement montants et références de commande — pour que les deux politiques de conservation (RGPD courte / fiscale longue) ne se contredisent jamais
+
+- [ ] **A5 — Addition par table et paiement par convive**
+  - `payment_status` est aujourd'hui porté par `Order` entier ; `SplitBill` n'est qu'un calculateur indicatif (son propre commentaire le dit)
+  - Décision d'implémentation **à prendre par la session qui construit ceci**, pas tranchée ici : un règlement par convive = une entrée de journal distincte avec son propre numéro de ticket, ou une seule entrée avec plusieurs lignes de paiement ? Ça détermine la granularité de la numérotation — trancher avant d'écrire le modèle, pas pendant
+
+- [ ] Pourboire en montants ronds (0 / 1 € / 2 € / autre) plutôt qu'en pourcentages — `menu/[qrToken]/page.tsx:1215`, changement d'affichage uniquement, aucun impact sur le journal fiscal
+
+- [ ] **A8 — Titres-restaurant** : reste hors périmètre de ce chantier (§7 — déclencheur toujours « un pilote qui le demande et le paie », non atteint). Préparer une réponse écrite pour les rendez-vous commerciaux, pas d'intégration
+
+- [ ] **Attestation individuelle de l'éditeur** 🧑 ⛔ — dernière étape, jamais avant : une fois tout ce qui précède construit et testé, Wassim (avec un professionnel) rédige et signe l'attestation. Revérifier l'état du droit à ce moment précis — a changé deux fois en dix-huit mois (§3.1(1))
 
 **Dans les deux cas, en fin de phase**
 
@@ -670,13 +725,16 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 
 ---
 
-### Phase F6 — Le paiement français (uniquement si S2)
+### Phase F6 — Le paiement français
 
-- [ ] Ouvrir le compte **Stripe** 🧑
-- [ ] `StripeProvider` derrière le port de F3 — **Connect, le restaurant est le marchand**, Tawla ne touche jamais les fonds
-- [ ] Connexion du compte par chaque restaurant depuis son dashboard, mêmes garanties qu'aujourd'hui pour Konnect (clé chiffrée au repos, jamais renvoyée au client)
-- [ ] Abonnement Tawla payé en euros (Stripe Billing ou virement + facture)
-- [ ] Webhooks signés, règlement idempotent, montant revérifié côté serveur — le patron existant de `settle_card_payment` se transpose
+- [x] Ouvrir le compte **Stripe** (mode test) 🧑 — compte plateforme + compte connecté de test créés le 2026-08-25, compatibilité Accounts v1 activée (`dashboard.stripe.com/settings/features/feat_accounts_v1_support` — spécifique à ce compte, à revérifier si un nouveau compte Stripe est créé)
+- [x] `StripeProvider` (`core/stripe_provider.py`) — **Connect, Direct Charge sur le compte connecté du restaurant**, Tawla ne touche jamais les fonds. Bascule par marché dans `orders/service.py` (`fr` → Stripe, `tn` → Konnect inchangé) derrière `PAYMENT_MODE=stripe`
+- [x] Connexion du compte par chaque restaurant — `PUT /restaurants/{id}/stripe-account`, dashboard manager (Réglages). Pas de secret à chiffrer ici (contrairement à Konnect) : `stripe_account_id` n'est qu'un identifiant de compte connecté, pas une clé
+- [x] Webhooks signés (`verify_stripe_order_webhook`, vraie vérification `Stripe-Signature` HMAC + anti-rejeu), règlement idempotent, montant revérifié côté serveur — teste end-to-end en mode test réel le 2026-08-25 (session Checkout, carte 4242…, règlement confirmé, charge vérifiée sur le compte connecté, jamais sur celui de Tawla) — PR #86
+- [ ] Compte Stripe en **mode live** : vérification d'entreprise réelle (KYC plateforme), clés live, compte connecté réel du premier restaurant pilote — bloqué sur F2/F7 (structure juridique, premier pilote) 🧑
+- [ ] Abonnement Tawla payé en euros (Stripe Billing ou virement + facture) — non commencé
+- [ ] `FRONTEND_URL` du backend de prod pointant vers le vrai domaine (pas localhost, gap trouvé pendant le test du 2026-08-25 — sans impact car `/pay/card/check` sert de filet de sécurité, mais à corriger avant tout usage réel)
+- [ ] Bouton client "Payer en ligne" (`lib/market.ts::onlinePaymentAvailable`) : **activé temporairement pour la période de test technique uniquement** (2026-08-25) — à remettre à `false` avant toute exposition à de vrais clients tant que le reste de cette Phase F6/F5bis n'est pas achevé et vérifié par un professionnel
 
 ---
 
@@ -718,7 +776,7 @@ chez lui qu'on a le droit de citer.
 | Chantier | Déclencheur exact |
 |---|---|
 | **Deuxième et troisième intégration caisse** | Deux prospects perdus pour cette seule raison, sur la même caisse |
-| **Conformité ISCA complète (S2)** | Un client qui la réclame **et** qui paie, ou l'abandon de la stratégie S1 |
+| ~~**Conformité ISCA complète (S2)**~~ | ~~Un client qui la réclame **et** qui paie, ou l'abandon de la stratégie S1~~ — **déclenché le 2026-08-25** par abandon explicite de S1, voir §3.1(1) |
 | **Titres-restaurant en ligne** | Trois patrons qui le citent comme motif de refus, chiffres à l'appui |
 | **Accessibilité RGAA / EN 301 549** | Le premier prospect de plus de 10 salariés (l'exemption micro-entreprise tombe) |
 | **Multi-établissements** | Un groupe de 2 adresses ou plus qui signe |
