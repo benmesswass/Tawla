@@ -4,6 +4,7 @@ import { currentMarket } from "@/lib/market";
 import TawlaLogo from "@/components/brand/TawlaLogo";
 import BoutonVisite from "@/components/visite/BoutonVisite";
 import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
+import { marketBaseUrl } from "@/lib/marketUrls";
 
 /**
  * Page d'accueil publique (Phase 14.2).
@@ -19,6 +20,17 @@ export const metadata = {
   title: "Tawla — la commande à table, sans commande perdue",
   description:
     "Vos clients commandent depuis leur téléphone, vos serveurs gardent la main, et vous voyez enfin vos chiffres. Installation, formation et QR imprimés inclus.",
+  // Deux domaines, même contenu commercial adapté au marché — France,
+  // MARCHE_FRANCE.md Phase F4 §5 ("hreflang : fr-TN ↔ fr-FR croisés").
+  // Codes de RÉGION, pas de langue différente : les deux marchés servent
+  // en français, seul le pays change.
+  alternates: {
+    canonical: marketBaseUrl(currentMarket.code) + "/",
+    languages: {
+      "fr-TN": marketBaseUrl("tn") + "/",
+      "fr-FR": marketBaseUrl("fr") + "/",
+    },
+  },
 };
 
 export default function HomePage() {

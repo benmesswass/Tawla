@@ -67,7 +67,10 @@ export default async function ChoisirPaysPage({
               >
                 <span className="text-lg font-medium">{option.name}</span>
                 {option.code === detected && (
-                  <span className="text-sm rounded-full px-3 py-1" style={{ background: "var(--harissa)", color: "var(--semoule)" }}>
+                  // harissa-pressed, pas harissa : harissa+semoule ne tient
+                  // que 3.97:1 (sous les 4.5:1 WCAG AA pour du texte de cette
+                  // taille) — vérifié au calcul, pas à l'œil.
+                  <span className="text-sm rounded-full px-3 py-1" style={{ background: "var(--harissa-pressed)", color: "var(--semoule)" }}>
                     Détecté
                   </span>
                 )}
