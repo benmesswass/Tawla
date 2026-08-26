@@ -7,9 +7,10 @@ devise, de fuseau, de taux ou de prix de palier en dur dans un module — tout
 passe par `current_market`. C'est la seule protection contre la divergence
 entre les deux marchés.
 
-Cette étape pose l'objet et son contenu ; le câblage (formateur monétaire,
-fuseau des journées de service, port de paiement) vient dans des PR
-suivantes — voir le tableau de la Phase F3 dans MARCHE_FRANCE.md.
+Câblage progressif au fil des étapes de la Phase F3 (voir son tableau dans
+MARCHE_FRANCE.md) : formateur monétaire (`core/currency.py`) et fuseau des
+journées de service (`core/dates.py::service_day_start`) branchés ; port de
+paiement encore à extraire de `orders/service.py`.
 """
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo

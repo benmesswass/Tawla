@@ -1,12 +1,20 @@
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BeforeValidator
 
-# La Tunisie n'applique plus l'heure d'été depuis 2009 : un décalage fixe est
-# exact toute l'année, et évite de dépendre de la base de fuseaux du système,
-# absente de certaines images conteneur minimales.
-TUNIS = timezone(timedelta(hours=1))
+if TYPE_CHECKING:
+    from app.core.markets import Market
+
+# Import différé (pas en tête de fichier) : `app.core.markets` importe
+# `app.modules.tenants.models`, qui importe `as_utc` d'ici — un import en
+# tête de fichier romprait au démarrage de l'appli entière (`ImportError:
+# cannot import name 'as_utc' from partially initialized module`), vérifié.
+def _resolve_market(market: "Market | None") -> "Market":
+    from app.core.markets import current_market
+
+    return market or current_market
+
 
 # Heure à laquelle une journée de service laisse la place à la suivante.
 #
@@ -19,23 +27,28 @@ TUNIS = timezone(timedelta(hours=1))
 SERVICE_DAY_START_HOUR = 5
 
 
-def service_day_start(now: datetime | None = None) -> datetime:
+def service_day_start(now: datetime | None = None, market: "Market | None" = None) -> datetime:
     """
-    Début, en UTC, de la journée de service en cours.
+    Début, en UTC, de la journée de service en cours, dans le fuseau du
+    marché — `zoneinfo`, conscient de l'heure d'été (`market=None` lit
+    `current_market` ; la Tunisie n'en observe plus depuis 2009, la France
+    si, d'où `zoneinfo` plutôt qu'un décalage fixe, qui serait faux sept mois
+    par an en France).
 
     Sert à cesser d'**afficher** les commandes de la veille sur les écrans de
     service — jamais à changer leur statut : elles restent « perdues » pour
     `stats/service.py::lost_orders`, et c'est ce chiffre qui porte l'argument
     de vente. On arrête de les montrer, on ne les efface pas.
     """
-    local = (now or datetime.now(timezone.utc)).astimezone(TUNIS)
+    resolved_market = _resolve_market(market)
+    local = (now or datetime.now(timezone.utc)).astimezone(resolved_market.timezone)
     start = local.replace(hour=SERVICE_DAY_START_HOUR, minute=0, second=0, microsecond=0)
     if local < start:
         start -= timedelta(days=1)
     return start.astimezone(timezone.utc)
 
 
-def service_day_bounds(day: date) -> tuple[datetime, datetime]:
+def service_day_bounds(day: date, market: "Market | None" = None) -> tuple[datetime, datetime]:
     """
     Début et fin, en UTC, de la journée de service correspondant à un jour
     calendaire donné.
@@ -47,11 +60,13 @@ def service_day_bounds(day: date) -> tuple[datetime, datetime]:
     (l'iftar et le sohour d'une même soirée, pendant le Ramadan) apparaissait
     sous un jour dans les stats et sous un autre sur les écrans de service.
 
-    Midi UTC (13 h Tunis) comme instant de référence : toujours dans le même
-    jour calendaire côté Tunis que `day`, donc `service_day_start` en déduit
-    sans ambiguïté le début de la bonne journée de service.
+    Midi UTC comme instant de référence : reste dans le même jour calendaire
+    côté marché que `day` pour n'importe quel fuseau à quelques heures de
+    UTC (Tunis comme Paris, hiver comme été), donc `service_day_start` en
+    déduit sans ambiguïté le début de la bonne journée de service.
     """
-    start = service_day_start(datetime.combine(day, time(hour=12), tzinfo=timezone.utc))
+    resolved_market = _resolve_market(market)
+    start = service_day_start(datetime.combine(day, time(hour=12), tzinfo=timezone.utc), market=resolved_market)
     return start, start + timedelta(days=1)
 
 

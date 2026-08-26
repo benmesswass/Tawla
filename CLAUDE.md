@@ -67,6 +67,18 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
 - Routes staff/cuisine/manager protégées par `get_current_staff` (JWT) +
   vérification du rôle ; routes client (scan QR, création/suivi de
   commande) restent publiques par design.
+- **Plus jamais de devise, de fuseau ou de taux en dur** (MARCHE_FRANCE.md
+  Phase F3, deux marchés tn/fr depuis un seul déploiement) : tout passe par
+  `current_market`/`currentMarket` (`app/core/markets.py` / `lib/market.ts`).
+  Montant affiché → `format_money()` / `formatAmount()`/`formatMoney()`
+  (`app/core/currency.py` / `lib/currency.ts`), jamais `f"{x:.2f}"` ni
+  `.toFixed(n)` avec un symbole en dur. Journée de service / heure locale →
+  `market.timezone` (`zoneinfo`), jamais un décalage UTC fixe façon
+  l'ancien `TUNIS` de `core/dates.py` (faux 7 mois par an en France, qui
+  observe l'heure d'été contrairement à la Tunisie depuis 2009). Deux
+  garde-fous font échouer la CI si un nouveau site en dur apparaît :
+  `backend/tests/test_currency.py` (scanne aussi `frontend/`) et les tests
+  Vitest de `frontend/lib/{currency,market}.test.ts`.
 
 ## Commandes
 

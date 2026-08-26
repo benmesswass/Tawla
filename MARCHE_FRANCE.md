@@ -599,8 +599,8 @@ retire ou ajoute. **Toute la Phase F5 en dépend.**
 Ne s'ouvre qu'après F2 : coder la couche marché avant de savoir si le marché
 français encaisse, c'est coder les mauvais drapeaux.
 
-- [ ] `app/core/markets.py` + `lib/market.ts` : devise, fuseau, langues, drapeaux, paliers, TVA, textes
-- [ ] **Formateur monétaire unique** des deux côtés, et suppression des ~20 `toFixed(3)` / `"DT"` en dur (Annexe A). Test qui échoue si un nouveau apparaît
+- [x] `app/core/markets.py` + `lib/market.ts` : devise, fuseau, langues, drapeaux, paliers, TVA, textes — [PR #88](https://github.com/benmesswass/Tawla/pull/88)
+- [x] **Formateur monétaire unique** des deux côtés, et suppression des ~20 `toFixed(3)` / `"DT"` en dur (Annexe A). Test qui échoue si un nouveau apparaît — [PR #88](https://github.com/benmesswass/Tawla/pull/88)
 - [ ] **Fuseau par `zoneinfo`** — `Europe/Paris` avec heure d'été. Test qui prouve qu'une commande du 15 juillet tombe dans la bonne journée de service (`core/dates.py:9`)
 - [ ] Extraire le **port de paiement** (§4) : `KonnectProvider`, `NullProvider`, interface commune, `orders/service.py` ne connaît plus Konnect
 - [ ] Paliers et contenu de l'offre déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`)
