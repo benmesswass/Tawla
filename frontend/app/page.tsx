@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { lalezar } from "@/lib/fonts";
+import { currentMarket } from "@/lib/market";
 import TawlaLogo from "@/components/brand/TawlaLogo";
 import BoutonVisite from "@/components/visite/BoutonVisite";
 import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
@@ -117,7 +118,9 @@ export default function HomePage() {
                 <h3 className="font-semibold text-lg">{tier.name}</h3>
                 <p className="text-xs text-[var(--ink-soft)] mb-3">{tier.tagline}</p>
                 <p className="mb-4">
-                  <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">{tier.priceDT} DT</span>
+                  <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">
+                    {tier.priceDT} {currentMarket.currency.symbol}
+                  </span>
                   <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
                 </p>
                 <ul className="text-sm text-[var(--ink-soft)] space-y-1.5">

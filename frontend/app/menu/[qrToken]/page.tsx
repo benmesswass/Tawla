@@ -19,6 +19,8 @@ import {
   Table,
 } from "@/lib/api";
 import { toLocalizedMessage } from "@/lib/errors";
+import { formatAmount } from "@/lib/currency";
+import { currentMarket } from "@/lib/market";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
@@ -1195,7 +1197,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           <div className="flex justify-between text-[15px] font-bold text-[var(--encre)] mt-2 pt-2 border-t border-[var(--line)]">
             <span>{t.total}</span>
             <span className="tabular-nums">
-              {trackedOrder.total_amount.toFixed(3)} {t.currency}
+              {formatAmount(trackedOrder.total_amount)} {t.currency}
             </span>
           </div>
         </div>
@@ -1214,7 +1216,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {r.order.id === trackedOrder.id && ` — ${t.thisOrder}`}
                   </span>
                   <span className="tabular-nums">
-                    {r.order.total_amount.toFixed(3)} {t.currency}
+                    {formatAmount(r.order.total_amount)} {t.currency}
                   </span>
                 </li>
               ))}
@@ -1222,7 +1224,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             <div className="mt-2 pt-2 border-t border-[rgba(184,134,46,.35)] flex justify-between font-semibold text-[var(--encre)]">
               <span>{t.tableTotal}</span>
               <span className="tabular-nums">
-                {totalArdoise.toFixed(3)} {t.currency}
+                {formatAmount(totalArdoise)} {t.currency}
               </span>
             </div>
             <p className="mt-1.5 text-xs text-[var(--ink-soft)]">{t.tableTotalNote}</p>
@@ -1288,7 +1290,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
                   <div className="flex gap-2">
                     {[0, 0.05, 0.1].map((pct) => {
-                      const amount = Number((trackedOrder.total_amount * pct).toFixed(3));
+                      const amount = Number((trackedOrder.total_amount * pct).toFixed(currentMarket.currency.decimals));
                       const selected = (tipInput === "" && pct === 0) || Number(tipInput) === amount;
                       return (
                         <button
@@ -1486,7 +1488,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   rupture ? "line-through opacity-45" : ""
                 }`}
               >
-                {item.price.toFixed(3)} {t.currency}
+                {formatAmount(item.price)} {t.currency}
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 {ligne && (
@@ -1693,7 +1695,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   >
                     <span>{t.openOrderLine(ref.order.id, ref.order.items.length)}</span>
                     <span className="tabular-nums shrink-0">
-                      {ref.order.total_amount.toFixed(3)} {t.currency}
+                      {formatAmount(ref.order.total_amount)} {t.currency}
                     </span>
                   </button>
                 </li>
@@ -1822,7 +1824,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}
                   </p>
                   <p className={`${lalezar.className} text-[26px] leading-none tabular-nums text-[var(--semoule)] mt-0.5`}>
-                    {total.toFixed(3)} {t.currency}
+                    {formatAmount(total)} {t.currency}
                   </p>
                 </div>
                 <button
@@ -1864,7 +1866,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   .map((item) => (
                     <li key={item.id} className="flex items-center gap-3">
                       <span className="flex-1 text-sm text-[var(--ink-soft)]">
-                        <span className="text-[var(--encre)]">{item.name}</span> · {item.price.toFixed(3)} DT
+                        <span className="text-[var(--encre)]">{item.name}</span> · {formatAmount(item.price)} {t.currency}
                       </span>
                       <button
                         onClick={() => addToCart(item, true)}
@@ -1934,7 +1936,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                             <span>{option.name}</span>
                             {option.price_delta > 0 && (
                               <span className="tabular-nums shrink-0">
-                                +{option.price_delta.toFixed(3)} {t.currency}
+                                +{formatAmount(option.price_delta)} {t.currency}
                               </span>
                             )}
                           </button>
@@ -1947,7 +1949,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <span className="text-[17px] font-bold tabular-nums text-[var(--encre)]">
-                  {chooserTotalPrice(optionChooserFor).toFixed(3)} {t.currency}
+                  {formatAmount(chooserTotalPrice(optionChooserFor))} {t.currency}
                 </span>
                 <button
                   onClick={confirmOptionChooser}

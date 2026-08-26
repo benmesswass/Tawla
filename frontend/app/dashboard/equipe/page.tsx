@@ -5,6 +5,8 @@ import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
 import { api, StaffRole, SubscriptionTier, TeamReport } from "@/lib/api";
 import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
+import { formatAmount, formatMoney } from "@/lib/currency";
+import { currentMarket } from "@/lib/market";
 import { duree } from "@/lib/duree";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -52,14 +54,17 @@ function reportToCsv(report: TeamReport): string {
 
   row("Rapport d'équipe Tawla", `${report.start} au ${report.end}`);
   lines.push("");
-  row("Nom", "Rôle", "Commandes prises", "Délai moyen de prise en charge (s)", "Montant traité (DT)");
+  row(
+    "Nom", "Rôle", "Commandes prises", "Délai moyen de prise en charge (s)",
+    `Montant traité (${currentMarket.currency.symbol})`
+  );
   for (const member of report.staff) {
     row(
       member.staff_name,
       ROLE_LABELS[member.role],
       member.orders_taken,
       member.avg_seconds_to_claim === null ? "" : Math.round(member.avg_seconds_to_claim),
-      member.total_amount_handled.toFixed(3)
+      formatAmount(member.total_amount_handled)
     );
   }
   return lines.join("\n");
@@ -204,7 +209,7 @@ export default function TeamReportPage() {
                       {formatDelay(member.avg_seconds_to_claim)}
                     </td>
                     <td className="py-2 text-right tabular-nums">
-                      {member.total_amount_handled.toFixed(3)} DT
+                      {formatMoney(member.total_amount_handled)}
                     </td>
                   </tr>
                 ))}

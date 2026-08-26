@@ -1,4 +1,5 @@
 import { MyShift } from "@/lib/api";
+import { formatMoney } from "@/lib/currency";
 import { duree } from "@/lib/duree";
 import { lalezar } from "@/lib/fonts";
 
@@ -25,7 +26,7 @@ export default function MaSoiree({ shift, tablesEnCharge }: { shift: MyShift | n
   const tuiles = [
     { valeur: String(tablesEnCharge), libelle: "Tables en charge" },
     { valeur: String(shift.orders_taken), libelle: "Commandes servies" },
-    { valeur: `${shift.total_amount_handled.toFixed(3)} DT`, libelle: "Encaissé ce soir" },
+    { valeur: formatMoney(shift.total_amount_handled), libelle: "Encaissé ce soir" },
     { valeur: delai, libelle: "Attente moyenne" },
   ];
 

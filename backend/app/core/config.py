@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/resto_qr"
     env: str = "development"
 
+    # Marché servi par cette instance ("tn" | "fr") — un déploiement par
+    # marché (MARCHE_FRANCE.md §4, option B retenue), jamais les deux dans le
+    # même processus. Lu une fois au démarrage par app/core/markets.py.
+    # Défaut "tn" : une instance existante qui ne pose jamais cette variable
+    # ne change pas de comportement.
+    market: str = "tn"
+
     # Défaut de dev uniquement — DOIT être surchargé en prod (variable
     # d'environnement JWT_SECRET). Signe les tokens d'auth staff. Le
     # garde-fou ci-dessous empêche de démarrer en prod avec cette valeur

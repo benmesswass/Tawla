@@ -12,6 +12,8 @@ tirets cadratins ni l'arabe — texte volontairement en ASCII étendu simple.
 """
 from fpdf import FPDF
 
+from app.core.currency import format_money
+from app.core.markets import Market, current_market
 from app.modules.orders.models import Order, PaymentMethod
 
 _PAYMENT_LABELS: dict[PaymentMethod, str] = {
@@ -19,6 +21,18 @@ _PAYMENT_LABELS: dict[PaymentMethod, str] = {
     PaymentMethod.CARD_TERMINAL: "Carte (terminal)",
     PaymentMethod.CASH: "Espèces",
 }
+
+
+def _pdf_money(amount: float, market: Market = current_market) -> str:
+    """`format_money()` rend "€" pour le marché France — la police Helvetica
+    core de fpdf2 ne le sait pas afficher (`FPDFUnicodeEncodingException`,
+    vérifié : même l'espace insécable seul passe, seul "€" casse) et lèverait
+    sur CHAQUE facture France, pas seulement sur un cas rare comme le nom de
+    plat arabe évoqué plus haut. Repli ASCII "EUR" pour ce rendu PDF
+    uniquement — l'écran et l'e-mail gardent le vrai symbole. Paramètre
+    `market` explicite (comme `format_money`) pour rester testable sans
+    dépendre du marché du processus — voir tests/test_invoice.py."""
+    return format_money(amount, market).replace("€", "EUR")
 
 
 def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
@@ -46,8 +60,8 @@ def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
         line_total = float(item.unit_price) * item.quantity
         pdf.cell(90, 8, item.menu_item_name)
         pdf.cell(20, 8, str(item.quantity), align="R")
-        pdf.cell(35, 8, f"{float(item.unit_price):.2f} DT", align="R")
-        pdf.cell(35, 8, f"{line_total:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(35, 8, _pdf_money(float(item.unit_price)), align="R")
+        pdf.cell(35, 8, _pdf_money(line_total), align="R", new_x="LMARGIN", new_y="NEXT")
         # Options choisies (France, F5/A2) : déjà comptées dans unit_price,
         # affichées ici pour mémoire, jamais reprises dans le calcul du total.
         if item.options:
@@ -62,14 +76,14 @@ def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
     tip = float(order.tip_amount)
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(145, 7, "Sous-total", align="R")
-    pdf.cell(35, 7, f"{order.total_amount:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(35, 7, _pdf_money(order.total_amount), align="R", new_x="LMARGIN", new_y="NEXT")
     if tip > 0:
         pdf.cell(145, 7, "Pourboire", align="R")
-        pdf.cell(35, 7, f"{tip:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(35, 7, _pdf_money(tip), align="R", new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(145, 9, "Total payé", align="R")
-    pdf.cell(35, 9, f"{order.total_amount + tip:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(35, 9, _pdf_money(order.total_amount + tip), align="R", new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(6)
     pdf.set_font("Helvetica", "", 10)

@@ -6,6 +6,7 @@ import { api, type Restaurant } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { clearToken } from "@/lib/auth";
 import { TIERS } from "@/lib/offer";
+import { currentMarket } from "@/lib/market";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import TawlaMark from "@/components/brand/TawlaMark";
@@ -81,11 +82,11 @@ export default function ActivationRequired({
             <p className="mt-4">
               {price < basePrice && (
                 <span className="text-sm line-through me-2" style={{ color: "var(--ink-soft)" }}>
-                  {basePrice} DT
+                  {basePrice} {currentMarket.currency.symbol}
                 </span>
               )}
               <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--encre)" }}>
-                {price} DT
+                {price} {currentMarket.currency.symbol}
               </span>
               <span className="text-sm" style={{ color: "var(--ink-soft)" }}> / mois</span>
             </p>
@@ -101,7 +102,7 @@ export default function ActivationRequired({
 
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={handlePay} disabled={submitting}>
-            {submitting ? "Paiement en cours…" : `Payer ${price} DT pour activer`}
+            {submitting ? "Paiement en cours…" : `Payer ${price} ${currentMarket.currency.symbol} pour activer`}
           </Button>
           <Button variant="secondary" onClick={handleLogout} disabled={submitting}>
             Se déconnecter

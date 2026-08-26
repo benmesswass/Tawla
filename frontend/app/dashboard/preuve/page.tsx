@@ -5,6 +5,8 @@ import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
 import { api, PeriodProof, ProofStats, SubscriptionTier } from "@/lib/api";
 import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
+import { formatMoney } from "@/lib/currency";
+import { currentMarket } from "@/lib/market";
 import { duree } from "@/lib/duree";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { clearToken } from "@/lib/auth";
@@ -34,7 +36,7 @@ function isoDaysAgo(days: number): string {
 const formatDuration = duree;
 
 function formatAmount(amount: number | null): string {
-  return amount === null ? "—" : `${amount.toFixed(3)} DT`;
+  return amount === null ? "—" : formatMoney(amount);
 }
 
 function formatDate(iso: string): string {
@@ -142,7 +144,11 @@ function proofToCsv(proof: ProofStats): string {
     cell(proof.current.avg_order_to_kitchen_seconds),
     cell(proof.previous.avg_order_to_kitchen_seconds)
   );
-  row("Panier moyen (DT)", cell(proof.current.avg_basket_amount), cell(proof.previous.avg_basket_amount));
+  row(
+    `Panier moyen (${currentMarket.currency.symbol})`,
+    cell(proof.current.avg_basket_amount),
+    cell(proof.previous.avg_basket_amount)
+  );
 
   return lines.join("\n");
 }

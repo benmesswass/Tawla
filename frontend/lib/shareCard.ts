@@ -3,6 +3,7 @@
 // aucune image externe à héberger. Rendu pixel uniquement : les libellés
 // fixes ci-dessous restent volontairement en dehors du dictionnaire i18n
 // principal (portée limitée à cette carte, jamais affichés autrement).
+import { formatMoney } from "./currency";
 const CANVAS_LABELS: Record<
   "fr" | "ar",
   { tagline: string; footer: string; total: string; tip: string; table: (label: string, id: number) => string }
@@ -141,9 +142,7 @@ export async function generateShareCardBlob(params: ShareCardParams): Promise<Bl
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
 }
 
-function montant(valeur: number): string {
-  return `${valeur.toFixed(3)} DT`;
-}
+const montant = formatMoney;
 
 function ligne(ctx: CanvasRenderingContext2D, y: number, largeur: number) {
   ctx.strokeStyle = "rgba(255,255,255,0.4)";

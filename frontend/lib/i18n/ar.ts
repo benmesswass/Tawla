@@ -1,4 +1,5 @@
 import type { Dictionary } from "./fr";
+import { formatAmount } from "@/lib/currency";
 
 // Arabe tunisien (derja) en écriture arabe — registre familier et chaleureux,
 // adapté à un parcours client de commande au restaurant. `satisfies Dictionary`
@@ -6,6 +7,10 @@ import type { Dictionary } from "./fr";
 export const ar = {
   locale: "ar",
   dir: "rtl",
+  // Fixe (pas currentMarket.currency.symbol) : cette derja tunisienne ne sert
+  // aujourd'hui que le marché tunisien. Le jour où le marché français a sa
+  // propre variante arabe littéraire (§6 F1 de MARCHE_FRANCE.md), elle aura
+  // son propre dictionnaire, pas ce symbole rendu dynamique ici.
   currency: "د.ت",
   localeSwitchLabel: "Français",
 
@@ -51,13 +56,13 @@ export const ar = {
   paymentTitle: "الخلاص",
   paidMessage: (method, tipAmount) =>
     `الخلاص تم ✓ ${method === "cash" ? "كاش" : "بالكارت"}` +
-    (tipAmount > 0 ? ` (فيها ${tipAmount.toFixed(3)} د.ت إكرامية)` : ""),
-  cashPendingMessage: (amount) => `طلبت تخلص كاش — جرسون باش يجي يقبض ${amount.toFixed(3)} د.ت.`,
+    (tipAmount > 0 ? ` (فيها ${formatAmount(tipAmount)} د.ت إكرامية)` : ""),
+  cashPendingMessage: (amount) => `طلبت تخلص كاش — جرسون باش يجي يقبض ${formatAmount(amount)} د.ت.`,
   cardTerminalPendingMessage: (amount) =>
-    `طلبت تخلص بالكارت — جرسون باش يجي بالماكينة يقبض ${amount.toFixed(3)} د.ت.`,
+    `طلبت تخلص بالكارت — جرسون باش يجي بالماكينة يقبض ${formatAmount(amount)} د.ت.`,
   tipLabel: "الإكرامية (إختياري، للخلاص بالكارت)",
   tipNone: "بلا",
-  tipPlaceholder: "0.00 د.ت",
+  tipPlaceholder: `${formatAmount(0)} د.ت`,
   emailLabel: "الإيميل (إختياري، باش توصلك الفاتورة)",
   emailPlaceholder: "انت@مثال.com",
   payByCard: "خلص أونلاين",
@@ -104,12 +109,12 @@ export const ar = {
     "الخلاص إلي تحت يخلص كان الطلبية المعروضة. ارجع للأخرين باش تخلصهم، ولا اطلب من الجرسون يخلصهم الكل مرة وحدة.",
   sharedWithLabel: "مقسوم بين :",
   sharedWithEveryone: "ما اخترت حتى واحد : مقسوم على الطاولة الكل.",
-  sharedPerPersonAmount: (amount) => `${amount.toFixed(3)} د.ت للشخص`,
+  sharedPerPersonAmount: (amount) => `${formatAmount(amount)} د.ت للشخص`,
   dinersLabel: "قداش عباد عالطاولة",
   openOrdersTitle: (count, reste) =>
     count > 1
-      ? `${count} طلبيات مازالوا — باقي ${reste.toFixed(3)} د تتخلص`
-      : `طلبية مازالت — باقي ${reste.toFixed(3)} د تتخلص`,
+      ? `${count} طلبيات مازالوا — باقي ${formatAmount(reste)} د تتخلص`
+      : `طلبية مازالت — باقي ${formatAmount(reste)} د تتخلص`,
   openOrderLine: (id, lines) => `طلبية #${id} — ${lines} حاجة`,
   loyaltyFirstVisit: "أول مرة — بطاقتك تبدا مع هذي الطلبية.",
   loyaltyRewardAvailable: "🎉 عندك حاجة مربوحة! وريها للجرسون.",

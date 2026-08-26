@@ -17,6 +17,8 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
+import { formatMoney } from "@/lib/currency";
+import { currentMarket } from "@/lib/market";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { useAccesDemoParLien } from "@/lib/demoLien";
 import { clearToken } from "@/lib/auth";
@@ -993,7 +995,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{item.name}</div>
                       <div className="text-xs text-neutral-500 truncate">
-                        {item.category} · {item.price.toFixed(3)} DT
+                        {item.category} · {formatMoney(item.price)}
                       </div>
                     </div>
                     <Badge tone={item.is_available ? "success" : "danger"} className="shrink-0 hidden sm:inline-flex">
@@ -1037,7 +1039,7 @@ export default function DashboardPage() {
                             setDrafts((d) => ({ ...d, [item.id]: { ...draft, price: e.target.value } }))
                           }
                           className="border rounded px-2 py-1"
-                          placeholder="Prix (DT)"
+                          placeholder={`Prix (${currentMarket.currency.symbol})`}
                           inputMode="decimal"
                         />
                       </div>
@@ -1195,7 +1197,7 @@ export default function DashboardPage() {
                                       value={option.priceDelta}
                                       onChange={(e) => updateOptionField(item, groupIndex, optionIndex, "priceDelta", e.target.value)}
                                       className="border rounded px-2 py-1 text-sm"
-                                      placeholder="Supplément (DT)"
+                                      placeholder={`Supplément (${currentMarket.currency.symbol})`}
                                       inputMode="decimal"
                                     />
                                     <button
@@ -1293,7 +1295,7 @@ export default function DashboardPage() {
                     value={newItem.price}
                     onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
                     className="border rounded px-2 py-1"
-                    placeholder="Prix (DT)"
+                    placeholder={`Prix (${currentMarket.currency.symbol})`}
                     inputMode="decimal"
                   />
                 </div>
