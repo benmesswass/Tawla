@@ -896,7 +896,7 @@ sont listées ici pour qu'aucune ne se règle par défaut, en silence.
 | # | Décision | Bloque | Statut |
 |---|---|---|---|
 | ~~C1~~ | ~~Scénario A, B ou C du §1~~ | — | ✅ Tranchée 2026-08-24 : **C** (§ Phase F0) |
-| **C2** | S1 (ne pas encaisser) ou S2 (être conforme au fisc) | F5, F6, et la promesse commerciale | Ouverte — se tranche en F2, avec l'expert-comptable |
+| **C2** | S1 (ne pas encaisser) ou S2 (être conforme au fisc) | F5, F6, et la promesse commerciale | **Décision de travail de Wassim (2026-08-26) : S2** — construit techniquement en entier, mais l'encaissement réel reste **désactivé par défaut en production** (drapeau de marché, § « Le port de paiement ») tant que la confirmation professionnelle (expert-comptable, ISCA) n'est pas faite ; actif en démo. Ne remplace pas F2 : le rendez-vous comptable + la revérification ISCA restent dus avant toute activation réelle |
 | **C3** | Segment prioritaire : brasserie de quartier, ou restaurants à clientèle maghrébine | Le positionnement, la démo, la langue, la carte | Ouverte — se tranche en F1, à l'écoute des entretiens |
 | **C4** | La marque internationale : « Tawla » ou un autre nom ; recherche INPI ; domaines | F4 | Amorcée 2026-08-24 : « MyTable » proposé, disponibilité à vérifier (§ Phase F0) |
 | **C5** | Le prix français (hypothèse 49/89/149 €, à ne pas annoncer avant F1) | F1 | Ouverte |
