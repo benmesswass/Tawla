@@ -128,6 +128,13 @@ export const fr = {
   suggestionHint: "Proposé par le restaurant — vous pouvez ignorer.",
   suggestionAdd: "Ajouter",
   suggestionDismiss: "Non merci",
+
+  // Options et suppléments sur un article (cuisson, sauce, accompagnement...).
+  optionsChooseTitle: (name: string) => `Choisissez pour « ${name} »`,
+  optionsGroupHint: (min: number, max: number) =>
+    min === max ? `Choisissez ${min}` : min === 0 ? `Jusqu'à ${max} au choix` : `Entre ${min} et ${max} au choix`,
+  optionsConfirmAdd: "Ajouter au panier",
+  optionsCancelChoice: "Annuler",
   cartClearedNotice:
     "Un article de votre panier n'est plus disponible et a été retiré. Votre panier est maintenant vide.",
 

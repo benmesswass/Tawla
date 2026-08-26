@@ -20,10 +20,10 @@ from app.core.logging import get_logger, log_event
 from app.core.push import send_push_notification
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
-from app.modules.menu.models import MenuItem
+from app.modules.menu.models import MenuItem, MenuItemOption
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
-from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.models import Order, OrderItem, OrderItemOption, OrderStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
 from app.modules.tenants.models import Restaurant, SubscriptionTier
@@ -85,8 +85,10 @@ async def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
         db.query(Order)
         # `table` chargée en une fois : elle est lue pour chaque commande
         # (le libellé affiché au serveur), et cet écran se recharge en plein
-        # service — une requête par commande n'y a pas sa place.
-        .options(selectinload(Order.table))
+        # service — une requête par commande n'y a pas sa place. Les options
+        # choisies (France, F5/A2) suivent le même principe : la cuisine lit
+        # chaque commande en entier, jamais une requête par article.
+        .options(selectinload(Order.table), selectinload(Order.items).selectinload(OrderItem.options))
         .filter(
             Order.restaurant_id == restaurant_id,
             Order.status.in_(ACTIVE_STATUSES),
@@ -110,7 +112,7 @@ async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Or
     """
     return (
         db.query(Order)
-        .options(selectinload(Order.table))
+        .options(selectinload(Order.table), selectinload(Order.items).selectinload(OrderItem.options))
         .filter(
             Order.restaurant_id == restaurant_id,
             Order.payment_method == PaymentMethod.CASH,
@@ -130,7 +132,7 @@ async def list_pending_card_terminal_payments(db: Session, restaurant_id: int) -
     — même principe que list_pending_cash_payments, moyen distinct."""
     return (
         db.query(Order)
-        .options(selectinload(Order.table))
+        .options(selectinload(Order.table), selectinload(Order.items).selectinload(OrderItem.options))
         .filter(
             Order.restaurant_id == restaurant_id,
             Order.payment_method == PaymentMethod.CARD_TERMINAL,
@@ -177,6 +179,51 @@ def purge_terminal_push_subscriptions(db: Session, dry_run: bool = False) -> int
     if stale:
         log_event(logger, "order.push_subscriptions_purged", count=len(stale))
     return len(stale)
+
+
+def _resolve_selected_options(menu_item: MenuItem, selected_option_ids: list[int]) -> list[MenuItemOption]:
+    """
+    Vérifie et retourne les options choisies pour un article — France, F5/A2.
+
+    Le client n'envoie que des ids : ceux qui n'appartiennent pas à un groupe
+    de CET article sont rejetés (jamais un id d'un autre article ou d'un autre
+    restaurant, deviné ou copié depuis une commande différente), et chaque
+    groupe doit recevoir entre min_select et max_select choix.
+    """
+    options_by_id = {opt.id: opt for group in menu_item.option_groups for opt in group.options}
+
+    selected: list[MenuItemOption] = []
+    for option_id in selected_option_ids:
+        option = options_by_id.get(option_id)
+        if option is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "OPTION_NOT_FOUND",
+                    "message": f"option {option_id} does not belong to '{menu_item.name}'",
+                    "menu_item_id": menu_item.id,
+                },
+            )
+        selected.append(option)
+
+    counts: dict[int, int] = {}
+    for option in selected:
+        counts[option.group_id] = counts.get(option.group_id, 0) + 1
+
+    for group in menu_item.option_groups:
+        count = counts.get(group.id, 0)
+        if not (group.min_select <= count <= group.max_select):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_OPTION_SELECTION",
+                    "message": f"'{group.name}' requires between {group.min_select} and {group.max_select} choice(s)",
+                    "menu_item_id": menu_item.id,
+                    "group_id": group.id,
+                    "group_name": group.name,
+                },
+            )
+    return selected
 
 
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
@@ -250,17 +297,30 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 },
             )
 
-        # Prix figé au moment T : voir commentaire dans models.py
+        selected_options = _resolve_selected_options(menu_item, line.selected_option_ids)
+
+        # Prix figé au moment T : voir commentaire dans models.py. Le
+        # supplément des options choisies (France, F5/A2) est ajouté une
+        # fois pour toutes ici — total_amount, la facture et le contrôle de
+        # montant Konnect n'ont ensuite jamais besoin de connaître les options,
+        # ils lisent unit_price comme avant.
+        options_total = sum(float(opt.price_delta) for opt in selected_options)
         order.items.append(
             OrderItem(
                 menu_item_id=menu_item.id,
                 menu_item_name=menu_item.name,
-                unit_price=menu_item.price,
+                unit_price=float(menu_item.price) + options_total,
                 quantity=line.quantity,
                 notes=line.notes,
                 is_shared=line.is_shared,
                 shared_with=",".join(str(p) for p in line.shared_with) or None,
                 from_suggestion=line.from_suggestion,
+                options=[
+                    OrderItemOption(
+                        group_name=opt.group.name, option_name=opt.name, price_delta=opt.price_delta
+                    )
+                    for opt in selected_options
+                ],
             )
         )
 
@@ -432,6 +492,13 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                         "quantity": i.quantity,
                         "notes": i.notes,
                         "is_shared": i.is_shared,
+                        # France, F5/A2 : ce que la cuisine doit préparer
+                        # exactement (« à point », « sans oignons »...), pas
+                        # seulement l'article. Nom du prix jamais inclus ici —
+                        # la cuisine n'en a pas besoin.
+                        "options": [
+                            {"group_name": o.group_name, "option_name": o.option_name} for o in i.options
+                        ],
                     }
                     for i in order.items
                 ],

@@ -1,4 +1,56 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class MenuItemOptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    price_delta: float
+
+
+class MenuItemOptionGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    min_select: int
+    max_select: int
+    options: list[MenuItemOptionOut]
+
+
+class MenuItemOptionIn(BaseModel):
+    """Un choix envoyé par le manager — sans id : le groupe est remplacé en
+    bloc (voir MenuItemOptionGroupsUpdate), jamais édité choix par choix."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+    price_delta: float = 0
+
+
+class MenuItemOptionGroupIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+    min_select: int = Field(default=0, ge=0)
+    max_select: int = Field(default=1, ge=1)
+    options: list[MenuItemOptionIn] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _min_not_above_max(self) -> "MenuItemOptionGroupIn":
+        if self.min_select > self.max_select:
+            raise ValueError("min_select ne peut pas dépasser max_select")
+        return self
+
+
+class MenuItemOptionGroupsUpdate(BaseModel):
+    """Remplace d'un bloc tous les groupes d'options d'un article — même
+    principe que MenuSuggestionsUpdate : rejouable sans effet de bord."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    groups: list[MenuItemOptionGroupIn]
 
 
 class MenuItemCreate(BaseModel):
@@ -33,6 +85,7 @@ class MenuItemOut(BaseModel):
     spice_level: int
     allergens: str | None
     is_halal: bool
+    option_groups: list[MenuItemOptionGroupOut] = Field(default_factory=list)
 
 
 class MenuItemAvailability(BaseModel):

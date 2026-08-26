@@ -48,6 +48,15 @@ def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
         pdf.cell(20, 8, str(item.quantity), align="R")
         pdf.cell(35, 8, f"{float(item.unit_price):.2f} DT", align="R")
         pdf.cell(35, 8, f"{line_total:.2f} DT", align="R", new_x="LMARGIN", new_y="NEXT")
+        # Options choisies (France, F5/A2) : déjà comptées dans unit_price,
+        # affichées ici pour mémoire, jamais reprises dans le calcul du total.
+        if item.options:
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.set_text_color(110, 110, 110)
+            noms = ", ".join(o.option_name for o in item.options)
+            pdf.cell(0, 5, f"   {noms}", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 10)
+            pdf.set_text_color(0, 0, 0)
 
     pdf.ln(4)
     tip = float(order.tip_amount)

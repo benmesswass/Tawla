@@ -21,7 +21,16 @@ import TawlaMark from "@/components/brand/TawlaMark";
 type KitchenOrder = {
   order_id: number;
   table_label: string;
-  items: { name: string; quantity: number; notes: string | null; is_shared: boolean; shared_with: number[] }[];
+  items: {
+    name: string;
+    quantity: number;
+    notes: string | null;
+    is_shared: boolean;
+    shared_with: number[];
+    // Choix figés (« Cuisson : à point »...) — France, MARCHE_FRANCE.md phase
+    // F5/A2 : ce que la cuisine doit réellement préparer, pas seulement l'article.
+    options: { group_name: string; option_name: string }[];
+  }[];
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
   preparation_started_at: string | null;
@@ -48,6 +57,7 @@ function orderFromApi(o: Order): KitchenOrder {
       notes: i.notes,
       is_shared: i.is_shared,
       shared_with: i.shared_with ?? [],
+      options: i.options ?? [],
     })),
     scheduled_for: o.scheduled_for,
     sent_to_kitchen_at: o.sent_to_kitchen_at,
@@ -163,7 +173,11 @@ export default function KitchenPage() {
               {
                 order_id: msg.order_id,
                 table_label: msg.table_label,
-                items: msg.items.map((it: KitchenOrder["items"][number]) => ({ ...it, shared_with: it.shared_with ?? [] })),
+                items: msg.items.map((it: KitchenOrder["items"][number]) => ({
+                  ...it,
+                  shared_with: it.shared_with ?? [],
+                  options: it.options ?? [],
+                })),
                 scheduled_for: msg.scheduled_for ?? null,
                 sent_to_kitchen_at: msg.sent_to_kitchen_at ?? null,
                 preparation_started_at: null,
@@ -241,7 +255,11 @@ export default function KitchenPage() {
           ${o.items
             .map(
               (it) =>
-                `<li>${it.quantity}× ${escapeHtml(it.name)}${it.is_shared ? " (à partager)" : ""}${it.notes ? " — " + escapeHtml(it.notes) : ""}</li>`
+                `<li>${it.quantity}× ${escapeHtml(it.name)}${it.is_shared ? " (à partager)" : ""}${
+                  it.options.length
+                    ? " — " + escapeHtml(it.options.map((o) => o.option_name).join(", "))
+                    : ""
+                }${it.notes ? " — " + escapeHtml(it.notes) : ""}</li>`
             )
             .join("")}
         </ul>
@@ -436,6 +454,11 @@ export default function KitchenPage() {
                               <span className="ms-1.5 inline-flex items-center gap-1 align-middle rounded-full border border-[rgba(184,134,46,.7)] text-[#d8ae62] text-[13px] font-semibold px-[11px] py-[5px]">
                                 <UtensilsIcon className="w-3 h-3 shrink-0" />
                                 {it.shared_with.length > 0 ? `À partager · ${it.shared_with.length} couverts` : "À partager"}
+                              </span>
+                            )}
+                            {it.options.length > 0 && (
+                              <span className="block text-[15px] font-semibold text-[var(--note-cuisine)]">
+                                {it.options.map((o) => o.option_name).join(" · ")}
                               </span>
                             )}
                             {it.notes && (

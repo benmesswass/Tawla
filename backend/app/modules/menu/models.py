@@ -1,5 +1,5 @@
 from sqlalchemy import Boolean, ForeignKey, Integer, LargeBinary, Numeric, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -69,3 +69,52 @@ class MenuItem(Base):
     # halal — le champ sert surtout à signaler l'exception (établissement
     # touristique servant alcool/porc), pas la norme.
     is_halal: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    option_groups: Mapped[list["MenuItemOptionGroup"]] = relationship(
+        back_populates="menu_item", cascade="all, delete-orphan", order_by="MenuItemOptionGroup.display_order"
+    )
+
+
+class MenuItemOptionGroup(Base):
+    """
+    Un groupe de choix sur un article (« Cuisson », « Sauce », « Accompagnement »)
+    — France, phase F5/A2 : « un steak sans cuisson ne part pas en cuisine ».
+
+    `min_select`/`max_select` couvrent les trois formes courantes sans avoir
+    besoin d'un champ `is_required` séparé (redondant) : obligatoire à choix
+    unique (1, 1), optionnel à choix unique (0, 1), optionnel à choix multiple
+    borné (0, N).
+    """
+
+    __tablename__ = "menu_item_option_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Porté aussi par le groupe, comme `MenuSuggestion.restaurant_id` : les
+    # routes manager n'ont ainsi jamais besoin de remonter à l'article pour
+    # vérifier l'appartenance au bon restaurant.
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    min_select: Mapped[int] = mapped_column(Integer, default=0)
+    max_select: Mapped[int] = mapped_column(Integer, default=1)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    menu_item: Mapped["MenuItem"] = relationship(back_populates="option_groups")
+    options: Mapped[list["MenuItemOption"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan", order_by="MenuItemOption.display_order"
+    )
+
+
+class MenuItemOption(Base):
+    """Un choix à l'intérieur d'un groupe (« À point », « Sans oignons »),
+    avec son propre supplément de prix éventuel (« Frites +2 DT »)."""
+
+    __tablename__ = "menu_item_options"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("menu_item_option_groups.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    group: Mapped["MenuItemOptionGroup"] = relationship(back_populates="options")

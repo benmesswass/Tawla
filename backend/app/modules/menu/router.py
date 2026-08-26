@@ -1,13 +1,13 @@
 from hashlib import sha256
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.logging import get_logger, log_event
 from app.core.subscription import require_tier
-from app.modules.menu import csv_import, schemas, suggestions
-from app.modules.menu.models import MenuItem
+from app.modules.menu import csv_import, options, schemas, suggestions
+from app.modules.menu.models import MenuItem, MenuItemOptionGroup
 from app.modules.notifications.manager import manager
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -99,6 +99,11 @@ def import_menu_csv(
 def _sorted_menu(db: Session, restaurant_id: int) -> list[MenuItem]:
     items = (
         db.query(MenuItem)
+        # Groupes d'options chargés en une fois : cet écran liste toute la
+        # carte d'un coup (dashboard manager comme parcours client), une
+        # requête par article n'y a pas sa place (même principe que
+        # list_active_orders côté commandes).
+        .options(selectinload(MenuItem.option_groups).selectinload(MenuItemOptionGroup.options))
         .filter(MenuItem.restaurant_id == restaurant_id)
         .order_by(MenuItem.name)
         .all()
@@ -170,6 +175,23 @@ def set_suggestions(
         restaurant_id=staff.restaurant_id, menu_item_id=item_id, count=len(suggested),
     )
     return schemas.MenuItemSuggestionsOut(menu_item_id=item_id, suggested_items=suggested)
+
+
+@router.put("/{item_id}/option-groups", response_model=schemas.MenuItemOut)
+def set_option_groups(
+    item_id: int,
+    payload: schemas.MenuItemOptionGroupsUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """Le manager configure les groupes d'options d'un article (cuisson,
+    sauce, accompagnement...) — remplacement en bloc, voir menu/options.py."""
+    item = options.set_option_groups(db, item_id, payload.groups, staff.restaurant_id)
+    log_event(
+        logger, "menu.option_groups_set",
+        restaurant_id=staff.restaurant_id, menu_item_id=item_id, group_count=len(payload.groups),
+    )
+    return item
 
 
 @router.patch("/{item_id}/availability", response_model=schemas.MenuItemOut)
