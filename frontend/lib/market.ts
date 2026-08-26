@@ -1,0 +1,75 @@
+/**
+ * Couche marché — France, MARCHE_FRANCE.md phase F3. Miroir exact de
+ * `app/core/markets.py` côté backend : même forme, mêmes deux marchés.
+ *
+ * Règle durable à partir d'ici : plus jamais de devise, de prix de palier ou
+ * de taux en dur dans un composant — tout passe par `currentMarket`. Cette
+ * étape pose l'objet ; le câblage (formateur monétaire, contenus par marché)
+ * vient dans des PR suivantes.
+ */
+import type { SubscriptionTier } from "./api";
+
+export type CurrencyConfig = {
+  code: "TND" | "EUR";
+  symbol: string;
+  decimals: number;
+};
+
+export type MarketConfig = {
+  code: "tn" | "fr";
+  name: string;
+  currency: CurrencyConfig;
+  // Identifiant IANA (pas un ZoneInfo — pas d'équivalent direct côté JS),
+  // pour Intl.DateTimeFormat / date-fns-tz le jour du câblage du fuseau.
+  timezone: string;
+  languages: readonly string[];
+  // Adaptateur technique branché — "none" tant que Stripe n'existe pas
+  // (Phase F6), voir le commentaire équivalent dans core/markets.py pour la
+  // distinction avec la décision "grisé en prod" de Wassim.
+  paymentProvider: "konnect" | "stripe" | "none";
+  // Hypothèse de départ pour la France (MARCHE_FRANCE.md §3.4, 49/89/149 €) —
+  // jamais à annoncer publiquement avant validation en Phase F1.
+  tierPrices: Record<SubscriptionTier, number>;
+  vatRates: Record<string, number> | null;
+  invoiceThreshold: number | null;
+};
+
+const TUNISIA: MarketConfig = {
+  code: "tn",
+  name: "Tunisie",
+  currency: { code: "TND", symbol: "DT", decimals: 3 },
+  timezone: "Africa/Tunis",
+  languages: ["fr", "ar"],
+  paymentProvider: "konnect",
+  tierPrices: { essentiel: 50, pro: 100, business: 150 },
+  vatRates: null,
+  invoiceThreshold: null,
+};
+
+const FRANCE: MarketConfig = {
+  code: "fr",
+  name: "France",
+  currency: { code: "EUR", symbol: "€", decimals: 2 },
+  timezone: "Europe/Paris",
+  languages: ["fr", "en"],
+  paymentProvider: "none",
+  tierPrices: { essentiel: 49, pro: 89, business: 149 },
+  vatRates: { sur_place: 0.10, a_emporter: 0.055, alcool: 0.20 },
+  invoiceThreshold: 25.0,
+};
+
+const MARKETS: Record<string, MarketConfig> = { tn: TUNISIA, fr: FRANCE };
+
+/** Résout un marché par code — `code` omis lit `NEXT_PUBLIC_MARKET` (défaut "tn"). */
+export function getMarket(code?: string): MarketConfig {
+  const resolved = (code ?? process.env.NEXT_PUBLIC_MARKET ?? "tn").toLowerCase();
+  const market = MARKETS[resolved];
+  if (!market) {
+    throw new Error(`unknown market code: "${resolved}" (expected one of ${Object.keys(MARKETS).join(", ")})`);
+  }
+  return market;
+}
+
+// Chargé une fois au démarrage — un déploiement sert un seul marché
+// (MARCHE_FRANCE.md §4, option B), jamais les deux à la fois.
+export const currentMarket: MarketConfig = getMarket();
