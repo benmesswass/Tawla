@@ -625,9 +625,9 @@ décision produit, seulement des domaines (F0).
 - [x] `CF-IPCountry` pour **ordonner** les options, jamais pour rediriger — `lib/geoMarket.ts` (`x-vercel-ip-country` géré en repli, l'hébergeur réel du frontend) (étape 1, [PR #92](https://github.com/benmesswass/Tawla/pull/92))
 - [x] Bandeau fermable « vous semblez être ailleurs » sur chaque marché — `components/BandeauAutreMarche.tsx`, détection via une route API dédiée (`app/api/geo`) pour ne pas sortir tout le site du rendu statique (étape 2, [PR #93](https://github.com/benmesswass/Tawla/pull/93))
 - [x] **Test automatisé : `/menu/<token>` n'affiche jamais le sélecteur**, cookie présent ou non — `lib/marketBanner.ts::selecteurAutorise()` + `marketBanner.test.ts`, vérifié aussi par Playwright (bandeau invisible sur `/menu/xxx` même avec en-tête de géoloc simulé) (étape 2, [PR #93](https://github.com/benmesswass/Tawla/pull/93))
-- [ ] Lien « changer de pays » visible en permanence (pas seulement quand le bandeau se déclenche) — pas de footer partagé existant sur le site pour l'accrocher proprement, reporté à une étape 3 avec `hreflang`/`canonical`/`sitemap`/`robots`
-- [ ] `hreflang`, `canonical`, `sitemap`, `robots` par marché
-- [ ] Vérifier l'accessibilité de la page de choix (clavier, contraste, cibles tactiles)
+- [ ] Lien « changer de pays » visible en permanence (pas seulement quand le bandeau se déclenche) — pas de footer partagé existant sur le site pour l'accrocher proprement, chantier à part
+- [x] `hreflang`, `canonical`, `sitemap`, `robots` par marché — `app/robots.ts`, `app/sitemap.ts` (limité aux pages commerciales statiques, volontairement sans les pages `/menu/<token>` par établissement), `alternates` sur `app/page.tsx` (`fr-TN`↔`fr-FR`). `x-default` sur le hub non fait : le hub n'a pas encore son propre domaine (🧑, item juste au-dessus), le poser depuis un déploiement de marché serait trompeur (étape 3, [PR #94](https://github.com/benmesswass/Tawla/pull/94))
+- [x] Vérifier l'accessibilité de la page de choix (clavier, contraste, cibles tactiles) — navigation clavier vérifiée par Playwright (Tab atteint les deux options dans le bon ordre, Entrée active), contraste du badge « Détecté » recalculé et corrigé (3.97:1 → 6.0:1, sous puis au-dessus du seuil AA), cibles tactiles déjà ≥56px depuis l'étape 1 (étape 3, [PR #94](https://github.com/benmesswass/Tawla/pull/94))
 
 **Critère de sortie** : celui du §5, vérifié depuis un téléphone réel.
 

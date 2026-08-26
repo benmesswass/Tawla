@@ -7,7 +7,14 @@
  *
  * Même exclusion que `components/visite/BandeauDemo.tsx` (précédent établi
  * dans ce dépôt pour « jamais sur l'écran d'un convive attablé »).
+ *
+ * Exclut aussi `/choisir-pays` lui-même : trouvé pendant la vérification
+ * visuelle de l'étape 3 (capture à l'appui) — le bandeau qui suggère
+ * l'autre marché n'a rien à faire par-dessus la page qui propose déjà
+ * exactement ce choix, plus clairement.
  */
 export function selecteurAutorise(pathname: string): boolean {
-  return !(pathname === "/menu" || pathname.startsWith("/menu/"));
+  if (pathname === "/menu" || pathname.startsWith("/menu/")) return false;
+  if (pathname === "/choisir-pays") return false;
+  return true;
 }
