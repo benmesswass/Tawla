@@ -620,9 +620,9 @@ Spécification complète en §5. Peut se faire avant F5 : elle ne dépend d'aucu
 décision produit, seulement des domaines (F0).
 
 - [ ] Réserver les domaines : hub + `tawla.fr` (ou la marque retenue en F0) 🧑
-- [ ] Page de choix statique, rendue serveur, sans JavaScript obligatoire
-- [ ] Cookie `tawla-market` (1 an), `?market=` qui force, lien « changer de pays » visible
-- [ ] `CF-IPCountry` pour **ordonner** les options, jamais pour rediriger
+- [x] Page de choix statique, rendue serveur, sans JavaScript obligatoire — `app/choisir-pays` (étape 1, PR à venir)
+- [x] Cookie `tawla-market` (1 an), `?market=` qui force — `app/api/choisir-marche` (étape 1, PR à venir). Lien « changer de pays » visible : étape 2, avec le bandeau
+- [x] `CF-IPCountry` pour **ordonner** les options, jamais pour rediriger — `lib/geoMarket.ts` (`x-vercel-ip-country` géré en repli, l'hébergeur réel du frontend) (étape 1, PR à venir)
 - [ ] Bandeau fermable « vous semblez être ailleurs » sur chaque marché
 - [ ] `hreflang`, `canonical`, `sitemap`, `robots` par marché
 - [ ] **Test automatisé : `/menu/<token>` n'affiche jamais le sélecteur**, cookie présent ou non

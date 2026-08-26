@@ -9,6 +9,12 @@
  */
 import type { SubscriptionTier } from "./api";
 
+// Seule source de vérité pour « quels marchés existent » (France, Phase F4
+// §5) — le sélecteur de pays et sa route de redirection en dépendent plutôt
+// que de répéter la liste.
+export const SUPPORTED_MARKET_CODES = ["tn", "fr"] as const;
+export type SupportedMarketCode = (typeof SUPPORTED_MARKET_CODES)[number];
+
 export type CurrencyConfig = {
   code: "TND" | "EUR";
   symbol: string;
@@ -17,7 +23,7 @@ export type CurrencyConfig = {
 };
 
 export type MarketConfig = {
-  code: "tn" | "fr";
+  code: SupportedMarketCode;
   name: string;
   currency: CurrencyConfig;
   // Identifiant IANA (pas un ZoneInfo — pas d'équivalent direct côté JS),
