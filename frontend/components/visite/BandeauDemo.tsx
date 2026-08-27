@@ -72,18 +72,28 @@ export default function BandeauDemo() {
   }
 
   return (
-    // z-[72] : au-dessus de la visite guidée (z-[70]/[71]) — sur les étapes
-    // sans cible, sa bulle se centre à l'écran et chevauche sinon ce bandeau.
-    <div className="fixed top-0 inset-x-0 z-[72] flex flex-col items-center px-3 pt-2 gap-2 pointer-events-none" role="status">
-      <button
-        onClick={() => setOuvert((o) => !o)}
-        className="pointer-events-auto rounded-full bg-[var(--espresso)] text-[var(--semoule)] text-xs px-3.5 py-1.5 shadow-lg"
-      >
-        Démonstration — effacée dans {restant(session.expireLe)} · {ouvert ? "Masquer" : "Partager sur un autre appareil"}
-      </button>
+    // Positionnement (fixed/z-index) porté par le conteneur commun dans
+    // app/layout.tsx, partagé avec BandeauAutreMarche — pour que les deux
+    // s'empilent au lieu de se superposer quand les deux sont visibles.
+    <div className="pointer-events-auto flex flex-col items-center gap-2" role="status">
+      <div className="flex items-center gap-1.5 rounded-full bg-[var(--espresso)] text-[var(--semoule)] text-xs pl-3.5 pr-1.5 py-1.5 shadow-lg">
+        <span>Démonstration — effacée dans {restant(session.expireLe)}</span>
+        {/* Bouton distinct de l'annonce du délai : la phrase seule ne se
+            lisait pas comme cliquable (retour de Wassim après une démo
+            client, 2026-08-27). */}
+        <button
+          onClick={() => setOuvert((o) => !o)}
+          className="flex items-center gap-1 rounded-full bg-white/15 hover:bg-white/25 px-2.5 py-1 font-medium transition-colors"
+        >
+          {ouvert ? "Masquer" : "Partager sur un autre appareil"}
+          <span aria-hidden className={`inline-block transition-transform ${ouvert ? "rotate-180" : ""}`}>
+            ▾
+          </span>
+        </button>
+      </div>
 
       {ouvert && (
-        <div className="pointer-events-auto w-[calc(100vw-1.5rem)] max-w-sm rounded-xl bg-white shadow-xl border border-[var(--line)] p-3 flex flex-col gap-2">
+        <div className="w-[calc(100vw-1.5rem)] max-w-sm rounded-xl bg-white shadow-xl border border-[var(--line)] p-3 flex flex-col gap-2">
           <p className="text-xs text-[var(--ink-soft)]">
             Ouvre l&apos;écran, déjà connecté, sur un ordinateur ou une tablette — pour montrer le service en direct pendant qu&apos;un client commande sur son téléphone.
           </p>

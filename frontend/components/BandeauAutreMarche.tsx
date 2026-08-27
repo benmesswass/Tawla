@@ -64,18 +64,22 @@ export default function BandeauAutreMarche() {
   }
 
   return (
-    <div className="fixed top-0 inset-x-0 z-[60] flex justify-center px-3 pt-2 pointer-events-none" role="status">
-      <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[var(--espresso)] text-[var(--semoule)] text-xs px-4 py-2 shadow-lg">
-        <span>
-          Vous semblez être en {autre.nom} —{" "}
-          <a href={autre.url} className="underline font-medium">
-            voir Tawla {autre.nom}
-          </a>
-        </span>
-        <button onClick={fermer} aria-label="Fermer" className="shrink-0 opacity-70 hover:opacity-100">
-          ✕
-        </button>
-      </div>
+    // Positionnement (fixed/z-index) porté par le conteneur commun dans
+    // app/layout.tsx, partagé avec BandeauDemo — pour que les deux s'empilent
+    // au lieu de se superposer quand les deux sont visibles.
+    <div
+      role="status"
+      className="pointer-events-auto flex items-center gap-3 rounded-full bg-[var(--espresso)] text-[var(--semoule)] text-xs px-4 py-2 shadow-lg"
+    >
+      <span>
+        Vous semblez être en {autre.nom} —{" "}
+        <a href={autre.url} className="underline font-medium">
+          voir Tawla {autre.nom}
+        </a>
+      </span>
+      <button onClick={fermer} aria-label="Fermer" className="shrink-0 opacity-70 hover:opacity-100">
+        ✕
+      </button>
     </div>
   );
 }
