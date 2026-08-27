@@ -113,6 +113,10 @@ export type Restaurant = RestaurantPublic & {
   // avec le compte à rebours dérivé de subscription_period_end ci-dessus.
   launch_promo_discount_percent: number | null;
   has_paid_for_subscription: boolean;
+  // Établissement de démo jetable — jamais payé par construction, voir
+  // backend/app/modules/tenants/models.py. Empêche le rappel de paiement de
+  // s'afficher sur un compte de démo (dashboard/page.tsx).
+  is_demo: boolean;
 };
 
 /**

@@ -50,6 +50,11 @@ class RestaurantOut(RestaurantPublicOut):
     # subscription_period_end ci-dessus.
     launch_promo_discount_percent: int | None
     has_paid_for_subscription: bool
+    # Établissement de démo jetable (voir modules/demo/service.py) — le
+    # frontend s'en sert pour ne jamais afficher le rappel de paiement : une
+    # démo n'est pas payée, et son propre docstring (tenants/models.py) le dit
+    # explicitement, "le rappel de paiement n'a pas de sens sur une démo".
+    is_demo: bool
     # Jamais la clé API elle-même (voir Restaurant.konnect_credentials) —
     # juste de quoi afficher "connecté" et le wallet, qui n'est pas un secret.
     konnect_configured: bool

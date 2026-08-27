@@ -868,7 +868,7 @@ export default function DashboardPage() {
           onUpgraded={(updated) => setRestaurant(updated)}
         />
       )}
-      {restaurant && !restaurant.has_paid_for_subscription && !paymentReminderDismissed && (
+      {restaurant && !restaurant.is_demo && !restaurant.has_paid_for_subscription && !paymentReminderDismissed && (
         <SubscriptionReminderModal
           restaurant={restaurant}
           onPaid={(updated) => {

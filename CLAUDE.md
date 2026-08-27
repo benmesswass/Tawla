@@ -268,3 +268,13 @@ contrats API), pas la couverture pour la couverture.
 
 Jamais de push direct sur `main` — toujours une branche feature + PR. CI
 (lint/typecheck/tests backend+frontend) doit être verte avant merge.
+
+## Agent skills
+
+### Issue tracker
+
+Issues et specs vivent dans les GitHub Issues de `benmesswass/Tawla`. Voir `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context : `CONTEXT.md` + `docs/adr/` à la racine, créés au fil de l'eau dès qu'un terme ou une décision se précise. Voir `docs/agents/domain.md`.
