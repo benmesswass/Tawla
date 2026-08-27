@@ -29,8 +29,11 @@ function surLaRoute(chemin: string, route: string): boolean {
  * Montée une fois dans le layout, elle survit à la navigation : les étapes
  * portent leur route, « Suivant » emmène sur la page suivante quand il faut, et
  * la position est gardée en localStorage. Elle ne démarre jamais toute seule —
- * `?visite=1` dans l'URL, ou le bouton « Voir la démo » de la page d'accueil.
- * Un restaurateur qui arrive sur le site n'a donc rien à fermer.
+ * seulement via `?visite=1` dans l'URL (le lien « Voir la visite guidée » de
+ * la page d'accueil). Cliquer « Voir la démo » n'y suffit plus depuis le
+ * 2026-08-27 : ce bouton ouvre directement le tableau de bord de démo, sans
+ * bulles par-dessus (voir BoutonVisite.tsx). Un restaurateur qui arrive sur le
+ * site n'a donc rien à fermer.
  *
  * Le parcours s'adapte à ce que le visiteur peut réellement ouvrir : sans
  * compte staff, les sept écrans de direction et de service sortent de la
