@@ -606,7 +606,7 @@ français encaisse, c'est coder les mauvais drapeaux.
 - [x] Paliers déplacés dans la couche marché (`core/subscription.py:33`, `lib/offer.ts`) — [PR #91](https://github.com/benmesswass/Tawla/pull/91). Scope réduit au prix : `name`/`tagline`/`features` restent la copie tunisienne, le contenu de l'offre par marché reste la ligne suivante, non encore fait
 - Contenus par marché — découpé en étapes, comme F4 (démo/visite guidée touchent une zone où la marque française n'est pas encore tranchée, §3.4, 🧑)
   - [x] Catégories de carte : « Ftour » remplacé par « Formules »/« Vins »/« À emporter » (`lib/market.ts::menuCategories`) — étape 6, [PR #96](https://github.com/benmesswass/Tawla/pull/96)
-  - [ ] Démo (brasserie française, formule du jour, carte des vins — plus jamais « Dar Chaabane »)
+  - [x] Démo (brasserie française, formule du jour, carte des vins — plus jamais « Dar Chaabane ») — étape 7, [PR #97](https://github.com/benmesswass/Tawla/pull/97)
   - [ ] Visite guidée (moteur conservé, contenu par marché)
   - [ ] Anecdotes d'attente (`lib/culturalFacts.ts`) — remplacer par du contenu propre au restaurant, ou retirer par drapeau de marché
   - [ ] Chevalet QR (français seul par défaut, anglais optionnel, arabe seulement sur le segment concerné)

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dates import as_utc
 from app.core.logging import log_event
+from app.core.markets import Market, current_market
 from app.modules.loyalty.models import LoyaltyMember
 from app.modules.menu.models import MenuItem, MenuSuggestion
 from app.modules.orders.models import Order, OrderItem
@@ -53,7 +54,12 @@ PLAFOND_DEMOS = 100
 
 # La carte de démonstration, alignée sur `scripts/seed_demo.py` : un
 # restaurateur qui voit la démo en ligne puis en rendez-vous doit reconnaître
-# les mêmes plats.
+# les mêmes plats. Un restaurateur français qui voit une carte tunisienne en
+# démo comprend que le produit n'est pas pour lui, en trois secondes
+# (MARCHE_FRANCE.md §3.2) — d'où une carte, une équipe et un nom d'établissement
+# distincts par marché plutôt qu'une seule liste traduite.
+NOM_DEMO = {"tn": "Dar Chaabane (démo)", "fr": "Brasserie du Vieux Marché (démo)"}
+
 CARTE = [
     ("Salade méchouia", "Entrées", 6.0),
     ("Brik à l'œuf", "Entrées", 4.5),
@@ -63,10 +69,32 @@ CARTE = [
     ("Thé à la menthe", "Boissons", 3.0),
 ]
 
+# Brasserie française : formule du jour, structure entrée/plat/dessert, carte
+# des vins — les deux catégories que la Tunisie n'a pas (étape 6, "Formules"
+# et "Vins" dans lib/market.ts::menuCategories / core/markets.py équivalent).
+CARTE_FR = [
+    ("Soupe à l'oignon gratinée", "Entrées", 9.50),
+    ("Terrine de campagne, cornichons", "Entrées", 8.50),
+    ("Bavette à l'échalote, frites maison", "Plats", 19.50),
+    ("Confit de canard, pommes sarladaises", "Plats", 22.00),
+    ("Crème brûlée", "Desserts", 7.00),
+    ("Tarte Tatin, crème fraîche", "Desserts", 7.50),
+    ("Eau minérale", "Boissons", 3.50),
+    ("Café gourmand", "Boissons", 6.50),
+    ("Formule midi : entrée + plat, ou plat + dessert", "Formules", 18.90),
+    ("Verre de côtes-du-rhône", "Vins", 5.50),
+]
+
 EQUIPE = [
     ("Amine (manager)", StaffRole.MANAGER),
     ("Sami (serveur)", StaffRole.WAITER),
     ("Karim (cuisine)", StaffRole.KITCHEN),
+]
+
+EQUIPE_FR = [
+    ("Julie (manager)", StaffRole.MANAGER),
+    ("Thomas (serveur)", StaffRole.WAITER),
+    ("Nicolas (cuisine)", StaffRole.KITCHEN),
 ]
 
 
@@ -134,7 +162,7 @@ def purger_demos_expirees(db: Session) -> int:
     return len(expirees)
 
 
-def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
+def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     """
     Monte un établissement complet : l'équipe, trois tables, une carte.
 
@@ -148,14 +176,22 @@ def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     cuisine, déjà connecté, sur un autre appareil que celui qui a ouvert la
     démo — les comptes serveur et cuisine ont un mot de passe généré
     aléatoirement ci-dessous, jamais révélé, donc jamais saisissable à la main.
+
+    `market` par défaut au marché du déploiement (`current_market`, France
+    étape 7) — même patron que `format_money()` (`core/currency.py`) :
+    l'appelant réel (`router.py`) ne le passe jamais, seuls les tests
+    l'utilisent pour vérifier l'autre marché sans dépendre de `MARKET` au
+    démarrage du process.
     """
     purger_demos_expirees(db)
 
     suffixe = secrets.token_urlsafe(8).lower().replace("_", "").replace("-", "")
     expiration = datetime.now(timezone.utc) + DUREE_DEMO
+    carte = CARTE_FR if market.code == "fr" else CARTE
+    equipe = EQUIPE_FR if market.code == "fr" else EQUIPE
 
     restaurant = Restaurant(
-        name="Dar Chaabane (démo)",
+        name=NOM_DEMO[market.code],
         slug=f"demo-{suffixe}",
         is_demo=True,
         demo_expires_at=expiration,
@@ -171,14 +207,17 @@ def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     db.flush()
 
     comptes = []
-    for nom, role in EQUIPE:
+    for nom, role in equipe:
         compte = Staff(
             restaurant_id=restaurant.id,
             name=nom,
             role=role,
             # Adresse jetable et unique : `Staff.email` est unique sur toute
             # la base, deux démos simultanées ne doivent pas se télescoper.
-            email=f"{role.value}@{restaurant.slug}.demo.tawla.tn",
+            # Domaine par marché — jamais résolu ni envoyé nulle part (mot de
+            # passe jamais révélé, cf. docstring), aucune dépendance à ce que
+            # `tawla.fr` soit réellement réservé (F4, encore 🧑).
+            email=f"{role.value}@{restaurant.slug}.demo.tawla.{market.code}",
             password_hash=hash_password(secrets.token_urlsafe(16)),
         )
         db.add(compte)
@@ -188,7 +227,7 @@ def creer_demo(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     for table in tables:
         db.add(table)
 
-    for nom, categorie, prix in CARTE:
+    for nom, categorie, prix in carte:
         db.add(MenuItem(restaurant_id=restaurant.id, name=nom, category=categorie, price=prix))
 
     db.commit()
