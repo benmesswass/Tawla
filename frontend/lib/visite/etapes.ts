@@ -143,7 +143,7 @@ export const ETAPES: EtapeVisite[] = [
     id: "tarif-essentiel",
     route: "/",
     cible: "tarif-essentiel",
-    titre: `Essentiel — 50 ${currentMarket.currency.symbol} / mois`,
+    titre: `Essentiel — ${currentMarket.tierPrices.essentiel} ${currentMarket.currency.symbol} / mois`,
     corps:
       "Pour un café ou une petite salle : le QR, la carte, la commande client, les écrans serveur et cuisine en temps réel, l'appel serveur depuis la table, et le paiement en espèces. Installation, QR imprimés et formation compris.",
   },
@@ -151,7 +151,7 @@ export const ETAPES: EtapeVisite[] = [
     id: "tarif-pro",
     route: "/",
     cible: "tarif-pro",
-    titre: `Pro — 100 ${currentMarket.currency.symbol} / mois`,
+    titre: `Pro — ${currentMarket.tierPrices.pro} ${currentMarket.currency.symbol} / mois`,
     corps:
       "Tout Essentiel, plus le paiement carte, le programme de fidélité, la suggestion « avec ce plat », le plan de salle visuel, les photos des plats et le mode Ramadan. C'est le palier que nous recommandons pour un restaurant qui sert à table.",
   },
@@ -159,7 +159,7 @@ export const ETAPES: EtapeVisite[] = [
     id: "tarif-business",
     route: "/",
     cible: "tarif-business",
-    titre: `Business — 150 ${currentMarket.currency.symbol} / mois`,
+    titre: `Business — ${currentMarket.tierPrices.business} ${currentMarket.currency.symbol} / mois`,
     corps:
       "Tout Pro, plus la gestion d'équipe : rapport par serveur pour décider d'une prime sur des chiffres, notifications à vos clients, support prioritaire. Le multi-établissements est construit à la demande, pour vous.",
   },
@@ -312,7 +312,7 @@ export const ETAPES: EtapeVisite[] = [
     cible: "client-categories",
     titre: "Ce que voit votre client",
     corps:
-      "Il a scanné le QR de sa table, rien à installer, rien à télécharger. Votre carte s'ouvre en français ou en arabe, rangée par catégories — sur une carte de cinquante plats, il atteint les desserts sans faire défiler le reste.",
+      `Il a scanné le QR de sa table, rien à installer, rien à télécharger. Votre carte s'ouvre en français${currentMarket.languages.includes("ar") ? " ou en arabe" : ""}, rangée par catégories — sur une carte de cinquante plats, il atteint les desserts sans faire défiler le reste.`,
   },
   {
     id: "client-plat",
