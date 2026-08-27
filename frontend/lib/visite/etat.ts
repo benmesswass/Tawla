@@ -16,6 +16,17 @@ export const CLE_PARCOURS = "tawlaVisiteParcours";
 export const CLE_DEMO = "tawlaDemoSession";
 
 /**
+ * Coupe-circuit global de la visite guidée — désactivée par défaut
+ * (`NEXT_PUBLIC_VISITE_GUIDEE` absent ou différent de "1"). `demarrerVisite`
+ * devient un no-op et `visiteEnCours` reste toujours faux : ni `?visite=1`,
+ * ni le bouton « Voir la démo », ni une visite déjà en cours en localStorage
+ * ne peuvent la faire apparaître tant que le flag n'est pas activé.
+ */
+export function visiteActivee(): boolean {
+  return process.env.NEXT_PUBLIC_VISITE_GUIDEE === "1";
+}
+
+/**
  * L'établissement jetable ouvert pour cette démo. Gardé ici parce que
  * plusieurs choses en dépendent après le clic : le bandeau qui annonce
  * l'échéance, l'étape finale qui propose d'ouvrir la carte de la table — la
@@ -62,7 +73,7 @@ export function enregistrerSessionDemo(session: SessionDemo): void {
 export const EVENEMENT_VISITE = "tawla:visite";
 
 export function visiteEnCours(): boolean {
-  if (typeof window === "undefined") return false;
+  if (!visiteActivee() || typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(CLE_ACTIVE) === "1";
   } catch {
@@ -73,6 +84,7 @@ export function visiteEnCours(): boolean {
 
 /** Ouvre la visite à une étape précise d'un parcours (voir `resoudreVisite`). */
 export function demarrerVisite(depuis = 0, parcours: Parcours = "vente"): void {
+  if (!visiteActivee()) return;
   try {
     window.localStorage.setItem(CLE_ACTIVE, "1");
     window.localStorage.setItem(CLE_ETAPE, String(depuis));
