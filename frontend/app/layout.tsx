@@ -20,8 +20,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <ServiceWorkerRegister />
         <DemoGuide />
-        <BandeauDemo />
-        <BandeauAutreMarche />
+        {/* Bandeaux du haut empilés ici plutôt que positionnés en `fixed`
+            chacun de leur côté : sinon, démo + décalage de marché détectés en
+            même temps se superposent exactement et l'un cache l'autre. */}
+        <div className="fixed top-0 inset-x-0 z-[72] flex flex-col items-center gap-2 px-3 pt-2 pointer-events-none">
+          {/* BandeauAutreMarche d'abord : sa position reste stable quand le
+              panneau de BandeauDemo s'ouvre et grandit, au lieu d'être
+              repoussé plus bas à chaque clic. */}
+          <BandeauAutreMarche />
+          <BandeauDemo />
+        </div>
         <VisiteGuidee />
       </body>
     </html>
