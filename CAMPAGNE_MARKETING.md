@@ -145,12 +145,12 @@ une extrapolation écrite aujourd'hui sur des pilotes qui n'existent pas.
 
 **Pages publiques (accueil, `/signup`) : qualifier plutôt qu'attirer large.**
 L'inscription en self-service ouvre la porte aux petits établissements que
-la stratégie exclut — correctifs proposés et implémentés dans une **branche
-et une PR séparées** de la PR documentaire (`CLAUDE.md`, Workflow PR),
-jamais mergées sans l'accord explicite de Wassim. Détail des changements et
-lien de la PR : voir le message de livraison de cette session — rien
-d'autre à documenter ici, pour ne pas dupliquer la description de la PR
-elle-même.
+la stratégie exclut — correctifs implémentés dans une **branche et une PR
+séparées** de la PR documentaire (`CLAUDE.md`, Workflow PR) :
+[PR #105](https://github.com/benmesswass/Tawla/pull/105),
+`claude/tawla-homepage-signup-cro`. Détail des trois correctifs dans la
+description de cette PR, pour ne pas la dupliquer ici. Ni cette PR ni celle
+qui porte ce fichier ne sont à merger sans l'accord explicite de Wassim.
 
 ## 6. Ce qui reste 🧑, jamais cette session
 
