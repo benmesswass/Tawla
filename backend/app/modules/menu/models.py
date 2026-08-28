@@ -78,9 +78,10 @@ class MenuItem(Base):
     # obligerait une migration à chaque nouvel allergène courant).
     spice_level: Mapped[int] = mapped_column(Integer, default=0)
     allergens: Mapped[str | None] = mapped_column(String(300), nullable=True)
-    # Par défaut à True : la quasi-totalité des restos tunisiens sont
-    # halal — le champ sert surtout à signaler l'exception (établissement
-    # touristique servant alcool/porc), pas la norme.
+    # Défaut SQL à True (fallback ORM direct, ex. démo) — mais le vrai défaut
+    # par marché vit dans MenuItemCreate (menu/schemas.py) et l'import CSV
+    # (csv_import.py) : True en Tunisie (norme, le champ signale l'exception),
+    # False en France (halal n'est qu'un régime parmi d'autres, voir MenuRegime).
     is_halal: Mapped[bool] = mapped_column(Boolean, default=True)
 
     option_groups: Mapped[list["MenuItemOptionGroup"]] = relationship(

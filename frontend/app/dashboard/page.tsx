@@ -112,7 +112,9 @@ const EMPTY_DRAFT: Draft = {
   description: "",
   spiceLevel: "0",
   allergens: "",
-  isHalal: true,
+  // Vrai par défaut en Tunisie (norme), faux en France — voir MenuItem.is_halal
+  // côté backend (menu/models.py).
+  isHalal: currentMarket.code === "tn",
 };
 
 // Options et suppléments sur un article (« Cuisson », « Sauce »...) — France,

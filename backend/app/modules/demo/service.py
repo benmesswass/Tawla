@@ -228,7 +228,19 @@ def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant
         db.add(table)
 
     for nom, categorie, prix in carte:
-        db.add(MenuItem(restaurant_id=restaurant.id, name=nom, category=categorie, price=prix))
+        # Construit en ORM direct : ne passe pas par MenuItemCreate
+        # (menu/schemas.py), donc le défaut market-aware d'is_halal doit être
+        # posé ici explicitement, sinon la démo retombe sur le défaut SQL
+        # (True) — une brasserie française se serait affichée "halal".
+        db.add(
+            MenuItem(
+                restaurant_id=restaurant.id,
+                name=nom,
+                category=categorie,
+                price=prix,
+                is_halal=market.code == "tn",
+            )
+        )
 
     db.commit()
     db.refresh(restaurant)
