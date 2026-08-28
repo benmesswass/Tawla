@@ -31,6 +31,11 @@ Documents qui la fondent :
   qui cherche « la prochaine tâche de code » vient toujours ici en priorité —
   `MARCHE_FRANCE.md` reste le programme du seul chantier France, à travailler
   à côté, jamais à la place de ce fichier.
+- [`ETUDE_MARCHE.md`](./ETUDE_MARCHE.md) — étude de marché et positionnement
+  (2026-08-28) : troisième revérification de la concurrence tunisienne (par
+  palier), triangulation du marché adressable, revérification France
+  (Sunday, niche maghrébine bilingue), matrice comparative, énoncé de
+  positionnement, analyse de défendabilité des trois paliers de prix.
 
 ## Objectif
 
