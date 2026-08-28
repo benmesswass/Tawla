@@ -93,7 +93,7 @@ export type PlatformOverview = {
   gmv_last_7d_tnd: number;
 
   // `null` = aucune commande sur la période, pas 0%.
-  lost_orders_rate_last_7d: number | null;
+  cancelled_orders_rate_last_7d: number | null;
 
   weekly_signups: WeeklyPoint[];
   restaurants: RestaurantSummary[];

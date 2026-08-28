@@ -244,8 +244,8 @@ export default function PlatformAdminPage() {
             />
 
             <KpiTile
-              label="Commandes perdues (7j)"
-              value={formatPercent(overview.lost_orders_rate_last_7d)}
+              label="Commandes annulées (7j)"
+              value={formatPercent(overview.cancelled_orders_rate_last_7d)}
               sub="Même définition que côté manager"
             />
           </div>

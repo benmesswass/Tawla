@@ -20,6 +20,23 @@ class StaffPerformance(BaseModel):
     orders_taken: int
 
 
+class StaffActiveLoad(BaseModel):
+    """
+    Charge d'un serveur **en ce moment**, pas son cumul du jour
+    (`StaffPerformance.orders_taken`) — combien de tables il a actuellement sur
+    les bras (commandes prises en charge, pas encore servies ni annulées).
+
+    Demande de Wassim (2026-08-28), à la place de « Commandes perdues » en tête
+    du tableau de bord : le signal utile au quotidien n'est pas un compteur de
+    ventes ratées, c'est de voir tout de suite qui est en train de se noyer.
+    """
+
+    staff_id: int
+    staff_name: str
+    role: StaffRole
+    tables_count: int
+
+
 class TopMenuItem(BaseModel):
     menu_item_name: str
     quantity: int
@@ -32,15 +49,22 @@ class HourlyCount(BaseModel):
 
 class DashboardStats(BaseModel):
     date: date_type
-    # Les deux chiffres de tête (Phase 17.1). La recette est ce que le patron
-    # vient chercher tous les soirs ; les commandes perdues sont posées juste à
-    # côté pour qu'il les apprenne en passant, sans avoir à ouvrir une autre
-    # page. Mêmes définitions que `PeriodProof`, par construction.
+    # Les deux chiffres de tête (Phase 17.1, remaniés le 2026-08-28). La
+    # recette est ce que le patron vient chercher tous les soirs ; le temps
+    # d'attente moyen est posé juste à côté (voir `RecetteDuJour.tsx`) — un
+    # signal opérationnel du jour même, pas un compteur de ventes ratées.
+    # `cancelled_orders_today` a la même définition que `PeriodProof`, par
+    # construction, mais n'est plus mis en avant en tête du tableau de bord.
     revenue_today: float
-    lost_orders_today: int
+    cancelled_orders_today: int
     active_orders_count: int
     timing: TimingStats
     staff_performance: list[StaffPerformance]
+    # Charge actuelle par serveur (2026-08-28) : combien de tables chacun a
+    # sur les bras **en ce moment**, distinct de `staff_performance` qui
+    # cumule la journée entière. Ne liste que les serveurs avec au moins une
+    # commande active — pas de ligne à zéro pour toute l'équipe.
+    staff_active_load: list[StaffActiveLoad]
     top_items: list[TopMenuItem]
     orders_by_hour: list[HourlyCount]
 
@@ -53,7 +77,7 @@ class KitchenTodayCount(BaseModel):
 class PeriodProof(BaseModel):
     """
     Les trois seuls chiffres qui valent quelque chose devant un restaurateur ou
-    un jury (Phase 13.3) : combien de commandes ont été perdues, combien de
+    un jury (Phase 13.3) : combien de commandes ont été annulées, combien de
     temps s'écoule entre la commande du client et son arrivée en cuisine, et
     quel est le panier moyen.
 
@@ -65,13 +89,12 @@ class PeriodProof(BaseModel):
 
     orders_count: int
 
-    # « Perdue » = annulée, ou restée en attente de confirmation au-delà du
-    # seuil défini dans orders/service.py::ABANDONED_PENDING_AFTER. Le détail
-    # est renvoyé séparément parce que les deux causes n'appellent pas la même
-    # action : une annulation est une décision, un abandon est un oubli.
-    lost_orders_count: int
-    cancelled_count: int
-    abandoned_count: int
+    # « Commande perdue » = commande annulée (`stats/service.py::
+    # cancelled_orders`, décision de Wassim du 2026-08-28). Une commande
+    # restée longtemps sans être prise en charge n'est plus comptée ici : elle
+    # peut toujours aboutir, contrairement à une annulation. Ce délai reste
+    # mesuré ailleurs (`TimingStats.avg_wait_confirmation_seconds`).
+    cancelled_orders_count: int
 
     # Du panier validé par le client à l'arrivée sur l'écran cuisine. C'est le
     # délai que le produit prétend réduire — donc celui qu'il faut mesurer.

@@ -25,22 +25,27 @@ d'avant faite à sa manière et une mesure d'après faite par la machine ne se
 comparent pas — et une comparaison fausse détruit la seule chose que Tawla a à
 vendre.
 
-Le code (`stats/service.py::_lost_orders`) appelle **commande perdue** :
+Le code (`stats/service.py::cancelled_orders`) appelle **commande perdue** :
 
-1. une commande **annulée**, ou
-2. une commande **restée plus de 10 minutes sans être prise en charge**.
+1. une commande **annulée**. Un point, c'est tout depuis le 2026-08-28 : une
+   commande qui met du temps à être prise en charge peut toujours aboutir,
+   contrairement à une annulation — la compter comme perdue confondait une
+   vente lente avec une vente ratée.
 
 Les équivalents observables à la main, et rien d'autre :
 
 | Ce que le code compte | Ce que vous notez sur place |
 |---|---|
 | Commande annulée | Une commande annulée, refusée, ou renvoyée en cuisine |
-| Jamais prise en charge sous 10 min | Une table installée qui attend **plus de 10 minutes** avant qu'un serveur ne prenne sa commande |
+| — | Une table installée qui attend **plus de 10 minutes** avant qu'un serveur ne prenne sa commande — ne compte plus dans le total « perdues », mais reste notée : c'est elle qui nourrit le délai moyen (ligne suivante) |
 | — | Un client qui s'installe puis **repart sans commander** |
 
-La troisième ligne n'a pas d'équivalent dans le code : un client qui repart ne
-crée aucune commande, donc rien à compter. **La noter à part**, jamais dans le
-total : elle sert l'argumentaire, pas la comparaison chiffrée.
+Les deux dernières lignes n'ont pas d'équivalent dans « commandes perdues » du
+code : une commande lente reste une commande, et un client qui repart n'en
+crée aucune. **Les noter à part**, jamais dans le total des perdues — la
+colonne « > 10 min » sert à calculer le délai moyen installée → commande, la
+ligne « repartie » sert l'argumentaire, ni l'une ni l'autre la comparaison
+chiffrée des perdues.
 
 **Panier moyen** : total encaissé du service ÷ nombre de tables servies. Les deux
 se lisent sur la caisse en fin de soirée. Ne pas estimer.
@@ -65,8 +70,9 @@ Comment compter une table :
 
 1. La table s'installe → **noter l'heure**.
 2. Un serveur prend sa commande → **noter l'heure**. L'écart est le délai.
-3. Si l'écart dépasse 10 minutes → cocher **perdue**.
-4. Si elle repart avant de commander → colonne **repartie**, et pas dans le total.
+3. Si l'écart dépasse 10 minutes → cocher la colonne **> 10 min** (délai, pas perte).
+4. Une commande annulée, refusée ou renvoyée en cuisine → cocher **annulée**, la seule colonne qui compte dans le total « perdues ».
+5. Si elle repart avant de commander → colonne **repartie**, et pas dans le total.
 
 Ne compter que les tables **installées pour consommer** : quelqu'un qui prend un
 café au comptoir n'entre pas dans la mesure, parce qu'il n'entrera pas non plus
@@ -110,7 +116,8 @@ _______________________________________________________________________
 
 TOTAUX DU SOIR
   Tables servies ............................ ______
-  Commandes perdues (> 10 min + annulées) ... ______
+  Commandes perdues (annulées) .............. ______
+  Dont tables > 10 min avant commande ....... ______   (délai, pas perte — voir ligne suivante)
   Clients repartis sans commander ........... ______   (hors total)
   Délai moyen installée → commande .......... ______ min
 

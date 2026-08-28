@@ -136,9 +136,7 @@ function proofToCsv(proof: ProofStats): string {
     `${proof.previous.start} au ${proof.previous.end}`
   );
   row("Commandes", proof.current.orders_count, proof.previous.orders_count);
-  row("Commandes perdues", proof.current.lost_orders_count, proof.previous.lost_orders_count);
-  row("dont annulées", proof.current.cancelled_count, proof.previous.cancelled_count);
-  row("dont oubliées", proof.current.abandoned_count, proof.previous.abandoned_count);
+  row("Commandes annulées", proof.current.cancelled_orders_count, proof.previous.cancelled_orders_count);
   row(
     "Délai commande vers cuisine (secondes)",
     cell(proof.current.avg_order_to_kitchen_seconds),
@@ -163,9 +161,9 @@ function downloadCsv(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
-function lostRate(period: PeriodProof): string {
+function cancelledRate(period: PeriodProof): string {
   if (period.orders_count === 0) return "—";
-  return `${((period.lost_orders_count / period.orders_count) * 100).toFixed(0)} % des commandes`;
+  return `${((period.cancelled_orders_count / period.orders_count) * 100).toFixed(0)} % des commandes`;
 }
 
 export default function ProofPage() {
@@ -277,13 +275,13 @@ export default function ProofPage() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <MetricCard
-              label="Commandes perdues"
-              value={String(proof.current.lost_orders_count)}
-              detail={`${lostRate(proof.current)} · ${proof.current.cancelled_count} annulée(s), ${proof.current.abandoned_count} oubliée(s)`}
-              current={proof.current.lost_orders_count}
-              previous={proof.previous.lost_orders_count}
+              label="Commandes annulées"
+              value={String(proof.current.cancelled_orders_count)}
+              detail={cancelledRate(proof.current)}
+              current={proof.current.cancelled_orders_count}
+              previous={proof.previous.cancelled_orders_count}
               direction="lower-is-better"
-              previousLabel={String(proof.previous.lost_orders_count)}
+              previousLabel={String(proof.previous.cancelled_orders_count)}
             />
             <MetricCard
               label="Délai commande → cuisine"
@@ -355,11 +353,10 @@ export default function ProofPage() {
               {formatDate(proof.previous.end)}.
             </p>
             <p className="mt-2">
-              Une commande est comptée perdue dans deux cas : elle a été annulée, ou bien plus de 10 minutes se
-              sont écoulées <strong className="text-[var(--encre)]">entre le moment où le client a validé son
-              panier et celui où un serveur l&apos;a prise en charge</strong> — autrement dit, personne n&apos;a
-              réagi. Le temps de cuisine et le temps de service n&apos;entrent pas dans ce calcul. Ces 10 minutes
-              sont une proposition à ajuster avec vous après un premier service.
+              Une commande est comptée perdue quand elle a été <strong className="text-[var(--encre)]">annulée</strong> —
+              rien d&apos;autre. Une commande simplement lente à être prise en charge n&apos;est pas une vente
+              ratée : elle reste dans le circuit, et son délai se lit dans « Délai commande → cuisine »
+              ci-dessus, pas ici.
             </p>
           </Card>
         </>

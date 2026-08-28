@@ -282,7 +282,7 @@ Verdict par fonctionnalité, sur l'état réel du code.
 | **Monnaie** | `toFixed(3)` + `"DT"` en dur dans ~20 fichiers (Annexe A), `tnd_to_millimes()`, `TIER_PRICES_TND`, `priceDT` | `12,50 €` : 2 décimales, virgule décimale, espace insécable avant le symbole. **Un seul formateur**, alimenté par la couche marché |
 | **Fuseau horaire** | `core/dates.py:9` : `TUNIS = timezone(timedelta(hours=1))`, avec le commentaire « la Tunisie n'applique plus l'heure d'été depuis 2009 » | **La France, si.** Un décalage fixe serait faux 7 mois par an : les journées de service, les stats et la page de preuve décaleraient d'une heure d'avril à octobre. Passage obligatoire à `zoneinfo` (`Europe/Paris`) |
 | **Journée de service** | `SERVICE_DAY_START_HOUR = 5` (`dates.py:19`) | Probablement encore valable, mais c'est une hypothèse tunisienne : à reconfronter au premier pilote français (un restaurant qui ferme à 23 h n'a pas le même besoin qu'un service de nuit) |
-| **Seuil de commande perdue** | `ABANDONED_PENDING_AFTER = 10 min` (`orders/service.py:53`) | Idem : une brasserie parisienne au service de midi n'a pas la même tolérance. À confronter, pas à recopier |
+| **Seuil d'alerte serveur** | `ATTENTE_ALERTE_MINUTES = 10 min` (`frontend/app/staff/page.tsx` — depuis le 2026-08-28, plus un seuil de « commande perdue » côté backend, seulement une alerte visuelle sur l'écran serveur) | Idem : une brasserie parisienne au service de midi n'a pas la même tolérance. À confronter, pas à recopier |
 | **Mode Ramadan / iftar** | `Restaurant.ramadan_mode_enabled`, `iftar_time`, `Order.scheduled_for` | **Ne pas retirer.** À rendre optionnel par établissement, et à repositionner : c'est l'unique fonctionnalité que Tawla a et que Sunday n'a pas, sur un segment français réel (§6 F1). Le mécanisme `scheduled_for` sert aussi de commande programmée générique |
 | **Allergènes** | Texte libre (`menu/models.py:67`) | En France l'information allergènes est **obligatoire** (réglementation INCO, 14 allergènes). Passage à une **liste structurée** — d'obligation légale à argument de vente |
 | **Pourboire** | 0 / 5 % / 10 % (`menu/[qrToken]/page.tsx:1215`) | La suggestion en pourcentage est un usage nord-américain. En France : montants ronds (sans / 1 € / 2 € / autre). Et sujet à la stratégie S1 |
@@ -824,7 +824,7 @@ d'être lu dans la configuration.
 |---|---|
 | `backend/app/core/dates.py:9` | `TUNIS = timezone(timedelta(hours=1))` — **faux 7 mois par an en France** |
 | `backend/app/core/dates.py:19` | `SERVICE_DAY_START_HOUR = 5` — hypothèse tunisienne à reconfronter |
-| `backend/app/modules/orders/service.py:53` | `ABANDONED_PENDING_AFTER = 10 min` — idem |
+| `frontend/app/staff/page.tsx` | `ATTENTE_ALERTE_MINUTES = 10 min` — idem |
 
 ### Culture, langue, contenu
 

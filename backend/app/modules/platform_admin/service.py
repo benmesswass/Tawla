@@ -10,7 +10,7 @@ from app.core.subscription import effective_tier
 from app.modules.orders.models import Order
 from app.modules.platform_admin import schemas
 from app.modules.stats.models import DashboardView
-from app.modules.stats.service import lost_orders, paid_orders
+from app.modules.stats.service import cancelled_orders, paid_orders
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 # Trois mois de tendance : assez pour montrer un rythme d'inscriptions, pas
@@ -125,8 +125,8 @@ async def get_overview(db: Session) -> schemas.PlatformOverview:
 
     orders_last_7d = [o for o in orders if as_utc(o.created_at) >= seven_days_ago]
     gmv_last_7d = sum(o.total_amount for o in paid_orders(orders_last_7d))
-    lost_last_7d = lost_orders(orders_last_7d, now)
-    lost_rate_last_7d = (len(lost_last_7d) / len(orders_last_7d)) if orders_last_7d else None
+    cancelled_last_7d = cancelled_orders(orders_last_7d)
+    cancelled_rate_last_7d = (len(cancelled_last_7d) / len(orders_last_7d)) if orders_last_7d else None
 
     return schemas.PlatformOverview(
         generated_at=now,
@@ -139,7 +139,7 @@ async def get_overview(db: Session) -> schemas.PlatformOverview:
         restaurants_active_last_7d=len(views_by_restaurant),
         orders_last_7d=len(orders_last_7d),
         gmv_last_7d_tnd=gmv_last_7d,
-        lost_orders_rate_last_7d=lost_rate_last_7d,
+        cancelled_orders_rate_last_7d=cancelled_rate_last_7d,
         weekly_signups=_weekly_signups(restaurants, now),
         restaurants=restaurant_summaries,
     )

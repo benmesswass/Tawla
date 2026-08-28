@@ -139,9 +139,9 @@ class PlatformOverview(BaseModel):
     gmv_last_7d_tnd: float
 
     # 6. Qualité de service plateforme — même définition que chaque resto
-    # voit déjà chez lui (`stats/service.py::lost_orders`), jamais une
+    # voit déjà chez lui (`stats/service.py::cancelled_orders`), jamais une
     # redéfinition. `None` = aucune commande sur la période, pas 0%.
-    lost_orders_rate_last_7d: float | None
+    cancelled_orders_rate_last_7d: float | None
 
     weekly_signups: list[WeeklyPoint]
     restaurants: list[RestaurantSummary]

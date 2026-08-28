@@ -23,9 +23,11 @@ import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 
-// Même seuil que `ABANDONED_PENDING_AFTER` côté serveur : au-delà, la commande
-// est comptée perdue dans les chiffres du patron. L'écran doit donc alerter
-// avant, pas après — sinon le serveur découvre la perte dans le tableau de bord.
+// Seuil propre à cet écran (2026-08-28, ex-partagé avec la définition de
+// « commande perdue » — voir CONTEXT.md) : une table qui attend depuis plus de
+// dix minutes mérite d'être signalée au serveur, même si elle ne compte plus
+// comme perdue dans les chiffres du patron. Dix minutes reste une proposition
+// à confronter au premier pilote, comme `SERVICE_DAY_START_HOUR`.
 const ATTENTE_ALERTE_MINUTES = 10;
 import Skeleton from "@/components/ui/Skeleton";
 import TawlaMark from "@/components/brand/TawlaMark";

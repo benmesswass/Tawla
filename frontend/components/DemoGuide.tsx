@@ -35,7 +35,7 @@ const STEPS = [
   {
     route: "/dashboard",
     title: "Manager — l'écran qui vend",
-    body: "Connectez-vous en tant que manager. Montrez la recette du jour, les commandes perdues, et /dashboard/preuve. Gardez cet écran ouvert le plus longtemps — c'est ce qui justifie le prix.",
+    body: "Connectez-vous en tant que manager. Montrez la recette du jour, le temps d'attente moyen, et /dashboard/preuve. Gardez cet écran ouvert le plus longtemps — c'est ce qui justifie le prix.",
   },
   {
     route: "/signup",

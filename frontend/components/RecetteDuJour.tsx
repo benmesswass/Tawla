@@ -1,14 +1,22 @@
 import { DashboardStats } from "@/lib/api";
 import { formatMoney } from "@/lib/currency";
+import { duree } from "@/lib/duree";
 
 /**
- * Les deux chiffres de tête du tableau de bord (Phase 17.1).
+ * Les deux chiffres de tête du tableau de bord (Phase 17.1, remaniés le
+ * 2026-08-28).
  *
  * La recette d'abord, en gros : c'est ce que le patron vient chercher tous les
  * soirs, et cette habitude quotidienne est ce qui empêche une résiliation au
- * troisième mois. Les commandes perdues juste à côté, pour qu'il apprenne
- * **en passant** le chiffre qui justifie l'abonnement — plutôt que d'aller le
- * chercher sur une page qu'il n'ouvrira jamais de lui-même.
+ * troisième mois. Le temps d'attente moyen juste à côté, pour qu'il voie **en
+ * passant** si le service tourne rond aujourd'hui — plutôt que d'aller le
+ * chercher sur `/dashboard/stats`, une page qu'il n'ouvrira jamais de
+ * lui-même.
+ *
+ * « Commandes perdues » (annulées) reste mesuré et partagé avec la page de
+ * preuve, mais n'est plus le chiffre de tête : Wassim a jugé qu'une commande
+ * simplement lente à être prise en charge n'a rien d'une vente ratée, et
+ * qu'un chiffre qui pénalise un service occupé décourage plus qu'il n'aide.
  *
  * Zéro s'affiche comme zéro : une case vide se lit comme une panne.
  */
@@ -27,15 +35,15 @@ export default function RecetteDuJour({ stats }: { stats: DashboardStats | null 
       </div>
 
       <div className="rounded-xl border border-[var(--line)] bg-white px-5 py-4">
-        <p className="text-sm text-[var(--ink-soft)]">Commandes perdues</p>
+        <p className="text-sm text-[var(--ink-soft)]">Temps d&apos;attente moyen</p>
         <p className="text-3xl font-semibold tabular-nums mt-1">
-          {stats ? stats.lost_orders_today : "—"}
+          {stats ? duree(stats.timing.avg_wait_confirmation_seconds) : "—"}
         </p>
         {/* La définition est écrite ici, pas dans une aide : un chiffre dont on
             ne comprend pas la définition ne convainc personne. */}
         <p className="text-xs text-[var(--ink-soft)] mt-1">
-          Annulées, ou restées plus de 10 minutes entre la validation du panier et la prise en charge par un
-          serveur.
+          Entre la validation du panier par le client et la prise en charge par un serveur, aujourd&apos;hui.
+          Le détail par serveur est sur « Activité du jour ».
         </p>
       </div>
     </div>
