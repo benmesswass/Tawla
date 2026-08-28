@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import HTTPException
@@ -35,17 +35,6 @@ ACTIVE_STATUSES: set[OrderStatus] = {
     OrderStatus.IN_PREPARATION,
     OrderStatus.READY,
 }
-
-# Au-delà de ce délai, une commande encore en attente de confirmation est
-# considérée comme perdue : personne ne l'a prise en charge. C'est la moitié de
-# la définition de « commande perdue » utilisée par la page de preuve
-# (`stats/service.py::get_proof_stats`), l'autre moitié étant les annulations.
-#
-# Dix minutes est une proposition, pas une vérité : c'est le seuil à confronter
-# au premier restaurant pilote (Phase 13.3 de la ROADMAP). Un service de midi
-# tendu peut légitimement mettre 5 minutes à prendre une commande ; au-delà de
-# 10, le client a déjà relevé la tête pour chercher un serveur.
-ABANDONED_PENDING_AFTER = timedelta(minutes=10)
 
 # Transitions autorisées : on refuse explicitement tout le reste plutôt
 # que de laisser un état incohérent se produire silencieusement.

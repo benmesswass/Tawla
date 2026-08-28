@@ -282,7 +282,7 @@ Au 2026-08-18, `terrain/PILOTES.md` ne contient qu'un modèle à copier.
 existe**, pas avant : un écran qui n'a rien à afficher n'est pas une
 préparation)
 
-- [ ] `Restaurant.baseline_lost_orders_per_day`, `baseline_avg_basket`, `baseline_measured_on` + migration + `model_registry.py`
+- [ ] `Restaurant.baseline_cancelled_orders_per_day`, `baseline_avg_basket`, `baseline_measured_on` + migration + `model_registry.py`
 - [ ] Saisie depuis le dashboard manager, avec la date du relevé — rien d'affiché tant que ce n'est pas saisi
 - [ ] `/dashboard/preuve` affiche « avant Tawla » en face de « mesuré » quand le relevé existe. C'est **la** capture d'écran qui vend le passage au payant
 - [ ] Ne jamais inventer ni pré-remplir ces valeurs : un chiffre « avant » inventé rend toute la démonstration mensongère, et la mesure est la seule chose que Tawla a à vendre
@@ -294,7 +294,7 @@ préparation)
 - [ ] Répéter le repli papier **avant** d'en avoir besoin, pas le soir où le réseau tombe 🧑
 - [ ] Tenir `terrain/PILOTES.md` le soir même de chaque service observé 🧑 : incidents, verbatims, ce qui a été contourné ou jamais utilisé
 - [ ] Relever les trois métriques chaque semaine sur `/dashboard/preuve` 🧑
-- [ ] Confronter les seuils codés au réel 🧑 : `ABANDONED_PENDING_AFTER` (10 min) et le seuil de fin de service de 5 h (`app/core/dates.py:16`) sont des propositions, pas des vérités
+- [ ] Confronter les seuils codés au réel 🧑 : `ATTENTE_ALERTE_MINUTES` (10 min, `frontend/app/staff/page.tsx`) et le seuil de fin de service de 5 h (`app/core/dates.py:16`) sont des propositions, pas des vérités
 - [ ] Confronter le plan de salle aux entretiens 🧑 : les zones suffisaient-elles, ou le plan dessiné change-t-il vraiment la conversation ?
 - [ ] Vérifier en service réel que le plafond du limiteur tient 🧑 — c'est le premier endroit où vingt tables commandent vraiment dans la même minute (cf. 19bis.2 S-2b)
 
@@ -363,6 +363,7 @@ dans les PR citées.
 | **19** | `/loyalty/lookup` fermée, création de commande idempotente (`client_order_id`), limiteur sur l'IP réelle, échappement de `table_label`, `<html lang>`, journée de service bornée à 5 h | #51 |
 | **19 (suite)** | Recette limitée aux commandes réglées, résolution d'appel serveur poussée au client, commandes ouvertes multiples, durées par étape, cuisine en deux colonnes, note partageable, plats partagés par convive, rupture barrée | #52 |
 | **Audit** | Audit de pré-lancement : 299 tests, parcours rejoués, attaques mesurées, 20 constats, grille recalculée | #54 |
+| — | Ad-hoc (demande directe de Wassim, hors phase) : redéfinition de « commande perdue » (annulée seule — une commande lente n'est plus comptée perdue), tableau de bord manager remanié (temps d'attente moyen et charge active par serveur à la place), `/dashboard/preuve` et l'agrégat `/admin` mis à jour en cohérence | #103 |
 
 Ce qui restait ouvert de ces phases a été repris ci-dessus, sans perte : la
 vérification du limiteur derrière le vrai proxy (→ 20.1), la mise en ligne

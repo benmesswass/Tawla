@@ -19,7 +19,7 @@ def _resolve_market(market: "Market | None") -> "Market":
 # Heure à laquelle une journée de service laisse la place à la suivante.
 #
 # 5 h du matin est une proposition, pas une vérité — à confronter au premier
-# pilote, exactement comme `ABANDONED_PENDING_AFTER` (orders/service.py) :
+# pilote, exactement comme `ATTENTE_ALERTE_MINUTES` (frontend/app/staff/page.tsx) :
 # assez tard pour ne jamais couper un service de nuit en cours, assez tôt pour
 # qu'un écran serveur ouvert au service de midi ne traîne plus les oubliés de
 # la veille. C'est le défaut que le plan de salle a rendu visible : des tables
@@ -36,9 +36,10 @@ def service_day_start(now: datetime | None = None, market: "Market | None" = Non
     par an en France).
 
     Sert à cesser d'**afficher** les commandes de la veille sur les écrans de
-    service — jamais à changer leur statut : elles restent « perdues » pour
-    `stats/service.py::lost_orders`, et c'est ce chiffre qui porte l'argument
-    de vente. On arrête de les montrer, on ne les efface pas.
+    service — jamais à changer leur statut : une commande annulée hier reste
+    annulée aujourd'hui, et continue de compter dans `stats/service.py::
+    cancelled_orders`, le chiffre qui porte l'argument de vente. On arrête de
+    les montrer, on ne les efface pas.
     """
     resolved_market = _resolve_market(market)
     local = (now or datetime.now(timezone.utc)).astimezone(resolved_market.timezone)

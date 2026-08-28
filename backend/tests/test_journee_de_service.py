@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from app.core.dates import service_day_start
 from app.core.markets import FRANCE, TUNISIA
 from app.modules.menu.models import MenuItem
-from app.modules.orders.models import Order
+from app.modules.orders.models import Order, OrderStatus
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table
 from app.modules.waiter_calls.models import WaiterCall
@@ -51,7 +51,7 @@ def test_une_commande_de_la_veille_disparait_de_lecran_serveur(client, db_sessio
     assert active.json() == []
 
 
-def test_une_commande_de_la_veille_reste_une_commande_perdue(client, db_session):
+def test_une_commande_annulee_de_la_veille_reste_une_commande_perdue(client, db_session):
     """
     On cesse de l'afficher, on ne l'efface pas : son statut ne bouge pas, donc
     elle continue de compter dans les commandes perdues — le chiffre qui porte
@@ -59,7 +59,10 @@ def test_une_commande_de_la_veille_reste_une_commande_perdue(client, db_session)
     """
     restaurant, table, _item = _setup(db_session)
     veille = service_day_start() - timedelta(hours=2)
-    oubliee = _order_created_at(db_session, restaurant, table, veille)
+    annulee = _order_created_at(db_session, restaurant, table, veille)
+    annulee.status = OrderStatus.CANCELLED
+    db_session.add(annulee)
+    db_session.commit()
     manager = create_staff(restaurant.id, StaffRole.MANAGER)
 
     # `veille` tombe avant 5h Tunis : sa journée de service est celle d'hier
@@ -73,9 +76,32 @@ def test_une_commande_de_la_veille_reste_une_commande_perdue(client, db_session)
     )
 
     assert preuve.status_code == 200
-    assert preuve.json()["current"]["lost_orders_count"] == 1
-    db_session.refresh(oubliee)
-    assert oubliee.status.value == "pending_confirmation"
+    assert preuve.json()["current"]["cancelled_orders_count"] == 1
+    db_session.refresh(annulee)
+    assert annulee.status.value == "cancelled"
+
+
+def test_une_commande_jamais_prise_en_charge_de_la_veille_nest_plus_perdue(client, db_session):
+    """
+    Depuis le 2026-08-28, une commande restée en attente — même celle d'hier,
+    même invisible sur l'écran serveur — n'est plus comptée « perdue » : elle
+    peut toujours être prise en charge. Seule une annulation l'est.
+    """
+    restaurant, table, _item = _setup(db_session)
+    veille = service_day_start() - timedelta(hours=2)
+    _order_created_at(db_session, restaurant, table, veille)
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+
+    jour_de_service = service_day_start().astimezone(TUNISIA.timezone).date() - timedelta(days=1)
+    jour = jour_de_service.isoformat()
+    preuve = client.get(
+        f"/api/v1/stats/preuve/{restaurant.id}",
+        params={"start": jour, "end": jour},
+        headers=auth_headers(manager),
+    )
+
+    assert preuve.status_code == 200
+    assert preuve.json()["current"]["cancelled_orders_count"] == 0
 
 
 def test_un_service_de_nuit_reste_affiche(client, db_session):

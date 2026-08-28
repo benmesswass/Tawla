@@ -279,18 +279,29 @@ export type StaffPerformance = {
   orders_taken: number;
 };
 
+/** Charge d'un serveur **en ce moment** (2026-08-28) : combien de tables il a
+ *  actuellement sur les bras, distinct du cumul du jour (`StaffPerformance`). */
+export type StaffActiveLoad = {
+  staff_id: number;
+  staff_name: string;
+  role: StaffRole;
+  tables_count: number;
+};
+
 export type TopMenuItem = { menu_item_name: string; quantity: number };
 export type HourlyCount = { hour: number; count: number };
 
 export type DashboardStats = {
   date: string;
-  /** Les deux chiffres de tête (Phase 17.1) : ce que le patron vient chercher
-   *  chaque soir, et celui qui justifie l'abonnement, posé juste à côté. */
+  /** Les deux chiffres de tête (Phase 17.1, remaniés le 2026-08-28) : ce que
+   *  le patron vient chercher chaque soir, et le temps d'attente moyen posé
+   *  juste à côté — un signal opérationnel du jour même. */
   revenue_today: number;
-  lost_orders_today: number;
+  cancelled_orders_today: number;
   active_orders_count: number;
   timing: TimingStats;
   staff_performance: StaffPerformance[];
+  staff_active_load: StaffActiveLoad[];
   top_items: TopMenuItem[];
   orders_by_hour: HourlyCount[];
 };
@@ -298,7 +309,7 @@ export type DashboardStats = {
 export type KitchenTodayCount = { date: string; count: number };
 
 /**
- * Les trois chiffres de preuve d'un pilote (Phase 13.3) : commandes perdues,
+ * Les trois chiffres de preuve d'un pilote (Phase 13.3) : commandes annulées,
  * délai commande → cuisine, panier moyen. `null` sur les moyennes veut dire
  * « aucune donnée », pas zéro — la distinction compte devant un patron.
  */
@@ -306,9 +317,7 @@ export type PeriodProof = {
   start: string;
   end: string;
   orders_count: number;
-  lost_orders_count: number;
-  cancelled_count: number;
-  abandoned_count: number;
+  cancelled_orders_count: number;
   avg_order_to_kitchen_seconds: number | null;
   avg_basket_amount: number | null;
   orders_with_suggestion_count: number;

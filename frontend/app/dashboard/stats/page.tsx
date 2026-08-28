@@ -66,6 +66,10 @@ function statsToCsv(stats: DashboardStats): string {
   stats.staff_performance.forEach((p) => row(p.staff_name, p.orders_taken));
   lines.push("");
 
+  row("Serveur", "Tables en charge en ce moment");
+  stats.staff_active_load.forEach((p) => row(p.staff_name, p.tables_count));
+  lines.push("");
+
   row("Plat", "Quantité vendue");
   stats.top_items.forEach((i) => row(i.menu_item_name, i.quantity));
   lines.push("");
@@ -223,6 +227,28 @@ export default function DashboardStatsPage() {
                 </div>
               ))}
             </div>
+          </Card>
+
+          <Card padding="md">
+            <h2 className="font-semibold mb-3 flex items-center gap-2">
+              Tables en charge, en ce moment
+              <Badge tone="info">{stats.staff_active_load.reduce((total, p) => total + p.tables_count, 0)}</Badge>
+            </h2>
+            {stats.staff_active_load.length === 0 && (
+              <EmptyState message="Personne n'a de table en charge en ce moment." />
+            )}
+            <div className="space-y-2">
+              {stats.staff_active_load.map((p) => (
+                <div key={p.staff_id} className="flex justify-between items-center text-sm">
+                  <span className="text-[var(--ink-soft)]">{p.staff_name}</span>
+                  <Badge tone="neutral">{p.tables_count}</Badge>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-[var(--ink-soft)] mt-3 pt-3 border-t border-[var(--line)]">
+              Commandes prises en charge, pas encore servies ni annulées — toujours l&apos;instant présent, quelle
+              que soit la journée affichée ci-dessus.
+            </p>
           </Card>
 
           <Card padding="md">

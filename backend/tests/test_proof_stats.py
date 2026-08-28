@@ -3,9 +3,10 @@ Les trois métriques de preuve (Phase 13.3).
 
 Ce sont les chiffres que Wassim montrera à un patron à la fin d'un pilote, et
 au jury. Ils doivent donc être justes au sens métier, pas seulement calculés :
-une annulation ne doit pas passer pour un panier, un oubli doit compter comme
-une commande perdue, et la période de comparaison doit avoir la même longueur
-que la période mesurée.
+une annulation ne doit pas passer pour un panier, une commande encore en
+attente ne doit jamais compter comme perdue (elle peut toujours aboutir,
+décision du 2026-08-28), et la période de comparaison doit avoir la même
+longueur que la période mesurée.
 """
 from datetime import date, datetime, timedelta, timezone
 
@@ -104,12 +105,17 @@ def test_cancelled_order_is_lost_and_excluded_from_the_basket(client, db_session
 
     current = _proof(client, restaurant, manager)["current"]
     assert current["orders_count"] == 2
-    assert current["cancelled_count"] == 1
-    assert current["lost_orders_count"] == 1
+    assert current["cancelled_orders_count"] == 1
     assert current["avg_basket_amount"] == 20.0  # la commande annulée est exclue
 
 
-def test_order_left_pending_too_long_counts_as_lost(client, db_session):
+def test_order_left_pending_indefinitely_does_not_count_as_lost(client, db_session):
+    """
+    Décision de Wassim (2026-08-28) : une commande jamais prise en charge peut
+    toujours l'être, contrairement à une annulation — la compter comme perdue
+    confondait une vente lente avec une vente ratée. Peu importe son âge, elle
+    ne doit jamais entrer dans `cancelled_orders_count`.
+    """
     restaurant, table, item = _setup(db_session, "preuve-oubliee")
     manager = create_staff(restaurant.id, StaffRole.MANAGER)
     now = datetime.now(timezone.utc)
@@ -118,28 +124,14 @@ def test_order_left_pending_too_long_counts_as_lost(client, db_session):
         db_session, restaurant, table, item,
         created_at=now - timedelta(hours=1), status=OrderStatus.PENDING_CONFIRMATION,
     )
-
-    current = _proof(client, restaurant, manager)["current"]
-    assert current["abandoned_count"] == 1
-    assert current["cancelled_count"] == 0
-    assert current["lost_orders_count"] == 1
-
-
-def test_order_pending_for_two_minutes_is_not_lost_yet(client, db_session):
-    """Le point qui rendrait la métrique fausse : une commande qui vient
-    d'arriver et attend normalement son serveur."""
-    restaurant, table, item = _setup(db_session, "preuve-recente")
-    manager = create_staff(restaurant.id, StaffRole.MANAGER)
-    now = datetime.now(timezone.utc)
-
     _add_order(
         db_session, restaurant, table, item,
         created_at=now - timedelta(minutes=2), status=OrderStatus.PENDING_CONFIRMATION,
     )
 
     current = _proof(client, restaurant, manager)["current"]
-    assert current["abandoned_count"] == 0
-    assert current["lost_orders_count"] == 0
+    assert current["orders_count"] == 2
+    assert current["cancelled_orders_count"] == 0
 
 
 def test_average_delay_from_order_to_kitchen(client, db_session):

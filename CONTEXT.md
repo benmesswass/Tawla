@@ -29,10 +29,25 @@ dédié) ou implicitement à la confirmation si personne ne l'a encore prise.
 Base des statistiques par serveur.
 
 **Commande perdue (Lost order)** :
-Une commande annulée, ou restée `PENDING_CONFIRMATION` au-delà du seuil
-d'abandon (dix minutes) — définition unique, partagée par le tableau de bord,
-la page de preuve et l'agrégat multi-restaurants. La métrique centrale de
-l'argument de vente du produit.
+Une commande annulée — définition unique (`stats/service.py::cancelled_orders`),
+partagée par le tableau de bord, la page de preuve et l'agrégat
+multi-restaurants. La métrique centrale de l'argument de vente du produit.
+Jusqu'au 2026-08-28, une commande restée `PENDING_CONFIRMATION` au-delà de dix
+minutes comptait aussi comme perdue ; Wassim a tranché que ça confondait une
+vente lente avec une vente ratée — elle peut toujours être prise en charge, ce
+qu'une annulation ne permet plus. Ce délai reste mesuré, sous un autre nom :
+voir **Temps d'attente** et **Charge active** ci-dessous.
+
+**Temps d'attente (`TimingStats.avg_wait_confirmation_seconds`)** :
+Délai moyen entre la validation du panier par le client et sa prise en charge
+par un serveur, sur la journée affichée. Chiffre de tête du tableau de bord
+depuis le 2026-08-28, à la place de « Commandes perdues ».
+
+**Charge active (`StaffActiveLoad`)** :
+Nombre de tables qu'un serveur a actuellement sur les bras — commandes prises
+en charge, pas encore servies ni annulées, évalué à l'instant présent plutôt
+que sur la journée affichée (comme `active_orders_count`). Distinct de
+`StaffPerformance.orders_taken`, qui cumule la journée entière.
 
 **Ligne de commande (OrderItem)** :
 Un article commandé, avec son nom et son prix unitaire **figés** au moment de

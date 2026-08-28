@@ -1,11 +1,11 @@
 from datetime import date as date_type
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.dates import as_utc, service_day_bounds, service_day_start
 from app.modules.orders.models import Order, OrderStatus, PaymentStatus
-from app.modules.orders.service import ABANDONED_PENDING_AFTER, ACTIVE_STATUSES
+from app.modules.orders.service import ACTIVE_STATUSES
 from app.modules.staff.models import Staff
 from app.modules.stats import schemas
 from app.modules.stats.models import DashboardView
@@ -18,24 +18,24 @@ from app.modules.stats.models import DashboardView
 TUNISIA_UTC_OFFSET_HOURS = 1
 
 
-def lost_orders(orders: list[Order], now: datetime) -> list[Order]:
+def cancelled_orders(orders: list[Order]) -> list[Order]:
     """
-    Définition unique de « commande perdue » : annulée, ou jamais prise en
-    charge au-delà du seuil d'abandon.
+    Définition unique de « commande perdue » : une commande annulée.
+
+    Une commande encore en attente de confirmation, même depuis longtemps,
+    n'est **pas** comptée ici — elle peut toujours être prise en charge, et la
+    pénaliser comme si elle était perdue confondait une commande lente avec
+    une vente qui n'aura jamais lieu (décision de Wassim, 2026-08-28). Ce que
+    ce délai révèle vit dans `TimingStats.avg_wait_confirmation_seconds` et
+    `StaffActiveLoad`, pas ici.
 
     Partagée par le tableau de bord et la page de preuve d'un restaurant, et
     par le dashboard plateforme (`platform_admin/service.py`) pour son taux de
-    commandes perdues tous restaurants confondus — jamais une redéfinition :
+    commandes annulées tous restaurants confondus — jamais une redéfinition :
     un restaurant qui verrait un taux différent chez lui et sur l'agrégat de
     Wassim cesserait de croire l'un des deux.
     """
-    abandoned_before = now - ABANDONED_PENDING_AFTER
-    return [
-        o
-        for o in orders
-        if o.status == OrderStatus.CANCELLED
-        or (o.status == OrderStatus.PENDING_CONFIRMATION and as_utc(o.created_at) < abandoned_before)
-    ]
+    return [o for o in orders if o.status == OrderStatus.CANCELLED]
 
 
 def paid_orders(orders: list[Order]) -> list[Order]:
@@ -109,6 +109,7 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
             staff_counts[o.taken_by_staff_id] = staff_counts.get(o.taken_by_staff_id, 0) + 1
 
     staff_performance: list[schemas.StaffPerformance] = []
+    staff_by_id: dict[int, Staff] = {}
     if staff_counts:
         staff_rows = db.query(Staff).filter(Staff.id.in_(staff_counts.keys())).all()
         staff_by_id = {s.id: s for s in staff_rows}
@@ -134,7 +135,7 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
         hour_counts[local_hour] = hour_counts.get(local_hour, 0) + 1
     orders_by_hour = [schemas.HourlyCount(hour=h, count=hour_counts[h]) for h in sorted(hour_counts)]
 
-    active_orders_count = (
+    active_orders_now = (
         db.query(Order)
         .filter(
             Order.restaurant_id == restaurant_id,
@@ -145,38 +146,57 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
             # l'écran serveur a cessé de la montrer (F-2, audit 2026-08-18).
             Order.created_at >= service_day_start(),
         )
-        .count()
+        .all()
     )
+    active_orders_count = len(active_orders_now)
+
+    # Charge en cours, par serveur (demande de Wassim, 2026-08-28) : combien de
+    # tables chaque serveur a-t-il **en ce moment** sur les bras, pas combien il
+    # en a traité aujourd'hui (`staff_performance`, cumulatif) — c'est ce
+    # deuxième chiffre qui dit si quelqu'un est en train de se noyer, là,
+    # pendant que le manager regarde son téléphone.
+    active_load_counts: dict[int, int] = {}
+    for o in active_orders_now:
+        if o.taken_by_staff_id is not None:
+            active_load_counts[o.taken_by_staff_id] = active_load_counts.get(o.taken_by_staff_id, 0) + 1
+
+    staff_active_load: list[schemas.StaffActiveLoad] = []
+    if active_load_counts:
+        staff_by_id.update(
+            {
+                s.id: s
+                for s in db.query(Staff).filter(Staff.id.in_(active_load_counts.keys() - staff_by_id.keys())).all()
+            }
+        )
+        for staff_id, count in sorted(active_load_counts.items(), key=lambda kv: -kv[1]):
+            s = staff_by_id.get(staff_id)
+            if s:
+                staff_active_load.append(
+                    schemas.StaffActiveLoad(staff_id=s.id, staff_name=s.name, role=s.role, tables_count=count)
+                )
 
     # Les deux chiffres que le patron vient chercher (Phase 17.1). Calculés
     # avec les mêmes règles que la page de preuve : les deux écrans parlent du
     # même jour au même homme, ils doivent dire la même chose.
-    now = datetime.now(timezone.utc)
     revenue_today = sum(o.total_amount for o in paid_orders(orders_today))
-    lost_orders_today = len(lost_orders(orders_today, now))
+    cancelled_orders_today = len(cancelled_orders(orders_today))
 
     return schemas.DashboardStats(
         date=day,
         revenue_today=revenue_today,
-        lost_orders_today=lost_orders_today,
+        cancelled_orders_today=cancelled_orders_today,
         active_orders_count=active_orders_count,
         timing=timing,
         staff_performance=staff_performance,
+        staff_active_load=staff_active_load,
         top_items=top_items,
         orders_by_hour=orders_by_hour,
     )
 
 
-def _period_proof(
-    db: Session, restaurant_id: int, start: date_type, end: date_type, now: datetime
-) -> schemas.PeriodProof:
+def _period_proof(db: Session, restaurant_id: int, start: date_type, end: date_type) -> schemas.PeriodProof:
     """
     Calcule les trois chiffres de preuve sur une période bornée (jours inclus).
-
-    `now` est passé en paramètre plutôt que lu ici : la période précédente et la
-    période courante doivent être évaluées avec la même référence temporelle,
-    sinon le seuil d'abandon ne veut pas dire la même chose des deux côtés de la
-    comparaison.
     """
     # Même bornage par journée de service que get_dashboard_stats (F-3) :
     # le début de la période suit le début du jour `start`, sa fin suit la
@@ -195,9 +215,7 @@ def _period_proof(
         .all()
     )
 
-    lost = lost_orders(orders, now)
-    cancelled = [o for o in lost if o.status == OrderStatus.CANCELLED]
-    abandoned = [o for o in lost if o.status != OrderStatus.CANCELLED]
+    cancelled = cancelled_orders(orders)
 
     order_to_kitchen = [
         (o.sent_to_kitchen_at - o.created_at).total_seconds() for o in orders if o.sent_to_kitchen_at
@@ -217,9 +235,7 @@ def _period_proof(
         start=start,
         end=end,
         orders_count=len(orders),
-        lost_orders_count=len(lost),
-        cancelled_count=len(cancelled),
-        abandoned_count=len(abandoned),
+        cancelled_orders_count=len(cancelled),
         avg_order_to_kitchen_seconds=_average(order_to_kitchen),
         avg_basket_amount=_average(baskets),
         orders_with_suggestion_count=len(with_suggestion),
@@ -236,14 +252,13 @@ async def get_proof_stats(
     comparaison, et pas les chiffres bruts, qui se montre à un patron à la fin
     d'un pilote (Phase 13.3).
     """
-    now = datetime.now(timezone.utc)
     span_days = (end - start).days + 1
     previous_end = start - timedelta(days=1)
     previous_start = previous_end - timedelta(days=span_days - 1)
 
     return schemas.ProofStats(
-        current=_period_proof(db, restaurant_id, start, end, now),
-        previous=_period_proof(db, restaurant_id, previous_start, previous_end, now),
+        current=_period_proof(db, restaurant_id, start, end),
+        previous=_period_proof(db, restaurant_id, previous_start, previous_end),
     )
 
 

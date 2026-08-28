@@ -265,7 +265,7 @@ def test_overview_on_empty_database_shows_zeroes_not_an_error(client, db_session
     assert body["paying_restaurants_count"] == 0
     assert body["orders_last_7d"] == 0
     assert body["gmv_last_7d_tnd"] == 0
-    assert body["lost_orders_rate_last_7d"] is None
+    assert body["cancelled_orders_rate_last_7d"] is None
     assert body["restaurants"] == []
     assert len(body["weekly_signups"]) == 12
 
@@ -359,8 +359,8 @@ def test_overview_aggregates_orders_across_every_restaurant(client, db_session):
     assert body["restaurants"][0]["slug"] == "chez-slah-orders"
 
 
-def test_lost_orders_rate_reuses_the_shared_definition(client, db_session):
-    """Même définition que `stats/service.py::lost_orders` — jamais une
+def test_cancelled_orders_rate_reuses_the_shared_definition(client, db_session):
+    """Même définition que `stats/service.py::cancelled_orders` — jamais une
     redéfinition (spec §1.6)."""
     admin = _create_admin(db_session)
     resto, table, item = _resto_with_item("Chez Slah", "chez-slah-lost", db_session)
@@ -371,7 +371,7 @@ def test_lost_orders_rate_reuses_the_shared_definition(client, db_session):
     body = client.get("/api/v1/platform-admin/overview", headers=_admin_headers(admin)).json()
 
     assert body["orders_last_7d"] == 2
-    assert body["lost_orders_rate_last_7d"] == pytest.approx(0.5)
+    assert body["cancelled_orders_rate_last_7d"] == pytest.approx(0.5)
 
 
 def test_overview_never_leaks_a_konnect_api_key(client, db_session):

@@ -180,8 +180,11 @@ reste qu'une impression, et une impression ne se montre à personne.
 
 Deux choses à confronter au réel, et à me remonter :
 
-- le seuil de **dix minutes** avant qu'une commande soit comptée perdue — c'est
-  une proposition, pas une vérité ;
+- le seuil de **dix minutes** avant qu'une table en attente soit signalée au
+  serveur (`ATTENTE_ALERTE_MINUTES`, `frontend/app/staff/page.tsx`) — c'est une
+  proposition, pas une vérité. Elle ne compte plus dans « commandes perdues »
+  depuis le 2026-08-28 (seule une annulation compte), mais reste le seuil
+  d'alerte à l'écran serveur ;
 - le **plan de salle** : les zones suffisaient-elles, ou le plan dessiné change-t-il
   vraiment la conversation ?
 
