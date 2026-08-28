@@ -23,10 +23,17 @@ export default function MaSoiree({ shift, tablesEnCharge }: { shift: MyShift | n
   // minute en tête, il lit un temps.
   const delai = shift.avg_seconds_to_claim === null ? "—" : duree(shift.avg_seconds_to_claim);
 
+  // `orders_taken`/`total_amount_handled` comptent tout ce que ce serveur a
+  // pris en charge aujourd'hui (`taken_by_staff_id`), servi ou non, payé ou
+  // non — voir get_my_shift (stats/service.py) et son intention (primes sur
+  // l'activité) dans test_ma_soiree.py. Des libellés « servies »/« encaissé »
+  // ici mentaient sur un montant pas encore en caisse (audit produit du
+  // 2026-08-28) : un serveur pouvait montrer une commande juste prise en
+  // charge, ni confirmée ni payée, comme de l'argent déjà encaissé.
   const tuiles = [
     { valeur: String(tablesEnCharge), libelle: "Tables en charge" },
-    { valeur: String(shift.orders_taken), libelle: "Commandes servies" },
-    { valeur: formatMoney(shift.total_amount_handled), libelle: "Encaissé ce soir" },
+    { valeur: String(shift.orders_taken), libelle: "Commandes prises en charge" },
+    { valeur: formatMoney(shift.total_amount_handled), libelle: "Valeur prise en charge" },
     { valeur: delai, libelle: "Attente moyenne" },
   ];
 
