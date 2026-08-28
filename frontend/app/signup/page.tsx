@@ -26,12 +26,19 @@ function SignupForm() {
   // (`/signup?tier=pro`) — Essentiel par défaut pour tout autre chemin
   // d'arrivée (mailto, /signup direct).
   const requestedTier = searchParams.get("tier");
+  // `arrivedWithoutTierChoice` distingue « venu direct sans choisir » (on ne
+  // sait rien de sa taille, on le renvoie voir les paliers) de « a cliqué
+  // Essentiel en connaissance de cause » (rien à lui dire de plus) — le
+  // palier par défaut (Essentiel) ne change pas, seule la question posée
+  // change : ne jamais décider de son palier à sa place.
+  const arrivedWithoutTierChoice = !TIERS.some((t) => t.id === requestedTier);
   const tier = TIERS.find((t) => t.id === requestedTier) ?? TIERS.find((t) => t.id === "essentiel")!;
 
   const [restaurantName, setRestaurantName] = useState("");
   const [managerName, setManagerName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmedFit, setConfirmedFit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Offre de lancement (2026-08-21, réglages configurables — voir
@@ -95,6 +102,16 @@ function SignupForm() {
               Palier choisi : <span style={{ color: "var(--encre)" }}>{tier.name}</span> — {tier.priceDT}{" "}
               {currentMarket.currency.symbol} / mois
             </p>
+            {arrivedWithoutTierChoice && (
+              <p className="text-xs mt-1" style={{ color: "var(--harissa)" }}>
+                Arrivé·e sans avoir choisi de palier ? Essentiel est pensé pour un petit café, une seule
+                salle.{" "}
+                <Link href="/#tarifs" className="underline">
+                  Voir les trois paliers
+                </Link>
+                .
+              </p>
+            )}
           </div>
         </div>
 
@@ -190,10 +207,29 @@ function SignupForm() {
           </div>
         </div>
 
+        {/* Auto-qualification, jamais vérifiée côté serveur : Tawla se
+            vend en personne à une cible étroite (CLAUDE.md, ROADMAP.md), et
+            le self-service ne doit pas devenir la porte d'entrée des petits
+            établissements que la stratégie exclut. Un simple frein, pas un
+            blocage — le patron reste seul juge de sa situation. */}
+        <label className="flex items-start gap-2 text-xs" style={{ color: "var(--ink-soft)" }}>
+          <input
+            type="checkbox"
+            required
+            checked={confirmedFit}
+            onChange={(e) => setConfirmedFit(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Je confirme que mon établissement compte au moins 6 tables, avec du wifi ou du réseau à toutes
+            les tables.
+          </span>
+        </label>
+
         <button
           type="submit"
           data-visite="signup-valider"
-          disabled={submitting}
+          disabled={submitting || !confirmedFit}
           className={`${lalezar.className} w-full text-white text-base tracking-wide px-3 py-2 rounded-lg disabled:opacity-50 transition-colors`}
           style={{ background: "var(--harissa)" }}
         >

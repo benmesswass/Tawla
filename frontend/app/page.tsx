@@ -46,6 +46,14 @@ export default function HomePage() {
             Vos clients scannent le QR de leur table et commandent. Vos serveurs gardent la main : rien ne part
             en cuisine sans qu&apos;ils l&apos;aient vérifié à table.
           </p>
+          {/* Le qualificatif de cible passe avant le CTA, pas après : un
+              petit café doit pouvoir s'auto-exclure avant de cliquer, pas
+              après avoir commencé une inscription. La stratégie exclut
+              volontairement ce public (CLAUDE.md, ROADMAP.md) — la page ne
+              doit pas l'attirer par accident. */}
+          <p className="mt-5 inline-block rounded-full bg-white/15 px-4 py-1.5 text-sm font-medium">
+            Pour les restaurants et brasseries à partir de 6 tables, en Tunisie.
+          </p>
           {/* La démo est le premier appel à l'action, avant « créer mon
               compte » : un restaurateur qui découvre Tawla veut le voir
               tourner, pas s'inscrire. Elle ne quitte pas la page — les bulles
@@ -54,10 +62,6 @@ export default function HomePage() {
             <BoutonVisite className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-medium text-[var(--harissa)] shadow-sm" />
             <p className="text-sm text-white/80">2 minutes, sans inscription.</p>
           </div>
-
-          <p className="mt-6 text-sm text-white/80">
-            Pour les restaurants et brasseries à partir de 6 tables, en Tunisie.
-          </p>
         </div>
       </section>
 
@@ -105,7 +109,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="bg-[var(--semoule)] border-t border-[var(--line)]">
+      <section id="tarifs" className="bg-[var(--semoule)] border-t border-[var(--line)]">
         <div className="max-w-3xl mx-auto px-6 py-12">
           <h2 className={`${lalezar.className} text-2xl mb-2`}>Trois paliers, un seul abonnement</h2>
           <p className="text-sm text-[var(--ink-soft)] mb-8 max-w-xl">
@@ -174,6 +178,10 @@ export default function HomePage() {
               J&apos;ai déjà un compte
             </Link>
           </div>
+          <p className="mt-4 text-xs text-[var(--ink-soft)]">
+            Pensé pour les restaurants et brasseries de 6 tables et plus — pas pour un petit café d&apos;une
+            seule salle.
+          </p>
         </div>
       </section>
 
