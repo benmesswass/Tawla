@@ -363,7 +363,7 @@ dans les PR citées.
 | **19** | `/loyalty/lookup` fermée, création de commande idempotente (`client_order_id`), limiteur sur l'IP réelle, échappement de `table_label`, `<html lang>`, journée de service bornée à 5 h | #51 |
 | **19 (suite)** | Recette limitée aux commandes réglées, résolution d'appel serveur poussée au client, commandes ouvertes multiples, durées par étape, cuisine en deux colonnes, note partageable, plats partagés par convive, rupture barrée | #52 |
 | **Audit** | Audit de pré-lancement : 299 tests, parcours rejoués, attaques mesurées, 20 constats, grille recalculée | #54 |
-| — | Ad-hoc (demande directe de Wassim, hors phase) : redéfinition de « commande perdue » (annulée seule — une commande lente n'est plus comptée perdue), tableau de bord manager remanié (temps d'attente moyen et charge active par serveur à la place), `/dashboard/preuve` et l'agrégat `/admin` mis à jour en cohérence | #TBD |
+| — | Ad-hoc (demande directe de Wassim, hors phase) : redéfinition de « commande perdue » (annulée seule — une commande lente n'est plus comptée perdue), tableau de bord manager remanié (temps d'attente moyen et charge active par serveur à la place), `/dashboard/preuve` et l'agrégat `/admin` mis à jour en cohérence | #103 |
 
 Ce qui restait ouvert de ces phases a été repris ci-dessus, sans perte : la
 vérification du limiteur derrière le vrai proxy (→ 20.1), la mise en ligne
