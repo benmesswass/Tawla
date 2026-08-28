@@ -1118,9 +1118,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         {!cancelled && (
           <ol className="mt-8">
             {DISPLAY_STEPS.map((step, i) => {
-              const done = i < currentDisplayIndex;
-              const current = i === currentDisplayIndex;
               const isLast = i === DISPLAY_STEPS.length - 1;
+              // Sur la dernière étape, `i` n'est jamais strictement inférieur
+              // à `currentDisplayIndex` (rien après « servie ») : sans le cas
+              // `isLast`, ce repère restait « en cours » à vie une fois la
+              // commande servie (audit produit du 2026-08-28).
+              const done = isLast ? i <= currentDisplayIndex : i < currentDisplayIndex;
+              const current = i === currentDisplayIndex && !done;
               const showWaitHint = current && step === "in_kitchen";
               return (
                 <li key={step} className="relative ps-[46px] pb-5 last:pb-0">
