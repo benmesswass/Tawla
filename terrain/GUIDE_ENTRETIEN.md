@@ -132,9 +132,15 @@ Décrire le **bénéfice**, jamais la fonctionnalité :
 > entre la commande d'un client et son arrivée en cuisine — vous mettriez combien
 > par mois ? »
 
-Puis, quel que soit le chiffre : *« Et à 120 dinars par mois, avec
+Puis, quel que soit le chiffre : *« Et à 89 dinars par mois, avec
 l'installation, la carte saisie pour vous, les QR imprimés livrés et la formation
 de l'équipe sur place ? »*
+
+*(89 DT = le palier Pro — celui qui correspond à cette cible. Le prix unique
+à 120 DT envisagé le 14 août n'a jamais été codé : trois paliers publics
+existent aujourd'hui, 49/89/149 DT ; voir `ARGUMENTAIRE_RESTAURATEUR.md`
+pour l'arithmétique complète et pourquoi ne jamais proposer le palier à 49 DT
+en premier à cette cible.)*
 
 Noter la réaction avant les mots : hésitation, rire, contre-proposition. Un
 « pourquoi si cher ? » est une bonne nouvelle — c'est une négociation. Un
