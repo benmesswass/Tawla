@@ -1,14 +1,24 @@
 from datetime import date as date_type
 from datetime import timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.dates import as_utc, service_day_bounds, service_day_start
 from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.orders.service import ACTIVE_STATUSES
-from app.modules.staff.models import Staff
+from app.modules.staff.models import Staff, StaffRole
 from app.modules.stats import schemas
 from app.modules.stats.models import DashboardView
+
+# Rôle du personnel visé par les rapports "commandes par serveur"
+# (staff_performance / TeamReport). Un manager PEUT techniquement prendre une
+# commande (`require_role(WAITER, MANAGER)` côté orders) mais n'est pas censé
+# apparaître à 0 dans ces rapports — confirmé par test_team_report.py, qui
+# construit plusieurs scénarios avec un manager n'ayant jamais rien pris et
+# attend une liste qui ne le mentionne pas. Ne couvre que le rôle que le
+# retour démo visait ("par serveur").
+STAFF_ROLE_TAKING_ORDERS = StaffRole.WAITER
 
 # Pas de config timezone par resto pour l'instant (MVP mono-pays) — décalage
 # fixe Tunisie (UTC+1, pas d'heure d'été) uniquement pour l'affichage des
@@ -108,17 +118,27 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
         if o.taken_by_staff_id is not None:
             staff_counts[o.taken_by_staff_id] = staff_counts.get(o.taken_by_staff_id, 0) + 1
 
-    staff_performance: list[schemas.StaffPerformance] = []
-    staff_by_id: dict[int, Staff] = {}
-    if staff_counts:
-        staff_rows = db.query(Staff).filter(Staff.id.in_(staff_counts.keys())).all()
-        staff_by_id = {s.id: s for s in staff_rows}
-        for staff_id, count in sorted(staff_counts.items(), key=lambda kv: -kv[1]):
-            s = staff_by_id.get(staff_id)
-            if s:
-                staff_performance.append(
-                    schemas.StaffPerformance(staff_id=s.id, staff_name=s.name, role=s.role, orders_taken=count)
-                )
+    # Tout serveur actif doit apparaître, même à 0 — sinon un serveur présent
+    # mais qui n'a encore rien pris disparaît du rapport au lieu d'y montrer 0
+    # (retour démo 2026-08-31, point 11). Un compte désactivé en cours de
+    # journée qui a quand même pris des commandes reste listé, même logique
+    # que get_team_report.
+    staff_rows = (
+        db.query(Staff)
+        .filter(
+            Staff.restaurant_id == restaurant_id,
+            Staff.role == STAFF_ROLE_TAKING_ORDERS,
+            or_(Staff.is_active.is_(True), Staff.id.in_(staff_counts.keys())),
+        )
+        .all()
+    )
+    staff_by_id: dict[int, Staff] = {s.id: s for s in staff_rows}
+    staff_performance = [
+        schemas.StaffPerformance(
+            staff_id=s.id, staff_name=s.name, role=s.role, orders_taken=staff_counts.get(s.id, 0)
+        )
+        for s in sorted(staff_rows, key=lambda s: -staff_counts.get(s.id, 0))
+    ]
 
     item_counts: dict[str, int] = {}
     for o in orders_today:
@@ -295,16 +315,22 @@ async def get_team_report(
     for order in orders:
         by_staff.setdefault(order.taken_by_staff_id, []).append(order)
 
-    if not by_staff:
-        return schemas.TeamReport(start=start, end=end, staff=[])
-
-    staff_by_id = {s.id: s for s in db.query(Staff).filter(Staff.id.in_(by_staff)).all()}
+    # Même principe que get_dashboard_stats : tout serveur actif apparaît,
+    # même à 0 commande sur la période — plus un compte désactivé entre-temps
+    # qui a quand même travaillé (retour démo 2026-08-31, point 11).
+    staff_rows = (
+        db.query(Staff)
+        .filter(
+            Staff.restaurant_id == restaurant_id,
+            Staff.role == STAFF_ROLE_TAKING_ORDERS,
+            or_(Staff.is_active.is_(True), Staff.id.in_(by_staff.keys())),
+        )
+        .all()
+    )
 
     rows: list[schemas.StaffPeriodReport] = []
-    for staff_id, staff_orders in by_staff.items():
-        member = staff_by_id.get(staff_id)
-        if not member:
-            continue
+    for member in staff_rows:
+        staff_orders = by_staff.get(member.id, [])
         delays = [
             (as_utc(o.taken_at) - as_utc(o.created_at)).total_seconds()
             for o in staff_orders

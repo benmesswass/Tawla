@@ -82,6 +82,83 @@ def test_dashboard_stats_counts_orders_per_staff(client):
     assert performance[yosra.id] == 1
 
 
+def test_dashboard_stats_lists_a_waiter_with_zero_orders(client):
+    """
+    Un serveur présent mais qui n'a encore rien pris en charge disparaissait du
+    rapport au lieu d'y apparaître à 0 : le manager ne pouvait pas distinguer
+    "absent aujourd'hui" de "présent, zéro commande" (retour démo 2026-08-31).
+    """
+    restaurant, _manager, manager_headers, table, item = _setup_restaurant(client)
+    sami = create_staff(restaurant.id, role=StaffRole.WAITER)
+    idle_waiter = create_staff(restaurant.id, role=StaffRole.WAITER)
+    kitchen = create_staff(restaurant.id, role=StaffRole.KITCHEN)
+
+    order = _create_order(client, restaurant, table, item)
+    client.post(f"/api/v1/orders/{order['id']}/claim", headers=auth_headers(sami))
+
+    res = client.get(f"/api/v1/stats/dashboard/{restaurant.id}", headers=manager_headers)
+    performance = {p["staff_id"]: p["orders_taken"] for p in res.json()["staff_performance"]}
+    assert performance[sami.id] == 1
+    assert performance[idle_waiter.id] == 0
+    # Un compte cuisine ne peut jamais prendre de commande : il n'a rien à
+    # faire dans un rapport "commandes par serveur", pas même à 0.
+    assert kitchen.id not in performance
+
+
+def test_dashboard_stats_excludes_inactive_staff_with_no_orders(client):
+    """Un compte désactivé sans commande sur la journée n'a rien à montrer."""
+    restaurant, _manager, manager_headers, _table, _item = _setup_restaurant(client)
+    inactive = create_staff(restaurant.id, role=StaffRole.WAITER)
+    inactive.is_active = False
+    db = _TestingSessionLocal()
+    db.merge(inactive)
+    db.commit()
+    db.close()
+
+    res = client.get(f"/api/v1/stats/dashboard/{restaurant.id}", headers=manager_headers)
+    performance = {p["staff_id"]: p["orders_taken"] for p in res.json()["staff_performance"]}
+    assert inactive.id not in performance
+
+
+def test_team_report_lists_a_waiter_with_zero_orders(client):
+    """Même bug, même correctif, côté rapport d'équipe (période) plutôt que dashboard du jour."""
+    restaurant, _manager, manager_headers, table, item = _setup_restaurant(client)
+    sami = create_staff(restaurant.id, role=StaffRole.WAITER)
+    idle_waiter = create_staff(restaurant.id, role=StaffRole.WAITER)
+
+    order = _create_order(client, restaurant, table, item)
+    client.post(f"/api/v1/orders/{order['id']}/claim", headers=auth_headers(sami))
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    res = client.get(
+        f"/api/v1/stats/equipe/{restaurant.id}", params={"start": today, "end": today}, headers=manager_headers
+    )
+    assert res.status_code == 200
+    rows = {row["staff_id"]: row["orders_taken"] for row in res.json()["staff"]}
+    assert rows[sami.id] == 1
+    assert rows[idle_waiter.id] == 0
+
+
+def test_team_report_is_not_empty_when_a_waiter_has_not_taken_an_order(client):
+    """
+    L'ancien code renvoyait une liste vide dès qu'aucun serveur n'avait pris de
+    commande sur la période, même avec un serveur actif présent — la période
+    correspondante n'existait donc pour personne dans le rapport. Le manager
+    (créé par _setup_restaurant) n'a pas à apparaître : il n'a rien pris, et ce
+    rapport suit les serveurs (test_team_report.py couvre déjà ce choix).
+    """
+    restaurant, _manager, manager_headers, _table, _item = _setup_restaurant(client)
+    waiter = create_staff(restaurant.id, role=StaffRole.WAITER)
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    res = client.get(
+        f"/api/v1/stats/equipe/{restaurant.id}", params={"start": today, "end": today}, headers=manager_headers
+    )
+    assert res.status_code == 200
+    rows = {row["staff_id"]: row["orders_taken"] for row in res.json()["staff"]}
+    assert rows == {waiter.id: 0}
+
+
 def test_dashboard_stats_top_items_sorted_by_quantity(client):
     restaurant, _manager, headers, table, item = _setup_restaurant(client)
     other_item = client.post(
