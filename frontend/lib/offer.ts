@@ -9,8 +9,10 @@
  * Phase F3) — plus jamais un deuxième 50/100/150 en dur ici, qui pourrait
  * diverger de la valeur réellement facturée côté serveur
  * (`core/subscription.py::tier_price`). `name`/`tagline`/`features` restent
- * la copie tunisienne telle quelle : les contenus par marché (démo, visite
- * guidée, catégories, chevalet QR) sont un chantier séparé, pas encore fait.
+ * la copie tunisienne telle quelle, sauf la ligne mode Ramadan (gérée via
+ * `currentMarket.ramadanModeAvailable`, sans objet en France) : le reste des
+ * contenus par marché (démo, visite guidée, catégories, chevalet QR) est un
+ * chantier séparé, pas encore fait.
  */
 import { currentMarket } from "./market";
 
@@ -61,7 +63,8 @@ export const TIERS: OfferTier[] = [
       "Programme de fidélité",
       "Vente incitative « avec ce plat »",
       "Plan de salle visuel, plusieurs zones",
-      "Photos des plats, mode Ramadan",
+      "Photos des plats",
+      ...(currentMarket.ramadanModeAvailable ? ["Mode Ramadan"] : []),
       "Import CSV du menu",
       "Page de preuve complète",
     ],
