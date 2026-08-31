@@ -75,6 +75,34 @@ def _average(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
+def _compute_timing(orders: list[Order]) -> schemas.TimingStats:
+    """
+    Délai moyen par étape sur un lot de commandes — factorisé pour être
+    calculé aussi bien sur toutes les commandes du jour (`get_dashboard_stats`)
+    que sur les seules commandes d'un serveur (`get_team_report`, point 12,
+    retour démo 2026-08-31) : même définition des 4 étapes dans les deux cas.
+    """
+    wait_confirmation = [(o.confirmed_at - o.created_at).total_seconds() for o in orders if o.confirmed_at]
+    confirmation_to_kitchen = [
+        (o.sent_to_kitchen_at - o.confirmed_at).total_seconds()
+        for o in orders
+        if o.confirmed_at and o.sent_to_kitchen_at
+    ]
+    kitchen_to_served = [
+        (o.served_at - o.sent_to_kitchen_at).total_seconds()
+        for o in orders
+        if o.sent_to_kitchen_at and o.served_at
+    ]
+    served_to_paid = [(o.paid_at - o.served_at).total_seconds() for o in orders if o.served_at and o.paid_at]
+
+    return schemas.TimingStats(
+        avg_wait_confirmation_seconds=_average(wait_confirmation),
+        avg_confirmation_to_kitchen_seconds=_average(confirmation_to_kitchen),
+        avg_kitchen_to_served_seconds=_average(kitchen_to_served),
+        avg_served_to_paid_seconds=_average(served_to_paid),
+    )
+
+
 async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> schemas.DashboardStats:
     # Instrumentation de rétention (ROADMAP.md Phase 24, voir stats/models.py)
     # — une ligne par appel, donc par ouverture de /dashboard ou
@@ -95,29 +123,7 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
         .all()
     )
 
-    wait_confirmation = [(o.confirmed_at - o.created_at).total_seconds() for o in orders_today if o.confirmed_at]
-    confirmation_to_kitchen = [
-        (o.sent_to_kitchen_at - o.confirmed_at).total_seconds()
-        for o in orders_today
-        if o.confirmed_at and o.sent_to_kitchen_at
-    ]
-    kitchen_to_served = [
-        (o.served_at - o.sent_to_kitchen_at).total_seconds()
-        for o in orders_today
-        if o.sent_to_kitchen_at and o.served_at
-    ]
-    served_to_paid = [
-        (o.paid_at - o.served_at).total_seconds()
-        for o in orders_today
-        if o.served_at and o.paid_at
-    ]
-
-    timing = schemas.TimingStats(
-        avg_wait_confirmation_seconds=_average(wait_confirmation),
-        avg_confirmation_to_kitchen_seconds=_average(confirmation_to_kitchen),
-        avg_kitchen_to_served_seconds=_average(kitchen_to_served),
-        avg_served_to_paid_seconds=_average(served_to_paid),
-    )
+    timing = _compute_timing(orders_today)
 
     staff_counts: dict[int, int] = {}
     for o in orders_today:
@@ -342,6 +348,9 @@ async def get_team_report(
             for o in staff_orders
             if o.taken_at
         ]
+        tips_collected = sum(
+            float(o.tip_amount) for o in staff_orders if o.payment_status == PaymentStatus.PAID
+        )
         rows.append(
             schemas.StaffPeriodReport(
                 staff_id=member.id,
@@ -350,6 +359,8 @@ async def get_team_report(
                 orders_taken=len(staff_orders),
                 avg_seconds_to_claim=_average(delays),
                 total_amount_handled=sum(o.total_amount for o in staff_orders),
+                total_tips_collected=tips_collected,
+                timing=_compute_timing(staff_orders),
             )
         )
 
