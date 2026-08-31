@@ -1712,7 +1712,7 @@ export default function DashboardPage() {
 
       {activeTab === "settings" && (
         <>
-          {restaurant && (
+          {restaurant && currentMarket.ramadanModeAvailable && (
             <Card tone="warning" padding="sm" className="mb-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="flex items-center gap-2 font-medium text-[#8a6420]">
@@ -1810,14 +1810,15 @@ export default function DashboardPage() {
                 </p>
               )}
               <p className="text-xs text-neutral-500 mt-2">
-                Le paiement carte, la fidélité, le plan de salle visuel, les photos, le mode Ramadan, l&apos;import
-                CSV et la page de preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications
-                push demandent Business. Pour changer de palier, contactez Tawla.
+                Le paiement carte, la fidélité, le plan de salle visuel, les photos
+                {currentMarket.ramadanModeAvailable ? ", le mode Ramadan" : ""}, l&apos;import CSV et la page de
+                preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications push demandent
+                Business. Pour changer de palier, contactez Tawla.
               </p>
             </Card>
           )}
 
-          {restaurant && (
+          {restaurant && currentMarket.paymentProvider === "konnect" && (
             <Card padding="sm" className="mt-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Paiement carte de vos clients</span>
@@ -1857,6 +1858,19 @@ export default function DashboardPage() {
               <p className="text-xs text-neutral-500 mt-2">
                 Jamais réaffichée après coup, comme un mot de passe temporaire — vous pourrez toujours la
                 remplacer par une nouvelle.
+              </p>
+            </Card>
+          )}
+
+          {restaurant && currentMarket.paymentProvider === "none" && (
+            <Card padding="sm" className="mt-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Paiement carte de vos clients</span>
+                <Badge tone="neutral">Bientôt disponible</Badge>
+              </div>
+              <p className="text-xs text-neutral-500 mt-2">
+                Le paiement carte en ligne arrive bientôt pour la France. En attendant, vos clients règlent en
+                espèces ou par terminal physique apporté à table.
               </p>
             </Card>
           )}

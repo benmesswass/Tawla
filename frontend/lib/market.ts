@@ -43,6 +43,10 @@ export type MarketConfig = {
   // — jamais validée côté backend (MenuItem.category est du texte libre), donc pas de
   // miroir dans core/markets.py : rien côté serveur n'en a besoin.
   menuCategories: readonly string[];
+  // Pré-commande Ramadan/iftar (Order.scheduled_for) : sans objet hors Tunisie,
+  // retour démo 2026-08-31 — un restaurateur français n'a aucune raison de voir
+  // l'option dans ses réglages.
+  ramadanModeAvailable: boolean;
 };
 
 const TUNISIA: MarketConfig = {
@@ -56,6 +60,7 @@ const TUNISIA: MarketConfig = {
   vatRates: null,
   invoiceThreshold: null,
   menuCategories: ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"],
+  ramadanModeAvailable: true,
 };
 
 const FRANCE: MarketConfig = {
@@ -71,6 +76,7 @@ const FRANCE: MarketConfig = {
   // "Ftour" (Ramadan tunisien) retiré, sans objet en France ; remplacé par les
   // trois catégories de carte françaises usuelles (MARCHE_FRANCE.md §3.2).
   menuCategories: ["Entrées", "Plats", "Desserts", "Boissons", "Formules", "Vins", "À emporter", "Autre"],
+  ramadanModeAvailable: false,
 };
 
 const MARKETS: Record<string, MarketConfig> = { tn: TUNISIA, fr: FRANCE };
