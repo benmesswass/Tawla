@@ -104,8 +104,8 @@ Disqualifier durement à la porte, sans exception :
 - **pas de Wi-Fi utilisable ou pas de réseau à toutes les tables** → ne pas
   installer, même s'il insiste. Le produit fonctionnera mal, et c'est ta faute
   qu'on retiendra, pas celle de son réseau ;
-- **moins de six tables** → douleur trop faible pour 120 DT, et du support pour
-  rien.
+- **service à faible volume, sans vraie pression de salle** → douleur trop
+  faible pour 120 DT, et du support pour rien.
 
 **Accord écrit d'une page par pilote**, quatre lignes :
 
