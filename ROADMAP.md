@@ -278,7 +278,7 @@ Au 2026-08-18, `terrain/PILOTES.md` ne contient qu'un modèle à copier.
 
 **23.1 — Avant d'installer quoi que ce soit** 🧑
 
-- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Moins de six tables → la douleur est trop faible pour 120 DT. Une terrasse est le signal positif le plus fort
+- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Service à faible volume, sans vraie pression de salle → la douleur est trop faible pour 120 DT. Une terrasse est le signal positif le plus fort
 - [ ] Accord écrit d'une page par pilote 🧑 : quatre semaines d'usage **effectif en service**, droit de citer le nom, droit de publier les chiffres mesurés, et en échange installation, formation, chevalets et support pendant le service. Un pilote qui refuse le droit de citation est un client gratuit, pas un pilote
 - [ ] **Relever la semaine de référence à la main, avant activation** 🧑 : commandes perdues par service et panier moyen, comptés sur place pendant quatre soirs. Sans cet « avant », la preuve d'après ne vaut rien — et c'est le seul travail de cette roadmap qui devient impossible à rattraper une fois l'outil installé
 - [ ] Arriver avec **sa** carte déjà chargée 🧑 (`setup_restaurant.py` + import CSV) et lui faire scanner son propre QR. « Voilà votre carte, elle tourne » ne se rattrape par aucun argument

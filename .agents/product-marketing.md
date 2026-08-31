@@ -147,7 +147,7 @@ prochain coup de feu.
 | « Ça va remplacer mes serveurs ? » | Non — le serveur confirme toujours avant que quoi que ce soit parte en cuisine. Ça l'accélère, ça ne le retire pas. |
 | « Mon wifi n'est pas terrible » | Disqualifier franchement avant toute démo : sans réseau fiable à toutes les tables, ne pas installer, même si le patron insiste. Le produit fonctionnera mal, et c'est notre faute qu'on retiendra. |
 
-**Anti-persona :** petits cafés de moins de six tables ; établissement sans
+**Anti-persona :** petits cafés à faible volume ; établissement sans
 wifi/réseau fiable à toutes les tables ; patron qui veut un outil gratuit ou
 low-cost sans accepter d'accompagnement ; demande immédiate de multi-
 établissements ou d'intégration caisse (hors périmètre tant qu'un client
