@@ -74,6 +74,7 @@ export const fr = {
   invoiceDownload: "Télécharger la facture (PDF)",
   invoiceQrCaption: "Scannez pour la retrouver sur un autre appareil",
   orderAgain: "Commander à nouveau",
+  postOrderSuggestionTitle: "Envie d'autre chose avant l'addition ?",
 
   splitBillToggle: "Partager l'addition entre plusieurs personnes",
   splitBillTitle: "Partager l'addition",
