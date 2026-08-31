@@ -132,6 +132,15 @@ class StaffPeriodReport(BaseModel):
     # dépend réellement du serveur, contrairement au temps de cuisson.
     avg_seconds_to_claim: float | None
     total_amount_handled: float
+    # Pourboires reçus sur les commandes qu'il a prises en charge — jamais
+    # affiché nulle part par serveur avant (retour démo 2026-08-31, point 12) :
+    # argument de prime direct quand les pourboires sont mutualisés ou suivis
+    # individuellement.
+    total_tips_collected: float
+    # Détail par étape, sur les seules commandes de ce serveur — même schéma
+    # que le dashboard global, pour donner au manager le détail derrière
+    # `avg_seconds_to_claim` (avant la prise en charge, ceci couvre l'après).
+    timing: TimingStats
 
 
 class TeamReport(BaseModel):

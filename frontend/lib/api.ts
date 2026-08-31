@@ -338,6 +338,8 @@ export type StaffPeriodReport = {
   orders_taken: number;
   avg_seconds_to_claim: number | null;
   total_amount_handled: number;
+  total_tips_collected: number;
+  timing: TimingStats;
 };
 
 /** Ce qu'un membre d'équipe voit de sa propre soirée (Phase 17.3) : ses
