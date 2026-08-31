@@ -122,7 +122,7 @@ export default function DashboardStatsPage() {
 
   if (staffLoading || !staff) {
     return (
-      <div className="p-4 max-w-4xl mx-auto space-y-3">
+      <div className="p-4 md:p-6 space-y-3">
         <Skeleton className="h-6 w-56" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
           <Skeleton className="h-64 w-full" />
@@ -142,7 +142,7 @@ export default function DashboardStatsPage() {
   const hourByValue = new Map((stats?.orders_by_hour ?? []).map((h) => [h.hour, h.count]));
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <div className="p-4 md:p-6">
       <EnteteManager
         titre="Activité du jour"
         sousTitre="Ce qui se passe en salle aujourd'hui : ce qui attend, ce que chaque serveur a pris en charge, et le temps passé à chaque étape."
