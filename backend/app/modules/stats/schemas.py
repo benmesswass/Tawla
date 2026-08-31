@@ -11,6 +11,7 @@ class TimingStats(BaseModel):
     avg_wait_confirmation_seconds: float | None
     avg_confirmation_to_kitchen_seconds: float | None
     avg_kitchen_to_served_seconds: float | None
+    avg_served_to_paid_seconds: float | None
 
 
 class StaffPerformance(BaseModel):

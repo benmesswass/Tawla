@@ -113,6 +113,10 @@ class Order(Base):
     payment_status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.UNPAID)
     tip_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     payment_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Moment où payment_status passe à PAID (tous moyens confondus) — sans lui,
+    # impossible de mesurer le délai "servie -> payée" (retour démo 2026-08-31),
+    # symétrique de served_at pour l'étape cuisine -> servie.
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Saisi par le client au moment de payer (facultatif, quel que soit le
     # moyen) — sert UNIQUEMENT à envoyer la confirmation + facture PDF une
