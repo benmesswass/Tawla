@@ -24,11 +24,11 @@ place à côté de la stratégie qui marche déjà.
 
 ## Plateforme : Meta (Facebook + Instagram), pas LinkedIn, pas Google
 
-- **LinkedIn écarté** : les gérants de restaurants indépendants tunisiens de
-  6-40 tables n'y maintiennent quasiment jamais de profil professionnel à
-  jour, et le ciblage par intitulé de poste LinkedIn suppose une donnée
-  qu'ils ne renseignent pas. LinkedIn cible juste des décideurs d'entreprise
-  qui utilisent LinkedIn — ce n'est pas ce public.
+- **LinkedIn écarté** : les gérants de restaurants indépendants n'y
+  maintiennent quasiment jamais de profil professionnel à jour, et le
+  ciblage par intitulé de poste LinkedIn suppose une donnée qu'ils ne
+  renseignent pas. LinkedIn cible juste des décideurs d'entreprise qui
+  utilisent LinkedIn — ce n'est pas ce public.
 - **Google Search écarté pour l'instant** : suppose un volume de recherche
   (« logiciel commande restaurant Tunisie ») qui reste à prouver — les trois
   concurrents investissent peu en SEO/SEA visible. Tant qu'aucune preuve de
@@ -92,16 +92,14 @@ réatteindre quelqu'un déjà engagé.
 ## Créas — qualifier, jamais séduire
 
 Trois angles, testés en parallèle à petit budget égal, jamais un seul remis
-en avant avant d'avoir un signal. Chaque texte **nomme le seuil des 6
-tables** — un filtre gratuit avant même le clic.
+en avant avant d'avoir un signal.
 
 **Angle 1 — la question qui fait mal (perte)**
 
 > Un vendredi soir plein, combien de commandes se perdent entre la salle et
 > la cuisine chez vous ?
-> Pour les restaurants et brasseries de 6 tables et plus (Tunis, La Marsa,
-> Sousse, Hammamet). On vient chez vous, on installe, on forme votre
-> équipe — pas un logiciel à configurer seul.
+> On vient chez vous, on installe, on forme votre équipe — pas un logiciel à
+> configurer seul.
 > **CTA : Demander un rendez-vous**
 
 **Angle 2 — la différenciation service**
@@ -109,15 +107,12 @@ tables** — un filtre gratuit avant même le clic.
 > On ne vous envoie pas un lien à paramétrer seul. On vient avec votre
 > carte, on installe, on forme votre équipe pendant un vrai service, et on
 > reste joignable le vendredi soir.
-> Pour les restaurants de 6 tables et plus, à Tunis, La Marsa, Sousse et
-> Hammamet.
 > **CTA : Demander un rendez-vous**
 
 **Angle 3 — la rareté (pilote)**
 
 > Je cherche 3 restaurants à [Ville] pour tester gratuitement, 4 semaines,
-> installation et formation comprises. 6 tables et plus, wifi correct en
-> salle.
+> installation et formation comprises. Wifi correct en salle.
 > **CTA : Demander un rendez-vous**
 
 Visuel : pas de maquette léchée — une photo simple d'un chevalet QR posé sur
@@ -151,8 +146,8 @@ avoir englouti tout le test d'un coup.
 
 La seule métrique qui compte : **coût par rendez-vous qualifié réellement
 obtenu** (pas coût par lead, pas CTR, pas CPM — des métriques vanity pour cet
-objectif). Un lead qui répond « moins de 6 tables » n'est pas qualifié, même
-s'il coûte le même CPM que les autres.
+objectif). Un lead qui ne correspond pas au profil visé n'est pas qualifié,
+même s'il coûte le même CPM que les autres.
 
 **Seuil d'arrêt :** si le coût par rendez-vous qualifié dépasse ce qu'une
 sortie à pied produit pour un temps équivalent (ordre de grandeur : une

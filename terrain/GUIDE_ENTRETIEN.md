@@ -23,12 +23,11 @@ semaine.
 Ouvrir une carte et lister **quarante** établissements — il en faudra deux fois
 plus que d'entretiens obtenus. Critères, dans l'ordre :
 
-1. **Six tables et plus**, visibles sur les photos ;
-2. **une terrasse** — c'est le signal le plus fort : tables loin du comptoir,
+1. **une terrasse** — c'est le signal le plus fort : tables loin du comptoir,
    serveur qui marche le plus, commandes perdues au maximum ;
-3. **ouvert depuis plusieurs années** — un patron installé est plus dur à
+2. **ouvert depuis plusieurs années** — un patron installé est plus dur à
    convaincre et infiniment plus utile : les autres l'écoutent ;
-4. répartis entre quartier, centre-ville et zone touristique.
+3. répartis entre quartier, centre-ville et zone touristique.
 
 Noter pour chacun : nom, rue, ville, type, nombre de tables estimé. Vingt
 entretiens dans le même quartier ne décrivent qu'un quartier.
@@ -201,8 +200,7 @@ ne se montre pas à un jury.
 
 ## Cible
 
-Restaurants et brasseries de **6 tables et plus**, à Tunis, La Marsa, Sousse et
-Hammamet. Pas les petits cafés : ticket trop faible pour le prix visé.
+Restaurants et brasseries. Pas les petits cafés : ticket trop faible pour le prix visé.
 
 Répartition à tenir sur les vingt : une bonne moitié de restaurants de quartier,
 quelques établissements de centre-ville, quelques-uns en zone touristique. Vingt

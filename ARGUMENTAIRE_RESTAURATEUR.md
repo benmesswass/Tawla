@@ -30,7 +30,7 @@ jamais en commençant par le moins cher : *« Business à 149 DT pour plusieurs
 serveurs ou plusieurs adresses, Essentiel à 49 DT pour un petit café une
 salle — et vous, avec [N] tables, c'est Pro. »* **Palier de référence pour
 cette cible : Pro, 89 DT/mois** — vente incitative, fidélité, plan de salle,
-mode Ramadan : exactement ce qu'un restaurant de 6 tables et plus utilise.
+mode Ramadan : exactement ce qu'un restaurant avec plusieurs serveurs utilise.
 Ne jamais proposer Essentiel en premier à cette cible : c'est le palier
 café-une-salle, il sous-vend ce qu'ils vont réellement utiliser.
 

@@ -24,10 +24,10 @@ en avancer le déclenchement.
 Positionnement, ICP, différenciation, ton de marque : tout est dans
 `.agents/product-marketing.md`, lu automatiquement par les autres skills
 marketing. Résumé en une phrase, pour ne pas avoir à l'ouvrir : **on vend un
-service d'installation en personne à des restaurants et brasseries de 6
-tables et plus, jamais un logiciel en libre-service à des petits cafés** —
-face à Digital Menu (19-49 DT, libre-service), Scanny (+caisse) et Menu-QR
-(entrée de gamme), aucun des trois ne se déplace.
+service d'installation en personne à des restaurants et brasseries, jamais un
+logiciel en libre-service à des petits cafés** — face à Digital Menu (19-49
+DT, libre-service), Scanny (+caisse) et Menu-QR (entrée de gamme), aucun des
+trois ne se déplace.
 
 ## 2. Garde-fous absolus (rappel — voir la mission d'origine pour le détail)
 
@@ -35,8 +35,7 @@ face à Digital Menu (19-49 DT, libre-service), Scanny (+caisse) et Menu-QR
   (`frontend/lib/offer.ts`) reste vide tant qu'aucun relevé réel n'existe.
 - **`terrain/*.md` ne se remplit jamais depuis une session** — données de
   terrain saisies à la main par Wassim.
-- **La cible ne s'élargit jamais** : 6 tables et plus, jamais les petits
-  cafés.
+- **La cible ne s'élargit jamais aux petits cafés.**
 - **Le prix ne bouge jamais** dans le discours — seulement du temps gratuit
   en échange de références (`PREMIERES_VENTES.md` #6, repris dans
   `PARRAINAGE.md`).
@@ -124,8 +123,7 @@ condition remplie :
   `REVUE_INVESTISSEURS.md`) est un relais plausible **une fois qu'il y a une
   histoire réelle à raconter** — deux clients payants, des chiffres
   mesurés. Personne à contacter tant que ce n'est pas vrai.
-- La cible ne s'élargit toujours pas : le budget grandit, le public ciblé
-  reste les mêmes quatre villes et le même seuil de 6 tables.
+- Le budget grandit, la discipline de ciblage reste la même.
 
 **Ce document ne va pas plus loin ici** : le plan chiffré de l'Horizon 2 est
 un chantier à ouvrir en janvier 2027, avec les vrais chiffres en main — pas

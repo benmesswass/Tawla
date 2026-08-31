@@ -292,7 +292,7 @@ Verdict par fonctionnalité, sur l'état réel du code.
 | **Visite guidée** | 20 étapes, contenu tunisien (`lib/visite/etapes.ts`) | Moteur conservé tel quel (excellent), contenu par marché |
 | **Prix des paliers** | 49 / 89 / 149 DT | À re-dériver, jamais à convertir (§3.4) |
 | **Politique de confidentialité** | fr/ar, loi 2004-63 (`lib/i18n/privacy.ts`) | Réécriture RGPD complète |
-| **Page publique** | « pour les restaurants et brasseries à partir de 6 tables, **en Tunisie** » (`app/page.tsx`), `contact@tawla.tn` | Copie, promesse, mentions légales, e-mail : tout change (§3.4) |
+| **Page publique** | Copie déjà neutre côté marché/segment depuis le retour démo 2026-08-31 (plus de mention de la Tunisie ni d'un seuil de tables), `contact@tawla.tn` reste en dur (`app/page.tsx`) | Mentions légales et e-mail restent à changer (§3.4) ; la copie elle-même n'a plus besoin de réécriture par marché |
 
 #### À ajouter — ce que le marché français exige et que le produit n'a pas
 
@@ -838,7 +838,7 @@ d'être lu dans la configuration.
 | `backend/app/modules/tables/qr_card.py` | Français seul, sans façonnage arabe (documenté) |
 | `backend/app/modules/demo/service.py:158,181` | Démo « Dar Chaabane », e-mails `@…demo.tawla.tn` |
 | `frontend/lib/visite/etapes.ts` | Contenu de la visite guidée, `tawla.tn` cité |
-| `frontend/app/page.tsx:46,149,167` | « en Tunisie », « restaurants tunisiens », `contact@tawla.tn` |
+| `frontend/app/page.tsx` | `contact@tawla.tn` (la copie publique ne mentionne plus la Tunisie ni un seuil de tables — retour démo 2026-08-31) |
 | `frontend/lib/shareCard.ts:12,19` | Pied de carte `tawla.tn` |
 
 ### Métier et droit

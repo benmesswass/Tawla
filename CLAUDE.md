@@ -6,7 +6,7 @@ Projet **personnel** de Wassim. Tout commit, push et opération GitHub se fait a
 
 ## Vision produit
 
-Plateforme de commande via QR code pour restaurants/cafés tunisiens. Client scanne
+Plateforme de commande via QR code pour restaurants/cafés. Client scanne
 le QR de sa table → menu → panier → valide. La commande part vers un écran
 partagé consulté par tous les serveurs (les commandes de toutes les tables
 s'y empilent) ; un serveur la prend en charge, confirme avec la table, puis
@@ -253,8 +253,8 @@ n'aurait pas dû être faite.
 
 **Cadrage produit (Wassim, 2026-08-13)** : Tawla est une entreprise rentable et
 non diluée, pas un dossier de levée. Conséquences : un prix unique élevé avec
-service inclus plutôt qu'un alignement sur les 19-49 DT du marché, cible
-restaurants de 6 tables et plus, et pas d'expansion régionale.
+service inclus plutôt qu'un alignement sur les 19-49 DT du marché, et pas
+d'expansion régionale.
 
 ## Philosophie d'ingénierie (à appliquer par défaut)
 

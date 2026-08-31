@@ -1,6 +1,6 @@
 # Tawla (resto-qr-menu)
 
-Plateforme de commande via QR code pour restaurants/cafés tunisiens.
+Plateforme de commande via QR code pour restaurants/cafés.
 
 **Flux** : le client scanne le QR de sa table → consulte le menu → ajoute au
 panier → valide. La commande apparaît immédiatement dans un écran partagé

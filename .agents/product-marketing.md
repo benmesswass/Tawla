@@ -8,7 +8,7 @@ autres skills marketing. Le prix cité est le prix réellement codé aujourd'hui
 
 ## Product Overview
 
-**One-liner :** la commande à table par QR code pour restaurants tunisiens —
+**One-liner :** la commande à table par QR code pour restaurants —
 vendue avec quelqu'un qui vient l'installer, jamais en libre-service.
 
 **Ce que ça fait :** le client scanne le QR de sa table, compose son panier et
@@ -38,9 +38,8 @@ en personne pour les 45-90 premiers clients, jamais par volume publicitaire
 
 ## Target Audience
 
-**Cible :** restaurants et brasseries de **6 tables et plus**, Tunis, La
-Marsa, Sousse, Hammamet — répartis quartier / centre-ville / zone touristique.
-**Jamais les petits cafés** : ticket trop faible pour justifier le prix, et
+**Cible :** restaurants et brasseries, répartis quartier / centre-ville / zone
+touristique. **Jamais les petits cafés** : ticket trop faible pour justifier le prix, et
 c'est la pente qui transforme une entreprise rentable en travail mal payé
 (`PREMIERES_VENTES.md` #10 « Ce qu'il ne faut pas faire »). Le palier
 Essentiel existe au catalogue (pour un petit café, une seule salle) mais n'est

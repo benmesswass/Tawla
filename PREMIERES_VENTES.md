@@ -6,8 +6,7 @@ roadmap. Celui-ci ne parle que d'une chose : **obtenir les deux premiers clients
 payants.**
 
 Rappel du cadrage (Wassim, 2026-08-13) : entreprise rentable et non diluée, prix
-unique élevé avec service inclus, cible restaurants de 6 tables et plus, pas
-d'expansion régionale.
+unique élevé avec service inclus, pas d'expansion régionale.
 
 ---
 

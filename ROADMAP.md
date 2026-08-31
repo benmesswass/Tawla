@@ -216,7 +216,7 @@ jour où la Phase 19bis est en revue, sans attendre la mise en ligne.
 Le matériel existe depuis la Phase 13 et n'a jamais servi : au 2026-08-18,
 `terrain/ENTRETIENS.md` porte toujours **vingt lignes vides**.
 
-- [ ] Mener les 20 entretiens 🧑 — restaurants et brasseries de **6 tables et plus** (Tunis, La Marsa, Sousse, Hammamet), pas les petits cafés. Ne jamais montrer l'application avant la fin
+- [ ] Mener les 20 entretiens 🧑 — restaurants et brasseries, pas les petits cafés. Ne jamais montrer l'application avant la fin
 - [ ] Remplir `terrain/ENTRETIENS.md` sur place ou juste après 🧑 — une ligne par établissement, et les verbatims mot pour mot, surtout les refus
 - [ ] Poser la question de prix franchement, après avoir décrit le bénéfice et jamais la fonctionnalité 🧑
 - [ ] Repérer les trois profils de pilote au passage 🧑 : café de quartier, restaurant de centre-ville, zone touristique. Chercher celui dont les autres patrons parlent, pas le plus accueillant
