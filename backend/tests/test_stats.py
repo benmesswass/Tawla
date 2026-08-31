@@ -52,6 +52,7 @@ def test_dashboard_stats_computes_timing_averages(client):
         confirmed_at=now + timedelta(seconds=60),
         sent_to_kitchen_at=now + timedelta(seconds=90),
         served_at=now + timedelta(seconds=690),
+        paid_at=now + timedelta(seconds=1090),
         status=OrderStatus.SERVED,
     )
 
@@ -61,6 +62,7 @@ def test_dashboard_stats_computes_timing_averages(client):
     assert timing["avg_wait_confirmation_seconds"] == 60
     assert timing["avg_confirmation_to_kitchen_seconds"] == 30
     assert timing["avg_kitchen_to_served_seconds"] == 600
+    assert timing["avg_served_to_paid_seconds"] == 400
 
 
 def test_dashboard_stats_counts_orders_per_staff(client):

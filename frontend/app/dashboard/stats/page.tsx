@@ -60,6 +60,7 @@ function statsToCsv(stats: DashboardStats): string {
   row("Envoyée → confirmée", stats.timing.avg_wait_confirmation_seconds ?? "");
   row("Confirmée → cuisine", stats.timing.avg_confirmation_to_kitchen_seconds ?? "");
   row("Cuisine → servie", stats.timing.avg_kitchen_to_served_seconds ?? "");
+  row("Servie → payée", stats.timing.avg_served_to_paid_seconds ?? "");
   lines.push("");
 
   row("Serveur", "Commandes prises en charge");
@@ -212,6 +213,10 @@ export default function DashboardStatsPage() {
               <div className="flex justify-between">
                 <span className="text-[var(--ink-soft)]">Cuisine → servie</span>
                 <span className="font-medium">{formatDuration(stats.timing.avg_kitchen_to_served_seconds)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--ink-soft)]">Servie → payée</span>
+                <span className="font-medium">{formatDuration(stats.timing.avg_served_to_paid_seconds)}</span>
               </div>
             </div>
           </Card>

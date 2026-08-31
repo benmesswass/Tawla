@@ -270,6 +270,7 @@ export type TimingStats = {
   avg_wait_confirmation_seconds: number | null;
   avg_confirmation_to_kitchen_seconds: number | null;
   avg_kitchen_to_served_seconds: number | null;
+  avg_served_to_paid_seconds: number | null;
 };
 
 export type StaffPerformance = {

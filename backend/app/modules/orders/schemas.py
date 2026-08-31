@@ -158,6 +158,7 @@ class OrderOut(BaseModel):
     scheduled_for: UtcDatetime | None
     payment_method: PaymentMethod | None
     payment_status: PaymentStatus
+    paid_at: UtcDatetime | None
     tip_amount: float
     total_amount: float
     items: list[OrderItemOut]

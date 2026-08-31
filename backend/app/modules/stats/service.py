@@ -96,11 +96,17 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
         for o in orders_today
         if o.sent_to_kitchen_at and o.served_at
     ]
+    served_to_paid = [
+        (o.paid_at - o.served_at).total_seconds()
+        for o in orders_today
+        if o.served_at and o.paid_at
+    ]
 
     timing = schemas.TimingStats(
         avg_wait_confirmation_seconds=_average(wait_confirmation),
         avg_confirmation_to_kitchen_seconds=_average(confirmation_to_kitchen),
         avg_kitchen_to_served_seconds=_average(kitchen_to_served),
+        avg_served_to_paid_seconds=_average(served_to_paid),
     )
 
     staff_counts: dict[int, int] = {}
