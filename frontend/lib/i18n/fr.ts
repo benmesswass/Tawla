@@ -67,7 +67,7 @@ export const fr = {
   tipPlaceholder: formatMoney(0),
   emailLabel: "E-mail (facultatif, pour recevoir votre facture)",
   emailPlaceholder: "vous@exemple.com",
-  payByCard: "Payer en ligne — Konnect",
+  payByCard: "Payer en ligne par carte",
   payByCardTerminal: "Carte à table (terminal serveur)",
   payByCash: "Espèces (le serveur passe encaisser)",
   paymentFailedRetry: "Le paiement n'a pas abouti. Vous pouvez réessayer.",
