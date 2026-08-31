@@ -54,10 +54,6 @@ export default function HomePage() {
             <BoutonVisite className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-medium text-[var(--harissa)] shadow-sm" />
             <p className="text-sm text-white/80">2 minutes, sans inscription.</p>
           </div>
-
-          <p className="mt-6 text-sm text-white/80">
-            Pour les restaurants et brasseries à partir de 6 tables, en Tunisie.
-          </p>
         </div>
       </section>
 
@@ -179,7 +175,7 @@ export default function HomePage() {
 
       <footer className="max-w-3xl mx-auto px-6 py-8 text-xs text-[var(--ink-soft)]">
         <p>
-          Tawla — commande à table par QR code pour les restaurants tunisiens. Si vous êtes client d&apos;un
+          Tawla — commande à table par QR code pour les restaurants. Si vous êtes client d&apos;un
           établissement, scannez simplement le QR posé sur votre table.
         </p>
         <Link href="/confidentialite" className="underline mt-2 inline-block">

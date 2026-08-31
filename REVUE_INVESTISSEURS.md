@@ -67,10 +67,10 @@ jamais : **venir sur place.** Paramétrer la carte complète, imprimer et livrer
 les QR sur supports propres, former le personnel pendant un service réel, être
 joignable un vendredi soir.
 
-Cible cohérente avec ce prix : **restaurants et brasseries de 6 tables et
-plus** (Tunis, La Marsa, Sousse, Hammamet), pas les petits cafés. Ticket plus
-élevé, plus de personnel, donc une commande perdue coûte réellement de
-l'argent — et le tableau de bord « performance par serveur » y devient un
+Cible cohérente avec ce prix : **restaurants et brasseries**, pas les petits
+cafés. Ticket plus élevé, plus de personnel, donc une commande perdue coûte
+réellement de l'argent — et le tableau de bord « performance par serveur » y
+devient un
 argument de direction. C'est le seul angle que les trois concurrents ne mettent
 pas en avant.
 
