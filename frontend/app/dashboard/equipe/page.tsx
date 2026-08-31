@@ -130,7 +130,7 @@ export default function TeamReportPage() {
 
   if (staffLoading || !staff) {
     return (
-      <div className="p-4 max-w-4xl mx-auto space-y-3">
+      <div className="p-4 md:p-6 space-y-3">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -138,7 +138,7 @@ export default function TeamReportPage() {
   }
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <div className="p-4 md:p-6">
       {upgradeTier && restaurantId && (
         <UpgradeModal
           restaurantId={restaurantId}
