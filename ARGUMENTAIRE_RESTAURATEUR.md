@@ -96,8 +96,6 @@ l'équipe entière sabote.
 Disqualifier durement, même si le patron insiste :
 
 - **Wifi/réseau fiable à toutes les tables ?** Non → ne pas installer.
-- **Six tables ou plus ?** Non → douleur trop faible pour le prix, du
-  support pour rien.
 - **Une terrasse ?** Signal positif le plus fort — tables loin du comptoir,
   commandes perdues au maximum, QR naturellement accepté dehors.
 
