@@ -205,10 +205,12 @@ rechargement.
 
 ## Roadmap
 
-`ROADMAP.md` est le fichier unique de pilotage du projet (phases 19 à 24 depuis
+`ROADMAP.md` pilote le code produit et la mise en ligne (phases 19 à 24 depuis
 l'audit final du 2026-08-15). Prendre la première tâche non cochée en partant du
 haut, dans l'ordre des phases. Une tâche cochée `[x]` doit mentionner la PR qui
-l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne.
+l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne. Depuis le
+2026-09-01, le design du parcours client a sa propre roadmap parallèle,
+`ROADMAP_DESIGN.md` — voir plus bas.
 
 **Règle qui prime sur tout ajout de code** : après la Phase 20, toute
 proposition de fonctionnalité doit nommer le restaurateur qui l'a demandée.
@@ -227,11 +229,13 @@ pas construite. Le produit ne manque pas de fonctionnalité, il manque un client
 - `MARCHE_FRANCE.md` — dossier de cadrage du marché français (2026-08-24, F0
   tranchée le même jour — scénario C, les deux marchés en parallèle) :
   différences produit/légales/techniques avec la Tunisie, architecture à deux
-  marchés, sélecteur de pays, phases F0 à F8. **Ce n'est PAS une seconde
-  roadmap et ça ne remet pas en cause « `ROADMAP.md` est le fichier unique de
-  pilotage »** : une session qui cherche la prochaine tâche **codable** prend
-  `ROADMAP.md` en priorité ; `MARCHE_FRANCE.md` pilote le chantier France en
-  parallèle, jamais à la place de `ROADMAP.md`.
+  marchés, sélecteur de pays, phases F0 à F8. Une session qui cherche la
+  prochaine tâche de **code produit** prend `ROADMAP.md` en priorité ;
+  `MARCHE_FRANCE.md` pilote le chantier France en parallèle, jamais à la place
+  de `ROADMAP.md`.
+- `ROADMAP_DESIGN.md` — roadmap dédiée au design du parcours client (née le
+  2026-09-01 d'un comparatif avec digitalmenu.tn). Troisième document
+  parallèle : ne réordonne ni `ROADMAP.md` ni `MARCHE_FRANCE.md`.
 - `REVUE_INVESTISSEURS.md` — revue d'investissement du 2026-08-13 (grille de
   notation, failles vérifiées, plafond de revenus).
 - `PREMIERES_VENTES.md` — audit orienté vente et les dix recommandations pour
