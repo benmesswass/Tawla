@@ -49,6 +49,10 @@ Documents qui la fondent :
   palier), triangulation du marché adressable, revérification France
   (Sunday, niche maghrébine bilingue), matrice comparative, énoncé de
   positionnement, analyse de défendabilité des trois paliers de prix.
+- [`MULTI_ETABLISSEMENTS.md`](./MULTI_ETABLISSEMENTS.md) — roadmap et prompt
+  d'exécution du chantier multi-établissements (2026-09-01), vendu dans le
+  palier Business. Décisions produit tranchées (§2), Option A retenue (§3) ;
+  reste à exécuter les phases §5.
 
 ## Objectif
 
