@@ -43,28 +43,30 @@ C'est l'écart qui compte : une fiche plat sans photo a l'air inachevée face
       actuel tant qu'aucune couverture n'est envoyée ; upload ouvert à tous
       les paliers, pas verrouillé Pro contrairement à la photo des plats
       (PR #121)
-- [ ] Icônes réseaux sociaux du restaurant dans l'en-tête du menu client, si
-      renseignés au profil établissement
+- [x] Icônes réseaux sociaux du restaurant dans l'en-tête du menu client, si
+      renseignés au profil établissement (PR #125)
 
 ## Phase D1bis — Avis Google après paiement (Pro+)
 
 Idée de Wassim (2026-09-01), insérée ici plutôt qu'en D2 pour ne pas
 renumeroter ce qui suit — même logique que la Phase 19bis de `ROADMAP.md`.
 
-- [ ] Une fois le paiement de l'addition confirmé côté client, une modale
+- [x] Une fois le paiement de l'addition confirmé côté client, une modale
       s'ouvre automatiquement pour proposer un avis Google, avec un lien
       direct vers la fiche Google Maps du restaurant. Réservé au palier Pro
       et au-dessus (à vérifier via `require_tier`/`effective_tier`, comme le
       mode Ramadan). Nouveau champ (ex. `google_review_url`) sur
       `Restaurant`, nullable — la modale ne s'affiche que si le manager l'a
-      renseigné ET que son palier l'autorise.
-- [ ] Rétrofit décidé par Wassim (2026-09-01) : les icônes réseaux sociaux
+      renseigné ET que son palier l'autorise (PR #130)
+- [x] Rétrofit décidé par Wassim (2026-09-01) : les icônes réseaux sociaux
       de D1.3 (PR #125) deviennent elles aussi réservées au palier Pro et
       au-dessus, comme l'avis Google ci-dessus — revient sur le choix
       « ouvert à tous les paliers » pris (avec justification) dans cette
       même PR. Mécanisme exact (verrou à la saisie dans Réglages comme le
       mode Ramadan, ou verrou à l'affichage seulement comme prévu ci-dessus
-      pour l'avis Google) à trancher au design de cette phase.
+      pour l'avis Google) à trancher au design de cette phase — tranché
+      côté manager (verrou à l'écriture sur `PATCH /social-links`, comme le
+      mode Ramadan), jamais relu à l'affichage (PR #130)
 
 ## Phase D2 — Navigation et micro-interactions
 
