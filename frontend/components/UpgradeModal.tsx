@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { api, type Restaurant, type SubscriptionTier } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
+import { trackEvent } from "@/lib/analytics";
 import { TIERS } from "@/lib/offer";
 import { currentMarket } from "@/lib/market";
+import { sessionDemo } from "@/lib/visite/etat";
 import Button from "@/components/ui/Button";
 
 /**
@@ -34,6 +36,7 @@ export default function UpgradeModal({
   if (!tier) return null; // "essentiel" n'atterrit jamais ici (jamais un required_tier)
 
   async function handleUpgrade() {
+    trackEvent("upgrade_clicked", { target_tier: requiredTier, is_demo: Boolean(sessionDemo()) });
     setSubmitting(true);
     setError(null);
     try {

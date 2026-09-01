@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { setToken } from "@/lib/auth";
 import { enregistrerSessionDemo } from "@/lib/visite/etat";
 
@@ -36,6 +37,7 @@ export default function BoutonVisite({
 
   async function ouvrir() {
     if (enCours) return;
+    trackEvent("demo_clicked");
     setEnCours(true);
     try {
       const session = await api.createDemoSession();

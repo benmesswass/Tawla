@@ -58,6 +58,18 @@ def _fresh_rate_limiter():
     _rate_limit_hits.clear()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_analytics(monkeypatch):
+    """
+    Empêche tout envoi réel à PostHog pendant les tests, même si
+    POSTHOG_API_KEY est posée dans backend/.env (cas du poste de dev local) —
+    sinon chaque test qui traverse settle_subscription_payment pollue le
+    projet PostHog réel avec des faux événements purchase_completed.
+    """
+    monkeypatch.setattr("app.core.analytics._client", None)
+    yield
+
+
 @pytest.fixture()
 def db_session():
     """Session sur la base de test, pour préparer un état directement en base

@@ -17,6 +17,7 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from app.core.analytics import capture_event
 from app.core.dates import as_utc
 from app.core.konnect import KonnectError, get_konnect_payment, tnd_to_millimes
 from app.core.logging import get_logger, log_event
@@ -102,4 +103,13 @@ def settle_subscription_payment(db: Session, restaurant_id: int) -> SettleResult
         restaurant_id=restaurant_id, tier=pending_tier.value, period_end=new_period_end.isoformat(),
         already_settled=updated == 0,
     )
+    # Uniquement quand CET appel a effectué le règlement (pas un doublon
+    # webhook/retour client concurrent sur la même référence — voir
+    # docstring du module) : sinon purchase_completed serait émis deux fois
+    # pour le même paiement.
+    if updated:
+        capture_event(
+            str(restaurant_id), "purchase_completed",
+            tier=pending_tier.value, amount_millimes=expected_millimes,
+        )
     return "active"

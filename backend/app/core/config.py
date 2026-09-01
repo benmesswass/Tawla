@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
+    # Analytics produit (PostHog) — événements de facturation d'abonnement
+    # émis côté serveur (voir app/core/analytics.py). Dégradation gracieuse :
+    # sans posthog_api_key, aucun envoi n'est tenté. Host EU par défaut : le
+    # projet Tawla est hébergé sur eu.posthog.com, pas le défaut US du SDK.
+    posthog_api_key: str = ""
+    posthog_host: str = "https://eu.i.posthog.com"
+
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:

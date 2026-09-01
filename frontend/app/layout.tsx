@@ -1,4 +1,5 @@
 import "./globals.css";
+import Analytics from "@/components/Analytics";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import DemoGuide from "@/components/DemoGuide";
 import VisiteGuidee from "@/components/visite/VisiteGuidee";
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className={`${hankenGrotesk.className} bg-[var(--semoule)] text-[var(--espresso)]`}
       >
         {children}
+        <Analytics />
         <ServiceWorkerRegister />
         <DemoGuide />
         {/* Bandeaux du haut empilés ici plutôt que positionnés en `fixed`
