@@ -90,6 +90,10 @@ export type RestaurantPublic = {
   cafe_mode_enabled: boolean;
   cover_photo_url: string | null;
   logo_url: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  tiktok_url: string | null;
+  whatsapp_url: string | null;
 };
 
 export type Restaurant = RestaurantPublic & {
@@ -731,6 +735,19 @@ export const api = {
   },
   deleteRestaurantLogo: (restaurantId: number) =>
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/logo`, { method: "DELETE" }),
+  setSocialLinks: (
+    restaurantId: number,
+    links: {
+      facebook_url: string | null;
+      instagram_url: string | null;
+      tiktok_url: string | null;
+      whatsapp_url: string | null;
+    }
+  ) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/social-links`, {
+      method: "PATCH",
+      body: JSON.stringify(links),
+    }),
   // Connexion du wallet Konnect PROPRE au restaurant (modèle direct,
   // 2026-08-19) — jamais réaffiché après coup, seul `konnect_configured` le
   // confirme ensuite (voir Restaurant).

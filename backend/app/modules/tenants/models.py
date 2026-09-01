@@ -65,6 +65,15 @@ class Restaurant(Base):
     logo_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     logo_content_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
+    # Icônes réseaux sociaux dans l'en-tête du menu client (Phase D1 de
+    # ROADMAP_DESIGN.md, point 3) — liens saisis par le manager, pas de
+    # validation stricte de format (même tolérance que category en texte
+    # libre). Nullable : chaque icône ne s'affiche que si son lien existe.
+    facebook_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    instagram_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    tiktok_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    whatsapp_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
     # Palier d'abonnement — conditionne l'accès aux fonctionnalités Pro/Business,
     # voir app/core/subscription.py. Essentiel par défaut, mais un palier ne
     # dit rien de si le compte est UTILISABLE (voir `is_active`/`is_usable`
