@@ -32,6 +32,31 @@ plus que d'entretiens obtenus. Critères, dans l'ordre :
 Noter pour chacun : nom, rue, ville, type, nombre de tables estimé. Vingt
 entretiens dans le même quartier ne décrivent qu'un quartier.
 
+### Compléter la liste par les canaux professionnels réels
+
+La tournée à pied reste la méthode principale — ceci ne la remplace pas,
+juste de quoi trouver des adresses ou un point d'entrée en plus. Détail
+complet, sourcé, avec ce qui n'a pas pu être vérifié : `CANAUX_ACQUISITION.md`
+à la racine du repo.
+
+- **Chambre Nationale des Restaurants et Cafés (UTICA)** — parle aujourd'hui
+  dans la presse au nom des restaurateurs tunisiens (coupures d'électricité,
+  caisses enregistreuses, chaises en terrasse). Pas de canal propre trouvé :
+  se contacte via l'UTICA nationale (Cité El Khadhra, Tunis,
+  +216 71 142 000). Une antenne existerait à Nabeul, en pleine zone cible —
+  à reconfirmer sur place avant de s'y présenter, pas encore vérifiée
+  directement.
+- **IFSA Africa**, salon agroalimentaire annuel au Parc des Expositions du
+  Kram, avec un vrai volet HoReCa (concours culinaires) — utile pour
+  repérer des établissements et des contacts, pas comme stand à tenir.
+  Vérifier la date de la prochaine édition avant d'en tenir compte : celle
+  de 2026 était déjà passée à l'écriture de ce guide.
+
+**Ce que la recherche n'a pas trouvé** : aucun groupe Facebook ou LinkedIn
+clairement B2B et tunisien réunissant des patrons de restaurant (par
+opposition à leurs clients ou leur personnel de cuisine). Ne pas en
+supposer un, ne pas y chercher de rendez-vous.
+
 ### Le créneau
 
 **15 h – 17 h, du mardi au jeudi.** Le service de midi est fini, celui du soir
@@ -131,9 +156,15 @@ Décrire le **bénéfice**, jamais la fonctionnalité :
 > entre la commande d'un client et son arrivée en cuisine — vous mettriez combien
 > par mois ? »
 
-Puis, quel que soit le chiffre : *« Et à 120 dinars par mois, avec
+Puis, quel que soit le chiffre : *« Et à 89 dinars par mois, avec
 l'installation, la carte saisie pour vous, les QR imprimés livrés et la formation
 de l'équipe sur place ? »*
+
+*(89 DT = le palier Pro — celui qui correspond à cette cible. Le prix unique
+à 120 DT envisagé le 14 août n'a jamais été codé : trois paliers publics
+existent aujourd'hui, 49/89/149 DT ; voir `ARGUMENTAIRE_RESTAURATEUR.md`
+pour l'arithmétique complète et pourquoi ne jamais proposer le palier à 49 DT
+en premier à cette cible.)*
 
 Noter la réaction avant les mots : hésitation, rire, contre-proposition. Un
 « pourquoi si cher ? » est une bonne nouvelle — c'est une négociation. Un

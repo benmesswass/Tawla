@@ -212,11 +212,6 @@ l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne. Depuis
 2026-09-01, le design du parcours client a sa propre roadmap parallèle,
 `ROADMAP_DESIGN.md` — voir plus bas.
 
-**Règle qui prime sur tout ajout de code** : après la Phase 20, toute
-proposition de fonctionnalité doit nommer le restaurateur qui l'a demandée.
-Sans nom, elle va dans la section « Sous condition » de `ROADMAP.md` et n'est
-pas construite. Le produit ne manque pas de fonctionnalité, il manque un client.
-
 - `AUDIT_COUTS_PRODUCTION.md` — audit du 2026-08-18 : ce que coûte réellement
   en argent la mise en production de Tawla (infrastructure, services tiers,
   domaine, conformité technique), chiffré et sourcé, obligatoire vs
