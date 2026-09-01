@@ -58,6 +58,13 @@ renumeroter ce qui suit — même logique que la Phase 19bis de `ROADMAP.md`.
       mode Ramadan). Nouveau champ (ex. `google_review_url`) sur
       `Restaurant`, nullable — la modale ne s'affiche que si le manager l'a
       renseigné ET que son palier l'autorise.
+- [ ] Rétrofit décidé par Wassim (2026-09-01) : les icônes réseaux sociaux
+      de D1.3 (PR #125) deviennent elles aussi réservées au palier Pro et
+      au-dessus, comme l'avis Google ci-dessus — revient sur le choix
+      « ouvert à tous les paliers » pris (avec justification) dans cette
+      même PR. Mécanisme exact (verrou à la saisie dans Réglages comme le
+      mode Ramadan, ou verrou à l'affichage seulement comme prévu ci-dessus
+      pour l'avis Google) à trancher au design de cette phase.
 
 ## Phase D2 — Navigation et micro-interactions
 
