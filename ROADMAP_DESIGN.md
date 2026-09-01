@@ -37,9 +37,12 @@ C'est l'écart qui compte : une fiche plat sans photo a l'air inachevée face
       comptes Essentiel, l'upload étant verrouillé Pro, et cassé l'import CSV
       en masse). Icônes par catégorie plutôt que fausses photos génériques —
       une icône ne prétend jamais être le plat réel (PR #121)
-- [ ] Bannière de couverture en tête du menu client (photo du lieu + logo
+- [x] Bannière de couverture en tête du menu client (photo du lieu + logo
       rond), à la place du bandeau texte seul actuel
-      (`frontend/app/menu/[qrToken]/page.tsx`)
+      (`frontend/app/menu/[qrToken]/page.tsx`) — repli identique à l'écran
+      actuel tant qu'aucune couverture n'est envoyée ; upload ouvert à tous
+      les paliers, pas verrouillé Pro contrairement à la photo des plats
+      (PR #121)
 - [ ] Icônes réseaux sociaux du restaurant dans l'en-tête du menu client, si
       renseignés au profil établissement
 
