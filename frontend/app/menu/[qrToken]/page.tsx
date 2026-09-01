@@ -913,6 +913,31 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     .filter((r) => r.order.payment_status !== "paid")
     .reduce((sum, r) => sum + r.order.total_amount, 0);
 
+  // Relance au moment où le repas touche à sa fin plutôt qu'un bouton statique
+  // "commander à nouveau" (retour démo 2026-08-31, point 13) : réutilise les
+  // suggestions "avec ce plat" déjà configurées par le restaurant (Phase 14.1)
+  // sur les articles de CETTE commande, plutôt qu'un moteur de reco à part.
+  // Vide si le restaurant n'a rien configuré pour ces plats — le bouton simple
+  // reste alors le seul affiché, pas de UI vide.
+  const postOrderSuggestions: MenuItem[] =
+    trackedOrder?.status === "served"
+      ? Array.from(new Set(trackedOrder.items.flatMap((line) => suggestions[String(line.menu_item_id)] ?? [])))
+          .map((id) => menu.find((m) => m.id === id))
+          .filter(
+            (item): item is MenuItem =>
+              !!item &&
+              item.is_available &&
+              !cart[item.id] &&
+              !trackedOrder.items.some((line) => line.menu_item_id === item.id)
+          )
+          .slice(0, 3)
+      : [];
+
+  function addSuggestionAndOrderAgain(item: MenuItem) {
+    addToCart(item, true);
+    orderAgain();
+  }
+
   // L'ardoise : toutes les commandes de la table encore à régler, celle qu'on
   // regarde comprise, dans l'ordre où elles ont été passées.
   const ardoise = openOrders
@@ -1362,12 +1387,36 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {t.shareOrderButton}
         </button>
 
-        <button
-          onClick={orderAgain}
-          className="mt-3 w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-2.5 text-sm font-semibold"
-        >
-          {t.orderAgain}
-        </button>
+        {postOrderSuggestions.length > 0 ? (
+          <div className="mt-3 border border-[var(--line)] bg-[var(--semoule-raised)] rounded-xl p-[14px]">
+            <p className="text-sm font-bold text-[var(--encre)]">{t.postOrderSuggestionTitle}</p>
+            <ul className="mt-2 space-y-2">
+              {postOrderSuggestions.map((item) => (
+                <li key={item.id} className="flex items-center gap-3">
+                  <span className="flex-1 text-sm text-[var(--ink-soft)]">
+                    <span className="text-[var(--encre)]">{item.name}</span> · {formatAmount(item.price)} {t.currency}
+                  </span>
+                  <button
+                    onClick={() => addSuggestionAndOrderAgain(item)}
+                    className="text-[12.5px] font-semibold px-[14px] py-2 rounded-[10px] bg-[var(--harissa)] text-[var(--semoule)]"
+                  >
+                    {t.suggestionAdd}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button onClick={orderAgain} className="mt-3 text-sm text-[var(--ink-soft)] underline">
+              {t.orderAgain}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={orderAgain}
+            className="mt-3 w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-2.5 text-sm font-semibold"
+          >
+            {t.orderAgain}
+          </button>
+        )}
         </div>
       </>
     );

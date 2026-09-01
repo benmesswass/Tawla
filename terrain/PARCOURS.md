@@ -236,8 +236,7 @@ encaissée.
 
 1. **Coder entre deux sorties.** C'est le piège principal, et il est documenté :
    trois phases techniquement irréprochables ont été livrées après que la roadmap
-   eut écrit qu'écrire du code ferait baisser la note. Après la mise en ligne,
-   toute idée de fonctionnalité doit nommer le restaurateur qui l'a demandée.
+   eut écrit qu'écrire du code ferait baisser la note.
 2. **Sauter le relevé « avant ».** Il paraît toujours possible de le faire plus
    tard. Il ne l'est jamais.
 3. **Installer chez un établissement au mauvais réseau** parce qu'il a dit oui.

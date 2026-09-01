@@ -624,6 +624,7 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float, c
     order.payment_method = PaymentMethod.CARD
     order.tip_amount = tip_amount
     order.payment_status = PaymentStatus.PAID
+    order.paid_at = datetime.now(timezone.utc)
     if customer_email:
         order.customer_email = customer_email
     db.commit()
@@ -775,7 +776,7 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
     updated = (
         db.query(Order)
         .filter(Order.id == order.id, Order.payment_ref == payment_ref)
-        .update({"payment_status": PaymentStatus.PAID})
+        .update({"payment_status": PaymentStatus.PAID, "paid_at": datetime.now(timezone.utc)})
     )
     db.commit()
     db.refresh(order)
@@ -856,6 +857,7 @@ async def confirm_cash_payment(db: Session, order_id: int, staff: Staff) -> Orde
         )
 
     order.payment_status = PaymentStatus.PAID
+    order.paid_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(order)
 
@@ -932,6 +934,7 @@ async def confirm_card_terminal_payment(db: Session, order_id: int, staff: Staff
         )
 
     order.payment_status = PaymentStatus.PAID
+    order.paid_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(order)
 

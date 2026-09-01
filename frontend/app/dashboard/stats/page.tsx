@@ -60,6 +60,7 @@ function statsToCsv(stats: DashboardStats): string {
   row("Envoyée → confirmée", stats.timing.avg_wait_confirmation_seconds ?? "");
   row("Confirmée → cuisine", stats.timing.avg_confirmation_to_kitchen_seconds ?? "");
   row("Cuisine → servie", stats.timing.avg_kitchen_to_served_seconds ?? "");
+  row("Servie → payée", stats.timing.avg_served_to_paid_seconds ?? "");
   lines.push("");
 
   row("Serveur", "Commandes prises en charge");
@@ -121,7 +122,7 @@ export default function DashboardStatsPage() {
 
   if (staffLoading || !staff) {
     return (
-      <div className="p-4 max-w-4xl mx-auto space-y-3">
+      <div className="p-4 md:p-6 space-y-3">
         <Skeleton className="h-6 w-56" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
           <Skeleton className="h-64 w-full" />
@@ -141,7 +142,7 @@ export default function DashboardStatsPage() {
   const hourByValue = new Map((stats?.orders_by_hour ?? []).map((h) => [h.hour, h.count]));
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <div className="p-4 md:p-6">
       <EnteteManager
         titre="Activité du jour"
         sousTitre="Ce qui se passe en salle aujourd'hui : ce qui attend, ce que chaque serveur a pris en charge, et le temps passé à chaque étape."
@@ -212,6 +213,10 @@ export default function DashboardStatsPage() {
               <div className="flex justify-between">
                 <span className="text-[var(--ink-soft)]">Cuisine → servie</span>
                 <span className="font-medium">{formatDuration(stats.timing.avg_kitchen_to_served_seconds)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--ink-soft)]">Servie → payée</span>
+                <span className="font-medium">{formatDuration(stats.timing.avg_served_to_paid_seconds)}</span>
               </div>
             </div>
           </Card>

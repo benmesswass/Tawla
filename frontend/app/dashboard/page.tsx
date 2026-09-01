@@ -830,7 +830,7 @@ export default function DashboardPage() {
 
   if (staffLoading || !staff) {
     return (
-      <div className="p-4 max-w-3xl mx-auto space-y-3">
+      <div className="p-4 md:p-6 space-y-3">
         <Skeleton className="h-6 w-64" />
         <Skeleton className="h-4 w-96 max-w-full" />
         <Skeleton className="h-24 w-full mt-4" />
@@ -859,7 +859,7 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="p-4 max-w-3xl mx-auto">
+    <div className="p-4 md:p-6">
       {upgradeTier && restaurantId && (
         <UpgradeModal
           restaurantId={restaurantId}
@@ -898,22 +898,29 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="flex gap-1 border-b border-[var(--line)] mb-4" data-visite="dashboard-onglets">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === tab.key
-                ? "border-[var(--harissa)] text-[var(--harissa)]"
-                : "border-transparent text-neutral-500 hover:text-neutral-700"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6 md:items-start">
+        <Card
+          dark
+          padding="sm"
+          className="flex md:block gap-1 md:space-y-1 overflow-x-auto md:w-48 md:shrink-0 md:sticky md:top-4"
+          data-visite="dashboard-onglets"
+        >
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`shrink-0 whitespace-nowrap text-left px-3 py-2 rounded-lg text-sm font-semibold transition-colors md:w-full ${
+                activeTab === tab.key
+                  ? "bg-[var(--harissa-on-espresso-bg)] text-[var(--harissa-on-espresso-text)]"
+                  : "text-[var(--ink-on-espresso)] hover:text-[var(--ink-on-espresso-strong)]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </Card>
 
+        <div className="flex-1 min-w-0">
       {activeTab === "menu" && (
         <>
           <Card padding="sm" className="mb-3">
@@ -1712,7 +1719,7 @@ export default function DashboardPage() {
 
       {activeTab === "settings" && (
         <>
-          {restaurant && (
+          {restaurant && currentMarket.ramadanModeAvailable && (
             <Card tone="warning" padding="sm" className="mb-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="flex items-center gap-2 font-medium text-[#8a6420]">
@@ -1810,14 +1817,15 @@ export default function DashboardPage() {
                 </p>
               )}
               <p className="text-xs text-neutral-500 mt-2">
-                Le paiement carte, la fidélité, le plan de salle visuel, les photos, le mode Ramadan, l&apos;import
-                CSV et la page de preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications
-                push demandent Business. Pour changer de palier, contactez Tawla.
+                Le paiement carte, la fidélité, le plan de salle visuel, les photos
+                {currentMarket.ramadanModeAvailable ? ", le mode Ramadan" : ""}, l&apos;import CSV et la page de
+                preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications push demandent
+                Business. Pour changer de palier, contactez Tawla.
               </p>
             </Card>
           )}
 
-          {restaurant && (
+          {restaurant && currentMarket.paymentProvider === "konnect" && (
             <Card padding="sm" className="mt-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Paiement carte de vos clients</span>
@@ -1860,8 +1868,23 @@ export default function DashboardPage() {
               </p>
             </Card>
           )}
+
+          {restaurant && currentMarket.paymentProvider === "none" && (
+            <Card padding="sm" className="mt-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Paiement carte de vos clients</span>
+                <Badge tone="neutral">Bientôt disponible</Badge>
+              </div>
+              <p className="text-xs text-neutral-500 mt-2">
+                Le paiement carte en ligne arrive bientôt pour la France. En attendant, vos clients règlent en
+                espèces ou par terminal physique apporté à table.
+              </p>
+            </Card>
+          )}
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 }

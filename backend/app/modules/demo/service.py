@@ -27,7 +27,7 @@ from app.core.dates import as_utc
 from app.core.logging import log_event
 from app.core.markets import Market, current_market
 from app.modules.loyalty.models import LoyaltyMember
-from app.modules.menu.models import MenuItem, MenuSuggestion
+from app.modules.menu.models import MenuItem, MenuRegime, MenuSuggestion
 from app.modules.orders.models import Order, OrderItem
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import hash_password
@@ -140,6 +140,13 @@ def supprimer_demo(db: Session, restaurant: Restaurant) -> None:
     db.query(WaiterCall).filter(WaiterCall.restaurant_id == rid).delete(synchronize_session=False)
     db.query(MenuSuggestion).filter(MenuSuggestion.restaurant_id == rid).delete(synchronize_session=False)
     db.query(MenuItem).filter(MenuItem.restaurant_id == rid).delete(synchronize_session=False)
+    # menu_item_regimes (la liaison) est en ondelete=CASCADE des deux côtés,
+    # mais MenuRegime.restaurant_id ne l'est pas (menu/models.py) : sans cette
+    # ligne, un régime créé pendant la démo (fonctionnalité Pro normalement
+    # testée) bloque la suppression du restaurant à l'expiration, ce qui
+    # bloque ensuite *toute* nouvelle démo derrière lui (purge à chaque
+    # création, cf. `purger_demos_expirees`).
+    db.query(MenuRegime).filter(MenuRegime.restaurant_id == rid).delete(synchronize_session=False)
     db.query(LoyaltyMember).filter(LoyaltyMember.restaurant_id == rid).delete(synchronize_session=False)
     db.query(DashboardView).filter(DashboardView.restaurant_id == rid).delete(synchronize_session=False)
     db.query(Table).filter(Table.restaurant_id == rid).delete(synchronize_session=False)

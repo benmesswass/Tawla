@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.markets import FRANCE, TUNISIA
 from app.modules.demo import service
-from app.modules.menu.models import MenuItem
+from app.modules.menu.models import MenuItem, MenuRegime
 from app.modules.orders.models import Order, OrderItem
 from app.modules.staff.models import Staff
 from app.modules.tables.models import Table
@@ -116,6 +116,38 @@ def test_une_demo_expiree_est_effacee_entierement(client, db_session):
     for modele in (Staff, Table, MenuItem, Order):
         assert db_session.query(modele).filter(modele.restaurant_id == rid).count() == 0
     assert db_session.query(OrderItem).count() == 0
+
+
+def test_une_demo_expiree_avec_un_regime_personnalise_est_purgeable(client, db_session):
+    """
+    Régression : un régime créé pendant la démo (fonctionnalité Pro normale,
+    « Sans porc », « Vegan »...) a longtemps empêché la purge du restaurant à
+    l'expiration en production — `MenuRegime.restaurant_id` n'a pas de cascade
+    côté base, et `supprimer_demo` ne le nettoyait pas. Conséquence : la démo
+    suivante échouait aussi, `purger_demos_expirees` tournant avant toute
+    création (voir `creer_demo`).
+
+    Assertion sur le comptage de lignes plutôt que sur une levée d'exception :
+    SQLite (moteur de ces tests) n'applique pas les contraintes de clé
+    étrangère par défaut, contrairement à Postgres en production — la ligne
+    orpheline y survivrait silencieusement sans jamais faire échouer le test.
+    """
+    demo = ouvrir_demo(client)
+    rid = demo["restaurant_id"]
+    reponse = client.put(
+        f"/api/v1/menu-items/by-restaurant/{rid}/regimes",
+        json={"names": ["Sans porc"]},
+        headers={"Authorization": f"Bearer {demo['access_token']}"},
+    )
+    assert reponse.status_code == 200, reponse.text
+
+    restaurant = db_session.get(Restaurant, rid)
+    restaurant.demo_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert service.purger_demos_expirees(db_session) == 1
+    assert db_session.get(Restaurant, rid) is None
+    assert db_session.query(MenuRegime).filter(MenuRegime.restaurant_id == rid).count() == 0
 
 
 def test_une_demo_vivante_survit_a_la_purge(client, db_session):

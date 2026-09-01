@@ -181,6 +181,20 @@ export default function HomePage() {
         <Link href="/confidentialite" className="underline mt-2 inline-block">
           Politique de confidentialité
         </Link>
+        <div className="mt-1 flex flex-wrap gap-x-3">
+          <Link href="/mentions-legales" className="underline inline-block">
+            Mentions légales
+          </Link>
+          <Link href="/cgu" className="underline inline-block">
+            CGU
+          </Link>
+          <Link href="/cgv" className="underline inline-block">
+            CGV
+          </Link>
+          <Link href="/dpa" className="underline inline-block">
+            DPA
+          </Link>
+        </div>
       </footer>
     </main>
   );
