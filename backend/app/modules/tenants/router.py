@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -152,6 +153,142 @@ def set_kitchen_sound(
         )
 
     restaurant.kitchen_sound_enabled = payload.enabled
+    db.commit()
+    db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
+# --- Bannière de couverture et logo (Phase D1 de ROADMAP_DESIGN.md) ---------
+#
+# Même trio de champs et mêmes contraintes que la photo des plats
+# (menu/router.py) : bytea en base, jpeg/png/webp, 3 Mo max, empreinte du
+# contenu dans l'URL pour l'invalidation de cache. Volontairement PAS
+# derrière require_tier(PRO) contrairement à la photo des plats : ce sont
+# deux images fixes par restaurant, pas une par plat, l'argument de coût de
+# stockage qui justifie le verrou Pro ne tient pas ici — et le verrouiller
+# laisserait un compte Essentiel sans la moindre image sur son menu (il ne
+# peut déjà pas uploader de photo de plat), à l'opposé de l'objectif de toute
+# cette roadmap.
+
+FORMATS_PHOTO = {"image/jpeg", "image/png", "image/webp"}
+TAILLE_PHOTO_MAX = 3 * 1024 * 1024
+
+
+@router.put("/{restaurant_id}/cover-photo", response_model=schemas.RestaurantOut)
+async def upload_restaurant_cover_photo(
+    restaurant_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    if file.content_type not in FORMATS_PHOTO:
+        raise HTTPException(
+            status_code=415,
+            detail={"code": "UNSUPPORTED_IMAGE", "message": "image must be jpeg, png or webp"},
+        )
+    contenu = await file.read()
+    if len(contenu) > TAILLE_PHOTO_MAX:
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "IMAGE_TOO_LARGE", "message": "image exceeds 3 MB"},
+        )
+
+    restaurant.cover_photo_data = contenu
+    restaurant.cover_photo_content_type = file.content_type
+    restaurant.cover_photo_url = (
+        f"/api/v1/restaurants/{restaurant.id}/cover-photo?v={sha256(contenu).hexdigest()[:12]}"
+    )
+    db.commit()
+    db.refresh(restaurant)
+    log_event(logger, "restaurant.cover_photo_uploaded", restaurant_id=restaurant.id)
+    return schemas.serialize_restaurant(restaurant)
+
+
+@router.get("/{restaurant_id}/cover-photo")
+def get_restaurant_cover_photo(restaurant_id: int, db: Session = Depends(get_db)):
+    """Publique, comme la carte elle-même : c'est le client attablé qui la regarde."""
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant or not restaurant.cover_photo_data:
+        raise HTTPException(status_code=404, detail={"code": "IMAGE_NOT_FOUND", "message": "no image"})
+    return Response(
+        content=restaurant.cover_photo_data,
+        media_type=restaurant.cover_photo_content_type or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@router.delete("/{restaurant_id}/cover-photo", response_model=schemas.RestaurantOut)
+def delete_restaurant_cover_photo(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
+):
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+    restaurant.cover_photo_data = None
+    restaurant.cover_photo_content_type = None
+    restaurant.cover_photo_url = None
+    db.commit()
+    db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
+@router.put("/{restaurant_id}/logo", response_model=schemas.RestaurantOut)
+async def upload_restaurant_logo(
+    restaurant_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    if file.content_type not in FORMATS_PHOTO:
+        raise HTTPException(
+            status_code=415,
+            detail={"code": "UNSUPPORTED_IMAGE", "message": "image must be jpeg, png or webp"},
+        )
+    contenu = await file.read()
+    if len(contenu) > TAILLE_PHOTO_MAX:
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "IMAGE_TOO_LARGE", "message": "image exceeds 3 MB"},
+        )
+
+    restaurant.logo_data = contenu
+    restaurant.logo_content_type = file.content_type
+    restaurant.logo_url = f"/api/v1/restaurants/{restaurant.id}/logo?v={sha256(contenu).hexdigest()[:12]}"
+    db.commit()
+    db.refresh(restaurant)
+    log_event(logger, "restaurant.logo_uploaded", restaurant_id=restaurant.id)
+    return schemas.serialize_restaurant(restaurant)
+
+
+@router.get("/{restaurant_id}/logo")
+def get_restaurant_logo(restaurant_id: int, db: Session = Depends(get_db)):
+    """Publique, comme la carte elle-même : c'est le client attablé qui la regarde."""
+    restaurant = db.get(Restaurant, restaurant_id)
+    if not restaurant or not restaurant.logo_data:
+        raise HTTPException(status_code=404, detail={"code": "IMAGE_NOT_FOUND", "message": "no image"})
+    return Response(
+        content=restaurant.logo_data,
+        media_type=restaurant.logo_content_type or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@router.delete("/{restaurant_id}/logo", response_model=schemas.RestaurantOut)
+def delete_restaurant_logo(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+    restaurant.logo_data = None
+    restaurant.logo_content_type = None
+    restaurant.logo_url = None
     db.commit()
     db.refresh(restaurant)
     return schemas.serialize_restaurant(restaurant)

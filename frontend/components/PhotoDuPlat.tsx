@@ -83,21 +83,29 @@ export default function PhotoDuPlat({
  * La zone de dépôt du formulaire d'édition — celle qu'on cherche quand on
  * ouvre « Modifier ». La vignette de la liste est un raccourci pour garnir une
  * carte entière ; ici, on vient s'occuper d'un plat en particulier.
+ *
+ * Générique depuis la bannière de couverture du menu client (Phase D1 de
+ * ROADMAP_DESIGN.md) : même zone de dépôt pour la photo d'un plat, la photo
+ * de couverture et le logo du restaurant — seule la donnée change.
  */
 export function ZonePhoto({
-  item,
+  photoUrl,
+  alt,
+  label = "Photo",
   enCours,
   onFichier,
   onRetirer,
 }: {
-  item: MenuItem;
+  photoUrl: string | null;
+  alt: string;
+  label?: string;
   enCours: boolean;
   onFichier: (fichier: File) => void;
   onRetirer: () => void;
 }) {
   const [survol, setSurvol] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const photo = mediaUrl(item.image_url);
+  const photo = mediaUrl(photoUrl);
 
   return (
     <div
@@ -119,16 +127,14 @@ export function ZonePhoto({
       <div className="flex items-center gap-3">
         {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={photo} alt={item.name} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+          <img src={photo} alt={alt} className="w-16 h-16 rounded-lg object-cover shrink-0" />
         ) : (
           <div className="w-16 h-16 rounded-lg bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-400">
             <UtensilsIcon className="w-6 h-6" />
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-sm">
-            {enCours ? "Envoi en cours…" : photo ? "Photo du plat" : "Glissez une photo ici"}
-          </p>
+          <p className="text-sm">{enCours ? "Envoi en cours…" : photo ? label : "Glissez une photo ici"}</p>
           <p className="text-xs text-neutral-500 mt-0.5">
             JPEG, PNG ou WebP — redimensionnée automatiquement avant l&apos;envoi.
           </p>

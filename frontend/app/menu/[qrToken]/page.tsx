@@ -1654,40 +1654,87 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     );
   }
 
+  const couverturePhoto = mediaUrl(restaurant.cover_photo_url);
+  const logoPhoto = mediaUrl(restaurant.logo_url);
+  const enTeteActions = (
+    <>
+      <button
+        onClick={toggleLocale}
+        className="min-h-[44px] inline-flex items-center text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] whitespace-nowrap"
+      >
+        {t.localeSwitchLabel}
+      </button>
+      <button
+        onClick={callWaiter}
+        disabled={waiterCallState !== "idle"}
+        data-visite="client-appel"
+        className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] disabled:opacity-70 whitespace-nowrap"
+      >
+        {waiterCallState === "called" ? (
+          t.callWaiterSent
+        ) : (
+          <>
+            <BellIcon className="w-[14px] h-[14px] shrink-0" />
+            {t.callWaiterButton}
+          </>
+        )}
+      </button>
+    </>
+  );
+
   return (
     <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pb-[132px] ${wrapperClassName ?? ""}`}>
-      <header className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-[10px] pb-[14px] flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <TawlaMark size={30} variant="reserve" className="shrink-0 mt-0.5" />
-          <div className="min-w-0">
+      {/* Bannière de couverture (Phase D1 de ROADMAP_DESIGN.md, point 2) :
+          seulement si le patron a envoyé une photo du lieu — sinon l'aplat
+          harissa d'aujourd'hui reste tel quel, jamais un entre-deux à moitié
+          garni. Le logo rond, lui, se décide indépendamment de la photo :
+          celui du restaurant s'il existe, la marque Tawla sinon, dans les
+          deux mises en page. */}
+      {couverturePhoto ? (
+        <header className="relative">
+          <div
+            role="img"
+            aria-label={restaurant.name}
+            className="relative h-32 bg-[var(--harissa)] overflow-hidden bg-cover bg-center"
+            style={{ backgroundImage: `url(${couverturePhoto})` }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[rgba(36,24,17,.55)]" />
+            <div className="absolute top-[10px] end-[10px] flex flex-col items-end gap-[7px]">{enTeteActions}</div>
+          </div>
+          <div className="relative bg-[var(--harissa)] text-[var(--semoule)] pt-2 pb-3 ps-20 pe-4">
+            <div className="absolute -top-7 start-3.5 w-14 h-14 rounded-full border-[3px] border-[var(--harissa)] shadow-md bg-[var(--semoule)] flex items-center justify-center overflow-hidden">
+              {logoPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoPhoto} alt={restaurant.name} className="w-full h-full object-cover" />
+              ) : (
+                <TawlaMark size={32} />
+              )}
+            </div>
             <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
             <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
           </div>
-        </div>
-        <div className="flex flex-col items-end gap-[7px] shrink-0">
-          <button
-            onClick={toggleLocale}
-            className="min-h-[44px] inline-flex items-center text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] whitespace-nowrap"
-          >
-            {t.localeSwitchLabel}
-          </button>
-          <button
-            onClick={callWaiter}
-            disabled={waiterCallState !== "idle"}
-            data-visite="client-appel"
-            className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] disabled:opacity-70 whitespace-nowrap"
-          >
-            {waiterCallState === "called" ? (
-              t.callWaiterSent
+        </header>
+      ) : (
+        <header className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-[10px] pb-[14px] flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            {logoPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoPhoto}
+                alt={restaurant.name}
+                className="w-[30px] h-[30px] rounded-full object-cover shrink-0 mt-0.5"
+              />
             ) : (
-              <>
-                <BellIcon className="w-[14px] h-[14px] shrink-0" />
-                {t.callWaiterButton}
-              </>
+              <TawlaMark size={30} variant="reserve" className="shrink-0 mt-0.5" />
             )}
-          </button>
-        </div>
-      </header>
+            <div className="min-w-0">
+              <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
+              <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-[7px] shrink-0">{enTeteActions}</div>
+        </header>
+      )}
 
       {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
         <div className="bg-[var(--espresso)] px-4 py-[11px] flex items-start gap-2 text-[12.5px] leading-[1.45] text-[rgba(246,239,221,.88)]">
