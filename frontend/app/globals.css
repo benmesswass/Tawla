@@ -18,6 +18,16 @@
   --ink-soft: #6b5947;
   --ink-faint: #8a7660;
 
+  /* Tuiles de la vignette générique par catégorie (VignetteCategorie, Phase
+     D1 de ROADMAP_DESIGN.md) — fond/bord teintés à faible opacité, le trait
+     de l'icône reprend directement --harissa/--menthe/--laiton. */
+  --tuile-harissa-fond: rgba(214, 64, 30, .11);
+  --tuile-harissa-bord: rgba(214, 64, 30, .32);
+  --tuile-menthe-fond: rgba(31, 107, 79, .11);
+  --tuile-menthe-bord: rgba(31, 107, 79, .32);
+  --tuile-laiton-fond: rgba(184, 134, 46, .14);
+  --tuile-laiton-bord: rgba(184, 134, 46, .36);
+
   /* Dérivés "sur espresso" — mêmes rôles que ci-dessus, contraste relevé pour
      rester lisibles sur fond sombre (cuisine, tickets, badges de connexion). */
   --espresso-card: #33241a;

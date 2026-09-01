@@ -9,3 +9,7 @@ export { default as WifiOffIcon } from "./WifiOffIcon";
 export { default as ShareIcon } from "./ShareIcon";
 export { default as TrayIcon } from "./TrayIcon";
 export { default as StampIcon } from "./StampIcon";
+export { default as BowlIcon } from "./BowlIcon";
+export { default as WineIcon } from "./WineIcon";
+export { default as BagIcon } from "./BagIcon";
+export { default as LayersIcon } from "./LayersIcon";

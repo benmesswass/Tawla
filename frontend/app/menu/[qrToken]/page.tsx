@@ -28,6 +28,7 @@ import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
 import TawlaMark from "@/components/brand/TawlaMark";
+import VignetteCategorie from "@/components/VignetteCategorie";
 import {
   MoonIcon,
   UtensilsIcon,
@@ -1460,8 +1461,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       >
         <div className="flex items-start gap-3">
           {/* La vignette est toujours présente, même sans photo : une carte de
-              restaurant garde la même grille de lecture plat après plat. Un
-              emplacement "PHOTO" en attendant photos_demo.py plutôt qu'un vide. */}
+              restaurant garde la même grille de lecture plat après plat. Sans
+              photo, une tuile générique par catégorie (VignetteCategorie)
+              plutôt qu'un vide — jamais une fausse photo qui ne ressemblerait
+              pas au plat réel. */}
           <div className={`relative shrink-0 w-[72px] h-[72px] ${rupture ? "opacity-45" : ""}`}>
             {photo ? (
               <>
@@ -1481,9 +1484,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 />
               </>
             ) : (
-              <div className="w-[72px] h-[72px] rounded-xl bg-[var(--creme)] border border-[var(--line)] flex items-center justify-center">
-                <span className="text-[8px] font-semibold tracking-[0.14em] text-[var(--ink-faint)]">PHOTO</span>
-              </div>
+              <VignetteCategorie category={item.category} />
             )}
           </div>
           <div className="min-w-0 flex-1">
