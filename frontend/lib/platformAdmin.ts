@@ -111,6 +111,25 @@ export type LaunchCampaign = {
   grants_used: number;
 };
 
+export type DailyCount = { date: string; count: number };
+export type EventCount = { event: string; count: number };
+export type TierCount = { tier: string | null; count: number };
+export type FunnelStep = { event: string; users: number };
+
+/**
+ * Funnel d'acquisition et engagement en démo, lu depuis PostHog — pas les
+ * mêmes chiffres que `PlatformOverview` (base Postgres). `available: false`
+ * = POSTHOG_PERSONAL_API_KEY absente côté serveur, tous les tableaux sont
+ * alors `null` (jamais un tableau vide déguisé en « zéro activité »).
+ */
+export type ProductAnalytics = {
+  available: boolean;
+  demo_starts_by_day: DailyCount[] | null;
+  demo_engagement: EventCount[] | null;
+  paywall_hits_by_tier: TierCount[] | null;
+  funnel: FunnelStep[] | null;
+};
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getAdminToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -144,6 +163,7 @@ export const platformAdminApi = {
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
   getOverview: () => request<PlatformOverview>("/api/v1/platform-admin/overview"),
+  getProductAnalytics: () => request<ProductAnalytics>("/api/v1/platform-admin/product-analytics"),
   getLaunchCampaign: () => request<LaunchCampaign>("/api/v1/platform-admin/launch-campaign"),
   setLaunchCampaign: (discountPercent: number, maxGrants: number) =>
     request<LaunchCampaign>("/api/v1/platform-admin/launch-campaign", {

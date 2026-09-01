@@ -14,6 +14,7 @@ import {
   PlatformAdminApiError,
   type LaunchCampaign,
   type PlatformOverview,
+  type ProductAnalytics,
   type SubscriptionTier,
 } from "@/lib/platformAdmin";
 import { formatMoney } from "@/lib/currency";
@@ -22,6 +23,23 @@ const TIER_LABELS: Record<SubscriptionTier, string> = {
   essentiel: "Essentiel",
   pro: "Pro",
   business: "Business",
+};
+
+// Ce qui est réellement testé pendant une démo (voir dashboard/page.tsx et
+// BandeauDemo.tsx) — un label par nom d'événement PostHog.
+const ENGAGEMENT_LABELS: Record<string, string> = {
+  menu_edited: "Carte / menu",
+  table_managed: "Tables / QR",
+  staff_managed: "Équipe",
+  csv_imported: "Import CSV",
+};
+
+// Funnel démo → client payant (voir lib/analytics.ts côté frontend et
+// app/core/analytics.py côté serveur pour où chaque événement part).
+const FUNNEL_LABELS: Record<string, string> = {
+  demo_clicked: "Démo lancée",
+  signup_submitted: "Inscrit",
+  purchase_completed: "Payé",
 };
 
 function formatPercent(rate: number | null): string {
@@ -59,6 +77,7 @@ function KpiTile({ label, value, sub }: { label: string; value: string; sub?: st
 export default function PlatformAdminPage() {
   const router = useRouter();
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
+  const [productAnalytics, setProductAnalytics] = useState<ProductAnalytics | null>(null);
   const [campaign, setCampaign] = useState<LaunchCampaign | null>(null);
   const [discountInput, setDiscountInput] = useState("");
   const [maxGrantsInput, setMaxGrantsInput] = useState("");
@@ -75,12 +94,14 @@ export default function PlatformAdminPage() {
 
   const load = useCallback(async () => {
     try {
-      const [data, campaignData] = await Promise.all([
+      const [data, campaignData, productData] = await Promise.all([
         platformAdminApi.getOverview(),
         platformAdminApi.getLaunchCampaign(),
+        platformAdminApi.getProductAnalytics(),
       ]);
       setOverview(data);
       setCampaign(campaignData);
+      setProductAnalytics(productData);
       setDiscountInput(String(campaignData.discount_percent));
       setMaxGrantsInput(String(campaignData.max_grants));
     } catch (err) {
@@ -330,6 +351,141 @@ export default function PlatformAdminPage() {
                       </span>
                     </div>
                   ))}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="mb-6">
+            <Card padding="md">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold">Produit &amp; acquisition</h2>
+                <span className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                  30 derniers jours · PostHog
+                </span>
+              </div>
+
+              {!productAnalytics?.available ? (
+                <EmptyState message="Analytics PostHog non configurées (POSTHOG_PERSONAL_API_KEY absente côté serveur)." />
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Démos lancées par jour</h3>
+                    {!productAnalytics.demo_starts_by_day || productAnalytics.demo_starts_by_day.every((d) => d.count === 0) ? (
+                      <EmptyState message="Aucune démo lancée sur la période." />
+                    ) : (
+                      (() => {
+                        const points = productAnalytics.demo_starts_by_day!;
+                        const max = Math.max(1, ...points.map((p) => p.count));
+                        const w = 640;
+                        const h = 90;
+                        const step = points.length > 1 ? w / (points.length - 1) : 0;
+                        const coords = points.map((p, i) => [i * step, h - (p.count / max) * (h - 12) - 4] as const);
+                        const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x},${y}`).join(" ");
+                        const last = coords[coords.length - 1];
+                        return (
+                          <svg viewBox={`0 0 ${w} ${h + 18}`} className="w-full" style={{ height: 108 }}>
+                            <line x1={0} y1={h} x2={w} y2={h} stroke="var(--line)" strokeWidth={1} />
+                            <path d={path} fill="none" stroke="var(--menthe)" strokeWidth={2.5} />
+                            <circle cx={last[0]} cy={last[1]} r={4} fill="var(--menthe)" />
+                            <text x={0} y={h + 16} fontSize={10} fill="var(--ink-soft)">
+                              {formatDate(points[0].date)}
+                            </text>
+                            <text x={w} y={h + 16} fontSize={10} fill="var(--ink-soft)" textAnchor="end">
+                              {formatDate(points[points.length - 1].date)}
+                            </text>
+                          </svg>
+                        );
+                      })()
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-medium mb-3">Ce qu&apos;ils testent en démo</h3>
+                    {!productAnalytics.demo_engagement || productAnalytics.demo_engagement.length === 0 ? (
+                      <EmptyState message="Aucune action enregistrée en démo sur la période." />
+                    ) : (
+                      (() => {
+                        const rows = productAnalytics.demo_engagement!;
+                        const max = Math.max(1, ...rows.map((r) => r.count));
+                        return (
+                          <div className="flex flex-col gap-2">
+                            {rows.map((r) => (
+                              <div key={r.event} className="flex items-center gap-2">
+                                <div className="w-28 text-xs shrink-0" style={{ color: "var(--encre)" }}>
+                                  {ENGAGEMENT_LABELS[r.event] ?? r.event}
+                                </div>
+                                <div className="flex-1 rounded h-4 overflow-hidden" style={{ background: "var(--semoule)" }}>
+                                  <div
+                                    className="h-full rounded"
+                                    style={{ width: `${(r.count / max) * 100}%`, background: "var(--harissa)" }}
+                                  />
+                                </div>
+                                <div className="w-6 text-xs text-right tabular-nums" style={{ color: "var(--ink-soft)" }}>
+                                  {r.count}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-medium mb-3">Entonnoir démo → client payant</h3>
+                    {!productAnalytics.funnel ? (
+                      <EmptyState message="Données indisponibles." />
+                    ) : (
+                      (() => {
+                        const steps = productAnalytics.funnel!;
+                        const base = steps[0]?.users || 1;
+                        return (
+                          <div className="flex flex-col gap-1.5">
+                            {steps.map((s, i) => {
+                              const pct = Math.round((s.users / base) * 100);
+                              const prevUsers = i > 0 ? steps[i - 1].users : null;
+                              const rate = prevUsers ? Math.round((s.users / Math.max(1, prevUsers)) * 100) : null;
+                              return (
+                                <div key={s.event} className="flex items-center gap-2">
+                                  <div
+                                    className="rounded px-2.5 py-1.5 text-xs text-white flex items-center justify-between"
+                                    style={{
+                                      width: `${Math.max(pct, 8)}%`,
+                                      background: i === steps.length - 1 ? "var(--menthe)" : "var(--harissa)",
+                                    }}
+                                  >
+                                    <span className="whitespace-nowrap">{FUNNEL_LABELS[s.event] ?? s.event}</span>
+                                    <span className="tabular-nums ms-2">{s.users}</span>
+                                  </div>
+                                  {rate !== null && (
+                                    <span className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                                      {rate} %
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-medium mb-3">Blocages palier (fonctionnalité payante testée)</h3>
+                    {!productAnalytics.paywall_hits_by_tier || productAnalytics.paywall_hits_by_tier.length === 0 ? (
+                      <EmptyState message="Aucun blocage palier enregistré sur la période." />
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {productAnalytics.paywall_hits_by_tier!.map((t) => (
+                          <Badge key={t.tier ?? "?"}>
+                            {(t.tier && TIER_LABELS[t.tier as SubscriptionTier]) ?? t.tier ?? "?"} — {t.count}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </Card>

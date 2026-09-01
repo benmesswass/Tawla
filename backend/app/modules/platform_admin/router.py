@@ -117,6 +117,11 @@ async def overview(
     return await service.get_overview(db)
 
 
+@router.get("/product-analytics", response_model=schemas.ProductAnalytics)
+def product_analytics(_admin: PlatformAdmin = Depends(get_current_platform_admin)):
+    return service.get_product_analytics()
+
+
 @router.get("/launch-campaign", response_model=schemas.LaunchCampaignOut)
 def get_launch_campaign_settings(
     db: Session = Depends(get_db),

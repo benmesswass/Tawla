@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core import posthog_query
+from app.core.config import settings
 from app.core.dates import as_utc
 from app.core.markets import current_market
 from app.core.subscription import effective_tier
@@ -142,4 +144,19 @@ async def get_overview(db: Session) -> schemas.PlatformOverview:
         cancelled_orders_rate_last_7d=cancelled_rate_last_7d,
         weekly_signups=_weekly_signups(restaurants, now),
         restaurants=restaurant_summaries,
+    )
+
+
+def get_product_analytics(days: int = 30) -> schemas.ProductAnalytics:
+    if not settings.posthog_personal_api_key:
+        return schemas.ProductAnalytics(
+            available=False, demo_starts_by_day=None, demo_engagement=None,
+            paywall_hits_by_tier=None, funnel=None,
+        )
+    return schemas.ProductAnalytics(
+        available=True,
+        demo_starts_by_day=posthog_query.demo_starts_by_day(days),
+        demo_engagement=posthog_query.demo_engagement_totals(days),
+        paywall_hits_by_tier=posthog_query.paywall_hits_by_tier(days),
+        funnel=posthog_query.acquisition_funnel(days),
     )
