@@ -210,11 +210,6 @@ l'audit final du 2026-08-15). Prendre la première tâche non cochée en partant
 haut, dans l'ordre des phases. Une tâche cochée `[x]` doit mentionner la PR qui
 l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne.
 
-**Règle qui prime sur tout ajout de code** : après la Phase 20, toute
-proposition de fonctionnalité doit nommer le restaurateur qui l'a demandée.
-Sans nom, elle va dans la section « Sous condition » de `ROADMAP.md` et n'est
-pas construite. Le produit ne manque pas de fonctionnalité, il manque un client.
-
 - `AUDIT_COUTS_PRODUCTION.md` — audit du 2026-08-18 : ce que coûte réellement
   en argent la mise en production de Tawla (infrastructure, services tiers,
   domaine, conformité technique), chiffré et sourcé, obligatoire vs
