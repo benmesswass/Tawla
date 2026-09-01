@@ -18,20 +18,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={`${hankenGrotesk.className} bg-[var(--semoule)] text-[var(--espresso)]`}
       >
-        {children}
-        <Analytics />
-        <ServiceWorkerRegister />
-        <DemoGuide />
         {/* Bandeaux du haut empilés ici plutôt que positionnés en `fixed`
             chacun de leur côté : sinon, démo + décalage de marché détectés en
-            même temps se superposent exactement et l'un cache l'autre. */}
-        <div className="fixed top-0 inset-x-0 z-[72] flex flex-col items-center gap-2 px-3 pt-2 pointer-events-none">
+            même temps se superposent exactement et l'un cache l'autre.
+            `sticky` (pas `fixed`) et placé AVANT `{children}` : réserve sa
+            propre place dans le flux au lieu de flotter par-dessus le
+            contenu de la page — un `fixed` cachait le haut de chaque page
+            (nav, boutons) derrière le bandeau, gênant en plein démo client
+            (retour de Wassim, 2026-09-01). */}
+        <div className="sticky top-0 z-[72] flex flex-col items-center gap-2 px-3 pt-2 pointer-events-none">
           {/* BandeauAutreMarche d'abord : sa position reste stable quand le
               panneau de BandeauDemo s'ouvre et grandit, au lieu d'être
               repoussé plus bas à chaque clic. */}
           <BandeauAutreMarche />
           <BandeauDemo />
         </div>
+        {children}
+        <Analytics />
+        <ServiceWorkerRegister />
+        <DemoGuide />
         <VisiteGuidee />
       </body>
     </html>
