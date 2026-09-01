@@ -15,9 +15,14 @@ _client = Posthog(settings.posthog_api_key, host=settings.posthog_host) if setti
 def capture_event(distinct_id: str, event: str, **properties) -> None:
     if not _client:
         return
-    # Un seul projet PostHog pour dev/preview ET prod (limite du plan
-    # actuel : 1 projet) — `env` sépare le bruit de dev/démo des vrais
-    # événements dans les insights, plutôt qu'une séparation par projet.
-    # `settings.env` est déjà la source de vérité utilisée ailleurs (voir
-    # _refuse_dev_secret_in_production) — aucune nouvelle variable.
-    _client.capture(event, distinct_id=distinct_id, properties={**properties, "env": settings.env})
+    # Un seul projet PostHog pour dev/staging/prod (limite du plan actuel :
+    # 1 projet) — `env` sépare le bruit de dev/démo des vrais événements
+    # dans les insights, plutôt qu'une séparation par projet. `posthog_env`
+    # (pas `settings.env`, qui contrôle les garde-fous de sécurité) : voir
+    # config.py pour pourquoi les deux sont distincts. `market` (tn/fr) :
+    # jamais mélanger les deux marchés — chaque backend ne sert qu'un
+    # marché (voir markets.py), donc `settings.market` suffit ici.
+    _client.capture(
+        event, distinct_id=distinct_id,
+        properties={**properties, "env": settings.posthog_env, "market": settings.market},
+    )
