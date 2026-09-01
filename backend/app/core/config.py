@@ -65,6 +65,19 @@ class Settings(BaseSettings):
     posthog_api_key: str = ""
     posthog_host: str = "https://eu.i.posthog.com"
 
+    # Lecture des mêmes données depuis le dashboard admin plateforme (voir
+    # app/core/posthog_query.py) — clé personnelle distincte de
+    # `posthog_api_key` ci-dessus (celle-ci est en écriture seule, prévue
+    # pour être publique côté client ; celle-ci est en lecture seule, scope
+    # insight:read + query:read, ne doit jamais partir au frontend).
+    # Dégradation gracieuse : sans elle, la section analytics du dashboard
+    # admin reste vide au lieu de planter. `posthog_app_host` est l'API web
+    # (eu.posthog.com), distinct de `posthog_host` qui est l'endpoint
+    # d'ingestion (eu.i.posthog.com) — les deux ne sont pas interchangeables.
+    posthog_personal_api_key: str = ""
+    posthog_app_host: str = "https://eu.posthog.com"
+    posthog_project_id: str = "263083"
+
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:

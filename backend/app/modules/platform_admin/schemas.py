@@ -145,3 +145,40 @@ class PlatformOverview(BaseModel):
 
     weekly_signups: list[WeeklyPoint]
     restaurants: list[RestaurantSummary]
+
+
+class DailyCount(BaseModel):
+    date: date_type
+    count: int
+
+
+class EventCount(BaseModel):
+    event: str
+    count: int
+
+
+class TierCount(BaseModel):
+    tier: str | None
+    count: int
+
+
+class FunnelStep(BaseModel):
+    event: str
+    users: int
+
+
+class ProductAnalytics(BaseModel):
+    """
+    Funnel d'acquisition et engagement en démo, lu depuis PostHog (voir
+    app/core/posthog_query.py) — pas les mêmes chiffres que
+    `PlatformOverview` (base Postgres) : ici, tout ce qui n'a jamais laissé
+    de trace en base (visiteur anonyme qui clique la démo, restaurateur qui
+    teste sans jamais s'inscrire). `None` = POSTHOG_PERSONAL_API_KEY absente
+    ou PostHog en erreur, jamais une liste vide déguisée en « zéro activité ».
+    """
+
+    available: bool
+    demo_starts_by_day: list[DailyCount] | None
+    demo_engagement: list[EventCount] | None
+    paywall_hits_by_tier: list[TierCount] | None
+    funnel: list[FunnelStep] | None
