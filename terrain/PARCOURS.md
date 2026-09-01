@@ -71,21 +71,29 @@ la décision dans `ROADMAP.md`, même si c'est « on garde ».
 
 ## Étape 3 — Trancher le prix
 
-**Une heure, seul · aucune donnée nouvelle nécessaire**
+**Déjà fait côté code, au 2026-08-28 — cette étape n'attend plus que toi.**
 
-120 DT/mois, service d'installation inclus, cible 45 établissements. C'est écrit
-dans deux documents et attendu par une constante `null` dans le code.
+Le prix unique à 120 DT décrit ici jusqu'au 18 août n'a jamais été codé.
+Depuis (Phase 22, PR #63, amendé PR #91) : **trois paliers publics 49/89/149
+DT** (Essentiel/Pro/Business), gating réel par fonctionnalité, page
+tarifaire publique et inscription en self-service — tout vit dans le code
+aujourd'hui, plus dans une constante `null`. Le rappel de paiement (« le
+bandeau de fin de pilote » qu'on attendait plus bas) est lui aussi déjà
+codé : une modale à chaque connexion tant que l'établissement n'a jamais
+payé. Aucune session de code n'attend plus rien ici.
 
-Les vingt entretiens ne servent pas à découvrir le prix — ils servent à savoir
-**comment le présenter**. Si le prix médian accepté sort très en dessous de 120,
-ça ne veut pas dire « baisser » : ça veut dire que la valeur n'a pas été
-comprise, ou que la cible est mauvaise.
+Pour cette cible : **le nombre à dire est Pro, 89
+DT/mois** — voir `ARGUMENTAIRE_RESTAURATEUR.md` pour l'arithmétique complète
+et pourquoi ne jamais proposer Essentiel en premier ici.
 
-**Fini quand** : le montant est écrit, et tu as dit à voix haute la phrase que tu
-diras au prochain patron sans hésiter dessus.
+Les vingt entretiens ne servent toujours pas à découvrir le prix — ils
+servent à savoir **comment le présenter**. Si le prix médian accepté sort
+très en dessous de 89, ça ne veut pas dire « baisser » : ça veut dire que la
+valeur n'a pas été comprise, ou que la cible est mauvaise.
 
-Ensuite, une session de code renseigne `PRICE_MONTHLY_DT` et le bandeau de fin de
-pilote — pas avant, un bandeau qui n'annonce aucune suite ne sert à rien.
+**Fini quand** : tu as dit à voix haute la phrase que tu diras au prochain
+patron sans hésiter dessus. Le montant, lui, est déjà écrit — cette case ne
+se coche que sur la seconde moitié, qui reste à toi.
 
 ---
 

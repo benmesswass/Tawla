@@ -31,6 +31,11 @@ Documents qui la fondent :
   qui cherche « la prochaine tâche de code » vient toujours ici en priorité —
   `MARCHE_FRANCE.md` reste le programme du seul chantier France, à travailler
   à côté, jamais à la place de ce fichier.
+- [`CAMPAGNE_MARKETING.md`](./CAMPAGNE_MARKETING.md) — programme du chantier
+  marketing/acquisition (2026-08-28) : positionnement, argumentaire de vente,
+  canaux réels, ciblage publicitaire Horizon 1, parrainage. **Ce n'est pas
+  une seconde roadmap non plus** : il outille les tâches 🧑 déjà écrites ici
+  (Phases 21, 23, 24), à travailler à côté, jamais à la place de ce fichier.
 - [`ETUDE_MARCHE.md`](./ETUDE_MARCHE.md) — étude de marché et positionnement
   (2026-08-28) : troisième revérification de la concurrence tunisienne (par
   palier), triangulation du marché adressable, revérification France
