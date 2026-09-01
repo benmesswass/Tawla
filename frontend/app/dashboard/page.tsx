@@ -186,6 +186,7 @@ export default function DashboardPage() {
   const [instagramUrl, setInstagramUrl] = useState("");
   const [tiktokUrl, setTiktokUrl] = useState("");
   const [whatsappUrl, setWhatsappUrl] = useState("");
+  const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [savingReseaux, setSavingReseaux] = useState(false);
   // Photo choisie pour un plat pas encore créé : elle attend d'avoir un
   // identifiant à qui être rattachée.
@@ -271,6 +272,7 @@ export default function DashboardPage() {
       setInstagramUrl(rest.instagram_url ?? "");
       setTiktokUrl(rest.tiktok_url ?? "");
       setWhatsappUrl(rest.whatsapp_url ?? "");
+      setGoogleReviewUrl(rest.google_review_url ?? "");
       if (!rest.is_active) return;
 
       const [menu, tableList, teamList, suggested, regimeList, dayStats] = await Promise.all([
@@ -545,6 +547,7 @@ export default function DashboardPage() {
         instagram_url: instagramUrl.trim() || null,
         tiktok_url: tiktokUrl.trim() || null,
         whatsapp_url: whatsappUrl.trim() || null,
+        google_review_url: googleReviewUrl.trim() || null,
       });
       setRestaurant(misAJour);
     } catch (e) {
@@ -2031,6 +2034,28 @@ export default function DashboardPage() {
 
           {restaurant && (
             <Card padding="sm" className="mt-4">
+              <span className="font-medium">Avis Google</span>
+              <p className="text-xs text-neutral-500 mt-1">
+                Une fois l&apos;addition réglée, le client voit une invitation à laisser un avis Google avec ce
+                lien. Facultatif — sans lui, rien ne s&apos;affiche après le paiement.
+              </p>
+              <label className="text-sm mt-2 block">
+                <span className="text-xs text-neutral-500 mb-0.5 block">Lien vers la fiche d&apos;avis</span>
+                <input
+                  type="url"
+                  value={googleReviewUrl}
+                  disabled={savingReseaux}
+                  onChange={(e) => setGoogleReviewUrl(e.target.value)}
+                  onBlur={saveReseaux}
+                  placeholder="https://g.page/r/…/review"
+                  className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                />
+              </label>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm" className="mt-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Palier d&apos;abonnement</span>
                 <Badge tone="neutral">{TIER_LABELS[restaurant.subscription_tier]}</Badge>
@@ -2043,9 +2068,9 @@ export default function DashboardPage() {
               )}
               <p className="text-xs text-neutral-500 mt-2">
                 Le paiement carte, la fidélité, le plan de salle visuel, les photos
-                {currentMarket.ramadanModeAvailable ? ", le mode Ramadan" : ""}, l&apos;import CSV et la page de
-                preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications push demandent
-                Business. Pour changer de palier, contactez Tawla.
+                {currentMarket.ramadanModeAvailable ? ", le mode Ramadan" : ""}, l&apos;import CSV, la page de
+                preuve, les réseaux sociaux et l&apos;avis Google demandent Pro ou plus ; le rapport d&apos;équipe
+                et les notifications push demandent Business. Pour changer de palier, contactez Tawla.
               </p>
             </Card>
           )}

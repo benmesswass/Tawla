@@ -164,12 +164,19 @@ def set_social_links(
     payload: schemas.SocialLinksUpdate,
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
     """
-    Icônes réseaux sociaux du menu client (Phase D1 de ROADMAP_DESIGN.md,
-    point 3). Les quatre liens sont posés ensemble (un seul formulaire côté
-    Réglages) — envoyer None sur l'un d'eux le retire sans toucher aux
-    autres, à la différence d'un PATCH partiel classique.
+    Icônes réseaux sociaux + lien d'avis Google du menu client (Phase D1 de
+    ROADMAP_DESIGN.md, point 3, et Phase D1bis). Les cinq liens sont posés
+    ensemble (un seul formulaire côté Réglages) — envoyer None sur l'un
+    d'eux le retire sans toucher aux autres, à la différence d'un PATCH
+    partiel classique.
+
+    Réservé à Pro et Business (retrofit décidé le 2026-09-01, même palier
+    que l'avis Google) : le verrou est ici, à l'écriture, comme le mode
+    Ramadan — pas relu à l'affichage sur la route publique
+    (`get_restaurant_by_qr_token`), qui reste un passthrough simple.
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
@@ -179,6 +186,7 @@ def set_social_links(
     restaurant.instagram_url = payload.instagram_url
     restaurant.tiktok_url = payload.tiktok_url
     restaurant.whatsapp_url = payload.whatsapp_url
+    restaurant.google_review_url = payload.google_review_url
     db.commit()
     db.refresh(restaurant)
     return schemas.serialize_restaurant(restaurant)

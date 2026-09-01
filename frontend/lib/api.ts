@@ -94,6 +94,7 @@ export type RestaurantPublic = {
   instagram_url: string | null;
   tiktok_url: string | null;
   whatsapp_url: string | null;
+  google_review_url: string | null;
 };
 
 export type Restaurant = RestaurantPublic & {
@@ -742,6 +743,7 @@ export const api = {
       instagram_url: string | null;
       tiktok_url: string | null;
       whatsapp_url: string | null;
+      google_review_url: string | null;
     }
   ) =>
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/social-links`, {
