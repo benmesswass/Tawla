@@ -330,6 +330,23 @@ réussite ne dépend d'aucune ligne de code.
 
 ---
 
+## Phase 25 — Avis Google après paiement (Pro+)
+
+Idée de Wassim (2026-09-01), pas encore ordonnée relativement aux phases de
+lancement ci-dessus (19bis à 24) — reste après elles tant qu'il n'a pas dit
+le contraire.
+
+- [ ] Une fois le paiement de l'addition confirmé côté client, une modale
+      s'ouvre automatiquement pour proposer un avis Google, avec un lien
+      direct vers la fiche Google Maps du restaurant. Réservé au palier Pro
+      et au-dessus (à vérifier via `require_tier`/`effective_tier`, comme le
+      mode Ramadan). Nouveau champ (ex. `google_review_url`) sur
+      `Restaurant`, nullable — la modale ne s'affiche que si le manager l'a
+      renseigné ET que son palier l'autorise. Design à proposer et valider
+      avant codage, même discipline que d'habitude.
+
+---
+
 ## Sous condition — ne pas ouvrir sans le déclencheur nommé
 
 Chaque ligne est une chose qu'il serait tentant de construire. Le déclencheur
