@@ -46,6 +46,19 @@ C'est l'écart qui compte : une fiche plat sans photo a l'air inachevée face
 - [ ] Icônes réseaux sociaux du restaurant dans l'en-tête du menu client, si
       renseignés au profil établissement
 
+## Phase D1bis — Avis Google après paiement (Pro+)
+
+Idée de Wassim (2026-09-01), insérée ici plutôt qu'en D2 pour ne pas
+renumeroter ce qui suit — même logique que la Phase 19bis de `ROADMAP.md`.
+
+- [ ] Une fois le paiement de l'addition confirmé côté client, une modale
+      s'ouvre automatiquement pour proposer un avis Google, avec un lien
+      direct vers la fiche Google Maps du restaurant. Réservé au palier Pro
+      et au-dessus (à vérifier via `require_tier`/`effective_tier`, comme le
+      mode Ramadan). Nouveau champ (ex. `google_review_url`) sur
+      `Restaurant`, nullable — la modale ne s'affiche que si le manager l'a
+      renseigné ET que son palier l'autorise.
+
 ## Phase D2 — Navigation et micro-interactions
 
 - [ ] Barre de catégories collante en haut du menu client pendant le scroll,
