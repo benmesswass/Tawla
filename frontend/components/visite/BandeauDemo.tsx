@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { EVENEMENT_VISITE, sessionDemo, type SessionDemo } from "@/lib/visite/etat";
 import { lienDemo } from "@/lib/demoLien";
+import { trackEvent } from "@/lib/analytics";
 
 function restant(expireLe: string): string {
   const minutes = Math.max(0, Math.round((new Date(expireLe).getTime() - Date.now()) / 60000));
@@ -63,6 +64,7 @@ export default function BandeauDemo() {
   async function copier(route: string, jeton: string) {
     try {
       await navigator.clipboard.writeText(lienDemo(route, jeton));
+      trackEvent("demo_secondary_screen_shared", { role: route.replace("/", "") || "dashboard" });
       setCopie(route);
       setTimeout(() => setCopie((c) => (c === route ? null : c)), 2000);
     } catch {

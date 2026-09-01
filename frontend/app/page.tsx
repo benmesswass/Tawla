@@ -3,6 +3,8 @@ import { lalezar } from "@/lib/fonts";
 import { currentMarket } from "@/lib/market";
 import TawlaLogo from "@/components/brand/TawlaLogo";
 import BoutonVisite from "@/components/visite/BoutonVisite";
+import TrackedLink from "@/components/TrackedLink";
+import TrackedAnchor from "@/components/TrackedAnchor";
 import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
 import { marketBaseUrl } from "@/lib/marketUrls";
 
@@ -144,32 +146,36 @@ export default function HomePage() {
                     <li key={feature}>• {feature}</li>
                   ))}
                 </ul>
-                <Link
+                <TrackedLink
                   href={`/signup?tier=${tier.id}`}
+                  event="pricing_cta_clicked"
+                  eventProperties={{ tier: tier.id }}
                   className={`mt-auto pt-4 border-t border-[var(--line)] text-center text-sm font-medium ${
                     tier.recommended ? "text-[var(--harissa)]" : "text-[var(--encre)] underline"
                   }`}
                 >
                   Choisir {tier.name}
-                </Link>
+                </TrackedLink>
               </div>
             ))}
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link
+            <TrackedLink
               href="/signup"
+              event="signup_cta_clicked"
               data-visite="accueil-creer-compte"
               className="inline-flex items-center rounded-lg bg-[var(--harissa)] px-5 py-3 text-white font-medium"
             >
               Créer mon compte
-            </Link>
-            <a
+            </TrackedLink>
+            <TrackedAnchor
               href="mailto:contact@tawla.tn?subject=Essai%20Tawla"
+              event="trial_requested_email"
               className="inline-flex items-center rounded-lg border border-[var(--line)] px-5 py-3 font-medium text-[var(--encre)]"
             >
               Demander un essai
-            </a>
+            </TrackedAnchor>
             {/* Le même appel, pour qui a lu la page jusqu'au bout sans
                 cliquer en haut. Discret ici : la décision du bas de page,
                 c'est « créer mon compte ». */}

@@ -16,11 +16,13 @@ import {
   Table,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { useAccesDemoParLien } from "@/lib/demoLien";
+import { sessionDemo } from "@/lib/visite/etat";
 import { clearToken } from "@/lib/auth";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -296,6 +298,10 @@ export default function DashboardPage() {
         })
         .catch((e) => setError(toFrenchMessage(e)));
     } else if (konnectResult === "fail") {
+      // purchase_completed est émis côté serveur (settle_subscription_payment,
+      // seule source de vérité côté paiement) — mais aucun signal serveur
+      // n'existe pour un échec/abandon Konnect, uniquement ce retour client.
+      trackEvent("purchase_cancelled");
       setError("Le paiement n'a pas abouti. Vous pouvez réessayer depuis Réglages.");
     }
   }, [restaurantId]);
@@ -310,6 +316,7 @@ export default function DashboardPage() {
   function handleGatedError(e: unknown) {
     const tier = requiredTierFromError(e);
     if (tier) {
+      trackEvent("paywall_hit", { required_tier: tier, is_demo: Boolean(sessionDemo()) });
       setUpgradeTier(tier);
       return;
     }
@@ -412,6 +419,7 @@ export default function DashboardPage() {
         is_halal: draft.isHalal,
       });
       flash(`« ${draft.name} » enregistré.`);
+      trackEvent("menu_edited", { feature: "edit_item", is_demo: Boolean(sessionDemo()) });
       setEditingItemId(null);
       await load();
     } catch (e) {
@@ -429,6 +437,7 @@ export default function DashboardPage() {
       const misAJour = await api.uploadMenuItemPhoto(item.id, reduite);
       setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
       flash(`Photo ajoutée à « ${item.name} ».`);
+      trackEvent("menu_edited", { feature: "upload_photo", is_demo: Boolean(sessionDemo()) });
     } catch (e) {
       handleGatedError(e);
     } finally {
@@ -441,6 +450,7 @@ export default function DashboardPage() {
     try {
       const misAJour = await api.deleteMenuItemPhoto(item.id);
       setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
+      trackEvent("menu_edited", { feature: "remove_photo", is_demo: Boolean(sessionDemo()) });
     } catch (e) {
       handleGatedError(e);
     }
@@ -450,6 +460,7 @@ export default function DashboardPage() {
     setError(null);
     try {
       await api.setMenuItemAvailability(item.id, !item.is_available);
+      trackEvent("menu_edited", { feature: "toggle_availability", is_demo: Boolean(sessionDemo()) });
       await load();
     } catch (e) {
       handleGatedError(e);
@@ -462,6 +473,7 @@ export default function DashboardPage() {
     try {
       await api.deleteMenuItem(item.id);
       flash(`« ${item.name} » supprimé.`);
+      trackEvent("menu_edited", { feature: "remove_item", is_demo: Boolean(sessionDemo()) });
       setEditingItemId(null);
       await load();
     } catch (e) {
@@ -499,6 +511,7 @@ export default function DashboardPage() {
         }
       }
       flash(`« ${newItem.name} » ajouté au menu.`);
+      trackEvent("menu_edited", { feature: "add_item", is_demo: Boolean(sessionDemo()) });
       setNewItem(EMPTY_DRAFT);
       setNouvellePhoto(null);
       setAddingItem(false);
@@ -518,6 +531,7 @@ export default function DashboardPage() {
     try {
       await api.updateTable(table.id, { label: draft.label.trim(), zone: draft.zone.trim() || null });
       flash(`« ${draft.label} » enregistrée.`);
+      trackEvent("table_managed", { feature: "edit_table", is_demo: Boolean(sessionDemo()) });
       await load();
     } catch (e) {
       handleGatedError(e);
@@ -536,6 +550,7 @@ export default function DashboardPage() {
       link.download = `tawla-affiche-${slug || table.id}.pdf`;
       link.click();
       URL.revokeObjectURL(url);
+      trackEvent("table_managed", { feature: "download_poster", is_demo: Boolean(sessionDemo()) });
     } catch (e) {
       handleGatedError(e);
     } finally {
@@ -557,6 +572,7 @@ export default function DashboardPage() {
         zone: newTable.zone.trim() || null,
       });
       flash(`« ${newTable.label} » ajoutée.`);
+      trackEvent("table_managed", { feature: "add_table", is_demo: Boolean(sessionDemo()) });
       setNewTable(EMPTY_TABLE_DRAFT);
       await load();
     } catch (e) {
@@ -582,6 +598,7 @@ export default function DashboardPage() {
       // sélection même si un plat suggéré est en rupture.
       setSuggestions((prev) => ({ ...prev, [String(item.id)]: next }));
       flash("Suggestions enregistrées.");
+      trackEvent("menu_edited", { feature: "toggle_suggestion", is_demo: Boolean(sessionDemo()) });
     } catch (e) {
       handleGatedError(e);
     } finally {
@@ -674,6 +691,7 @@ export default function DashboardPage() {
         }))
       );
       flash("Options enregistrées.");
+      trackEvent("menu_edited", { feature: "save_options", is_demo: Boolean(sessionDemo()) });
       await load();
     } catch (e) {
       handleGatedError(e);
@@ -737,6 +755,11 @@ export default function DashboardPage() {
       const result = await api.importMenuCsv(csvContent, csvReplace);
       setCsvResult(result);
       flash(`${result.created_count + result.updated_count} article(s) importé(s).`);
+      trackEvent("csv_imported", {
+        created_count: result.created_count,
+        updated_count: result.updated_count,
+        is_demo: Boolean(sessionDemo()),
+      });
       setCsvContent("");
       await load();
     } catch (e) {
@@ -779,6 +802,7 @@ export default function DashboardPage() {
           : null
       );
       flash(`Compte de ${created.staff.name} créé.`);
+      trackEvent("staff_managed", { feature: "add_staff", is_demo: Boolean(sessionDemo()) });
       setNewStaff(EMPTY_STAFF_DRAFT);
       await load();
     } catch (e) {
@@ -798,6 +822,7 @@ export default function DashboardPage() {
     try {
       await api.updateStaff(member.id, { name: draft.name.trim(), role: draft.role });
       flash(`${draft.name} mis à jour.`);
+      trackEvent("staff_managed", { feature: "edit_staff", is_demo: Boolean(sessionDemo()) });
       await load();
     } catch (e) {
       handleGatedError(e);
@@ -809,6 +834,7 @@ export default function DashboardPage() {
     try {
       await api.updateStaff(member.id, { is_active: !member.is_active });
       flash(member.is_active ? `Accès de ${member.name} désactivé.` : `Accès de ${member.name} rétabli.`);
+      trackEvent("staff_managed", { feature: "toggle_active", is_demo: Boolean(sessionDemo()) });
       await load();
     } catch (e) {
       handleGatedError(e);
@@ -823,6 +849,7 @@ export default function DashboardPage() {
         setNewCredentials({ email: reset.staff.email, password: reset.temporary_password });
       }
       flash(`Nouveau mot de passe généré pour ${member.name}.`);
+      trackEvent("staff_managed", { feature: "reset_password", is_demo: Boolean(sessionDemo()) });
     } catch (e) {
       handleGatedError(e);
     }

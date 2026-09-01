@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, type LaunchPromoStatus, type SubscriptionTier } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { setToken } from "@/lib/auth";
 import { toFrenchMessage } from "@/lib/errors";
 import { hankenGrotesk, lalezar } from "@/lib/fonts";
@@ -66,6 +67,7 @@ function SignupForm() {
         password,
         tier: tier.id as SubscriptionTier,
       });
+      trackEvent("signup_submitted", { tier: tier.id });
       setToken(access_token);
       router.push("/dashboard");
     } catch (err) {
