@@ -88,6 +88,8 @@ export type RestaurantPublic = {
   ramadan_mode_enabled: boolean;
   iftar_time: string | null;
   cafe_mode_enabled: boolean;
+  cover_photo_url: string | null;
+  logo_url: string | null;
 };
 
 export type Restaurant = RestaurantPublic & {
@@ -712,6 +714,23 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
     }),
+  // Bannière de couverture + logo du menu client (Phase D1 de
+  // ROADMAP_DESIGN.md) — ouverts à tous les paliers, contrairement à la
+  // photo des plats.
+  uploadRestaurantCoverPhoto: (restaurantId: number, photo: Blob) => {
+    const form = new FormData();
+    form.append("file", photo, "couverture.jpg");
+    return request<Restaurant>(`/api/v1/restaurants/${restaurantId}/cover-photo`, { method: "PUT", body: form });
+  },
+  deleteRestaurantCoverPhoto: (restaurantId: number) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/cover-photo`, { method: "DELETE" }),
+  uploadRestaurantLogo: (restaurantId: number, photo: Blob) => {
+    const form = new FormData();
+    form.append("file", photo, "logo.jpg");
+    return request<Restaurant>(`/api/v1/restaurants/${restaurantId}/logo`, { method: "PUT", body: form });
+  },
+  deleteRestaurantLogo: (restaurantId: number) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/logo`, { method: "DELETE" }),
   // Connexion du wallet Konnect PROPRE au restaurant (modèle direct,
   // 2026-08-19) — jamais réaffiché après coup, seul `konnect_configured` le
   // confirme ensuite (voir Restaurant).

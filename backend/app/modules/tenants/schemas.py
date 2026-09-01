@@ -27,6 +27,8 @@ class RestaurantPublicOut(BaseModel):
     ramadan_mode_enabled: bool
     iftar_time: UtcDatetime | None
     cafe_mode_enabled: bool
+    cover_photo_url: str | None
+    logo_url: str | None
 
 
 class RestaurantOut(RestaurantPublicOut):

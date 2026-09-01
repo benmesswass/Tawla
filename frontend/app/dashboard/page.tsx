@@ -166,6 +166,11 @@ export default function DashboardPage() {
   const { staff, loading: staffLoading } = useCurrentStaff(["manager"]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [photoEnCours, setPhotoEnCours] = useState<number | null>(null);
+  // Bannière de couverture + logo du restaurant (Phase D1 de
+  // ROADMAP_DESIGN.md) — un seul de chaque, pas besoin d'un id comme pour
+  // photoEnCours ci-dessus qui distingue quarante plats.
+  const [couvertureEnCours, setCouvertureEnCours] = useState(false);
+  const [logoEnCours, setLogoEnCours] = useState(false);
   // Photo choisie pour un plat pas encore créé : elle attend d'avoir un
   // identifiant à qui être rattachée.
   const [nouvellePhoto, setNouvellePhoto] = useState<File | null>(null);
@@ -451,6 +456,60 @@ export default function DashboardPage() {
       const misAJour = await api.deleteMenuItemPhoto(item.id);
       setItems((prev) => prev.map((i) => (i.id === item.id ? misAJour : i)));
       trackEvent("menu_edited", { feature: "remove_photo", is_demo: Boolean(sessionDemo()) });
+    } catch (e) {
+      handleGatedError(e);
+    }
+  }
+
+  async function deposerCouverture(fichier: File) {
+    if (!restaurantId) return;
+    setError(null);
+    setCouvertureEnCours(true);
+    try {
+      const reduite = await reduirePhoto(fichier);
+      const misAJour = await api.uploadRestaurantCoverPhoto(restaurantId, reduite);
+      setRestaurant(misAJour);
+      flash("Photo de couverture ajoutée.");
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setCouvertureEnCours(false);
+    }
+  }
+
+  async function retirerCouverture() {
+    if (!restaurantId) return;
+    setError(null);
+    try {
+      const misAJour = await api.deleteRestaurantCoverPhoto(restaurantId);
+      setRestaurant(misAJour);
+    } catch (e) {
+      handleGatedError(e);
+    }
+  }
+
+  async function deposerLogo(fichier: File) {
+    if (!restaurantId) return;
+    setError(null);
+    setLogoEnCours(true);
+    try {
+      const reduite = await reduirePhoto(fichier);
+      const misAJour = await api.uploadRestaurantLogo(restaurantId, reduite);
+      setRestaurant(misAJour);
+      flash("Logo ajouté.");
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setLogoEnCours(false);
+    }
+  }
+
+  async function retirerLogo() {
+    if (!restaurantId) return;
+    setError(null);
+    try {
+      const misAJour = await api.deleteRestaurantLogo(restaurantId);
+      setRestaurant(misAJour);
     } catch (e) {
       handleGatedError(e);
     }
@@ -1088,7 +1147,9 @@ export default function DashboardPage() {
                           photo » : ce champ supposait que le patron héberge
                           ses images ailleurs, ce qu'aucun ne fait. */}
                       <ZonePhoto
-                        item={item}
+                        photoUrl={item.image_url}
+                        alt={item.name}
+                        label="Photo du plat"
                         enCours={photoEnCours === item.id}
                         onFichier={(fichier) => deposerPhoto(item, fichier)}
                         onRetirer={() => retirerPhoto(item)}
@@ -1828,6 +1889,36 @@ export default function DashboardPage() {
                 joueront le premier son qu&apos;après une interaction sur l&apos;écran cuisine (politique de lecture
                 automatique).
               </p>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm" className="mt-4">
+              <span className="font-medium">Photo de couverture et logo</span>
+              <p className="text-xs text-neutral-500 mt-1">
+                Affichés en tête du menu client, à la place de l&apos;aplat de couleur uni. Facultatifs — sans eux, le
+                menu garde son en-tête actuel.
+              </p>
+              <div className="mt-2">
+                <ZonePhoto
+                  photoUrl={restaurant.cover_photo_url}
+                  alt={`Photo de couverture — ${restaurant.name}`}
+                  label="Photo de couverture"
+                  enCours={couvertureEnCours}
+                  onFichier={deposerCouverture}
+                  onRetirer={retirerCouverture}
+                />
+              </div>
+              <div className="mt-3">
+                <ZonePhoto
+                  photoUrl={restaurant.logo_url}
+                  alt={`Logo — ${restaurant.name}`}
+                  label="Logo"
+                  enCours={logoEnCours}
+                  onFichier={deposerLogo}
+                  onRetirer={retirerLogo}
+                />
+              </div>
             </Card>
           )}
 

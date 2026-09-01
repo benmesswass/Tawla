@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -51,6 +51,19 @@ class Restaurant(Base):
     # par défaut (une cuisine bruyante peut ne pas vouloir d'un bip de plus),
     # activable par le manager depuis le dashboard.
     kitchen_sound_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Bannière de couverture + logo du menu client (Phase D1 de
+    # ROADMAP_DESIGN.md, point 2) — même trio url/data/content_type que
+    # MenuItem.image_* : en base (bytea), pas sur disque (Railway/Render ont
+    # un disque éphémère, voir le commentaire équivalent sur MenuItem).
+    # Nullable : tant qu'ils sont vides, le menu client garde l'aplat harissa
+    # + la marque Tawla actuels, jamais un écran cassé.
+    cover_photo_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    cover_photo_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    cover_photo_content_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    logo_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    logo_content_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     # Palier d'abonnement — conditionne l'accès aux fonctionnalités Pro/Business,
     # voir app/core/subscription.py. Essentiel par défaut, mais un palier ne
