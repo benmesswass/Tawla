@@ -14,18 +14,20 @@ le produit tunisien devienne un produit français.
 
 ## 0. Ce que ce fichier est — et ce qu'il n'est pas
 
-`ROADMAP.md` **reste le fichier unique de pilotage du produit tunisien**. Rien
-ici ne le remplace, ne le réordonne et ne le contredit : les phases 19bis à 24
-continuent de s'exécuter dans leur ordre, avec leur règle (« une seule phase de
-code avant la mise en ligne, et plus rien ensuite avant le premier pilote »).
+`ROADMAP.md` **pilote le code produit et la mise en ligne du produit
+tunisien**. Rien ici ne le remplace, ne le réordonne et ne le contredit : les
+phases 19bis à 24 continuent de s'exécuter dans leur ordre, avec leur règle
+(« une seule phase de code avant la mise en ligne, et plus rien ensuite avant
+le premier pilote »).
 
 Ce fichier-ci est un **programme de marché**, pas une roadmap produit
 concurrente. **F0 a été tranchée par Wassim le 2026-08-24** (voir la phase F0
 plus bas pour le détail des quatre décisions) : scénario **C**, les deux
 marchés en parallèle, sans attendre un jalon tunisien. Une session qui
-démarre et cherche « la prochaine tâche » va toujours dans `ROADMAP.md` en
-priorité — ce fichier n'en devient pas une seconde roadmap générale, il reste
-le programme du seul chantier France, à travailler à côté.
+démarre et cherche « la prochaine tâche de code produit » va toujours dans
+`ROADMAP.md` en priorité — ce fichier reste le programme du seul chantier
+France, à travailler à côté. (Le design du parcours client a, lui, sa propre
+roadmap depuis le 2026-09-01 : [`ROADMAP_DESIGN.md`](./ROADMAP_DESIGN.md).)
 
 **Ce qui rend le scénario C jouable aujourd'hui, et pourrait cesser de
 l'être** : au 2026-08-24, `ROADMAP.md` ne contient plus aucune tâche non

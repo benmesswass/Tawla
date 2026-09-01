@@ -6,8 +6,8 @@ détaillés plutôt que de tout dupliquer.*
 
 ## 0. Ce que ce fichier est — et ce qu'il n'est pas
 
-**`ROADMAP.md` reste le fichier unique de pilotage du produit.** Rien ici ne
-le remplace, ne le réordonne, ne le contredit — les phases 19bis à 24
+**`ROADMAP.md` pilote le code produit et la mise en ligne.** Rien ici ne le
+remplace, ne le réordonne, ne le contredit — les phases 19bis à 24
 continuent dans leur ordre, avec leur règle (« une seule phase de code avant
 la mise en ligne, et plus rien ensuite avant le premier pilote »). Une
 session qui cherche « la prochaine tâche codable » va toujours dans

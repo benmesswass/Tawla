@@ -1,6 +1,6 @@
 # Tawla — Roadmap
 
-Fichier unique de pilotage du projet. Prendre la première tâche non cochée en
+Pilote le code produit et la mise en ligne. Prendre la première tâche non cochée en
 partant du haut, dans l'ordre des phases. Une tâche cochée `[x]` doit mentionner
 la PR qui l'a livrée. Les tâches marquées 🧑 demandent une décision, un compte
 réel ou une présence physique de Wassim — elles ne sont jamais faisables en
@@ -11,7 +11,13 @@ Refondue le **2026-08-18** après l'audit de pré-lancement
 **fusionne** ce qui restait ouvert de la roadmap du 2026-08-15 avec ce que
 l'audit a trouvé : les 44 tâches encore non cochées ont toutes été reprises ici,
 aucune n'a été perdue, et les constats de l'audit sont devenus des tâches.
-**Il n'existe toujours qu'une seule roadmap.**
+
+**Depuis le 2026-09-01, ce fichier n'est plus le seul document de pilotage** :
+le design du parcours client a sa propre roadmap,
+[`ROADMAP_DESIGN.md`](./ROADMAP_DESIGN.md), née d'un comparatif avec
+digitalmenu.tn. Ce fichier-ci reste celui qui décide de la prochaine tâche de
+**code produit et de mise en ligne** ; `ROADMAP_DESIGN.md` se travaille à
+côté, sans réordonner les phases ci-dessous.
 
 Documents qui la fondent :
 
@@ -27,15 +33,17 @@ Documents qui la fondent :
 - [`ROADMAP_ARCHIVE.md`](./ROADMAP_ARCHIVE.md) — phases 0 à 11. Lecture seule.
 - [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md) — dossier de cadrage du marché
   français (2026-08-24 ; F0 tranchée le même jour, scénario C — les deux
-  marchés en parallèle). **Ce n'est pas une seconde roadmap** : une session
-  qui cherche « la prochaine tâche de code » vient toujours ici en priorité —
-  `MARCHE_FRANCE.md` reste le programme du seul chantier France, à travailler
-  à côté, jamais à la place de ce fichier.
+  marchés en parallèle). Programme du chantier France, à travailler à côté :
+  une session qui cherche « la prochaine tâche de code produit » vient
+  toujours ici en priorité, jamais à la place de ce fichier.
+- [`ROADMAP_DESIGN.md`](./ROADMAP_DESIGN.md) — roadmap dédiée au design du
+  parcours client, née le 2026-09-01 d'un comparatif avec digitalmenu.tn. Se
+  travaille en parallèle de celle-ci, sans attendre la Phase 21.
 - [`CAMPAGNE_MARKETING.md`](./CAMPAGNE_MARKETING.md) — programme du chantier
   marketing/acquisition (2026-08-28) : positionnement, argumentaire de vente,
-  canaux réels, ciblage publicitaire Horizon 1, parrainage. **Ce n'est pas
-  une seconde roadmap non plus** : il outille les tâches 🧑 déjà écrites ici
-  (Phases 21, 23, 24), à travailler à côté, jamais à la place de ce fichier.
+  canaux réels, ciblage publicitaire Horizon 1, parrainage. Outille les
+  tâches 🧑 déjà écrites ici (Phases 21, 23, 24), à travailler à côté, jamais
+  à la place de ce fichier.
 - [`ETUDE_MARCHE.md`](./ETUDE_MARCHE.md) — étude de marché et positionnement
   (2026-08-28) : troisième revérification de la concurrence tunisienne (par
   palier), triangulation du marché adressable, revérification France
