@@ -29,7 +29,16 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
-import { MoonIcon, CoffeeIcon, UtensilsIcon, BellIcon } from "@/components/icons";
+import {
+  MoonIcon,
+  CoffeeIcon,
+  UtensilsIcon,
+  BellIcon,
+  FacebookIcon,
+  InstagramIcon,
+  TikTokIcon,
+  WhatsAppIcon,
+} from "@/components/icons";
 import { reduirePhoto } from "@/lib/photo";
 import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
 import RecetteDuJour from "@/components/RecetteDuJour";
@@ -171,6 +180,13 @@ export default function DashboardPage() {
   // photoEnCours ci-dessus qui distingue quarante plats.
   const [couvertureEnCours, setCouvertureEnCours] = useState(false);
   const [logoEnCours, setLogoEnCours] = useState(false);
+  // Icônes réseaux sociaux du menu client (Phase D1, point 3) — un seul
+  // formulaire pour les quatre liens, enregistrés ensemble au blur.
+  const [facebookUrl, setFacebookUrl] = useState("");
+  const [instagramUrl, setInstagramUrl] = useState("");
+  const [tiktokUrl, setTiktokUrl] = useState("");
+  const [whatsappUrl, setWhatsappUrl] = useState("");
+  const [savingReseaux, setSavingReseaux] = useState(false);
   // Photo choisie pour un plat pas encore créé : elle attend d'avoir un
   // identifiant à qui être rattachée.
   const [nouvellePhoto, setNouvellePhoto] = useState<File | null>(null);
@@ -251,6 +267,10 @@ export default function DashboardPage() {
       setIftarInput(isoToLocalInput(rest.iftar_time));
       setCafeModeEnabled(rest.cafe_mode_enabled);
       setKitchenSoundEnabled(rest.kitchen_sound_enabled);
+      setFacebookUrl(rest.facebook_url ?? "");
+      setInstagramUrl(rest.instagram_url ?? "");
+      setTiktokUrl(rest.tiktok_url ?? "");
+      setWhatsappUrl(rest.whatsapp_url ?? "");
       if (!rest.is_active) return;
 
       const [menu, tableList, teamList, suggested, regimeList, dayStats] = await Promise.all([
@@ -512,6 +532,25 @@ export default function DashboardPage() {
       setRestaurant(misAJour);
     } catch (e) {
       handleGatedError(e);
+    }
+  }
+
+  async function saveReseaux() {
+    if (!restaurantId) return;
+    setError(null);
+    setSavingReseaux(true);
+    try {
+      const misAJour = await api.setSocialLinks(restaurantId, {
+        facebook_url: facebookUrl.trim() || null,
+        instagram_url: instagramUrl.trim() || null,
+        tiktok_url: tiktokUrl.trim() || null,
+        whatsapp_url: whatsappUrl.trim() || null,
+      });
+      setRestaurant(misAJour);
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingReseaux(false);
     }
   }
 
@@ -1918,6 +1957,74 @@ export default function DashboardPage() {
                   onFichier={deposerLogo}
                   onRetirer={retirerLogo}
                 />
+              </div>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm" className="mt-4">
+              <span className="font-medium">Réseaux sociaux</span>
+              <p className="text-xs text-neutral-500 mt-1">
+                Affichés en petites icônes dans l&apos;en-tête du menu client. Facultatifs, indépendants les uns des
+                autres — laisser un champ vide retire son icône sans toucher aux autres.
+              </p>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="text-sm">
+                  <span className="flex items-center gap-1.5 text-xs text-neutral-500 mb-0.5">
+                    <FacebookIcon className="w-3.5 h-3.5" /> Facebook
+                  </span>
+                  <input
+                    type="url"
+                    value={facebookUrl}
+                    disabled={savingReseaux}
+                    onChange={(e) => setFacebookUrl(e.target.value)}
+                    onBlur={saveReseaux}
+                    placeholder="https://facebook.com/…"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="flex items-center gap-1.5 text-xs text-neutral-500 mb-0.5">
+                    <InstagramIcon className="w-3.5 h-3.5" /> Instagram
+                  </span>
+                  <input
+                    type="url"
+                    value={instagramUrl}
+                    disabled={savingReseaux}
+                    onChange={(e) => setInstagramUrl(e.target.value)}
+                    onBlur={saveReseaux}
+                    placeholder="https://instagram.com/…"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="flex items-center gap-1.5 text-xs text-neutral-500 mb-0.5">
+                    <TikTokIcon className="w-3.5 h-3.5" /> TikTok
+                  </span>
+                  <input
+                    type="url"
+                    value={tiktokUrl}
+                    disabled={savingReseaux}
+                    onChange={(e) => setTiktokUrl(e.target.value)}
+                    onBlur={saveReseaux}
+                    placeholder="https://tiktok.com/@…"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="flex items-center gap-1.5 text-xs text-neutral-500 mb-0.5">
+                    <WhatsAppIcon className="w-3.5 h-3.5" /> WhatsApp
+                  </span>
+                  <input
+                    type="url"
+                    value={whatsappUrl}
+                    disabled={savingReseaux}
+                    onChange={(e) => setWhatsappUrl(e.target.value)}
+                    onBlur={saveReseaux}
+                    placeholder="https://wa.me/216…"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
               </div>
             </Card>
           )}

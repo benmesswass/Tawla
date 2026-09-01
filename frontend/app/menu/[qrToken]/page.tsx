@@ -29,6 +29,7 @@ import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
 import TawlaMark from "@/components/brand/TawlaMark";
 import VignetteCategorie from "@/components/VignetteCategorie";
+import ReseauxSociaux from "@/components/ReseauxSociaux";
 import {
   MoonIcon,
   UtensilsIcon,
@@ -1712,6 +1713,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </div>
             <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
             <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
+            {/* Ancrées à la ligne de la table, pas à celle du nom : cette
+                ligne-là reste courte à gauche quelle que soit la longueur du
+                nom au-dessus, donc jamais de collision (Phase D1, point 3). */}
+            <ReseauxSociaux restaurant={restaurant} className="absolute bottom-3 end-4" />
           </div>
         </header>
       ) : (
@@ -1732,7 +1737,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-[7px] shrink-0">{enTeteActions}</div>
+          <div className="flex flex-col items-end gap-[7px] shrink-0">
+            {enTeteActions}
+            <ReseauxSociaux restaurant={restaurant} />
+          </div>
         </header>
       )}
 

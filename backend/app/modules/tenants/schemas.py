@@ -29,6 +29,10 @@ class RestaurantPublicOut(BaseModel):
     cafe_mode_enabled: bool
     cover_photo_url: str | None
     logo_url: str | None
+    facebook_url: str | None
+    instagram_url: str | None
+    tiktok_url: str | None
+    whatsapp_url: str | None
 
 
 class RestaurantOut(RestaurantPublicOut):
@@ -84,6 +88,16 @@ class RamadanModeUpdate(BaseModel):
 
 class CafeModeUpdate(BaseModel):
     enabled: bool
+
+
+class SocialLinksUpdate(BaseModel):
+    """Les quatre liens sont indépendants — vide (None) retire l'icône
+    correspondante sans toucher aux trois autres."""
+
+    facebook_url: str | None = None
+    instagram_url: str | None = None
+    tiktok_url: str | None = None
+    whatsapp_url: str | None = None
 
 
 class KitchenSoundUpdate(BaseModel):

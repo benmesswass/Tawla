@@ -37,11 +37,27 @@ C'est l'écart qui compte : une fiche plat sans photo a l'air inachevée face
       comptes Essentiel, l'upload étant verrouillé Pro, et cassé l'import CSV
       en masse). Icônes par catégorie plutôt que fausses photos génériques —
       une icône ne prétend jamais être le plat réel (PR #121)
-- [ ] Bannière de couverture en tête du menu client (photo du lieu + logo
+- [x] Bannière de couverture en tête du menu client (photo du lieu + logo
       rond), à la place du bandeau texte seul actuel
-      (`frontend/app/menu/[qrToken]/page.tsx`)
+      (`frontend/app/menu/[qrToken]/page.tsx`) — repli identique à l'écran
+      actuel tant qu'aucune couverture n'est envoyée ; upload ouvert à tous
+      les paliers, pas verrouillé Pro contrairement à la photo des plats
+      (PR #121)
 - [ ] Icônes réseaux sociaux du restaurant dans l'en-tête du menu client, si
       renseignés au profil établissement
+
+## Phase D1bis — Avis Google après paiement (Pro+)
+
+Idée de Wassim (2026-09-01), insérée ici plutôt qu'en D2 pour ne pas
+renumeroter ce qui suit — même logique que la Phase 19bis de `ROADMAP.md`.
+
+- [ ] Une fois le paiement de l'addition confirmé côté client, une modale
+      s'ouvre automatiquement pour proposer un avis Google, avec un lien
+      direct vers la fiche Google Maps du restaurant. Réservé au palier Pro
+      et au-dessus (à vérifier via `require_tier`/`effective_tier`, comme le
+      mode Ramadan). Nouveau champ (ex. `google_review_url`) sur
+      `Restaurant`, nullable — la modale ne s'affiche que si le manager l'a
+      renseigné ET que son palier l'autorise.
 
 ## Phase D2 — Navigation et micro-interactions
 

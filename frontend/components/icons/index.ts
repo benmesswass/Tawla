@@ -13,3 +13,7 @@ export { default as BowlIcon } from "./BowlIcon";
 export { default as WineIcon } from "./WineIcon";
 export { default as BagIcon } from "./BagIcon";
 export { default as LayersIcon } from "./LayersIcon";
+export { default as FacebookIcon } from "./FacebookIcon";
+export { default as InstagramIcon } from "./InstagramIcon";
+export { default as TikTokIcon } from "./TikTokIcon";
+export { default as WhatsAppIcon } from "./WhatsAppIcon";

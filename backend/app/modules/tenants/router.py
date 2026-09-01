@@ -158,6 +158,32 @@ def set_kitchen_sound(
     return schemas.serialize_restaurant(restaurant)
 
 
+@router.patch("/{restaurant_id}/social-links", response_model=schemas.RestaurantOut)
+def set_social_links(
+    restaurant_id: int,
+    payload: schemas.SocialLinksUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Icônes réseaux sociaux du menu client (Phase D1 de ROADMAP_DESIGN.md,
+    point 3). Les quatre liens sont posés ensemble (un seul formulaire côté
+    Réglages) — envoyer None sur l'un d'eux le retire sans toucher aux
+    autres, à la différence d'un PATCH partiel classique.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    restaurant.facebook_url = payload.facebook_url
+    restaurant.instagram_url = payload.instagram_url
+    restaurant.tiktok_url = payload.tiktok_url
+    restaurant.whatsapp_url = payload.whatsapp_url
+    db.commit()
+    db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
 # --- Bannière de couverture et logo (Phase D1 de ROADMAP_DESIGN.md) ---------
 #
 # Même trio de champs et mêmes contraintes que la photo des plats
