@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.markets import current_market
 from app.core.subscription import effective_tier, require_tier, tier_includes
 from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
@@ -82,6 +83,7 @@ def get_table_poster(table_id: int, db: Session = Depends(get_db), staff: Staff 
         table_label=table.label,
         restaurant_name=restaurant.name if restaurant else "Tawla",
         zone=table.zone,
+        bilingual="ar" in current_market.languages,
     )
     return Response(
         content=pdf_bytes,

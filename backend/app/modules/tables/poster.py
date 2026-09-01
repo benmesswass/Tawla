@@ -15,10 +15,12 @@ salle d'un client qui ne nous a jamais parlé. Le QR lui-même reste noir pur
 sur blanc — seule zone où le contraste maximal compte pour la lecture par un
 téléphone d'entrée de gamme.
 
-Bilingue FR/AR : le texte arabe est façonné (lettres liées, RTL) via fpdf2 +
-uharfbuzz — jamais de rendu non façonné, qui serait pire que pas d'arabe du
-tout (même principe que la garde de `qr_card.py` sur l'absence d'arabe, qui
-elle n'a pas cette dépendance et reste volontairement français seul).
+Bilingue FR/AR par défaut : le texte arabe est façonné (lettres liées, RTL)
+via fpdf2 + uharfbuzz — jamais de rendu non façonné, qui serait pire que pas
+d'arabe du tout (même principe que la garde de `qr_card.py` sur l'absence
+d'arabe, qui elle n'a pas cette dépendance et reste volontairement français
+seul). `bilingual=False` retire l'arabe pour un marché qui n'en a pas
+l'usage (France, `core/markets.py::FRANCE.languages` ne contient pas "ar").
 """
 import re
 from pathlib import Path
@@ -126,7 +128,9 @@ def _draw_tawla_mark(pdf: FPDF, x: float, y: float, size: float) -> None:
     pdf.polyline([(x + 68 * s, y + 50 * s), (x + 74 * s, y + 56 * s), (x + 86 * s, y + 40 * s)])
 
 
-def generate_table_poster_pdf(*, menu_url: str, table_label: str, restaurant_name: str, zone: str | None = None) -> bytes:
+def generate_table_poster_pdf(
+    *, menu_url: str, table_label: str, restaurant_name: str, zone: str | None = None, bilingual: bool = True
+) -> bytes:
     qr = qrcode.QRCode(error_correction=ERROR_CORRECT_Q, box_size=10, border=2)
     qr.add_data(menu_url)
     qr.make(fit=True)
@@ -200,7 +204,7 @@ def generate_table_poster_pdf(*, menu_url: str, table_label: str, restaurant_nam
     # force pas le nom dans le gabarit arabe, même règle que « ne jamais
     # inventer un numéro ».
     right_x = 51.9
-    if eyebrow is not None:
+    if eyebrow is not None and bilingual:
         _arabic(pdf)
         _left(pdf, right_x, 33.4, f"طاولة {big}", "Kufi", 15, color=_ENCRE)
         _latin(pdf)
@@ -228,9 +232,10 @@ def generate_table_poster_pdf(*, menu_url: str, table_label: str, restaurant_nam
     pdf.set_xy(_MARGIN_X, 158.2)
     pdf.multi_cell(124.8, 21 * _PT_TO_MM * 1.15, "Scannez, commandez depuis votre table", align="L")
 
-    _arabic(pdf)
-    _left(pdf, _MARGIN_X, pdf.get_y() + 3, "امسح الرمز واطلب من طاولتك", "Kufi", 12, color=_INK_SOFT)
-    _latin(pdf)
+    if bilingual:
+        _arabic(pdf)
+        _left(pdf, _MARGIN_X, pdf.get_y() + 3, "امسح الرمز واطلب من طاولتك", "Kufi", 12, color=_INK_SOFT)
+        _latin(pdf)
 
     # 16-18 — Filet et pied de page.
     pdf.set_fill_color(*_LINE)
