@@ -31,9 +31,12 @@ main », salle avec service à table).
 C'est l'écart qui compte : une fiche plat sans photo a l'air inachevée face
 à un concurrent qui en montre systématiquement, même en démo générique.
 
-- [ ] Photo obligatoire à la création d'un plat, ou pack de visuels
+- [x] Photo obligatoire à la création d'un plat, ou pack de visuels
       génériques par catégorie proposé en attendant que le patron envoie les
-      siens — décider laquelle des deux options 🧑
+      siens — décidé 🧑 : pack générique (photo obligatoire aurait bloqué les
+      comptes Essentiel, l'upload étant verrouillé Pro, et cassé l'import CSV
+      en masse). Icônes par catégorie plutôt que fausses photos génériques —
+      une icône ne prétend jamais être le plat réel (PR #121)
 - [ ] Bannière de couverture en tête du menu client (photo du lieu + logo
       rond), à la place du bandeau texte seul actuel
       (`frontend/app/menu/[qrToken]/page.tsx`)
