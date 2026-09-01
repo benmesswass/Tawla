@@ -270,6 +270,7 @@ export type TimingStats = {
   avg_wait_confirmation_seconds: number | null;
   avg_confirmation_to_kitchen_seconds: number | null;
   avg_kitchen_to_served_seconds: number | null;
+  avg_served_to_paid_seconds: number | null;
 };
 
 export type StaffPerformance = {
@@ -337,6 +338,8 @@ export type StaffPeriodReport = {
   orders_taken: number;
   avg_seconds_to_claim: number | null;
   total_amount_handled: number;
+  total_tips_collected: number;
+  timing: TimingStats;
 };
 
 /** Ce qu'un membre d'équipe voit de sa propre soirée (Phase 17.3) : ses

@@ -104,8 +104,8 @@ Disqualifier durement à la porte, sans exception :
 - **pas de Wi-Fi utilisable ou pas de réseau à toutes les tables** → ne pas
   installer, même s'il insiste. Le produit fonctionnera mal, et c'est ta faute
   qu'on retiendra, pas celle de son réseau ;
-- **moins de six tables** → douleur trop faible pour 120 DT, et du support pour
-  rien.
+- **service à faible volume, sans vraie pression de salle** → douleur trop
+  faible pour 120 DT, et du support pour rien.
 
 **Accord écrit d'une page par pilote**, quatre lignes :
 
@@ -228,8 +228,7 @@ encaissée.
 
 1. **Coder entre deux sorties.** C'est le piège principal, et il est documenté :
    trois phases techniquement irréprochables ont été livrées après que la roadmap
-   eut écrit qu'écrire du code ferait baisser la note. Après la mise en ligne,
-   toute idée de fonctionnalité doit nommer le restaurateur qui l'a demandée.
+   eut écrit qu'écrire du code ferait baisser la note.
 2. **Sauter le relevé « avant ».** Il paraît toujours possible de le faire plus
    tard. Il ne l'est jamais.
 3. **Installer chez un établissement au mauvais réseau** parce qu'il a dit oui.

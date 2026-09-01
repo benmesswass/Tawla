@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.modules.menu.models import MenuItem
-from app.modules.orders.models import Order, OrderItem, OrderStatus
+from app.modules.orders.models import Order, OrderItem, OrderStatus, PaymentStatus
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table
 
@@ -158,6 +158,49 @@ def test_report_is_isolated_and_manager_only(client, db_session):
     # Un serveur ne consulte pas le document qui sert à calculer sa prime.
     assert client.get(f"/api/v1/stats/equipe/{restaurant.id}", headers=auth_headers(waiter)).status_code == 403
     assert client.get(f"/api/v1/stats/equipe/{restaurant.id}").status_code == 401
+
+
+def test_reports_tips_and_per_step_timing_per_server(client, db_session):
+    """
+    Retour démo client (2026-08-31, point 12) : un manager veut voir le détail
+    par étape et les pourboires par serveur, pas seulement le cumul de
+    commandes — argument de prime direct.
+    """
+    restaurant, table, item = _setup(db_session, "equipe-detail")
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    sami = create_staff(restaurant.id, StaffRole.WAITER)
+
+    now = datetime.now(timezone.utc) - timedelta(hours=1)
+    order = _order(db_session, restaurant, table, item, staff=sami, claim_after_seconds=30)
+    order.confirmed_at = now + timedelta(seconds=30)
+    order.sent_to_kitchen_at = now + timedelta(seconds=60)
+    order.served_at = now + timedelta(seconds=360)
+    order.paid_at = now + timedelta(seconds=560)
+    order.payment_status = PaymentStatus.PAID
+    order.tip_amount = 3.5
+    db_session.add(order)
+    db_session.commit()
+
+    row = _report(client, restaurant, manager)["staff"][0]
+    assert row["staff_id"] == sami.id
+    assert row["total_tips_collected"] == 3.5
+    assert row["timing"]["avg_confirmation_to_kitchen_seconds"] == 30
+    assert row["timing"]["avg_kitchen_to_served_seconds"] == 300
+    assert row["timing"]["avg_served_to_paid_seconds"] == 200
+
+
+def test_tips_only_count_when_the_order_is_actually_paid(client, db_session):
+    restaurant, table, item = _setup(db_session, "equipe-pourboire-impaye")
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    sami = create_staff(restaurant.id, StaffRole.WAITER)
+
+    order = _order(db_session, restaurant, table, item, staff=sami, claim_after_seconds=10)
+    order.tip_amount = 5.0  # jamais réglé : le pourboire n'a pas été perçu.
+    db_session.add(order)
+    db_session.commit()
+
+    row = _report(client, restaurant, manager)["staff"][0]
+    assert row["total_tips_collected"] == 0
 
 
 def test_inverted_period_is_rejected(client, db_session):

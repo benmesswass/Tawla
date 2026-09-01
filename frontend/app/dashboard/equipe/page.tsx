@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
 import { api, StaffRole, SubscriptionTier, TeamReport } from "@/lib/api";
@@ -48,6 +48,10 @@ function csvEscape(value: string | number): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function avgBasket(member: TeamReport["staff"][number]): number | null {
+  return member.orders_taken > 0 ? member.total_amount_handled / member.orders_taken : null;
+}
+
 function reportToCsv(report: TeamReport): string {
   const lines: string[] = [];
   const row = (...cells: (string | number)[]) => lines.push(cells.map(csvEscape).join(","));
@@ -56,15 +60,25 @@ function reportToCsv(report: TeamReport): string {
   lines.push("");
   row(
     "Nom", "Rôle", "Commandes prises", "Délai moyen de prise en charge (s)",
-    `Montant traité (${currentMarket.currency.symbol})`
+    `Montant traité (${currentMarket.currency.symbol})`,
+    `Panier moyen (${currentMarket.currency.symbol})`,
+    `Pourboires (${currentMarket.currency.symbol})`,
+    "Envoyée → confirmée (s)", "Confirmée → cuisine (s)", "Cuisine → servie (s)", "Servie → payée (s)"
   );
   for (const member of report.staff) {
+    const basket = avgBasket(member);
     row(
       member.staff_name,
       ROLE_LABELS[member.role],
       member.orders_taken,
       member.avg_seconds_to_claim === null ? "" : Math.round(member.avg_seconds_to_claim),
-      formatAmount(member.total_amount_handled)
+      formatAmount(member.total_amount_handled),
+      basket === null ? "" : formatAmount(basket),
+      formatAmount(member.total_tips_collected),
+      member.timing.avg_wait_confirmation_seconds === null ? "" : Math.round(member.timing.avg_wait_confirmation_seconds),
+      member.timing.avg_confirmation_to_kitchen_seconds === null ? "" : Math.round(member.timing.avg_confirmation_to_kitchen_seconds),
+      member.timing.avg_kitchen_to_served_seconds === null ? "" : Math.round(member.timing.avg_kitchen_to_served_seconds),
+      member.timing.avg_served_to_paid_seconds === null ? "" : Math.round(member.timing.avg_served_to_paid_seconds)
     );
   }
   return lines.join("\n");
@@ -88,6 +102,9 @@ export default function TeamReportPage() {
   const [report, setReport] = useState<TeamReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [upgradeTier, setUpgradeTier] = useState<SubscriptionTier | null>(null);
+  // Un seul serveur détaillé à la fois : le détail par étape n'a d'intérêt
+  // que pour creuser un cas précis, pas pour tout déplier d'un coup.
+  const [expandedStaffId, setExpandedStaffId] = useState<number | null>(null);
 
   const restaurantId = staff?.restaurant_id ?? null;
 
@@ -113,7 +130,7 @@ export default function TeamReportPage() {
 
   if (staffLoading || !staff) {
     return (
-      <div className="p-4 max-w-4xl mx-auto space-y-3">
+      <div className="p-4 md:p-6 space-y-3">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -121,7 +138,7 @@ export default function TeamReportPage() {
   }
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <div className="p-4 md:p-6">
       {upgradeTier && restaurantId && (
         <UpgradeModal
           restaurantId={restaurantId}
@@ -194,25 +211,82 @@ export default function TeamReportPage() {
                   <th className="py-2 pr-3 font-medium">Membre</th>
                   <th className="py-2 pr-3 font-medium text-right">Commandes</th>
                   <th className="py-2 pr-3 font-medium text-right">Prise en charge</th>
-                  <th className="py-2 font-medium text-right">Montant traité</th>
+                  <th className="py-2 pr-3 font-medium text-right">Montant traité</th>
+                  <th className="py-2 pr-3 font-medium text-right">Panier moyen</th>
+                  <th className="py-2 font-medium text-right">Pourboires</th>
+                  <th className="py-2 pl-3" />
                 </tr>
               </thead>
               <tbody>
-                {report.staff.map((member) => (
-                  <tr key={member.staff_id} className="border-b border-[var(--line)]">
-                    <td className="py-2 pr-3">
-                      {member.staff_name}
-                      <span className="text-[var(--ink-soft)]"> · {ROLE_LABELS[member.role]}</span>
-                    </td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{member.orders_taken}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">
-                      {formatDelay(member.avg_seconds_to_claim)}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">
-                      {formatMoney(member.total_amount_handled)}
-                    </td>
-                  </tr>
-                ))}
+                {report.staff.map((member) => {
+                  const basket = avgBasket(member);
+                  const expanded = expandedStaffId === member.staff_id;
+                  return (
+                    <Fragment key={member.staff_id}>
+                      <tr className="border-b border-[var(--line)]">
+                        <td className="py-2 pr-3">
+                          {member.staff_name}
+                          <span className="text-[var(--ink-soft)]"> · {ROLE_LABELS[member.role]}</span>
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{member.orders_taken}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {formatDelay(member.avg_seconds_to_claim)}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {formatMoney(member.total_amount_handled)}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {basket === null ? "—" : formatMoney(basket)}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">{formatMoney(member.total_tips_collected)}</td>
+                        <td className="py-2 pl-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedStaffId(expanded ? null : member.staff_id)}
+                            className="text-xs font-medium text-[var(--harissa)] whitespace-nowrap"
+                          >
+                            {expanded ? "Masquer" : "Détail par étape"}
+                          </button>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className="border-b border-[var(--line)] bg-[var(--semoule-raised)]">
+                          <td colSpan={7} className="py-3 px-3">
+                            <p className="text-xs font-medium text-[var(--ink-soft)] mb-2">
+                              Temps moyen par étape — commandes prises par {member.staff_name} sur la période
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                              <div>
+                                <div className="text-xs text-[var(--ink-soft)]">Envoyée → confirmée</div>
+                                <div className="font-medium">
+                                  {formatDelay(member.timing.avg_wait_confirmation_seconds)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-[var(--ink-soft)]">Confirmée → cuisine</div>
+                                <div className="font-medium">
+                                  {formatDelay(member.timing.avg_confirmation_to_kitchen_seconds)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-[var(--ink-soft)]">Cuisine → servie</div>
+                                <div className="font-medium">
+                                  {formatDelay(member.timing.avg_kitchen_to_served_seconds)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-[var(--ink-soft)]">Servie → payée</div>
+                                <div className="font-medium">
+                                  {formatDelay(member.timing.avg_served_to_paid_seconds)}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -226,6 +300,11 @@ export default function TeamReportPage() {
             <p className="mt-2">
               Les commandes annulées ne sont pas comptées. Un membre de l&apos;équipe dont le compte a été
               désactivé reste listé s&apos;il a travaillé sur la période.
+            </p>
+            <p className="mt-2">
+              Les pourboires ne comptent que sur les commandes réellement réglées. Le « détail par étape »
+              couvre les mêmes 4 étapes que le tableau de bord, mais uniquement sur les commandes prises en
+              charge par ce membre.
             </p>
           </Card>
         </>

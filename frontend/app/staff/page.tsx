@@ -595,7 +595,7 @@ export default function StaffPage() {
 
   if (staffLoading || !staff) {
     return (
-      <div className="p-4 max-w-md mx-auto space-y-3">
+      <div className="p-4 max-w-md mx-auto md:max-w-none md:mx-0 md:px-6 space-y-3">
         <Skeleton className="h-6 w-48" />
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-20 w-full mt-4" />

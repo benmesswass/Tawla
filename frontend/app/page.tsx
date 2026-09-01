@@ -52,7 +52,7 @@ export default function HomePage() {
               volontairement ce public (CLAUDE.md, ROADMAP.md) — la page ne
               doit pas l'attirer par accident. */}
           <p className="mt-5 inline-block rounded-full bg-white/15 px-4 py-1.5 text-sm font-medium">
-            Pour les restaurants et brasseries à partir de 6 tables, en Tunisie.
+            Pour les restaurants et brasseries.
           </p>
           {/* La démo est le premier appel à l'action, avant « créer mon
               compte » : un restaurateur qui découvre Tawla veut le voir
@@ -179,20 +179,33 @@ export default function HomePage() {
             </Link>
           </div>
           <p className="mt-4 text-xs text-[var(--ink-soft)]">
-            Pensé pour les restaurants et brasseries de 6 tables et plus — pas pour un petit café d&apos;une
-            seule salle.
+            Pensé pour les restaurants et brasseries — pas pour un petit café d&apos;une seule salle.
           </p>
         </div>
       </section>
 
       <footer className="max-w-3xl mx-auto px-6 py-8 text-xs text-[var(--ink-soft)]">
         <p>
-          Tawla — commande à table par QR code pour les restaurants tunisiens. Si vous êtes client d&apos;un
+          Tawla — commande à table par QR code pour les restaurants. Si vous êtes client d&apos;un
           établissement, scannez simplement le QR posé sur votre table.
         </p>
         <Link href="/confidentialite" className="underline mt-2 inline-block">
           Politique de confidentialité
         </Link>
+        <div className="mt-1 flex flex-wrap gap-x-3">
+          <Link href="/mentions-legales" className="underline inline-block">
+            Mentions légales
+          </Link>
+          <Link href="/cgu" className="underline inline-block">
+            CGU
+          </Link>
+          <Link href="/cgv" className="underline inline-block">
+            CGV
+          </Link>
+          <Link href="/dpa" className="underline inline-block">
+            DPA
+          </Link>
+        </div>
       </footer>
     </main>
   );

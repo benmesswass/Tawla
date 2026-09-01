@@ -72,6 +72,7 @@ export const ar = {
   invoiceDownload: "حمل الفاتورة (PDF)",
   invoiceQrCaption: "إسكانيها باش تلقاها في جهاز آخر",
   orderAgain: "أطلب مرة أخرى",
+  postOrderSuggestionTitle: "حابب حاجة أخرى قبل الفاتورة؟",
 
   splitBillToggle: "قسم الفاتورة بين بعضكم",
   splitBillTitle: "قسمة الفاتورة",

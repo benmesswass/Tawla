@@ -31,6 +31,11 @@ Documents qui la fondent :
   qui cherche « la prochaine tâche de code » vient toujours ici en priorité —
   `MARCHE_FRANCE.md` reste le programme du seul chantier France, à travailler
   à côté, jamais à la place de ce fichier.
+- [`ETUDE_MARCHE.md`](./ETUDE_MARCHE.md) — étude de marché et positionnement
+  (2026-08-28) : troisième revérification de la concurrence tunisienne (par
+  palier), triangulation du marché adressable, revérification France
+  (Sunday, niche maghrébine bilingue), matrice comparative, énoncé de
+  positionnement, analyse de défendabilité des trois paliers de prix.
 
 ## Objectif
 
@@ -54,15 +59,6 @@ Phase 19 a fermé les trois défauts de l'audit du 15 août ; la **Phase 19bis**
 ferme ce que l'audit du 18 août a trouvé en attaquant et en rejouant les
 parcours ; la Phase 20 met en ligne ; et **tout ce qui suit passe par la porte
 d'un restaurant**.
-
-Toute tâche de code proposée après la Phase 20 doit d'abord répondre à :
-« quel restaurateur l'a demandée, et lequel refuse de payer sans elle ? ».
-Sans réponse nommée, elle va en § « Sous condition ».
-
-**Une exception, et une seule** : un **défaut** constaté — le produit fait faux
-— n'est pas une fonctionnalité et ne tombe pas sous cette règle. C'est ce qui
-autorise la Phase 19bis. Un manque fonctionnel, lui, attend son restaurateur.
-La distinction est tranchée dans `AUDIT_PRE_LANCEMENT.md` §5.
 
 ## Le calendrier, à rebours de Ramadan
 
@@ -211,7 +207,7 @@ jour où la Phase 19bis est en revue, sans attendre la mise en ligne.
 Le matériel existe depuis la Phase 13 et n'a jamais servi : au 2026-08-18,
 `terrain/ENTRETIENS.md` porte toujours **vingt lignes vides**.
 
-- [ ] Mener les 20 entretiens 🧑 — restaurants et brasseries de **6 tables et plus** (Tunis, La Marsa, Sousse, Hammamet), pas les petits cafés. Ne jamais montrer l'application avant la fin
+- [ ] Mener les 20 entretiens 🧑 — restaurants et brasseries, pas les petits cafés. Ne jamais montrer l'application avant la fin
 - [ ] Remplir `terrain/ENTRETIENS.md` sur place ou juste après 🧑 — une ligne par établissement, et les verbatims mot pour mot, surtout les refus
 - [ ] Poser la question de prix franchement, après avoir décrit le bénéfice et jamais la fonctionnalité 🧑
 - [ ] Repérer les trois profils de pilote au passage 🧑 : café de quartier, restaurant de centre-ville, zone touristique. Chercher celui dont les autres patrons parlent, pas le plus accueillant
@@ -273,7 +269,7 @@ Au 2026-08-18, `terrain/PILOTES.md` ne contient qu'un modèle à copier.
 
 **23.1 — Avant d'installer quoi que ce soit** 🧑
 
-- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Moins de six tables → la douleur est trop faible pour 120 DT. Une terrasse est le signal positif le plus fort
+- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Service à faible volume, sans vraie pression de salle → la douleur est trop faible pour 120 DT. Une terrasse est le signal positif le plus fort
 - [ ] Accord écrit d'une page par pilote 🧑 : quatre semaines d'usage **effectif en service**, droit de citer le nom, droit de publier les chiffres mesurés, et en échange installation, formation, chevalets et support pendant le service. Un pilote qui refuse le droit de citation est un client gratuit, pas un pilote
 - [ ] **Relever la semaine de référence à la main, avant activation** 🧑 : commandes perdues par service et panier moyen, comptés sur place pendant quatre soirs. Sans cet « avant », la preuve d'après ne vaut rien — et c'est le seul travail de cette roadmap qui devient impossible à rattraper une fois l'outil installé
 - [ ] Arriver avec **sa** carte déjà chargée 🧑 (`setup_restaurant.py` + import CSV) et lui faire scanner son propre QR. « Voilà votre carte, elle tourne » ne se rattrape par aucun argument
@@ -380,8 +376,7 @@ relevé « avant » (→ 23.2), le bandeau de fin de pilote (→ 22), et
 3. **Phase 19bis : écrire le test qui échoue d'abord**, puis le correctif. Un correctif de sécurité ou d'intégrité sans test qui le prouve ne compte pas comme livré — sauf les deux lignes marquées *(sans test)*, où la vérification est manuelle par nature.
 4. **Cocher `[x]` avec le numéro de PR**, et si le scope a été réduit, écrire pourquoi sur la ligne.
 5. **À la clôture d'une phase, recalculer la grille** — sur ce qui est constaté, jamais sur ce qui est préparé. Si une phase n'a déplacé aucune note, le dire dans la PR : c'est le signal que la tâche n'aurait pas dû être faite.
-6. **Après la Phase 20, toute proposition de code doit nommer le restaurateur qui l'a demandée.** Sans nom, elle va en § « Sous condition ». Un **défaut constaté** échappe à cette règle — un manque fonctionnel, jamais.
-7. **Ne jamais cocher une case sur une supposition.** Les trois lignes de 20.1 sont là parce qu'un test vert en local a déjà laissé passer un contournement réel du limiteur : `TestClient` n'exécute pas la couche qui, en production, réécrit l'IP.
-8. **Ne jamais remplir `terrain/*` depuis une session.** Ces fichiers se tiennent à la main, sur place. Un chiffre de terrain inventé détruit la seule chose que Tawla a à vendre.
-9. **Conventions inchangées** : voir `CLAUDE.md` (multi-tenant partout, transitions d'état contrôlées, prix figé sur `OrderItem`, tout nouveau modèle dans `model_registry.py`, toute migration dans la même PR, logs via `log_event`).
-10. **Face à une ambiguïté produit** : livrer le scope le plus étroit qui règle le problème réel, et signaler l'ambiguïté dans la PR — plutôt que d'inventer une réponse.
+6. **Ne jamais cocher une case sur une supposition.** Les trois lignes de 20.1 sont là parce qu'un test vert en local a déjà laissé passer un contournement réel du limiteur : `TestClient` n'exécute pas la couche qui, en production, réécrit l'IP.
+7. **Ne jamais remplir `terrain/*` depuis une session.** Ces fichiers se tiennent à la main, sur place. Un chiffre de terrain inventé détruit la seule chose que Tawla a à vendre.
+8. **Conventions inchangées** : voir `CLAUDE.md` (multi-tenant partout, transitions d'état contrôlées, prix figé sur `OrderItem`, tout nouveau modèle dans `model_registry.py`, toute migration dans la même PR, logs via `log_event`).
+9. **Face à une ambiguïté produit** : livrer le scope le plus étroit qui règle le problème réel, et signaler l'ambiguïté dans la PR — plutôt que d'inventer une réponse.

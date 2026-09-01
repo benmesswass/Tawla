@@ -221,8 +221,7 @@ function SignupForm() {
             className="mt-0.5"
           />
           <span>
-            Je confirme que mon établissement compte au moins 6 tables, avec du wifi ou du réseau à toutes
-            les tables.
+            Je confirme que mon établissement a du wifi ou du réseau à toutes les tables.
           </span>
         </label>
 
