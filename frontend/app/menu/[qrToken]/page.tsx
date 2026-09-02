@@ -187,6 +187,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [optionChooserFor, setOptionChooserFor] = useState<MenuItem | null>(null);
   // Modale d'avis Google post-paiement (Phase D1bis).
   const [showGoogleReview, setShowGoogleReview] = useState(false);
+  // Catégorie surlignée dans la barre collante (Phase D2 de ROADMAP_DESIGN.md)
+  // — stocke l'ancre (`categoryAnchor(category)`), pas le nom brut : c'est ce
+  // que l'IntersectionObserver lit directement sur `section.id`.
+  const [activeCategoryAnchor, setActiveCategoryAnchor] = useState<string | null>(null);
   // groupId -> ids des options choisies dans ce groupe, pendant la composition.
   const [chooserSelection, setChooserSelection] = useState<Record<number, number[]>>({});
   // Nombre de personnes à table, demandé seulement quand un plat est marqué
@@ -642,6 +646,41 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackedOrder?.payment_status]);
+
+  // Barre de catégories collante : surligne celle en cours de lecture
+  // (Phase D2 de ROADMAP_DESIGN.md). Requêté sur le DOM réel plutôt que sur
+  // `categories` (calculé plus bas, après les retours anticipés ci-dessous,
+  // donc indisponible ici) — sans incidence : la vue de suivi de commande et
+  // le mode café n'ont pas de section `cat-…`, l'observer n'y observe rien.
+  useEffect(() => {
+    const sections = Array.from(document.querySelectorAll<HTMLElement>("section[id^='cat-']"));
+    if (sections.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) setActiveCategoryAnchor(entry.target.id);
+        });
+      },
+      // Bande de détection fine juste sous la barre collante (~48px de haut)
+      // plutôt que la moitié de l'écran : sur une section courte (1-2 plats),
+      // une bande large aurait sauté la catégorie plutôt que de s'y arrêter.
+      { rootMargin: "-56px 0px -70% 0px", threshold: 0 }
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [menu]);
+
+  // La pastille active se recentre dans la barre horizontale : sans ça, sur
+  // une carte à 5-6 catégories, elle finit hors du cadre visible dès qu'on
+  // avance dans la carte et le surlignage ne sert plus à rien.
+  useEffect(() => {
+    if (!activeCategoryAnchor) return;
+    document.getElementById(`${activeCategoryAnchor}-pill`)?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [activeCategoryAnchor]);
 
   async function payByCard() {
     if (!trackedOrder) return;
@@ -1837,16 +1876,25 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           className="sticky top-0 z-30 bg-[rgba(246,239,221,.95)] backdrop-blur border-b border-[var(--line)]"
         >
           <ul className="flex gap-2 overflow-x-auto px-4 py-[11px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {categories.map((category) => (
-              <li key={category}>
-                <a
-                  href={`#${categoryAnchor(category)}`}
-                  className="inline-block whitespace-nowrap rounded-full border border-[var(--line)] bg-[var(--semoule-raised)] px-[13px] py-[6px] text-[12.5px] font-semibold text-[var(--encre)] transition-colors active:bg-[var(--harissa)] active:text-[var(--semoule)] active:border-[var(--harissa)]"
-                >
-                  {menuCategoryLabel(category, locale)}
-                </a>
-              </li>
-            ))}
+            {categories.map((category) => {
+              const anchor = categoryAnchor(category);
+              const active = anchor === activeCategoryAnchor;
+              return (
+                <li key={category}>
+                  <a
+                    id={`${anchor}-pill`}
+                    href={`#${anchor}`}
+                    className={`inline-block whitespace-nowrap rounded-full border px-[13px] py-[6px] text-[12.5px] font-semibold transition-colors active:bg-[var(--harissa)] active:text-[var(--semoule)] active:border-[var(--harissa)] ${
+                      active
+                        ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
+                        : "bg-[var(--semoule-raised)] text-[var(--encre)] border-[var(--line)]"
+                    }`}
+                  >
+                    {menuCategoryLabel(category, locale)}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       )}

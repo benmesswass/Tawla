@@ -70,9 +70,9 @@ renumeroter ce qui suit — même logique que la Phase 19bis de `ROADMAP.md`.
 
 ## Phase D2 — Navigation et micro-interactions
 
-- [ ] Barre de catégories collante en haut du menu client pendant le scroll,
+- [x] Barre de catégories collante en haut du menu client pendant le scroll,
       catégorie visible surlignée (le concurrent l'a, Tawla affiche une
-      liste plate sans repère de position)
+      liste plate sans repère de position) (PR #135)
 - [ ] Transitions de base sur les boutons/liens du site vitrine
       (0.15–0.25s, easing standard) et un léger fondu d'apparition au scroll
       sur les 3 blocs de bénéfices de la home
