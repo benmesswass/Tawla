@@ -2324,6 +2324,16 @@ export default function DashboardPage() {
                               ~{proration} {currentMarket.currency.symbol} aujourd&apos;hui (prorata), puis plein
                               tarif au prochain prélèvement.
                             </p>
+                          ) : restaurant.is_demo ? (
+                            // Établissement de démo (jetable, purgé sous 2h) :
+                            // jamais le texte de prélèvement réel ci-dessous —
+                            // le backend force le mode simulé quel que soit
+                            // PAYMENT_MODE (retour utilisateur, 2026-09-02),
+                            // ce texte doit le dire clairement plutôt que de
+                            // laisser croire à un vrai abonnement.
+                            <p className="text-[11px] text-[var(--ink-soft)] mt-0.5">
+                              Simulation — aucun prélèvement réel en démo.
+                            </p>
                           ) : (
                             currentMarket.paymentProvider === "stripe" && (
                               // Abonnement RÉCURRENT (mode Netflix, 2026-09-02)
@@ -2345,7 +2355,12 @@ export default function DashboardPage() {
                             onClick={() => setUpgradeTier(tier.id)}
                             className="mt-3 w-full"
                           >
-                            {currentMarket.paymentProvider === "stripe" ? "S'abonner à" : "Passer à"} {tier.name}
+                            {restaurant.is_demo
+                              ? "Simuler"
+                              : currentMarket.paymentProvider === "stripe"
+                                ? "S'abonner à"
+                                : "Passer à"}{" "}
+                            {tier.name}
                           </Button>
                         </div>
                       );
@@ -2423,43 +2438,58 @@ export default function DashboardPage() {
             <Card padding="sm" className="mt-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Paiement carte de vos clients</span>
-                <Badge tone={restaurant.konnect_configured ? "success" : "neutral"}>
-                  {restaurant.konnect_configured ? "Connecté" : "Non connecté"}
+                <Badge tone={restaurant.is_demo || restaurant.konnect_configured ? "success" : "neutral"}>
+                  {restaurant.is_demo ? "Simulé" : restaurant.konnect_configured ? "Connecté" : "Non connecté"}
                 </Badge>
               </div>
-              <p className="text-xs text-neutral-500 mt-2 mb-3">
-                Sans compte Konnect connecté, le paiement carte reste en mode démonstration (confirmé
-                immédiatement, sans vrai débit). Une fois connecté, vos clients règlent directement votre propre
-                compte — jamais celui de Tawla.
-                {restaurant.konnect_configured && restaurant.konnect_wallet_id && (
-                  <> Wallet connecté : <code className="text-neutral-700">{restaurant.konnect_wallet_id}</code>.</>
-                )}
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2">
-                <input
-                  type="password"
-                  value={konnectApiKeyInput}
-                  onChange={(e) => setKonnectApiKeyInput(e.target.value)}
-                  placeholder="Clé API Konnect"
-                  className="border rounded px-2 py-1"
-                />
-                <input
-                  value={konnectWalletIdInput}
-                  onChange={(e) => setKonnectWalletIdInput(e.target.value)}
-                  placeholder="ID du portefeuille"
-                  className="border rounded px-2 py-1"
-                />
-                <Button
-                  onClick={saveKonnectCredentials}
-                  disabled={savingKonnect || !konnectApiKeyInput.trim() || !konnectWalletIdInput.trim()}
-                >
-                  {restaurant.konnect_configured ? "Remplacer" : "Connecter"}
-                </Button>
-              </div>
-              <p className="text-xs text-neutral-500 mt-2">
-                Jamais réaffichée après coup, comme un mot de passe temporaire — vous pourrez toujours la
-                remplacer par une nouvelle.
-              </p>
+              {restaurant.is_demo ? (
+                // Connecter un vrai wallet est bloqué côté backend pour un
+                // établissement de démo (jetable, purgé sous 2h) — inutile
+                // d'afficher un formulaire qui échouerait au clic, le
+                // paiement carte y est déjà simulé automatiquement (retour
+                // utilisateur, 2026-09-02 : "un bouton de simulation pour...
+                // paiement de son client").
+                <p className="text-xs text-neutral-500 mt-2">
+                  Simulation — paiement carte confirmé immédiatement, sans vrai débit. La connexion d&apos;un
+                  vrai wallet Konnect n&apos;est pas proposée sur un établissement de démonstration.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-neutral-500 mt-2 mb-3">
+                    Sans compte Konnect connecté, le paiement carte reste en mode démonstration (confirmé
+                    immédiatement, sans vrai débit). Une fois connecté, vos clients règlent directement votre propre
+                    compte — jamais celui de Tawla.
+                    {restaurant.konnect_configured && restaurant.konnect_wallet_id && (
+                      <> Wallet connecté : <code className="text-neutral-700">{restaurant.konnect_wallet_id}</code>.</>
+                    )}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_auto] gap-2">
+                    <input
+                      type="password"
+                      value={konnectApiKeyInput}
+                      onChange={(e) => setKonnectApiKeyInput(e.target.value)}
+                      placeholder="Clé API Konnect"
+                      className="border rounded px-2 py-1"
+                    />
+                    <input
+                      value={konnectWalletIdInput}
+                      onChange={(e) => setKonnectWalletIdInput(e.target.value)}
+                      placeholder="ID du portefeuille"
+                      className="border rounded px-2 py-1"
+                    />
+                    <Button
+                      onClick={saveKonnectCredentials}
+                      disabled={savingKonnect || !konnectApiKeyInput.trim() || !konnectWalletIdInput.trim()}
+                    >
+                      {restaurant.konnect_configured ? "Remplacer" : "Connecter"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-2">
+                    Jamais réaffichée après coup, comme un mot de passe temporaire — vous pourrez toujours la
+                    remplacer par une nouvelle.
+                  </p>
+                </>
+              )}
             </Card>
           )}
 
@@ -2467,21 +2497,30 @@ export default function DashboardPage() {
             <Card padding="sm" className="mt-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Paiement carte de vos clients</span>
-                <Badge tone={restaurant.stripe_configured ? "success" : "neutral"}>
-                  {restaurant.stripe_configured ? "Connecté" : "Non connecté"}
+                <Badge tone={restaurant.is_demo || restaurant.stripe_configured ? "success" : "neutral"}>
+                  {restaurant.is_demo ? "Simulé" : restaurant.stripe_configured ? "Connecté" : "Non connecté"}
                 </Badge>
               </div>
-              <p className="text-xs text-neutral-500 mt-2 mb-3">
-                Sans compte Stripe connecté, le paiement carte reste en mode démonstration (confirmé
-                immédiatement, sans vrai débit). Une fois connecté, vos clients règlent directement votre propre
-                compte Stripe — jamais celui de Tawla.
-              </p>
-              <Button onClick={startStripeConnect} disabled={startingStripeConnect}>
-                {restaurant.stripe_configured ? "Gérer mon compte Stripe" : "Connecter Stripe"}
-              </Button>
-              <p className="text-xs text-neutral-500 mt-2">
-                Vous serez redirigé vers Stripe pour renseigner vos informations — Tawla ne les reçoit jamais.
-              </p>
+              {restaurant.is_demo ? (
+                <p className="text-xs text-neutral-500 mt-2">
+                  Simulation — paiement carte confirmé immédiatement, sans vrai débit. La connexion d&apos;un
+                  vrai compte Stripe n&apos;est pas proposée sur un établissement de démonstration.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-neutral-500 mt-2 mb-3">
+                    Sans compte Stripe connecté, le paiement carte reste en mode démonstration (confirmé
+                    immédiatement, sans vrai débit). Une fois connecté, vos clients règlent directement votre propre
+                    compte Stripe — jamais celui de Tawla.
+                  </p>
+                  <Button onClick={startStripeConnect} disabled={startingStripeConnect}>
+                    {restaurant.stripe_configured ? "Gérer mon compte Stripe" : "Connecter Stripe"}
+                  </Button>
+                  <p className="text-xs text-neutral-500 mt-2">
+                    Vous serez redirigé vers Stripe pour renseigner vos informations — Tawla ne les reçoit jamais.
+                  </p>
+                </>
+              )}
             </Card>
           )}
         </>
