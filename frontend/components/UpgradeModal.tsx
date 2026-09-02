@@ -92,15 +92,23 @@ export default function UpgradeModal({
             restants) — {tier.priceDT} {currentMarket.currency.symbol}/mois à partir du prochain prélèvement.
           </p>
         )}
-        {currentMarket.paymentProvider === "stripe" && (
-          // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) : le prélèvement
-          // se répète tout seul chaque mois jusqu'à annulation — jamais
-          // laisser croire à un paiement unique, un manager pourrait
-          // s'engager sans le savoir (retour utilisateur, 2026-09-02 :
-          // "ça peut coûter de l'argent ce genre d'erreur").
-          <p className="text-xs text-[var(--ink-soft)] mt-1">
-            Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail d&apos;abonnement.
-          </p>
+        {restaurant?.is_demo ? (
+          // Établissement de démo (jetable, purgé sous 2h) : le backend
+          // force le mode simulé quel que soit PAYMENT_MODE (retour
+          // utilisateur, 2026-09-02) — jamais le texte de prélèvement réel
+          // ci-dessous, qui décrirait un engagement qui n'a pas lieu.
+          <p className="text-xs text-[var(--ink-soft)] mt-1">Simulation — aucun prélèvement réel en démo.</p>
+        ) : (
+          currentMarket.paymentProvider === "stripe" && (
+            // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) : le prélèvement
+            // se répète tout seul chaque mois jusqu'à annulation — jamais
+            // laisser croire à un paiement unique, un manager pourrait
+            // s'engager sans le savoir (retour utilisateur, 2026-09-02 :
+            // "ça peut coûter de l'argent ce genre d'erreur").
+            <p className="text-xs text-[var(--ink-soft)] mt-1">
+              Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail d&apos;abonnement.
+            </p>
+          )
         )}
         <ul className="mt-3 space-y-1 text-sm text-[var(--ink-soft)]">
           {tier.features.map((feature) => (
@@ -114,11 +122,13 @@ export default function UpgradeModal({
           <Button onClick={handleUpgrade} disabled={submitting}>
             {submitting
               ? "Paiement en cours…"
-              : proration !== null
-                ? `Passer à ${tier.name} — ${proration} ${currentMarket.currency.symbol} aujourd'hui`
-                : currentMarket.paymentProvider === "stripe"
-                  ? `S'abonner à ${tier.name} — ${tier.priceDT} ${currentMarket.currency.symbol}/mois`
-                  : `Passer à ${tier.name} — ${tier.priceDT} ${currentMarket.currency.symbol}/mois`}
+              : restaurant?.is_demo
+                ? `Simuler ${tier.name}`
+                : proration !== null
+                  ? `Passer à ${tier.name} — ${proration} ${currentMarket.currency.symbol} aujourd'hui`
+                  : currentMarket.paymentProvider === "stripe"
+                    ? `S'abonner à ${tier.name} — ${tier.priceDT} ${currentMarket.currency.symbol}/mois`
+                    : `Passer à ${tier.name} — ${tier.priceDT} ${currentMarket.currency.symbol}/mois`}
           </Button>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Plus tard
