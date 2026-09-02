@@ -73,9 +73,9 @@ renumeroter ce qui suit — même logique que la Phase 19bis de `ROADMAP.md`.
 - [x] Barre de catégories collante en haut du menu client pendant le scroll,
       catégorie visible surlignée (le concurrent l'a, Tawla affiche une
       liste plate sans repère de position) (PR #135)
-- [ ] Transitions de base sur les boutons/liens du site vitrine
+- [x] Transitions de base sur les boutons/liens du site vitrine
       (0.15–0.25s, easing standard) et un léger fondu d'apparition au scroll
-      sur les 3 blocs de bénéfices de la home
+      sur les 3 blocs de bénéfices de la home (PR #137)
 
 ## Phase D3 — Preuve sociale publique
 

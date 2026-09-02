@@ -448,3 +448,28 @@
     animation: none;
   }
 }
+
+/* --- Vitrine : fondu d'apparition au scroll (Phase D2 point 2 de
+   ROADMAP_DESIGN.md) --------------------------------------------------------
+   Contrairement à .plat-apparait ci-dessus (qui joue dès le montage), ici le
+   déclenchement attend l'entrée dans le viewport — piloté en JS
+   (IntersectionObserver, voir components/FadeInOnScroll.tsx), la classe
+   .visible n'est ajoutée qu'à ce moment-là. */
+.fondu-scroll {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 500ms ease-out, transform 500ms ease-out;
+}
+
+.fondu-scroll.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fondu-scroll {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

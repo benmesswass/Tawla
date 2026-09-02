@@ -5,6 +5,7 @@ import TawlaLogo from "@/components/brand/TawlaLogo";
 import BoutonVisite from "@/components/visite/BoutonVisite";
 import TrackedLink from "@/components/TrackedLink";
 import TrackedAnchor from "@/components/TrackedAnchor";
+import FadeInOnScroll from "@/components/FadeInOnScroll";
 import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
 import { marketBaseUrl } from "@/lib/marketUrls";
 
@@ -61,7 +62,7 @@ export default function HomePage() {
               tourner, pas s'inscrire. Elle ne quitte pas la page — les bulles
               s'ouvrent par-dessus celle qu'il est en train de lire. */}
           <div className="mt-7 flex flex-wrap items-center gap-4">
-            <BoutonVisite className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-medium text-[var(--harissa)] shadow-sm" />
+            <BoutonVisite className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-medium text-[var(--harissa)] shadow-sm transition-colors duration-200 hover:bg-[var(--semoule)]" />
             <p className="text-sm text-white/80">2 minutes, sans inscription.</p>
           </div>
         </div>
@@ -69,11 +70,11 @@ export default function HomePage() {
 
       <section className="max-w-3xl mx-auto px-6 py-12" data-visite="accueil-benefices">
         <div className="grid gap-6 sm:grid-cols-3">
-          {BENEFITS.map((benefit) => (
-            <div key={benefit.title}>
+          {BENEFITS.map((benefit, i) => (
+            <FadeInOnScroll key={benefit.title} delayMs={i * 90}>
               <h2 className="font-semibold mb-1">{benefit.title}</h2>
               <p className="text-sm text-[var(--ink-soft)]">{benefit.detail}</p>
-            </div>
+            </FadeInOnScroll>
           ))}
         </div>
       </section>
@@ -150,8 +151,10 @@ export default function HomePage() {
                   href={`/signup?tier=${tier.id}`}
                   event="pricing_cta_clicked"
                   eventProperties={{ tier: tier.id }}
-                  className={`mt-auto pt-4 border-t border-[var(--line)] text-center text-sm font-medium ${
-                    tier.recommended ? "text-[var(--harissa)]" : "text-[var(--encre)] underline"
+                  className={`mt-auto pt-4 border-t border-[var(--line)] text-center text-sm font-medium transition-colors duration-200 ${
+                    tier.recommended
+                      ? "text-[var(--harissa)] hover:text-[var(--harissa-dark)]"
+                      : "text-[var(--encre)] underline hover:text-[var(--harissa)]"
                   }`}
                 >
                   Choisir {tier.name}
@@ -165,22 +168,25 @@ export default function HomePage() {
               href="/signup"
               event="signup_cta_clicked"
               data-visite="accueil-creer-compte"
-              className="inline-flex items-center rounded-lg bg-[var(--harissa)] px-5 py-3 text-white font-medium"
+              className="inline-flex items-center rounded-lg bg-[var(--harissa)] px-5 py-3 text-white font-medium transition-colors duration-200 hover:bg-[var(--harissa-dark)]"
             >
               Créer mon compte
             </TrackedLink>
             <TrackedAnchor
               href="mailto:contact@tawla.tn?subject=Essai%20Tawla"
               event="trial_requested_email"
-              className="inline-flex items-center rounded-lg border border-[var(--line)] px-5 py-3 font-medium text-[var(--encre)]"
+              className="inline-flex items-center rounded-lg border border-[var(--line)] px-5 py-3 font-medium text-[var(--encre)] transition-colors duration-200 hover:border-[var(--harissa)] hover:text-[var(--harissa)]"
             >
               Demander un essai
             </TrackedAnchor>
             {/* Le même appel, pour qui a lu la page jusqu'au bout sans
                 cliquer en haut. Discret ici : la décision du bas de page,
                 c'est « créer mon compte ». */}
-            <BoutonVisite className="text-sm underline text-[var(--ink-soft)]" />
-            <Link href="/login" className="text-sm underline text-[var(--ink-soft)]">
+            <BoutonVisite className="text-sm underline text-[var(--ink-soft)] transition-colors duration-200 hover:text-[var(--harissa)]" />
+            <Link
+              href="/login"
+              className="text-sm underline text-[var(--ink-soft)] transition-colors duration-200 hover:text-[var(--harissa)]"
+            >
               J&apos;ai déjà un compte
             </Link>
           </div>
@@ -195,20 +201,35 @@ export default function HomePage() {
           Tawla — commande à table par QR code pour les restaurants. Si vous êtes client d&apos;un
           établissement, scannez simplement le QR posé sur votre table.
         </p>
-        <Link href="/confidentialite" className="underline mt-2 inline-block">
+        <Link
+          href="/confidentialite"
+          className="underline mt-2 inline-block transition-colors duration-200 hover:text-[var(--harissa)]"
+        >
           Politique de confidentialité
         </Link>
         <div className="mt-1 flex flex-wrap gap-x-3">
-          <Link href="/mentions-legales" className="underline inline-block">
+          <Link
+            href="/mentions-legales"
+            className="underline inline-block transition-colors duration-200 hover:text-[var(--harissa)]"
+          >
             Mentions légales
           </Link>
-          <Link href="/cgu" className="underline inline-block">
+          <Link
+            href="/cgu"
+            className="underline inline-block transition-colors duration-200 hover:text-[var(--harissa)]"
+          >
             CGU
           </Link>
-          <Link href="/cgv" className="underline inline-block">
+          <Link
+            href="/cgv"
+            className="underline inline-block transition-colors duration-200 hover:text-[var(--harissa)]"
+          >
             CGV
           </Link>
-          <Link href="/dpa" className="underline inline-block">
+          <Link
+            href="/dpa"
+            className="underline inline-block transition-colors duration-200 hover:text-[var(--harissa)]"
+          >
             DPA
           </Link>
         </div>
