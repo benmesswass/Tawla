@@ -751,8 +751,6 @@ def schedule_subscription_downgrade(
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     restaurant = _restaurant_or_404(db, restaurant_id)
-    if not restaurant.stripe_subscription_id:
-        raise HTTPException(status_code=404, detail={"code": "NO_SUBSCRIPTION", "message": "no active subscription"})
 
     target = payload.tier
     current = effective_tier(restaurant)
@@ -760,6 +758,22 @@ def schedule_subscription_downgrade(
         raise HTTPException(
             status_code=400, detail={"code": "NOT_A_DOWNGRADE", "message": "target tier must be strictly lower"}
         )
+
+    if restaurant.is_demo:
+        # Un établissement de démo n'a jamais de vrai `stripe_subscription_id`
+        # (voir start_subscription_checkout) — rien à programmer chez Stripe,
+        # rien à différer non plus : la session dure 2h, personne ne reverra
+        # la prochaine échéance. Appliqué tout de suite, comme l'upgrade
+        # simulé (retour utilisateur, 2026-09-02 : "un bouton de simulation
+        # pour... paiement pour tawla").
+        restaurant.subscription_tier = target
+        db.commit()
+        db.refresh(restaurant)
+        log_event(logger, "subscription.downgrade_simulated", restaurant_id=restaurant_id, tier=target.value)
+        return schemas.serialize_restaurant(restaurant)
+
+    if not restaurant.stripe_subscription_id:
+        raise HTTPException(status_code=404, detail={"code": "NO_SUBSCRIPTION", "message": "no active subscription"})
 
     try:
         stripe_gateway.schedule_tier_change(
@@ -783,4 +797,35 @@ def schedule_subscription_downgrade(
     db.refresh(restaurant)
 
     log_event(logger, "subscription.downgrade_scheduled", restaurant_id=restaurant_id, tier=target.value)
+    return schemas.serialize_restaurant(restaurant)
+
+
+@router.post("/{restaurant_id}/subscription/simulate-cancel", response_model=schemas.RestaurantOut)
+def simulate_subscription_cancellation(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
+):
+    """
+    Résiliation SIMULÉE, réservée aux établissements de démo — un compte
+    jetable n'a jamais de vrai abonnement Stripe (voir stripe_subscription_active),
+    donc jamais de vrai portail à ouvrir (`open_billing_portal` répondrait
+    404 NO_SUBSCRIPTION). Reproduit exactement l'effet réel de
+    `customer.subscription.deleted` (subscription_payments.py) : annuler
+    N'IMPORTE QUEL palier, y compris Essentiel, veut dire plus aucun service
+    (retour utilisateur, 2026-09-02) — jamais un repli gratuit sur Essentiel.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+    if not restaurant.is_demo:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NOT_A_DEMO_RESTAURANT", "message": "use the real billing portal instead"},
+        )
+
+    restaurant.is_active = False
+    restaurant.subscription_downgrade_pending_tier = None
+    db.commit()
+    db.refresh(restaurant)
+
+    log_event(logger, "subscription.cancellation_simulated", restaurant_id=restaurant_id)
     return schemas.serialize_restaurant(restaurant)
