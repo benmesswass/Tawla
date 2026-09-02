@@ -69,66 +69,85 @@ export default function ActivationRequired({
         <div className="flex justify-center mb-3">
           <TawlaMark size={40} />
         </div>
-        <h1 className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
-          Activez {restaurant.name}
-        </h1>
-        <p className="mt-2 text-sm" style={{ color: "var(--ink-soft)" }}>
-          Votre établissement n&apos;est pas encore actif. La carte, les tables et les commandes restent bloquées
-          tant que l&apos;abonnement n&apos;est pas payé.
-        </p>
-
-        {tier && (
+        {restaurant.is_demo ? (
+          // Sur un établissement de démo, `is_active` ne peut devenir faux
+          // QUE via une résiliation simulée (voir simulate-cancel — jamais
+          // au moment de la création, toujours active) : ce n'est jamais un
+          // vrai blocage à lever en payant, juste l'action qu'on vient de
+          // tester à annuler pour reprendre la démo (retour utilisateur,
+          // 2026-09-02 ter : "je dois pouvoir juste annuler et revenir en
+          // arrière, pas uniquement activer ou me déconnecter"). Même appel
+          // que la réactivation réelle (`handlePay`, checkout demo-mode déjà
+          // gratuit et immédiat) — seul le CADRAGE change.
           <>
-            <p className="mt-4">
-              {price < basePrice && (
-                <span className="text-sm line-through me-2" style={{ color: "var(--ink-soft)" }}>
-                  {basePrice} {currentMarket.currency.symbol}
-                </span>
-              )}
-              <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--encre)" }}>
-                {price} {currentMarket.currency.symbol}
-              </span>
-              <span className="text-sm" style={{ color: "var(--ink-soft)" }}> / mois</span>
+            <h1 className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
+              Résiliation simulée
+            </h1>
+            <p className="mt-2 text-sm" style={{ color: "var(--ink-soft)" }}>
+              Vous venez de tester l&apos;écran qu&apos;un client verrait après une vraie résiliation — plus aucun
+              accès tant qu&apos;il ne se réabonne pas. Annulez pour reprendre la démo là où vous en étiez.
             </p>
-            {restaurant.is_demo ? (
-              // Établissement de démo : jamais un vrai prélèvement, même ici
-              // après une résiliation simulée (retour utilisateur,
-              // 2026-09-02 bis : "active tout même pour la démo").
-              <p className="text-xs mt-1" style={{ color: "var(--ink-soft)" }}>
-                Simulation — aucun prélèvement réel en démo.
-              </p>
-            ) : (
-              currentMarket.paymentProvider === "stripe" && (
-                // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) — même
-                // divulgation que UpgradeModal/SubscriptionReminderModal.
-                <p className="text-xs mt-1" style={{ color: "var(--ink-soft)" }}>
-                  Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail
-                  d&apos;abonnement.
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+            <div className="mt-5 flex flex-col gap-2">
+              <Button onClick={handlePay} disabled={submitting}>
+                {submitting ? "En cours…" : "Annuler la résiliation"}
+              </Button>
+              <Button variant="secondary" onClick={handleLogout} disabled={submitting}>
+                Se déconnecter
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 className="text-lg font-semibold" style={{ color: "var(--encre)" }}>
+              Activez {restaurant.name}
+            </h1>
+            <p className="mt-2 text-sm" style={{ color: "var(--ink-soft)" }}>
+              Votre établissement n&apos;est pas encore actif. La carte, les tables et les commandes restent
+              bloquées tant que l&apos;abonnement n&apos;est pas payé.
+            </p>
+
+            {tier && (
+              <>
+                <p className="mt-4">
+                  {price < basePrice && (
+                    <span className="text-sm line-through me-2" style={{ color: "var(--ink-soft)" }}>
+                      {basePrice} {currentMarket.currency.symbol}
+                    </span>
+                  )}
+                  <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--encre)" }}>
+                    {price} {currentMarket.currency.symbol}
+                  </span>
+                  <span className="text-sm" style={{ color: "var(--ink-soft)" }}> / mois</span>
                 </p>
-              )
+                {currentMarket.paymentProvider === "stripe" && (
+                  // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) — même
+                  // divulgation que UpgradeModal/SubscriptionReminderModal.
+                  <p className="text-xs mt-1" style={{ color: "var(--ink-soft)" }}>
+                    Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail
+                    d&apos;abonnement.
+                  </p>
+                )}
+                <ul className="mt-3 space-y-1 text-sm text-left" style={{ color: "var(--ink-soft)" }}>
+                  {tier.features.map((feature) => (
+                    <li key={feature}>• {feature}</li>
+                  ))}
+                </ul>
+              </>
             )}
-            <ul className="mt-3 space-y-1 text-sm text-left" style={{ color: "var(--ink-soft)" }}>
-              {tier.features.map((feature) => (
-                <li key={feature}>• {feature}</li>
-              ))}
-            </ul>
+
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+            <div className="mt-5 flex flex-col gap-2">
+              <Button onClick={handlePay} disabled={submitting}>
+                {submitting ? "Paiement en cours…" : `Payer ${price} ${currentMarket.currency.symbol} pour activer`}
+              </Button>
+              <Button variant="secondary" onClick={handleLogout} disabled={submitting}>
+                Se déconnecter
+              </Button>
+            </div>
           </>
         )}
-
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-
-        <div className="mt-5 flex flex-col gap-2">
-          <Button onClick={handlePay} disabled={submitting}>
-            {submitting
-              ? "Paiement en cours…"
-              : restaurant.is_demo
-                ? "Simuler l'activation"
-                : `Payer ${price} ${currentMarket.currency.symbol} pour activer`}
-          </Button>
-          <Button variant="secondary" onClick={handleLogout} disabled={submitting}>
-            Se déconnecter
-          </Button>
-        </div>
       </Card>
     </div>
   );
