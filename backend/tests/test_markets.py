@@ -26,7 +26,7 @@ def test_france_market_shape():
     assert market.currency.decimals == 2
     assert market.currency.decimal_separator == ","
     assert str(market.timezone) == "Europe/Paris"
-    assert market.payment_provider == "none"
+    assert market.payment_provider == "stripe"
     assert market.invoice_threshold == 25.0
     assert market.vat_rates is not None
     assert market.tier_prices == {

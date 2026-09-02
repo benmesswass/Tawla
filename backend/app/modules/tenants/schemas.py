@@ -65,6 +65,24 @@ class RestaurantOut(RestaurantPublicOut):
     # juste de quoi afficher "connecté" et le wallet, qui n'est pas un secret.
     konnect_configured: bool
     konnect_wallet_id: str | None
+    # Idem pour Stripe (France) — présence de l'account_id seulement, pas un
+    # secret (voir Restaurant.stripe_account_id).
+    stripe_configured: bool
+    # Abonnement TAWLA récurrent (mode Netflix, pas le paiement carte client
+    # ci-dessus) — jamais l'id Stripe lui-même, juste de quoi savoir si le
+    # bouton "Gérer mon abonnement" (portail Stripe) a un sens à afficher.
+    stripe_subscription_active: bool
+    # Annulation demandée par le manager depuis le portail Stripe, effective
+    # à `subscription_period_end` (posé par
+    # handle_stripe_subscription_event sur `customer.subscription.updated`,
+    # 2026-09-02) — sans ce champ, l'interface affiche "renouvellement
+    # automatique" alors que Stripe a déjà enregistré l'annulation.
+    subscription_cancel_at_period_end: bool
+    # Rétrogradation programmée, pas encore appliquée — seul moyen pour
+    # l'interface de refléter un clic réussi sur "redescendre à un palier
+    # moins cher" avant la prochaine échéance (retour utilisateur,
+    # 2026-09-02 : "aucune indication si c'était pris en compte").
+    subscription_downgrade_pending_tier: SubscriptionTier | None
 
 
 def serialize_restaurant(restaurant: Restaurant) -> RestaurantOut:
@@ -116,6 +134,28 @@ class KonnectCredentialsIn(BaseModel):
     wallet_id: str = Field(min_length=1)
 
 
+class StripeConnectStartOut(BaseModel):
+    """URL Stripe hébergée où rediriger le manager pour l'onboarding Connect
+    (Account Links) — jamais un formulaire local, voir stripe_gateway.py."""
+
+    onboarding_url: str
+
+
+class SubscriptionDowngradeIn(BaseModel):
+    """Le palier VISÉ, forcément inférieur au palier courant — voir
+    tenants/router.py::schedule_subscription_downgrade."""
+
+    tier: SubscriptionTier
+
+
+class BillingPortalOut(BaseModel):
+    """URL du portail Stripe hébergé où le manager gère son abonnement
+    récurrent lui-même — annuler, moyen de paiement, factures (mode Netflix,
+    2026-09-02)."""
+
+    portal_url: str
+
+
 class SubscriptionCheckoutIn(BaseModel):
     """Le palier VISÉ — jamais un montant : le prix est toujours recalculé
     côté serveur depuis current_market.tier_prices (app/core/markets.py)."""
@@ -126,11 +166,12 @@ class SubscriptionCheckoutIn(BaseModel):
 class SubscriptionCheckoutOut(BaseModel):
     """
     `mode="demo"` : palier déjà appliqué, `restaurant` à jour, `pay_url` absent
-    — aucun paiement réel tant que Konnect n'est pas activé (PAYMENT_MODE).
-    `mode="konnect"` : palier PAS encore appliqué (il ne le sera qu'au
-    règlement du paiement) — rediriger le manager vers `pay_url`.
+    — aucun paiement réel tant que le fournisseur du marché n'est pas activé
+    (PAYMENT_MODE). `mode="konnect"`/`mode="stripe"` : palier PAS encore
+    appliqué (il ne le sera qu'au règlement du paiement) — rediriger le
+    manager vers `pay_url`.
     """
 
-    mode: Literal["demo", "konnect"]
+    mode: Literal["demo", "konnect", "stripe"]
     restaurant: RestaurantOut | None = None
     pay_url: str | None = None

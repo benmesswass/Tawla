@@ -34,12 +34,12 @@ class Market:
     currency: CurrencyConfig
     timezone: ZoneInfo
     languages: tuple[str, ...]
-    # Adaptateur de paiement technique branché pour ce marché — "none" tant
-    # que StripeProvider n'existe pas (Phase F6). Distinct de la question de
-    # savoir si l'encaissement réel est exposé en production : ça, c'est la
-    # décision de Wassim du 2026-08-26 (Annexe C/C2 de MARCHE_FRANCE.md,
-    # « grisé en prod, actif en démo »), pas encore un champ ici tant que F6
-    # n'a rien à activer/désactiver.
+    # Adaptateur de paiement technique branché pour ce marché. Distinct de la
+    # question de savoir si l'encaissement réel est exposé en production :
+    # ça, c'est le drapeau `PAYMENT_MODE` posé par déploiement (décision de
+    # Wassim du 2026-08-26, Annexe C/C2 de MARCHE_FRANCE.md, « grisé en prod,
+    # actif en démo » — voir `stripe_gateway.is_stripe_enabled()`), jamais ce
+    # champ-ci.
     payment_provider: str
     # Prix des paliers dans la devise du marché. Les valeurs françaises sont
     # l'hypothèse de départ de MARCHE_FRANCE.md §3.4 (49/89/149 €) — **jamais
@@ -75,7 +75,7 @@ FRANCE = Market(
     currency=CurrencyConfig(code="EUR", symbol="€", decimals=2, decimal_separator=","),
     timezone=ZoneInfo("Europe/Paris"),
     languages=("fr", "en"),
-    payment_provider="none",
+    payment_provider="stripe",
     tier_prices={
         SubscriptionTier.ESSENTIEL: 49,
         SubscriptionTier.PRO: 89,

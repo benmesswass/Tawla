@@ -105,6 +105,43 @@ class Restaurant(Base):
         Enum(SubscriptionTier), nullable=True
     )
 
+    # Abonnement récurrent Stripe pour l'abonnement TAWLA elle-même (France,
+    # MARCHE_FRANCE.md Phase F6 étape 4) — jamais Konnect, qui ne sait pas
+    # facturer automatiquement chaque mois (pas de carte enregistrée, pas de
+    # récurrence dans son API). `stripe_customer_id`/`stripe_subscription_id`
+    # ne sont ni l'un ni l'autre des secrets (comme `stripe_account_id`, voir
+    # plus haut) — de simples identifiants, en clair. Renseignés par le
+    # webhook `checkout.session.completed` (subscription_payments.py), jamais
+    # par le client. `subscription_period_end`/`subscription_tier` restent la
+    # source de vérité pour le gating (effective_tier) — ces deux colonnes ne
+    # servent qu'à retrouver l'abonnement côté Stripe (portail, annulation).
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Annulation demandée par le manager depuis le portail Stripe (mode
+    # Netflix, retour utilisateur 2026-09-02) — presque toujours "à la fin de
+    # la période" (config par défaut du portail), jamais immédiate : l'accès
+    # reste jusqu'à `subscription_period_end`, exactement comme aujourd'hui
+    # pour un renouvellement Konnect manqué. Sans ce champ, l'interface
+    # continuerait à afficher "renouvellement automatique" alors que Stripe a
+    # déjà enregistré l'annulation — `customer.subscription.updated` (webhook)
+    # est le SEUL signal qui l'indique, `customer.subscription.deleted` ne se
+    # déclenche que plus tard, à la fin de la période déjà payée.
+    subscription_cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Rétrogradation programmée par le manager (schedule_subscription_downgrade)
+    # — posé dès l'appel réussi, avant même que Stripe ne l'applique à la
+    # prochaine échéance. Sans ce champ, l'interface n'avait AUCUN moyen de
+    # montrer qu'un changement était en attente (retour utilisateur,
+    # 2026-09-02 : "je reste à Business sans aucune indication si c'était
+    # pris en compte" — le seul signal était un flash() de 2,5 secondes).
+    # Effacé par `invoice.paid` (subscription_payments.py) une fois le
+    # nouveau palier réellement appliqué — plus rien "en attente" à ce
+    # moment-là.
+    subscription_downgrade_pending_tier: Mapped[SubscriptionTier | None] = mapped_column(
+        Enum(SubscriptionTier), nullable=True
+    )
+
     # A-t-il DÉJÀ payé au moins une fois (ou été onboardé à la main) — PAS "a
     # accès en ce moment" (voir `is_usable` ci-dessous, qui vérifie EN PLUS
     # `subscription_period_end`). Un établissement inscrit en self-service via
@@ -188,9 +225,39 @@ class Restaurant(Base):
     konnect_api_key_encrypted: Mapped[str | None] = mapped_column(String(500), nullable=True)
     konnect_wallet_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    # Pendant Stripe Connect (France, MARCHE_FRANCE.md Phase F6 étape 3) — le
+    # restaurant est le marchand, jamais Tawla, même garantie que Konnect
+    # ci-dessus. En clair, PAS chiffré : contrairement à une clé API, un
+    # `account_id` Connect (`acct_...`) n'est pas un secret — Stripe
+    # l'affiche lui-même en clair dans son URL de tableau de bord et dans les
+    # webhooks, il ne permet aucune action sans la clé secrète PLATEFORME
+    # (`STRIPE_SECRET_KEY`, jamais stockée par restaurant). Null tant que
+    # l'onboarding n'a pas démarré ; sa présence seule ne garantit pas que
+    # l'inscription est terminée (`charges_enabled` côté Stripe, jamais mis
+    # en cache ici pour ne pas devenir périmé).
+    stripe_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     @property
     def konnect_configured(self) -> bool:
         return bool(self.konnect_api_key_encrypted and self.konnect_wallet_id)
+
+    @property
+    def stripe_configured(self) -> bool:
+        return bool(self.stripe_account_id)
+
+    @property
+    def stripe_subscription_active(self) -> bool:
+        """
+        `stripe_subscription_id`, pas `stripe_customer_id` : ce dernier
+        survit à une annulation (le client Stripe reste valable pour se
+        réabonner), `stripe_subscription_id` lui est effacé par
+        `handle_stripe_subscription_event` sur `customer.subscription.deleted`
+        — c'est donc lui qui reflète "a un abonnement QUI PRÉLÈVE
+        actuellement", pas seulement "a déjà payé un jour" (retour
+        utilisateur, 2026-09-02 : le texte "prélèvement automatique" ne doit
+        plus s'afficher après une résiliation).
+        """
+        return bool(self.stripe_subscription_id)
 
     @property
     def is_usable(self) -> bool:
@@ -227,6 +294,22 @@ class Restaurant(Base):
         if not api_key:
             return None
         return api_key, self.konnect_wallet_id
+
+    def payment_credentials(self) -> tuple[str, str] | str | None:
+        """
+        Identifiants de paiement carte pour le marché COURANT
+        (`current_market`, un déploiement ne sert qu'un marché) — jamais les
+        deux formes à la fois. Centralise le choix Konnect/Stripe ici plutôt
+        que dans chaque appelant (`orders/service.py`), même raison d'être
+        que le reste de la couche marché : une seule divergence possible.
+        """
+        from app.core.markets import current_market
+
+        if current_market.payment_provider == "konnect":
+            return self.konnect_credentials()
+        if current_market.payment_provider == "stripe":
+            return self.stripe_account_id
+        return None
 
 
 # Réglages de l'offre de lancement (2026-08-21) : configurable par Wassim

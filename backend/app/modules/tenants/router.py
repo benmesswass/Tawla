@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -17,6 +17,7 @@ from app.core.konnect import (
     verify_konnect_webhook,
 )
 from app.core.logging import get_logger, log_event
+from app.core import stripe_gateway
 from app.core.markets import current_market
 from app.core.rate_limit import rate_limit
 from app.core.subscription import (
@@ -26,7 +27,7 @@ from app.core.subscription import (
     require_tier,
     tier_includes,
 )
-from app.core.subscription_payments import settle_subscription_payment
+from app.core.subscription_payments import handle_stripe_subscription_event, settle_subscription_payment
 from app.modules.staff.dependencies import get_current_staff, require_role, require_role_regardless_of_activation
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import service as tables_service
@@ -347,6 +348,46 @@ def set_konnect_credentials(
     return schemas.serialize_restaurant(restaurant)
 
 
+@router.post("/{restaurant_id}/stripe-connect/start", response_model=schemas.StripeConnectStartOut)
+def start_stripe_connect(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """
+    Démarre (ou reprend) l'onboarding Stripe Connect du restaurant —
+    équivalent Stripe de `set_konnect_credentials` ci-dessus, mais le
+    restaurant ne saisit rien ici : il est redirigé vers une page hébergée
+    par Stripe (Account Links), voir `stripe_gateway.create_onboarding_link`.
+    Réutilise le compte existant si l'inscription avait déjà démarré, plutôt
+    que d'en créer un second orphelin à chaque clic.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    account_id = restaurant.stripe_account_id
+    if not account_id:
+        try:
+            account_id = stripe_gateway.create_connected_account(country=current_market.code.upper())
+        except stripe_gateway.StripeGatewayError as err:
+            raise HTTPException(
+                status_code=502, detail={"code": "STRIPE_ACCOUNT_CREATE_FAILED", "message": str(err)}
+            ) from err
+        restaurant.stripe_account_id = account_id
+        db.commit()
+
+    try:
+        onboarding_url = stripe_gateway.create_onboarding_link(
+            account_id=account_id,
+            refresh_url=f"{settings.frontend_url}/dashboard?stripe=refresh",
+            return_url=f"{settings.frontend_url}/dashboard?stripe=return",
+        )
+    except stripe_gateway.StripeGatewayError as err:
+        raise HTTPException(
+            status_code=502, detail={"code": "STRIPE_ONBOARDING_LINK_FAILED", "message": str(err)}
+        ) from err
+
+    log_event(logger, "restaurant.stripe_connect_started", restaurant_id=restaurant_id, account_id=account_id)
+    return schemas.StripeConnectStartOut(onboarding_url=onboarding_url)
+
+
 def _restaurant_or_404(db: Session, restaurant_id: int) -> Restaurant:
     restaurant = db.get(Restaurant, restaurant_id)
     if not restaurant:
@@ -397,17 +438,25 @@ def start_subscription_checkout(
                 detail={"code": "NOT_AN_UPGRADE", "message": f"restaurant already has {current.value} or above"},
             )
 
-    if not is_subscription_konnect_enabled():
-        # Mode démonstration : aucune clé Konnect réelle pour Tawla elle-même
-        # pour l'instant (voir app/core/konnect.py) — le palier est appliqué
-        # immédiatement, comme pay_by_card_simulated pour le paiement d'une
-        # commande. Même calcul de prolongation que le règlement réel
-        # (settle_subscription_payment) : reproduire ce même comportement ici
-        # en mode démo évite un abonnement qui se comporterait différemment
-        # le jour où Konnect devient réel. `is_subscription_konnect_enabled`
-        # (pas `is_konnect_enabled` seule) : PAYMENT_MODE=konnect peut être
-        # posé pour le paiement carte du client sans que Tawla ait encore ses
-        # propres clés Konnect — rester en démo tant qu'elles manquent.
+    # Fournisseur résolu par current_market (un déploiement ne sert qu'un
+    # marché) : Stripe n'a pas de second jeu de clés "Tawla elle-même" à
+    # vérifier séparément comme Konnect (`is_subscription_konnect_enabled`) —
+    # la même clé secrète plateforme sert la charge directe restaurant
+    # (Connect) et la charge directe Tawla (abonnement, sans compte connecté,
+    # voir stripe_gateway.py) — donc `is_stripe_enabled()` seul suffit.
+    is_provider_enabled = (
+        stripe_gateway.is_stripe_enabled()
+        if current_market.payment_provider == "stripe"
+        else is_subscription_konnect_enabled()
+    )
+    if not is_provider_enabled:
+        # Mode démonstration : aucune clé réelle pour Tawla elle-même pour
+        # l'instant (voir app/core/konnect.py / stripe_gateway.py) — le palier
+        # est appliqué immédiatement, comme pay_by_card_simulated pour le
+        # paiement d'une commande. Même calcul de prolongation que le
+        # règlement réel (settle_subscription_payment) : reproduire ce même
+        # comportement ici en mode démo évite un abonnement qui se
+        # comporterait différemment le jour où le paiement réel s'active.
         # Essentiel EST un abonnement de 30 jours comme Pro/Business
         # (2026-08-20, voir CLAUDE.md) — même calcul de période pour les
         # trois. `is_active=True` passe à `True` une bonne fois pour toutes
@@ -432,6 +481,88 @@ def start_subscription_checkout(
         return schemas.SubscriptionCheckoutOut(mode="demo", restaurant=schemas.serialize_restaurant(restaurant))
 
     price = tier_price(restaurant, target)
+    if current_market.payment_provider == "stripe":
+        # Déjà abonné (stripe_subscription_id posé par
+        # handle_stripe_subscription_event au premier paiement) : modifier
+        # CET abonnement, jamais en créer un second en parallèle — bug réel
+        # corrigé le 2026-09-02, chaque clic empilait un nouvel abonnement
+        # sans annuler le précédent (double, triple facturation constatée en
+        # conditions réelles). Seule la toute première souscription (pas
+        # encore de stripe_subscription_id) passe par une session de
+        # paiement.
+        if restaurant.stripe_subscription_id:
+            # `target == essentiel` est TOUJOURS payable même sans dépasser
+            # le palier courant (voir le garde-fou plus haut, pensé pour
+            # payer un palier en attente pendant le mois gratuit) — mais ici,
+            # abonnement déjà actif, ce serait une RÉTROGRADATION immédiate
+            # avec prorata, pas ce que ce chemin doit faire (voir
+            # schedule_subscription_downgrade pour ça, en différé, sans
+            # prorata).
+            if not (tier_includes(target, effective_tier(restaurant)) and target != effective_tier(restaurant)):
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "NOT_AN_UPGRADE", "message": "use the downgrade endpoint for a lower tier"},
+                )
+            try:
+                # Une rétrogradation programmée (schedule_subscription_downgrade)
+                # écraserait cet upgrade à l'échéance si on ne l'annule pas
+                # d'abord — un manager qui change deux fois d'avis doit voir
+                # la DERNIÈRE décision gagner, jamais la première (retour
+                # utilisateur, 2026-09-02).
+                if restaurant.subscription_downgrade_pending_tier:
+                    stripe_gateway.release_schedule_if_any(subscription_id=restaurant.stripe_subscription_id)
+                stripe_gateway.change_tier_immediately(
+                    subscription_id=restaurant.stripe_subscription_id,
+                    new_tier=target.value,
+                    new_amount_eur=price,
+                    description=f"Tawla — abonnement {target.value}",
+                )
+            except stripe_gateway.StripeGatewayError as err:
+                log_event(logger, "subscription.tier_change_failed", restaurant_id=restaurant_id, error=str(err))
+                raise HTTPException(
+                    status_code=502, detail={"code": "PAYMENT_INIT_FAILED", "message": "could not change tier"}
+                ) from err
+            restaurant.subscription_tier = target
+            restaurant.is_active = True
+            restaurant.has_paid_for_subscription = True
+            restaurant.subscription_downgrade_pending_tier = None
+            db.commit()
+            db.refresh(restaurant)
+            log_event(
+                logger, "subscription.tier_changed_immediately",
+                restaurant_id=restaurant_id, tier=target.value, provider="stripe",
+            )
+            return schemas.SubscriptionCheckoutOut(mode="stripe", restaurant=schemas.serialize_restaurant(restaurant))
+
+        # Abonnement récurrent (mode Netflix, retour utilisateur 2026-09-02)
+        # — jamais `subscription_payment_ref`/`subscription_pending_tier`
+        # ici : ces deux champs gardent l'idempotence d'un paiement PONCTUEL
+        # (Konnect, et l'ACTIVATION initiale ci-dessous), sans objet pour un
+        # abonnement qui se facture tout seul chaque mois sans jamais
+        # ré-émettre de référence. Seul le webhook
+        # (`handle_stripe_subscription_event`) fait foi, voir
+        # subscription_payments.py.
+        try:
+            pay_url, payment_ref = stripe_gateway.create_subscription_checkout_session(
+                amount_eur=price,
+                restaurant_id=restaurant.id,
+                tier=target.value,
+                description=f"Tawla — abonnement {target.value}",
+                success_url=f"{settings.frontend_url}/dashboard?stripe_subscription=success",
+                cancel_url=f"{settings.frontend_url}/dashboard?stripe_subscription=fail",
+                customer_email=None,
+            )
+        except stripe_gateway.StripeGatewayError as err:
+            log_event(logger, "subscription.checkout_init_failed", restaurant_id=restaurant_id, error=str(err))
+            raise HTTPException(
+                status_code=502, detail={"code": "PAYMENT_INIT_FAILED", "message": "could not start the payment"}
+            ) from err
+        log_event(
+            logger, "subscription.checkout_initiated",
+            restaurant_id=restaurant_id, tier=target.value, payment_ref=payment_ref, provider="stripe",
+        )
+        return schemas.SubscriptionCheckoutOut(mode="stripe", pay_url=pay_url)
+
     try:
         pay_url, payment_ref = init_konnect_payment(
             amount_tnd=price,
@@ -507,4 +638,111 @@ def check_subscription_payment(
     restaurant = _restaurant_or_404(db, restaurant_id)
     settle_subscription_payment(db, restaurant_id)
     db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
+@router.post("/stripe-subscription-webhook")
+async def stripe_subscription_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Point d'entrée UNIQUE pour tous les évènements d'abonnement récurrent
+    Stripe (mode Netflix, retour utilisateur 2026-09-02) — jamais scopé à un
+    `{restaurant_id}` dans l'URL comme les webhooks Konnect : Stripe ne
+    connaît pas nos identifiants avant d'avoir vérifié la signature, c'est
+    `handle_stripe_subscription_event` qui retrouve le restaurant concerné à
+    partir du contenu de l'évènement (subscription_payments.py). Corps BRUT
+    (pas `request.json()`) : la vérification de signature porte sur les
+    octets exacts envoyés par Stripe, un JSON reparsé puis réencodé ne
+    matcherait plus la signature.
+    """
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe_gateway.construct_webhook_event(payload=payload, signature_header=signature)
+    except stripe_gateway.StripeGatewayError as err:
+        log_event(logger, "stripe.subscription_webhook_bad_signature", error=str(err))
+        raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"}) from err
+
+    result = handle_stripe_subscription_event(db, event)
+    log_event(logger, "stripe.subscription_webhook", event_type=event["type"], result=result)
+    return {"received": True, "result": result}
+
+
+@router.post("/{restaurant_id}/subscription/manage", response_model=schemas.BillingPortalOut)
+def open_billing_portal(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    """
+    Portail Stripe hébergé où le manager gère lui-même son abonnement —
+    annuler, changer de moyen de paiement, voir ses factures (mode Netflix,
+    retour utilisateur 2026-09-02). `stripe_customer_id` : posé par
+    `handle_stripe_subscription_event` au premier paiement, absent tant
+    qu'aucun abonnement récurrent n'a jamais été payé.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+    if not restaurant.stripe_customer_id:
+        raise HTTPException(status_code=404, detail={"code": "NO_SUBSCRIPTION", "message": "no active subscription"})
+
+    try:
+        url = stripe_gateway.create_billing_portal_session(
+            customer_id=restaurant.stripe_customer_id,
+            return_url=f"{settings.frontend_url}/dashboard?tab=settings#abonnement",
+        )
+    except stripe_gateway.StripeGatewayError as err:
+        raise HTTPException(
+            status_code=502, detail={"code": "BILLING_PORTAL_FAILED", "message": str(err)}
+        ) from err
+    return schemas.BillingPortalOut(portal_url=url)
+
+
+@router.post("/{restaurant_id}/subscription/downgrade", response_model=schemas.RestaurantOut)
+def schedule_subscription_downgrade(
+    restaurant_id: int,
+    payload: schemas.SubscriptionDowngradeIn,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
+    """
+    Palier INFÉRIEUR à la prochaine échéance, en restant abonné — distinct
+    d'une annulation complète (retour utilisateur, 2026-09-02 : Pro/Business
+    ont le choix entre annuler et redescendre à un palier moins cher, jamais
+    un seul bouton "annuler" qui confondrait les deux). Jamais immédiat,
+    jamais de prorata — voir stripe_gateway.schedule_tier_change. Le palier
+    affiché ne change qu'au prochain `invoice.paid`
+    (subscription_payments.py), pas ici : cet appel programme seulement.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+    if not restaurant.stripe_subscription_id:
+        raise HTTPException(status_code=404, detail={"code": "NO_SUBSCRIPTION", "message": "no active subscription"})
+
+    target = payload.tier
+    current = effective_tier(restaurant)
+    if not (tier_includes(current, target) and current != target):
+        raise HTTPException(
+            status_code=400, detail={"code": "NOT_A_DOWNGRADE", "message": "target tier must be strictly lower"}
+        )
+
+    try:
+        stripe_gateway.schedule_tier_change(
+            subscription_id=restaurant.stripe_subscription_id,
+            new_tier=target.value,
+            new_amount_eur=tier_price(restaurant, target),
+            description=f"Tawla — abonnement {target.value}",
+        )
+    except stripe_gateway.StripeGatewayError as err:
+        raise HTTPException(
+            status_code=502, detail={"code": "DOWNGRADE_SCHEDULING_FAILED", "message": str(err)}
+        ) from err
+
+    # Seul moyen pour l'interface de savoir qu'un changement est en attente
+    # avant la prochaine échéance — sans ça, rien ne distinguait un clic
+    # réussi d'un clic resté sans effet (retour utilisateur, 2026-09-02 :
+    # "je reste à Business sans aucune indication"). Effacé par
+    # `invoice.paid` (subscription_payments.py) une fois réellement appliqué.
+    restaurant.subscription_downgrade_pending_tier = target
+    db.commit()
+    db.refresh(restaurant)
+
+    log_event(logger, "subscription.downgrade_scheduled", restaurant_id=restaurant_id, tier=target.value)
     return schemas.serialize_restaurant(restaurant)

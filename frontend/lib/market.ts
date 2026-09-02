@@ -30,9 +30,9 @@ export type MarketConfig = {
   // pour Intl.DateTimeFormat / date-fns-tz le jour du câblage du fuseau.
   timezone: string;
   languages: readonly string[];
-  // Adaptateur technique branché — "none" tant que Stripe n'existe pas
-  // (Phase F6), voir le commentaire équivalent dans core/markets.py pour la
-  // distinction avec la décision "grisé en prod" de Wassim.
+  // Adaptateur technique branché — voir le commentaire équivalent dans
+  // core/markets.py pour la distinction avec le drapeau PAYMENT_MODE
+  // ("grisé en prod, actif en démo", décision de Wassim du 2026-08-26).
   paymentProvider: "konnect" | "stripe" | "none";
   // Hypothèse de départ pour la France (MARCHE_FRANCE.md §3.4, 49/89/149 €) —
   // jamais à annoncer publiquement avant validation en Phase F1.
@@ -69,7 +69,7 @@ const FRANCE: MarketConfig = {
   currency: { code: "EUR", symbol: "€", decimals: 2, decimalSeparator: "," },
   timezone: "Europe/Paris",
   languages: ["fr", "en"],
-  paymentProvider: "none",
+  paymentProvider: "stripe",
   tierPrices: { essentiel: 49, pro: 89, business: 149 },
   vatRates: { sur_place: 0.10, a_emporter: 0.055, alcool: 0.20 },
   invoiceThreshold: 25.0,

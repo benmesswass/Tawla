@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api, type Restaurant, type SubscriptionTier } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { trackEvent } from "@/lib/analytics";
-import { TIERS } from "@/lib/offer";
+import { TIERS, estimateUpgradeProration } from "@/lib/offer";
 import { currentMarket } from "@/lib/market";
 import { sessionDemo } from "@/lib/visite/etat";
 import Button from "@/components/ui/Button";
@@ -21,11 +21,16 @@ import Button from "@/components/ui/Button";
 export default function UpgradeModal({
   restaurantId,
   requiredTier,
+  restaurant,
   onClose,
   onUpgraded,
 }: {
   restaurantId: number;
   requiredTier: SubscriptionTier;
+  // Facultatif : sert uniquement à estimer le prorata d'un upgrade EN COURS
+  // d'abonnement (retour utilisateur, 2026-09-02) — absent, la modale reste
+  // utilisable telle quelle (premier abonnement, prix plein).
+  restaurant?: Restaurant;
   onClose: () => void;
   onUpgraded: (restaurant: Restaurant) => void;
 }) {
@@ -35,13 +40,19 @@ export default function UpgradeModal({
   const tier = TIERS.find((t) => t.id === requiredTier);
   if (!tier) return null; // "essentiel" n'atterrit jamais ici (jamais un required_tier)
 
+  const currentTier = restaurant && TIERS.find((t) => t.id === restaurant.subscription_tier);
+  const proration =
+    restaurant?.stripe_subscription_active && restaurant.subscription_period_end && currentTier
+      ? estimateUpgradeProration(currentTier.priceDT, tier.priceDT, restaurant.subscription_period_end)
+      : null;
+
   async function handleUpgrade() {
     trackEvent("upgrade_clicked", { target_tier: requiredTier, is_demo: Boolean(sessionDemo()) });
     setSubmitting(true);
     setError(null);
     try {
       const result = await api.startSubscriptionCheckout(restaurantId, requiredTier);
-      if (result.mode === "konnect" && result.pay_url) {
+      if (result.pay_url) {
         window.location.href = result.pay_url;
         return;
       }
@@ -67,6 +78,30 @@ export default function UpgradeModal({
           </span>
           <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
         </p>
+        {proration !== null && (
+          // Argument de vente (retour utilisateur, 2026-09-02 : "c'est bien
+          // pour vendre") : l'upgrade ne recommence pas le mois, il ne
+          // facture QUE le prorata des jours restants — un manager qui voit
+          // "89€/mois" en fin de cycle peut hésiter à tort en pensant payer
+          // ce plein tarif dès aujourd'hui.
+          <p
+            className="mt-1.5 text-sm font-medium rounded px-2 py-1 inline-block"
+            style={{ backgroundColor: "rgba(31,107,79,.1)", color: "var(--menthe)" }}
+          >
+            Vous ne payez que ~{proration} {currentMarket.currency.symbol} aujourd&apos;hui (le prorata des jours
+            restants) — {tier.priceDT} {currentMarket.currency.symbol}/mois à partir du prochain prélèvement.
+          </p>
+        )}
+        {currentMarket.paymentProvider === "stripe" && (
+          // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) : le prélèvement
+          // se répète tout seul chaque mois jusqu'à annulation — jamais
+          // laisser croire à un paiement unique, un manager pourrait
+          // s'engager sans le savoir (retour utilisateur, 2026-09-02 :
+          // "ça peut coûter de l'argent ce genre d'erreur").
+          <p className="text-xs text-[var(--ink-soft)] mt-1">
+            Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail d&apos;abonnement.
+          </p>
+        )}
         <ul className="mt-3 space-y-1 text-sm text-[var(--ink-soft)]">
           {tier.features.map((feature) => (
             <li key={feature}>• {feature}</li>
@@ -79,7 +114,11 @@ export default function UpgradeModal({
           <Button onClick={handleUpgrade} disabled={submitting}>
             {submitting
               ? "Paiement en cours…"
-              : `Passer à ${tier.name} — ${tier.priceDT} ${currentMarket.currency.symbol}/mois`}
+              : proration !== null
+                ? `Passer à ${tier.name} — ${proration} ${currentMarket.currency.symbol} aujourd'hui`
+                : currentMarket.paymentProvider === "stripe"
+                  ? `S'abonner à ${tier.name} — ${tier.priceDT} ${currentMarket.currency.symbol}/mois`
+                  : `Passer à ${tier.name} — ${tier.priceDT} ${currentMarket.currency.symbol}/mois`}
           </Button>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Plus tard

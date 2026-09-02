@@ -428,7 +428,7 @@ PaymentProvider (port)
 ├── verify_webhook(payload, signature)             -> bool
 └── supports_refund()                              -> bool
     ├── KonnectProvider  (existant, TND, millimes)
-    ├── StripeProvider   (à écrire, EUR, Connect — le restaurant est marchand)
+    ├── StripeProvider   (écrit 2026-09-01, EUR, Connect — le restaurant est marchand)
     └── NullProvider     (mode S1 : aucun encaissement dans Tawla)
 ```
 
@@ -680,11 +680,14 @@ variantes sont écrites ici pour qu'aucune session n'ait à improviser.
 
 ### Phase F6 — Le paiement français (uniquement si S2)
 
-- [ ] Ouvrir le compte **Stripe** 🧑
-- [ ] `StripeProvider` derrière le port de F3 — **Connect, le restaurant est le marchand**, Tawla ne touche jamais les fonds
-- [ ] Connexion du compte par chaque restaurant depuis son dashboard, mêmes garanties qu'aujourd'hui pour Konnect (clé chiffrée au repos, jamais renvoyée au client)
-- [ ] Abonnement Tawla payé en euros (Stripe Billing ou virement + facture)
-- [ ] Webhooks signés, règlement idempotent, montant revérifié côté serveur — le patron existant de `settle_card_payment` se transpose
+- [x] Ouvrir le compte **Stripe** 🧑 — fait le 2026-09-01 (Wassim), compte "TAWLA" activé (identité + IBAN acceptés côté Stripe)
+- [x] `StripeProvider` derrière le port de F3 — **Connect (Direct Charges), le restaurant est le marchand**, Tawla ne touche jamais les fonds. `core/stripe_gateway.py` + `StripeProvider` (2026-09-01) : mêmes garanties que Konnect (dégradation gracieuse, `PAYMENT_MODE=stripe` explicite requis — c'est le drapeau démo/prod de l'Annexe C2), testé unitairement (monkeypatch, aucun appel réseau réel). `FRANCE.payment_provider` bascule sur `"stripe"`
+- [x] Connexion du compte par chaque restaurant depuis son dashboard — migration `Restaurant.stripe_account_id` (en clair, pas chiffré : pas un secret, voir son docstring dans `models.py`), endpoint `POST /{restaurant_id}/stripe-connect/start` (Account Links, onboarding hébergé par Stripe — jamais de formulaire local, contrairement à Konnect), bouton dashboard manager. **Vérifié en conditions réelles le 2026-09-01/02** contre le compte Stripe de test de Wassim, onboarding complété (données de test) jusqu'au badge "Connecté"
+- [x] Abonnement Tawla payé en euros — **récurrent** (mode Netflix : facturation automatique chaque mois tant que le restaurant ne se désabonne pas lui-même, retour utilisateur 2026-09-02), pas un simple virement/facture manuelle. Konnect exclu de ce modèle : pas de carte enregistrée, pas de récurrence dans son API — reste Stripe/France uniquement.
+  - `Restaurant.stripe_customer_id`/`stripe_subscription_id` (migration, en clair — pas des secrets), `stripe_gateway.create_subscription_checkout_session` (mode `subscription`, prix recalculé serveur comme partout ailleurs), `create_billing_portal_session` (portail Stripe hébergé — annuler/changer de moyen de paiement sans écran à maintenir côté Tawla)
+  - Webhook unique `POST /api/v1/restaurants/stripe-subscription-webhook` (`handle_stripe_subscription_event`, signature vérifiée via `STRIPE_WEBHOOK_SECRET`) : `checkout.session.completed` (lie le restaurant au client/abonnement Stripe), `invoice.paid` (chaque échéance, `subscription_period_end` relu depuis Stripe — jamais un `+30 jours` calculé nous-mêmes), `customer.subscription.deleted` (annulation — efface juste `stripe_subscription_id`, la dégradation à Essentiel se fait ensuite toute seule via `effective_tier()`, comme un renouvellement Konnect manqué)
+  - **Vérifié le 2026-09-02** : création de session récurrente réelle contre le compte Stripe de test (200, vraie URL Checkout) ; les trois évènements webhook testés en isolation avec des évènements synthétiques (liaison, renouvellement avec relecture `current_period_end`, annulation) — tous corrects. **Non vérifiable en local** : la livraison réelle Stripe → serveur (Stripe ne joint pas `localhost` ; ni Stripe CLI ni tunnel disponibles sur ce poste) — à confirmer une fois l'endpoint déclaré côté tableau de bord Stripe (prod ou via `stripe listen`)
+- [x] Montant revérifié côté serveur avant règlement (paiement carte du CLIENT, Connect — pas l'abonnement Tawla ci-dessus) — **flux complet vérifié en conditions réelles le 2026-09-02** : commande créée → `pay/card` → vraie session Stripe Checkout → paiement par carte de test (4242...) → `settle_card_payment` réinterroge Stripe (pas de confiance aveugle au retour client) → commande marquée payée en base (`payment_status=paid`, `paid_at` renseigné). Reste ouvert : la vérification de **signature webhook Connect** elle-même (route + secret d'endpoint à déclarer côté tableau de bord Stripe) — le test ci-dessus est passé par le filet de sécurité `/pay/card/check` (retour client), pas par un webhook Stripe réel ; distinct du webhook d'abonnement ci-dessus, déjà câblé
 
 ---
 

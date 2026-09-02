@@ -20,6 +20,8 @@ import { trackEvent } from "@/lib/analytics";
 import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
+import { TIERS, TIER_ACCENTS, estimateUpgradeProration } from "@/lib/offer";
+import { lalezar } from "@/lib/fonts";
 import { useCurrentStaff } from "@/lib/useCurrentStaff";
 import { useAccesDemoParLien } from "@/lib/demoLien";
 import { sessionDemo } from "@/lib/visite/etat";
@@ -46,6 +48,8 @@ import EditeurDePlan from "@/components/plan/EditeurDePlan";
 import UpgradeModal from "@/components/UpgradeModal";
 import ActivationRequired from "@/components/ActivationRequired";
 import SubscriptionReminderModal from "@/components/SubscriptionReminderModal";
+import WelcomeTierModal from "@/components/WelcomeTierModal";
+import ConfirmDowngradeModal from "@/components/ConfirmDowngradeModal";
 import QrCode from "@/components/QrCode";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
@@ -58,6 +62,40 @@ const TIER_LABELS: Record<SubscriptionTier, string> = {
   pro: "Pro",
   business: "Business",
 };
+
+// Passage en libre-service (2026-09-02) : chaque palier peut passer
+// directement à n'importe quel palier strictement supérieur — jamais un
+// contact manuel avec Tawla. `TIERS` (lib/offer.ts) porte déjà l'ordre et le
+// prix, jamais un deuxième classement en dur ici.
+const UPGRADE_TIERS_ABOVE: Record<SubscriptionTier, typeof TIERS> = {
+  essentiel: TIERS.slice(1),
+  pro: TIERS.slice(2),
+  business: [],
+};
+
+// Rétrogradation en restant abonné (Stripe uniquement — mode Netflix,
+// 2026-09-02), distincte d'une annulation complète : Pro peut redescendre à
+// Essentiel, Business à Pro ou Essentiel. Jamais depuis Essentiel, déjà le
+// plus bas — annuler est alors la seule sortie (voir manageSubscription).
+const DOWNGRADE_TIERS_BELOW: Record<SubscriptionTier, typeof TIERS> = {
+  essentiel: [],
+  pro: TIERS.slice(0, 1),
+  business: TIERS.slice(0, 2),
+};
+
+// Ce que le manager PERD en redescendant de `current` à `target` (retour
+// utilisateur, 2026-09-02 : "ce qu'il perd") — chaque palier liste déjà ses
+// propres apports dans `features` (lib/offer.ts), précédés d'une ligne
+// récapitulative "Tout <palier précédent>" : on exclut cette ligne-là (déjà
+// couverte par `target`) et on prend tout le reste, pour chaque palier
+// strictement entre `target` (exclu) et `current` (inclus).
+function featuresLostGoingTo(current: SubscriptionTier, target: SubscriptionTier): string[] {
+  const currentIndex = TIERS.findIndex((t) => t.id === current);
+  const targetIndex = TIERS.findIndex((t) => t.id === target);
+  return TIERS.slice(targetIndex + 1, currentIndex + 1).flatMap((tier) =>
+    tier.features.filter((f) => !f.startsWith("Tout ")),
+  );
+}
 
 // `subscription_period_end` reste posé même après expiration (calcul à la
 // lecture côté serveur, voir effective_tier()) : ne jamais l'afficher seul,
@@ -194,8 +232,41 @@ export default function DashboardPage() {
   const [newItem, setNewItem] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [upgradeTier, setUpgradeTier] = useState<SubscriptionTier | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  // Palier tout juste activé (paiement réel ou démo) — voir applyTierUpdate,
+  // affiche WelcomeTierModal au lieu du simple flash() qui passait inaperçu
+  // (retour utilisateur, 2026-09-02).
+  const [celebratingTier, setCelebratingTier] = useState<SubscriptionTier | null>(null);
+  // Confirmation avant rétrogradation — modale Tawla plutôt que
+  // window.confirm() natif (retour utilisateur, 2026-09-02).
+  const [confirmingDowngradeTier, setConfirmingDowngradeTier] = useState<SubscriptionTier | null>(null);
+  const [downgradeSubmitting, setDowngradeSubmitting] = useState(false);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+
+  // Un seul point d'entrée pour appliquer une fiche restaurant mise à jour
+  // après un paiement de palier (réel ou démo) — sur les quatre chemins qui
+  // peuvent en produire une (retour Konnect/Stripe, UpgradeModal,
+  // SubscriptionReminderModal, ActivationRequired) : ouvre WelcomeTierModal
+  // uniquement quand le palier a réellement changé, jamais sur un simple
+  // rechargement de la même fiche. Déclaré tôt (avant les effets de retour
+  // de paiement plus bas, qui le référencent dans leur tableau de
+  // dépendances) : un `const` n'est pas remonté comme une `function`.
+  const applyTierUpdate = useCallback(
+    (updated: Restaurant) => {
+      const previousTier = restaurant?.subscription_tier;
+      setRestaurant(updated);
+      // `restaurant` encore `null` (fiche pas encore chargée, retour de
+      // paiement arrivé avant `load()`) : on ne SAIT pas si le palier a
+      // vraiment changé, donc on ne fête rien — mieux vaut silencieux que
+      // fêter à tort un palier qui n'a pas bougé (retour utilisateur,
+      // 2026-09-02 : modale "Bienvenue" affichée alors que le paiement
+      // n'avait pas abouti côté serveur, webhook local injoignable).
+      if (previousTier !== undefined && updated.subscription_tier !== previousTier) {
+        setCelebratingTier(updated.subscription_tier);
+      }
+    },
+    [restaurant],
+  );
+  const [message, setMessage] = useState<string | null>(null);
   // Rappel de paiement (offre de lancement, 2026-08-21) : "Plus tard" ne le
   // ferme que pour cette page ouverte — jamais mémorisé, il doit réapparaître
   // à chaque connexion (voir SubscriptionReminderModal).
@@ -212,6 +283,7 @@ export default function DashboardPage() {
   const [konnectApiKeyInput, setKonnectApiKeyInput] = useState("");
   const [konnectWalletIdInput, setKonnectWalletIdInput] = useState("");
   const [savingKonnect, setSavingKonnect] = useState(false);
+  const [startingStripeConnect, setStartingStripeConnect] = useState(false);
   const [tables, setTables] = useState<Table[]>([]);
   const [tableDrafts, setTableDrafts] = useState<Record<number, TableDraft>>({});
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
@@ -301,6 +373,16 @@ export default function DashboardPage() {
     if (restaurantId) load();
   }, [restaurantId, load]);
 
+  // Le badge de palier de l'en-tête (EnteteManager, cliquable depuis les
+  // quatre écrans de direction) pointe vers `?tab=settings` : ouvrir
+  // directement l'onglet Réglages plutôt que de laisser le manager
+  // rechercher la carte "Palier d'abonnement" (retour utilisateur,
+  // 2026-09-02 : "doit être cliquable"). `#abonnement` sur la carte fait le
+  // reste du travail de défilement, géré par le navigateur.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "settings") setActiveTab("settings");
+  }, []);
+
   // Page de retour du paiement en ligne d'un palier (`?konnect=success` /
   // `?konnect=fail`, voir tenants/router.py::start_subscription_checkout) :
   // en dev local le webhook Konnect ne peut jamais joindre localhost, ce
@@ -317,10 +399,7 @@ export default function DashboardPage() {
     if (konnectResult === "success") {
       api
         .checkSubscriptionPayment(restaurantId)
-        .then((updated) => {
-          setRestaurant(updated);
-          flash(`Palier ${TIER_LABELS[updated.subscription_tier]} activé.`);
-        })
+        .then(applyTierUpdate)
         .catch((e) => setError(toFrenchMessage(e)));
     } else if (konnectResult === "fail") {
       // purchase_completed est émis côté serveur (settle_subscription_payment,
@@ -329,7 +408,28 @@ export default function DashboardPage() {
       trackEvent("purchase_cancelled");
       setError("Le paiement n'a pas abouti. Vous pouvez réessayer depuis Réglages.");
     }
-  }, [restaurantId]);
+  }, [restaurantId, applyTierUpdate]);
+
+  // Même filet de sécurité que ci-dessus, côté Stripe (France) — paramètre
+  // distinct (`stripe_subscription=`) pour ne jamais se confondre avec le
+  // retour de l'onboarding Connect (`?stripe=return`/`?stripe=refresh`, voir
+  // startStripeConnect), un usage totalement différent de la même query key.
+  useEffect(() => {
+    if (!restaurantId) return;
+    const params = new URLSearchParams(window.location.search);
+    const stripeResult = params.get("stripe_subscription");
+    if (!stripeResult) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    if (stripeResult === "success") {
+      api
+        .checkSubscriptionPayment(restaurantId)
+        .then(applyTierUpdate)
+        .catch((e) => setError(toFrenchMessage(e)));
+    } else if (stripeResult === "fail") {
+      trackEvent("purchase_cancelled");
+      setError("Le paiement n'a pas abouti. Vous pouvez réessayer depuis Réglages.");
+    }
+  }, [restaurantId, applyTierUpdate]);
 
   /**
    * Remplace `setError(toFrenchMessage(e))` dans tous les catch de cette
@@ -412,6 +512,52 @@ export default function DashboardPage() {
       handleGatedError(e);
     } finally {
       setSavingKonnect(false);
+    }
+  }
+
+  async function confirmDowngrade() {
+    if (!restaurantId || !confirmingDowngradeTier) return;
+    const tier = confirmingDowngradeTier;
+    setError(null);
+    setDowngradeSubmitting(true);
+    try {
+      const updated = await api.scheduleDowngrade(restaurantId, tier);
+      setRestaurant(updated);
+      setConfirmingDowngradeTier(null);
+      flash(`Passage à ${TIER_LABELS[tier]} programmé pour la prochaine échéance.`);
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setDowngradeSubmitting(false);
+    }
+  }
+
+  async function manageSubscription() {
+    if (!restaurantId) return;
+    setError(null);
+    try {
+      const { portal_url } = await api.openBillingPortal(restaurantId);
+      // Nouvel onglet, pas une redirection sur place (retour utilisateur,
+      // 2026-09-02) : contrairement au paiement (success_url/fail_url
+      // ramènent automatiquement sur Tawla), le portail Stripe n'a pas de
+      // retour prévu — perdre l'onglet du dashboard manager n'aurait aucun
+      // intérêt.
+      window.open(portal_url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      handleGatedError(e);
+    }
+  }
+
+  async function startStripeConnect() {
+    if (!restaurantId) return;
+    setError(null);
+    setStartingStripeConnect(true);
+    try {
+      const { onboarding_url } = await api.startStripeConnect(restaurantId);
+      window.location.href = onboarding_url;
+    } catch (e) {
+      handleGatedError(e);
+      setStartingStripeConnect(false);
     }
   }
 
@@ -974,7 +1120,12 @@ export default function DashboardPage() {
   // fini de charger (voir load()), pour ne jamais flasher cet écran avant le
   // dashboard normal chez un compte déjà actif.
   if (restaurant && !restaurant.is_active) {
-    return <ActivationRequired restaurant={restaurant} onActivated={(updated) => setRestaurant(updated)} />;
+    return (
+      <>
+        <ActivationRequired restaurant={restaurant} onActivated={applyTierUpdate} />
+        {celebratingTier && <WelcomeTierModal tier={celebratingTier} onClose={() => setCelebratingTier(null)} />}
+      </>
+    );
   }
 
   const filteredItems = items.filter((item) => {
@@ -989,23 +1140,35 @@ export default function DashboardPage() {
         <UpgradeModal
           restaurantId={restaurantId}
           requiredTier={upgradeTier}
+          restaurant={restaurant ?? undefined}
           onClose={() => setUpgradeTier(null)}
-          onUpgraded={(updated) => setRestaurant(updated)}
+          onUpgraded={applyTierUpdate}
         />
       )}
       {restaurant && !restaurant.is_demo && !restaurant.has_paid_for_subscription && !paymentReminderDismissed && (
         <SubscriptionReminderModal
           restaurant={restaurant}
           onPaid={(updated) => {
-            setRestaurant(updated);
+            applyTierUpdate(updated);
             setPaymentReminderDismissed(true);
           }}
           onDismiss={() => setPaymentReminderDismissed(true)}
         />
       )}
+      {celebratingTier && <WelcomeTierModal tier={celebratingTier} onClose={() => setCelebratingTier(null)} />}
+      {confirmingDowngradeTier && restaurant?.subscription_period_end && (
+        <ConfirmDowngradeModal
+          tier={confirmingDowngradeTier}
+          periodEndLabel={formatDate(restaurant.subscription_period_end)}
+          submitting={downgradeSubmitting}
+          onConfirm={confirmDowngrade}
+          onCancel={() => setConfirmingDowngradeTier(null)}
+        />
+      )}
       <EnteteManager
         titre="Carte"
         sousTitre="Modifier un plat, signaler une rupture, en ajouter un — et déposer les photos en les glissant sur leur vignette."
+        palier={restaurant?.subscription_tier}
       />
 
       <div data-visite="dashboard-recette">
@@ -2030,23 +2193,204 @@ export default function DashboardPage() {
           )}
 
           {restaurant && (
-            <Card padding="sm" className="mt-4">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Palier d&apos;abonnement</span>
-                <Badge tone="neutral">{TIER_LABELS[restaurant.subscription_tier]}</Badge>
+            <Card id="abonnement" padding="sm" className="mt-4 scroll-mt-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium">Votre palier :</span>
+                <span
+                  className="text-sm font-semibold px-2.5 py-1 rounded-full border-2"
+                  style={{
+                    backgroundColor: TIER_ACCENTS[restaurant.subscription_tier].fond,
+                    borderColor: TIER_ACCENTS[restaurant.subscription_tier].bord,
+                    color: TIER_ACCENTS[restaurant.subscription_tier].texte,
+                  }}
+                >
+                  {TIER_LABELS[restaurant.subscription_tier]}
+                </span>
               </div>
-              {restaurant.subscription_tier !== "essentiel" && restaurant.subscription_period_end && (
-                <p className="text-xs text-neutral-500 mt-2">
-                  Valable jusqu&apos;au {formatDate(restaurant.subscription_period_end)}. Repasse automatiquement à
-                  Essentiel sans renouvellement d&apos;ici là.
+              {/* Essentiel est un abonnement payant comme Pro/Business,
+                  jamais une exception (retour utilisateur, 2026-09-02 :
+                  "Essentiel c'est payant") — la garde qui l'excluait ici
+                  cachait le bouton "Gérer mon abonnement" à un manager
+                  Essentiel pourtant bel et bien abonné. */}
+              {restaurant.subscription_period_end &&
+                (restaurant.stripe_subscription_active ? (
+                  // Abonnement récurrent (mode Netflix, 2026-09-02) : se
+                  // renouvelle tout seul, contrairement à Konnect ci-dessous
+                  // — jamais le même texte "sans renouvellement d'ici là",
+                  // qui serait faux ici et inquiéterait pour rien.
+                  <>
+                    <p className="text-xs text-neutral-500 mt-2">
+                      {restaurant.subscription_cancel_at_period_end ? (
+                        restaurant.subscription_tier === "essentiel" ? (
+                          // Essentiel est déjà le palier le plus bas — "repasse
+                          // à Essentiel" n'aurait aucun sens ici (retour
+                          // utilisateur, 2026-09-02). Dire ce qui se passe
+                          // vraiment : accès gratuit conservé, plus jamais
+                          // prélevé, jusqu'à un réabonnement volontaire.
+                          <>
+                            Abonnement annulé — accès Essentiel conservé au-delà du{" "}
+                            {formatDate(restaurant.subscription_period_end)}, sans nouveau prélèvement.
+                          </>
+                        ) : (
+                          <>
+                            Abonnement annulé — accès conservé jusqu&apos;au{" "}
+                            {formatDate(restaurant.subscription_period_end)}, puis repasse à Essentiel.
+                          </>
+                        )
+                      ) : (
+                        <>
+                          Prochain prélèvement le {formatDate(restaurant.subscription_period_end)}. Renouvellement
+                          automatique chaque mois.
+                        </>
+                      )}
+                    </p>
+                    <Button variant="secondary" onClick={manageSubscription} className="mt-2">
+                      Gérer mon abonnement
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-xs text-neutral-500 mt-2">
+                    Valable jusqu&apos;au {formatDate(restaurant.subscription_period_end)}. Repasse automatiquement à
+                    Essentiel sans renouvellement d&apos;ici là.
+                  </p>
+                ))}
+
+              {UPGRADE_TIERS_ABOVE[restaurant.subscription_tier].length > 0 && (
+                <div className="mt-4">
+                  <p className={`${lalezar.className} text-xl text-[var(--encre)]`}>Passez au palier suivant</p>
+                  <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                    {UPGRADE_TIERS_ABOVE[restaurant.subscription_tier].map((tier) => {
+                      const accent = TIER_ACCENTS[tier.id];
+                      const currentPriceDT = TIERS.find((t) => t.id === restaurant.subscription_tier)?.priceDT ?? 0;
+                      const proration =
+                        restaurant.stripe_subscription_active && restaurant.subscription_period_end
+                          ? estimateUpgradeProration(currentPriceDT, tier.priceDT, restaurant.subscription_period_end)
+                          : null;
+                      return (
+                        <div
+                          key={tier.id}
+                          className="rounded-xl border-2 p-4 flex flex-col"
+                          style={{ backgroundColor: accent.fond, borderColor: accent.bord }}
+                        >
+                          {tier.recommended && (
+                            <span
+                              className="self-start text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2"
+                              style={{ backgroundColor: accent.texte, color: "var(--semoule)" }}
+                            >
+                              Recommandé
+                            </span>
+                          )}
+                          <p className={`${lalezar.className} text-2xl`} style={{ color: accent.texte }}>
+                            {tier.name}
+                          </p>
+                          <p className="text-xs text-[var(--ink-soft)] mt-0.5">{tier.tagline}</p>
+                          <p className="mt-2">
+                            <span className="text-2xl font-semibold text-[var(--encre)] tabular-nums">
+                              {tier.priceDT} {currentMarket.currency.symbol}
+                            </span>
+                            <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
+                          </p>
+                          {proration !== null ? (
+                            // Argument de vente (retour utilisateur,
+                            // 2026-09-02) : montrer que l'upgrade ne coûte
+                            // presque rien en fin de mois, pas juste "89€/mois"
+                            // qui peut faire hésiter.
+                            <p className="text-[11px] font-medium mt-0.5" style={{ color: "var(--menthe)" }}>
+                              ~{proration} {currentMarket.currency.symbol} aujourd&apos;hui (prorata), puis plein
+                              tarif au prochain prélèvement.
+                            </p>
+                          ) : (
+                            currentMarket.paymentProvider === "stripe" && (
+                              // Abonnement RÉCURRENT (mode Netflix, 2026-09-02)
+                              // — jamais laisser croire à un paiement unique,
+                              // voir la même note dans UpgradeModal.tsx (retour
+                              // utilisateur : "ça peut coûter de l'argent").
+                              <p className="text-[11px] text-[var(--ink-soft)] mt-0.5">
+                                Prélevé chaque mois, résiliable à tout moment.
+                              </p>
+                            )
+                          )}
+                          <ul className="mt-2 space-y-1 text-sm text-[var(--encre)] flex-1">
+                            {tier.features.slice(0, 4).map((feature) => (
+                              <li key={feature}>• {feature}</li>
+                            ))}
+                          </ul>
+                          <Button
+                            variant={tier.recommended ? "primary" : "laiton"}
+                            onClick={() => setUpgradeTier(tier.id)}
+                            className="mt-3 w-full"
+                          >
+                            {currentMarket.paymentProvider === "stripe" ? "S'abonner à" : "Passer à"} {tier.name}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {currentMarket.paymentProvider === "stripe" && restaurant.subscription_downgrade_pending_tier && (
+                // Indicateur PERSISTANT — sans lui, rien ne distingue un clic
+                // réussi d'un clic resté sans effet une fois le flash() de
+                // 2,5 secondes disparu (retour utilisateur, 2026-09-02 :
+                // "je reste à Business sans aucune indication").
+                <p
+                  className="mt-3 text-sm rounded px-3 py-2"
+                  style={{ backgroundColor: "rgba(184,134,46,.12)", color: "var(--laiton)" }}
+                >
+                  Rétrogradation vers <strong>{TIER_LABELS[restaurant.subscription_downgrade_pending_tier]}</strong>{" "}
+                  programmée pour le {formatDate(restaurant.subscription_period_end ?? "")}.
                 </p>
               )}
-              <p className="text-xs text-neutral-500 mt-2">
-                Le paiement carte, la fidélité, le plan de salle visuel, les photos
-                {currentMarket.ramadanModeAvailable ? ", le mode Ramadan" : ""}, l&apos;import CSV et la page de
-                preuve demandent Pro ou plus ; le rapport d&apos;équipe et les notifications push demandent
-                Business. Pour changer de palier, contactez Tawla.
-              </p>
+
+              {currentMarket.paymentProvider === "stripe" &&
+                restaurant.stripe_subscription_active &&
+                DOWNGRADE_TIERS_BELOW[restaurant.subscription_tier].length > 0 && (
+                  // Rétrogradation en restant abonné, distincte d'annuler
+                  // (retour utilisateur, 2026-09-02) — jamais pour Konnect,
+                  // qui n'a pas de notion d'abonnement actif à modifier.
+                  <div className="mt-4">
+                    <p className={`${lalezar.className} text-xl text-[var(--encre)]`}>
+                      Ou redescendre à un palier moins cher
+                    </p>
+                    <p className="text-xs text-neutral-500 mt-1">
+                      Effectif à la prochaine échéance ({formatDate(restaurant.subscription_period_end ?? "")}),
+                      jamais immédiat — vous gardez {TIER_LABELS[restaurant.subscription_tier]} jusque-là.
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                      {DOWNGRADE_TIERS_BELOW[restaurant.subscription_tier].map((tier) => {
+                        const lost = featuresLostGoingTo(restaurant.subscription_tier, tier.id);
+                        return (
+                          <div key={tier.id} className="rounded-xl border border-[var(--line)] p-3">
+                            <p className="text-sm font-medium text-[var(--encre)]">
+                              {tier.name} — {tier.priceDT} {currentMarket.currency.symbol}/mois
+                            </p>
+                            {lost.length > 0 && (
+                              <>
+                                <p className="text-xs text-[var(--harissa)] mt-1.5">Vous perdrez :</p>
+                                <ul className="mt-0.5 space-y-0.5 text-xs text-neutral-500">
+                                  {lost.map((feature) => (
+                                    <li key={feature}>• {feature}</li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+                            <Button
+                              variant="secondary"
+                              onClick={() => setConfirmingDowngradeTier(tier.id)}
+                              disabled={restaurant.subscription_downgrade_pending_tier === tier.id}
+                              className="mt-2 w-full"
+                            >
+                              {restaurant.subscription_downgrade_pending_tier === tier.id
+                                ? "Déjà programmé ✓"
+                                : `Passer à ${tier.name}`}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
             </Card>
           )}
 
@@ -2094,15 +2438,24 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {restaurant && currentMarket.paymentProvider === "none" && (
+          {restaurant && currentMarket.paymentProvider === "stripe" && (
             <Card padding="sm" className="mt-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Paiement carte de vos clients</span>
-                <Badge tone="neutral">Bientôt disponible</Badge>
+                <Badge tone={restaurant.stripe_configured ? "success" : "neutral"}>
+                  {restaurant.stripe_configured ? "Connecté" : "Non connecté"}
+                </Badge>
               </div>
+              <p className="text-xs text-neutral-500 mt-2 mb-3">
+                Sans compte Stripe connecté, le paiement carte reste en mode démonstration (confirmé
+                immédiatement, sans vrai débit). Une fois connecté, vos clients règlent directement votre propre
+                compte Stripe — jamais celui de Tawla.
+              </p>
+              <Button onClick={startStripeConnect} disabled={startingStripeConnect}>
+                {restaurant.stripe_configured ? "Gérer mon compte Stripe" : "Connecter Stripe"}
+              </Button>
               <p className="text-xs text-neutral-500 mt-2">
-                Le paiement carte en ligne arrive bientôt pour la France. En attendant, vos clients règlent en
-                espèces ou par terminal physique apporté à table.
+                Vous serez redirigé vers Stripe pour renseigner vos informations — Tawla ne les reçoit jamais.
               </p>
             </Card>
           )}
