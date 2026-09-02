@@ -15,7 +15,7 @@ Trois couches, comme le module qu'elles couvrent :
   marché Stripe), `stripe_gateway` mocké au niveau fonction — même
   convention que test_subscription_payments.py pour Konnect.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import stripe as stripe_sdk
@@ -704,6 +704,27 @@ def test_reactivating_a_cancelled_demo_restaurant_at_the_same_tier_succeeds(clie
     assert body["mode"] == "demo"
     assert body["restaurant"]["is_active"] is True
     assert body["restaurant"]["subscription_tier"] == "business"
+
+
+def test_demo_checkout_never_extends_the_period_end(client, db_session):
+    """Retour utilisateur, 2026-09-02 quater : `subscription_period_end`
+    reste celui posé à la création (~2h, demo/service.py) — le prolonger de
+    30 jours à chaque simulation (upgrade, downgrade, annulation de
+    résiliation) affichait "Valable jusqu'au" sauter loin dans le futur pour
+    une session qui s'efface dans l'heure, sans le moindre effet réel
+    puisque `demo_expires_at` gouverne la purge, pas ce champ."""
+    original_period_end = datetime.now(timezone.utc) + timedelta(hours=2)
+    restaurant = _demo_restaurant(
+        db_session, slug="demo-checkout-stable-period-end",
+        subscription_tier=SubscriptionTier.ESSENTIEL, subscription_period_end=original_period_end,
+    )
+    headers = _manager_headers(restaurant.id)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "business"}, headers=headers)
+
+    assert res.status_code == 200
+    db_session.refresh(restaurant)
+    assert as_utc(restaurant.subscription_period_end) == original_period_end
 
 
 def test_reactivating_a_cancelled_real_subscription_at_the_same_tier_creates_a_fresh_checkout(
