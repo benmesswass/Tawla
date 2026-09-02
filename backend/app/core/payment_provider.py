@@ -1,17 +1,17 @@
 """
-Port de paiement carte (France, MARCHE_FRANCE.md §4, Phase F3 étape 4).
+Port de paiement carte (France, MARCHE_FRANCE.md §4, Phase F3 étape 4 /
+Phase F6 étape 2).
 
 Abstrait le fournisseur derrière une interface commune pour qu'`orders/
 service.py` ne connaisse plus Konnect directement — même raison que
 `current_market` pour la devise ou le fuseau : protéger contre la
-divergence quand un deuxième fournisseur (`StripeProvider`, Phase F6,
-Connect — le restaurant reste le marchand) apparaîtra.
+divergence entre les fournisseurs.
 
-`KonnectProvider` est un pur adaptateur : toute la logique reste dans
-`core/konnect.py`, inchangée, pour ne rien risquer sur le paiement carte
-tunisien qui en dépend réellement aujourd'hui. `NullProvider` est **le**
-mode du marché français tant que `StripeProvider` n'existe pas
-(`current_market.payment_provider == "none"`) — pas un bouche-trou.
+`KonnectProvider` et `StripeProvider` sont de purs adaptateurs : toute la
+logique reste dans `core/konnect.py`/`core/stripe_gateway.py`, inchangée.
+`NullProvider` reste **le** mode effectif tant qu'aucun identifiant n'est
+connecté pour ce restaurant, ou pour tout marché dont
+`payment_provider == "none"` — pas un bouche-trou.
 
 Volontairement hors de ce port : la vérification de signature du webhook
 entrant (`orders/router.py::order_card_payment_webhook`). C'est un HMAC
@@ -24,11 +24,14 @@ même raison, `init_payment()` ne prend pas d'URL de webhook en paramètre :
 Konnect ne signe pas ses webhooks, donc l'URL de retour doit être
 pré-signée (`sign_konnect_order_webhook`) — un détail Konnect que
 l'appelant n'a plus à connaître, construit ici à partir du seul `order_id`.
+Stripe, lui, signe ses webhooks nativement (`stripe_gateway`) — mais cette
+vérification-là, et la route qui la consomme, restent à câbler avec
+l'onboarding restaurant (Phase F6, étapes 3 et 5), pas encore ouvert.
 """
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.core import konnect
+from app.core import konnect, stripe_gateway
 from app.core.config import settings
 from app.core.markets import Market, current_market
 
@@ -137,6 +140,55 @@ class KonnectProvider:
         return False
 
 
+class StripeProvider:
+    """Adaptateur autour de `core/stripe_gateway.py` — Direct Charges sur le
+    compte connecté du restaurant (`account_id`, futur
+    `Restaurant.stripe_account_id`), qui reste le marchand — jamais Tawla."""
+
+    def __init__(self, account_id: str):
+        self._account_id = account_id
+
+    def is_available(self) -> bool:
+        return stripe_gateway.is_stripe_enabled()
+
+    def init_payment(
+        self,
+        *,
+        amount: float,
+        order_id: str,
+        description: str,
+        success_url: str,
+        fail_url: str,
+        lifespan_minutes: int,
+    ) -> PaymentInit:
+        try:
+            pay_url, payment_ref = stripe_gateway.create_checkout_session(
+                amount_eur=amount,
+                order_id=order_id,
+                description=description,
+                success_url=success_url,
+                fail_url=fail_url,
+                lifespan_minutes=lifespan_minutes,
+                account_id=self._account_id,
+            )
+        except stripe_gateway.StripeGatewayError as err:
+            raise PaymentProviderError(str(err)) from err
+        return PaymentInit(pay_url=pay_url, payment_ref=payment_ref)
+
+    def get_payment(self, payment_ref: str) -> PaymentState:
+        try:
+            session = stripe_gateway.retrieve_checkout_session(payment_ref, account_id=self._account_id)
+        except stripe_gateway.StripeGatewayError as err:
+            raise PaymentProviderError(str(err)) from err
+        return PaymentState(status=session.status, reached_amount=session.amount_total)
+
+    def to_smallest_unit(self, amount: float) -> int:
+        return stripe_gateway.eur_to_cents(amount)
+
+    def supports_refund(self) -> bool:
+        return True
+
+
 class NullProvider:
     """Mode S1 (§3.1 de MARCHE_FRANCE.md) : aucun encaissement dans Tawla
     pour ce marché/restaurant. `is_available()` toujours faux — l'appelant
@@ -159,18 +211,21 @@ class NullProvider:
 
 
 def get_payment_provider(
-    credentials: tuple[str, str] | None, market: Market = current_market
+    credentials: tuple[str, str] | str | None, market: Market = current_market
 ) -> PaymentProvider:
     """
     Résout le fournisseur de paiement carte pour un restaurant.
 
-    `credentials` : `(api_key, wallet_id)` Konnect du restaurant, ou `None`
-    tant qu'il n'a rien connecté (voir `Restaurant.konnect_credentials()`)
-    — un `NullProvider` dans les deux cas suivants : pas d'identifiants, ou
-    marché dont `payment_provider != "konnect"` (la France aujourd'hui,
-    volontairement, tant que `StripeProvider` n'existe pas).
+    `credentials` : `(api_key, wallet_id)` Konnect, `account_id` Stripe (`str`
+    seul — pas de second identifiant côté Connect), ou `None` tant que le
+    restaurant n'a rien connecté. La forme attendue dépend du marché ; une
+    forme incompatible avec `market.payment_provider` (ex. identifiants
+    Konnect passés à un marché Stripe) retombe sur `NullProvider`, jamais une
+    erreur — même dégradation gracieuse que l'absence d'identifiants.
     """
-    if market.payment_provider == "konnect" and credentials is not None:
+    if market.payment_provider == "konnect" and isinstance(credentials, tuple):
         api_key, wallet_id = credentials
         return KonnectProvider(api_key, wallet_id)
+    if market.payment_provider == "stripe" and isinstance(credentials, str):
+        return StripeProvider(credentials)
     return NullProvider()

@@ -35,6 +35,39 @@ export type OfferTier = {
   recommended?: boolean;
 };
 
+// Identité visuelle par palier (dashboard manager, 2026-09-02) — les trois
+// accents du système déjà réservés aux tuiles de catégorie
+// (`--tuile-*-fond`/`-bord`, globals.css), jamais une quatrième couleur
+// inventée. Essentiel reste neutre (premier palier, rien à mettre en avant) ;
+// Pro/Business montent en couleur pour donner envie de scroller vers le
+// palier suivant plutôt que de contacter Tawla (retour utilisateur,
+// 2026-09-02).
+export const TIER_ACCENTS: Record<OfferTier["id"], { fond: string; bord: string; texte: string }> = {
+  essentiel: { fond: "var(--creme)", bord: "var(--line-strong)", texte: "var(--encre)" },
+  pro: { fond: "var(--tuile-laiton-fond)", bord: "var(--tuile-laiton-bord)", texte: "var(--laiton)" },
+  business: { fond: "var(--tuile-harissa-fond)", bord: "var(--tuile-harissa-bord)", texte: "var(--harissa)" },
+};
+
+/**
+ * Estime le prorata payé pour un upgrade EN COURS D'ABONNEMENT — jamais pour
+ * un tout premier abonnement (`stripe_subscription_active` faux), qui paie
+ * le plein tarif via une nouvelle session de paiement, pas ce mécanisme
+ * (voir change_tier_immediately côté backend). Approximatif (mois
+ * calendaire réel de 28 à 31 jours ; Stripe facture au jour et à la seconde
+ * près), mais assez précis pour rassurer avant de cliquer — retour
+ * utilisateur, 2026-09-02 : "c'est bien pour vendre", montrer que l'upgrade
+ * ne coûte presque rien en fin de mois plutôt que de laisser deviner.
+ */
+export function estimateUpgradeProration(
+  currentPriceDT: number,
+  targetPriceDT: number,
+  periodEndIso: string,
+): number | null {
+  const daysRemaining = (new Date(periodEndIso).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+  if (daysRemaining <= 0) return null;
+  return Math.round(((targetPriceDT - currentPriceDT) * Math.min(daysRemaining, 30)) / 30);
+}
+
 export const TIERS: OfferTier[] = [
   {
     id: "essentiel",

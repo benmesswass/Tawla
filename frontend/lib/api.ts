@@ -107,6 +107,23 @@ export type Restaurant = RestaurantPublic & {
   // n'est jamais renvoyée, seulement ces deux champs.
   konnect_configured: boolean;
   konnect_wallet_id: string | null;
+  // Idem, Stripe Connect (France) — voir StripeProvider/stripe_gateway côté
+  // backend. Pas d'équivalent à konnect_wallet_id à afficher : l'account_id
+  // n'apporte rien de lisible au manager, seul l'état "connecté" compte.
+  stripe_configured: boolean;
+  // Abonnement TAWLA récurrent (mode Netflix, 2026-09-02) — distinct de
+  // stripe_configured ci-dessus (paiement carte du CLIENT du restaurant).
+  // Jamais l'id Stripe lui-même, juste de quoi savoir si "Gérer mon
+  // abonnement" (portail Stripe) a un sens à afficher.
+  stripe_subscription_active: boolean;
+  // Annulation demandée par le manager depuis le portail Stripe, effective
+  // à subscription_period_end (2026-09-02) — sinon l'interface continuerait
+  // à afficher "renouvellement automatique" après une annulation réelle.
+  subscription_cancel_at_period_end: boolean;
+  // Rétrogradation programmée, pas encore appliquée (2026-09-02) — sans ce
+  // champ, l'interface n'avait aucun moyen de refléter un clic réussi avant
+  // la prochaine échéance.
+  subscription_downgrade_pending_tier: SubscriptionTier | null;
   // Activation du compte (2026-08-20) — Essentiel n'est jamais gratuit, voir
   // is_usable côté backend (tenants/models.py). Le dashboard bloque tout tant
   // que ce n'est pas vrai (une promo personnalisée à 100 % l'active comme un
@@ -128,12 +145,13 @@ export type Restaurant = RestaurantPublic & {
 
 /**
  * `mode: "demo"` : palier déjà appliqué, `restaurant` à jour, aucun paiement
- * réel (aucune clé Konnect pour Tawla elle-même pour l'instant — voir
- * backend app/core/konnect.py). `mode: "konnect"` : rediriger vers `pay_url`,
- * le palier ne change qu'au règlement effectif du paiement.
+ * réel (fournisseur du marché pas encore activé pour Tawla elle-même — voir
+ * backend app/core/konnect.py / stripe_gateway.py). `mode: "konnect"` /
+ * `mode: "stripe"` : rediriger vers `pay_url`, le palier ne change qu'au
+ * règlement effectif du paiement.
  */
 export type SubscriptionCheckoutResult = {
-  mode: "demo" | "konnect";
+  mode: "demo" | "konnect" | "stripe";
   restaurant: Restaurant | null;
   pay_url: string | null;
 };
@@ -757,6 +775,28 @@ export const api = {
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/konnect-credentials`, {
       method: "PUT",
       body: JSON.stringify({ api_key: apiKey, wallet_id: walletId }),
+    }),
+  // Démarre (ou reprend) l'onboarding Stripe Connect — renvoie l'URL hébergée
+  // par Stripe où rediriger le manager, jamais un formulaire local (voir
+  // tenants/router.py::start_stripe_connect).
+  startStripeConnect: (restaurantId: number) =>
+    request<{ onboarding_url: string }>(`/api/v1/restaurants/${restaurantId}/stripe-connect/start`, {
+      method: "POST",
+    }),
+  // Portail Stripe hébergé (mode Netflix, 2026-09-02) — annuler, changer de
+  // moyen de paiement, voir ses factures. Jamais un écran à écrire côté
+  // Tawla, voir tenants/router.py::open_billing_portal.
+  openBillingPortal: (restaurantId: number) =>
+    request<{ portal_url: string }>(`/api/v1/restaurants/${restaurantId}/subscription/manage`, {
+      method: "POST",
+    }),
+  // Palier INFÉRIEUR à la prochaine échéance, en restant abonné — distinct
+  // d'une annulation complète (mode Netflix, 2026-09-02). Voir
+  // tenants/router.py::schedule_subscription_downgrade.
+  scheduleDowngrade: (restaurantId: number, tier: SubscriptionTier) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/subscription/downgrade`, {
+      method: "POST",
+      body: JSON.stringify({ tier }),
     }),
   startSubscriptionCheckout: (restaurantId: number, tier: SubscriptionTier) =>
     request<SubscriptionCheckoutResult>(`/api/v1/restaurants/${restaurantId}/subscription/checkout`, {

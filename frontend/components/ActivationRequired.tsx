@@ -46,7 +46,7 @@ export default function ActivationRequired({
     setError(null);
     try {
       const result = await api.startSubscriptionCheckout(restaurant.id, restaurant.subscription_tier);
-      if (result.mode === "konnect" && result.pay_url) {
+      if (result.pay_url) {
         window.location.href = result.pay_url;
         return;
       }
@@ -90,6 +90,14 @@ export default function ActivationRequired({
               </span>
               <span className="text-sm" style={{ color: "var(--ink-soft)" }}> / mois</span>
             </p>
+            {currentMarket.paymentProvider === "stripe" && (
+              // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) — même
+              // divulgation que UpgradeModal/SubscriptionReminderModal.
+              <p className="text-xs mt-1" style={{ color: "var(--ink-soft)" }}>
+                Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail
+                d&apos;abonnement.
+              </p>
+            )}
             <ul className="mt-3 space-y-1 text-sm text-left" style={{ color: "var(--ink-soft)" }}>
               {tier.features.map((feature) => (
                 <li key={feature}>• {feature}</li>

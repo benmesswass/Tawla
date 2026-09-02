@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken } from "@/lib/auth";
 import { lalezar } from "@/lib/fonts";
+import { TIER_ACCENTS } from "@/lib/offer";
+import type { SubscriptionTier } from "@/lib/api";
 
 /**
  * L'en-tête commun aux quatre écrans de direction.
@@ -32,7 +34,20 @@ const PAGES = [
   { href: "/staff", label: "Service en salle" },
 ] as const;
 
-export default function EnteteManager({ titre, sousTitre }: { titre: string; sousTitre?: string }) {
+const TIER_LABELS: Record<string, string> = { essentiel: "Essentiel", pro: "Pro", business: "Business" };
+
+export default function EnteteManager({
+  titre,
+  sousTitre,
+  palier,
+}: {
+  titre: string;
+  sousTitre?: string;
+  // Facultatif : seul /dashboard connaît le restaurant courant au moment du
+  // rendu de cet en-tête partagé (voir sa docstring) — les trois autres
+  // écrans peuvent l'ignorer sans rien casser.
+  palier?: SubscriptionTier;
+}) {
   const router = useRouter();
   const chemin = usePathname();
 
@@ -67,9 +82,29 @@ export default function EnteteManager({ titre, sousTitre }: { titre: string; sou
             </Link>
           );
         })}
+        {palier && (
+          // <a> natif, jamais <Link> : depuis /dashboard lui-même, une
+          // navigation Next vers la même route ne change que la query string
+          // sans remonter la page — l'effet qui lit `?tab=settings` (voir
+          // dashboard/page.tsx) ne se redéclenchait alors jamais (retour
+          // utilisateur, 2026-09-02 : "ne redirige pas"). Un lien natif force
+          // un vrai rechargement, donc l'effet tourne à chaque clic.
+          <a
+            href="/dashboard?tab=settings#abonnement"
+            className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-full border-2 transition-transform hover:scale-105 ms-auto"
+            style={{
+              backgroundColor: (TIER_ACCENTS[palier] ?? TIER_ACCENTS.essentiel).fond,
+              borderColor: (TIER_ACCENTS[palier] ?? TIER_ACCENTS.essentiel).bord,
+              color: (TIER_ACCENTS[palier] ?? TIER_ACCENTS.essentiel).texte,
+            }}
+          >
+            Palier {TIER_LABELS[palier] ?? palier}
+            <span aria-hidden="true">→</span>
+          </a>
+        )}
         <button
           onClick={seDeconnecter}
-          className="text-sm text-[var(--ink-soft)] underline ms-auto"
+          className={`text-sm text-[var(--ink-soft)] underline ${palier ? "" : "ms-auto"}`}
         >
           Se déconnecter
         </button>

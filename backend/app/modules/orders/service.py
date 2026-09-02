@@ -663,7 +663,7 @@ async def start_card_payment(
     if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
         raise upgrade_required_error(SubscriptionTier.PRO)
 
-    credentials = restaurant.konnect_credentials()
+    credentials = restaurant.payment_credentials()
     provider = get_payment_provider(credentials)
     if not provider.is_available():
         order = await pay_by_card_simulated(db, order_id, tip_amount, customer_email)
@@ -731,10 +731,11 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
         return "pending"
 
     restaurant = db.get(Restaurant, order.restaurant_id)
-    credentials = restaurant.konnect_credentials() if restaurant else None
+    credentials = restaurant.payment_credentials() if restaurant else None
     if not credentials:
-        # Konnect déconnecté par le manager entre l'initiation et le règlement
-        # (rare) : rien à régler sans la clé, mais ne pas planter le webhook.
+        # Fournisseur déconnecté par le manager entre l'initiation et le
+        # règlement (rare) : rien à régler sans identifiants, ne pas
+        # planter le webhook pour autant.
         # Volontairement PAS `provider.is_available()` ici (voir sa docstring
         # dans payment_provider.py) : un paiement déjà initié se règle même si
         # le drapeau global a été désactivé entre-temps, seuls les

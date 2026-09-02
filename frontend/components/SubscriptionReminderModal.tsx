@@ -43,7 +43,7 @@ export default function SubscriptionReminderModal({
     setError(null);
     try {
       const result = await api.startSubscriptionCheckout(restaurant.id, restaurant.subscription_tier);
-      if (result.mode === "konnect" && result.pay_url) {
+      if (result.pay_url) {
         window.location.href = result.pay_url;
         return;
       }
@@ -74,6 +74,14 @@ export default function SubscriptionReminderModal({
           </span>
           <span className="text-sm text-[var(--ink-soft)]"> / mois</span>
         </p>
+        {currentMarket.paymentProvider === "stripe" && (
+          // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) — même
+          // divulgation que UpgradeModal, ce rappel initie le tout premier
+          // paiement mais s'abonne bien pour le mois suivant aussi.
+          <p className="text-xs text-[var(--ink-soft)] mt-1">
+            Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail d&apos;abonnement.
+          </p>
+        )}
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
