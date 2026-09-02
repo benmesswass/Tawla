@@ -347,6 +347,17 @@ def set_konnect_credentials(
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     restaurant = _restaurant_or_404(db, restaurant_id)
+    if restaurant.is_demo:
+        # Un établissement de démo (jetable, purgé sous 2h) ne doit jamais
+        # pouvoir connecter un vrai wallet — le paiement carte du client y
+        # est déjà simulé automatiquement tant qu'aucun n'est connecté (voir
+        # orders/service.py::start_card_payment) ; laisser passer de vraies
+        # clés reviendrait à basculer un compte éphémère sur un vrai
+        # encaissement (retour utilisateur, 2026-09-02).
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "DEMO_RESTAURANT", "message": "card payment is already simulated in demo mode"},
+        )
 
     restaurant.konnect_api_key_encrypted = encrypt_field(payload.api_key)
     restaurant.konnect_wallet_id = payload.wallet_id
@@ -369,6 +380,16 @@ def start_stripe_connect(restaurant_id: int, db: Session = Depends(get_db), staf
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     restaurant = _restaurant_or_404(db, restaurant_id)
+    if restaurant.is_demo:
+        # Même garde que set_konnect_credentials ci-dessus — sans elle, un
+        # établissement de démo pourrait créer un vrai compte Connect Stripe
+        # orphelin (jamais nettoyé, la ligne restaurant est purgée sous 2h,
+        # pas le compte Stripe), et si l'onboarding allait au bout, ferait
+        # basculer le paiement carte du client de simulé à réel.
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "DEMO_RESTAURANT", "message": "card payment is already simulated in demo mode"},
+        )
 
     account_id = restaurant.stripe_account_id
     if not account_id:
@@ -457,7 +478,16 @@ def start_subscription_checkout(
         if current_market.payment_provider == "stripe"
         else is_subscription_konnect_enabled()
     )
-    if not is_provider_enabled:
+    # Un établissement de démo (jetable, purgé sous 2h) reste TOUJOURS en
+    # mode démo ici, même si le déploiement a PAYMENT_MODE=stripe pour ses
+    # vrais restaurants — sans quoi "S'abonner à Business" créerait un vrai
+    # abonnement Stripe récurrent sur un compte qui n'existera plus dans 2h :
+    # plus aucun tableau de bord pour le résilier, prélèvement indéfini
+    # (retour utilisateur, 2026-09-02). Même raisonnement que
+    # `pay_by_card_simulated` côté client (orders/service.py), qui lui est
+    # protégé par construction (jamais de vraies clés sur un compte démo,
+    # voir set_konnect_credentials/start_stripe_connect ci-dessus).
+    if not is_provider_enabled or restaurant.is_demo:
         # Mode démonstration : aucune clé réelle pour Tawla elle-même pour
         # l'instant (voir app/core/konnect.py / stripe_gateway.py) — le palier
         # est appliqué immédiatement, comme pay_by_card_simulated pour le

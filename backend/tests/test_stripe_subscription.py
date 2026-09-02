@@ -544,3 +544,86 @@ def test_payment_credentials_ignores_the_stripe_account_id_on_the_tunisia_market
     restaurant = Restaurant(name="x", slug="y", stripe_account_id="acct_1")
 
     assert restaurant.payment_credentials() is None
+
+
+# --- Établissements de démo : jamais de vrai paiement, même Stripe actif ---
+
+
+def _demo_restaurant(db_session, *, slug: str, **extra) -> Restaurant:
+    restaurant = create_restaurant(slug=slug, subscription_tier=SubscriptionTier.ESSENTIEL)
+    restaurant.is_demo = True
+    for key, value in extra.items():
+        setattr(restaurant, key, value)
+    db_session.add(restaurant)
+    db_session.commit()
+    db_session.refresh(restaurant)
+    return restaurant
+
+
+def test_subscription_checkout_forces_demo_mode_for_a_demo_restaurant_even_with_stripe_active(
+    client, db_session, monkeypatch
+):
+    """Retour utilisateur, 2026-09-02 : un établissement de démo (jetable,
+    purgé sous 2h) ne doit JAMAIS créer un vrai abonnement Stripe récurrent —
+    sans ce garde-fou, PAYMENT_MODE=stripe (déjà actif pour les vrais
+    restaurants) ferait basculer "S'abonner à Business" sur une vraie session
+    Stripe Checkout pour un compte qui n'existera plus dans 2h."""
+    restaurant = _demo_restaurant(db_session, slug="demo-checkout-forced")
+    headers = _manager_headers(restaurant.id)
+
+    def _boom(**kw):
+        raise AssertionError("un établissement de démo ne doit jamais atteindre un vrai chemin de paiement Stripe")
+
+    monkeypatch.setattr(tenants_router.stripe_gateway, "create_subscription_checkout_session", _boom)
+    monkeypatch.setattr(tenants_router.stripe_gateway, "change_tier_immediately", _boom)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "pro"}, headers=headers)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["mode"] == "demo"
+    assert body["restaurant"]["subscription_tier"] == "pro"
+    db_session.refresh(restaurant)
+    assert restaurant.stripe_subscription_id is None
+
+
+def test_stripe_connect_start_is_rejected_for_a_demo_restaurant(client, db_session, monkeypatch):
+    """Même raisonnement que le test ci-dessus, côté paiement carte du
+    CLIENT plutôt que l'abonnement Tawla : sans ce garde-fou, un compte démo
+    pourrait créer un vrai compte Connect Stripe orphelin (jamais nettoyé,
+    la ligne restaurant est purgée sous 2h, pas le compte Stripe côté
+    Stripe), et faire basculer `pay_by_card_simulated` sur du réel si
+    l'onboarding allait au bout."""
+    restaurant = _demo_restaurant(db_session, slug="demo-stripe-connect-blocked")
+    headers = _manager_headers(restaurant.id)
+
+    def _boom(**kw):
+        raise AssertionError("un établissement de démo ne doit jamais créer de vrai compte Connect")
+
+    monkeypatch.setattr(tenants_router.stripe_gateway, "create_connected_account", _boom)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/stripe-connect/start", headers=headers)
+
+    assert res.status_code == 400
+    assert res.json()["detail"]["code"] == "DEMO_RESTAURANT"
+    db_session.refresh(restaurant)
+    assert restaurant.stripe_account_id is None
+
+
+def test_konnect_credentials_are_rejected_for_a_demo_restaurant(client, db_session):
+    """Équivalent Tunisie du test Stripe Connect ci-dessus — même risque
+    (paiement carte du client basculant de simulé à réel sur un compte
+    jetable) si un vrai wallet Konnect pouvait être connecté en démo."""
+    restaurant = _demo_restaurant(db_session, slug="demo-konnect-credentials-blocked")
+    headers = _manager_headers(restaurant.id)
+
+    res = client.put(
+        f"/api/v1/restaurants/{restaurant.id}/konnect-credentials",
+        json={"api_key": "fake-key", "wallet_id": "fake-wallet"},
+        headers=headers,
+    )
+
+    assert res.status_code == 400
+    assert res.json()["detail"]["code"] == "DEMO_RESTAURANT"
+    db_session.refresh(restaurant)
+    assert restaurant.konnect_wallet_id is None
