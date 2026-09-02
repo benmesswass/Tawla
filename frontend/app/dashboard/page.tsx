@@ -219,7 +219,9 @@ export default function DashboardPage() {
   const [couvertureEnCours, setCouvertureEnCours] = useState(false);
   const [logoEnCours, setLogoEnCours] = useState(false);
   // Icônes réseaux sociaux du menu client (Phase D1, point 3) — un seul
-  // formulaire pour les quatre liens, enregistrés ensemble au blur.
+  // formulaire pour les cinq liens, enregistrés ensemble au clic sur
+  // "Enregistrer" (pas au blur : un blur par champ envoyait un PATCH par
+  // champ rempli, et désactivait les inputs suivants pendant l'aller-retour).
   const [facebookUrl, setFacebookUrl] = useState("");
   const [instagramUrl, setInstagramUrl] = useState("");
   const [tiktokUrl, setTiktokUrl] = useState("");
@@ -717,6 +719,7 @@ export default function DashboardPage() {
         google_review_url: googleReviewUrl.trim() || null,
       });
       setRestaurant(misAJour);
+      flash("Liens enregistrés.");
     } catch (e) {
       handleGatedError(e);
     } finally {
@@ -2151,10 +2154,11 @@ export default function DashboardPage() {
 
           {restaurant && (
             <Card padding="sm" className="mt-4">
-              <span className="font-medium">Réseaux sociaux</span>
+              <span className="font-medium">Réseaux sociaux et avis Google</span>
               <p className="text-xs text-neutral-500 mt-1">
                 Affichés en petites icônes dans l&apos;en-tête du menu client. Facultatifs, indépendants les uns des
-                autres — laisser un champ vide retire son icône sans toucher aux autres.
+                autres — laisser un champ vide retire son icône sans toucher aux autres. Un seul bouton
+                Enregistrer pour les cinq liens ci-dessous.
               </p>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="text-sm">
@@ -2166,7 +2170,6 @@ export default function DashboardPage() {
                     value={facebookUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setFacebookUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://facebook.com/…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
@@ -2180,7 +2183,6 @@ export default function DashboardPage() {
                     value={instagramUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setInstagramUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://instagram.com/…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
@@ -2194,7 +2196,6 @@ export default function DashboardPage() {
                     value={tiktokUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setTiktokUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://tiktok.com/@…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
@@ -2208,34 +2209,36 @@ export default function DashboardPage() {
                     value={whatsappUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setWhatsappUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://wa.me/216…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
                 </label>
               </div>
-            </Card>
-          )}
 
-          {restaurant && (
-            <Card padding="sm" className="mt-4">
-              <span className="font-medium">Avis Google</span>
-              <p className="text-xs text-neutral-500 mt-1">
-                Une fois l&apos;addition réglée, le client voit une invitation à laisser un avis Google avec ce
-                lien. Facultatif — sans lui, rien ne s&apos;affiche après le paiement.
-              </p>
-              <label className="text-sm mt-2 block">
-                <span className="text-xs text-neutral-500 mb-0.5 block">Lien vers la fiche d&apos;avis</span>
-                <input
-                  type="url"
-                  value={googleReviewUrl}
-                  disabled={savingReseaux}
-                  onChange={(e) => setGoogleReviewUrl(e.target.value)}
-                  onBlur={saveReseaux}
-                  placeholder="https://g.page/r/…/review"
-                  className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
-                />
-              </label>
+              <div className="mt-4 pt-3 border-t border-[var(--line)]">
+                <span className="text-xs text-neutral-500 font-medium">Avis Google</span>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Une fois l&apos;addition réglée, le client voit une invitation à laisser un avis Google avec ce
+                  lien. Facultatif — sans lui, rien ne s&apos;affiche après le paiement.
+                </p>
+                <label className="text-sm mt-2 block">
+                  <span className="text-xs text-neutral-500 mb-0.5 block">Lien vers la fiche d&apos;avis</span>
+                  <input
+                    type="url"
+                    value={googleReviewUrl}
+                    disabled={savingReseaux}
+                    onChange={(e) => setGoogleReviewUrl(e.target.value)}
+                    placeholder="https://g.page/r/…/review"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3">
+                <Button size="sm" onClick={saveReseaux} disabled={savingReseaux}>
+                  {savingReseaux ? "Enregistrement..." : "Enregistrer"}
+                </Button>
+              </div>
             </Card>
           )}
 
