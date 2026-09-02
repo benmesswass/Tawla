@@ -33,6 +33,7 @@ class RestaurantPublicOut(BaseModel):
     instagram_url: str | None
     tiktok_url: str | None
     whatsapp_url: str | None
+    google_review_url: str | None
 
 
 class RestaurantOut(RestaurantPublicOut):
@@ -109,13 +110,18 @@ class CafeModeUpdate(BaseModel):
 
 
 class SocialLinksUpdate(BaseModel):
-    """Les quatre liens sont indépendants — vide (None) retire l'icône
-    correspondante sans toucher aux trois autres."""
+    """Les cinq liens sont indépendants — vide (None) retire l'icône (ou la
+    modale d'avis) correspondante sans toucher aux autres.
+
+    google_review_url partage cette route plutôt que d'en avoir une à lui
+    seul (Phase D1bis) — nom de route un peu large, mais évite une route
+    quasi identique pour un seul champ."""
 
     facebook_url: str | None = None
     instagram_url: str | None = None
     tiktok_url: str | None = None
     whatsapp_url: str | None = None
+    google_review_url: str | None = None
 
 
 class KitchenSoundUpdate(BaseModel):

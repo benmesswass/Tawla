@@ -48,9 +48,10 @@ def _run_hogql(query: str, values: dict[str, Any] | None = None) -> list[list[An
 def demo_starts_by_day(days: int = 30) -> list[dict] | None:
     rows = _run_hogql(
         "SELECT toDate(timestamp) AS day, count() AS n FROM events "
-        "WHERE event = 'demo_clicked' AND timestamp >= now() - INTERVAL {days} DAY "
+        "WHERE event = 'demo_clicked' AND properties.env = 'production' AND properties.market = {market} "
+        "AND timestamp >= now() - INTERVAL {days} DAY "
         "GROUP BY day ORDER BY day",
-        {"days": days},
+        {"days": days, "market": settings.market},
     )
     if rows is None:
         return None
@@ -73,9 +74,10 @@ def demo_engagement_totals(days: int = 30) -> list[dict] | None:
     rows = _run_hogql(
         "SELECT event, count() AS n FROM events "
         "WHERE event IN {events} AND properties.is_demo = true "
+        "AND properties.env = 'production' AND properties.market = {market} "
         "AND timestamp >= now() - INTERVAL {days} DAY "
         "GROUP BY event ORDER BY n DESC",
-        {"events": _DEMO_ENGAGEMENT_EVENTS, "days": days},
+        {"events": _DEMO_ENGAGEMENT_EVENTS, "days": days, "market": settings.market},
     )
     if rows is None:
         return None
@@ -85,9 +87,10 @@ def demo_engagement_totals(days: int = 30) -> list[dict] | None:
 def paywall_hits_by_tier(days: int = 30) -> list[dict] | None:
     rows = _run_hogql(
         "SELECT properties.required_tier AS tier, count() AS n FROM events "
-        "WHERE event = 'paywall_hit' AND timestamp >= now() - INTERVAL {days} DAY "
+        "WHERE event = 'paywall_hit' AND properties.env = 'production' AND properties.market = {market} "
+        "AND timestamp >= now() - INTERVAL {days} DAY "
         "GROUP BY tier ORDER BY n DESC",
-        {"days": days},
+        {"days": days, "market": settings.market},
     )
     if rows is None:
         return None
@@ -100,9 +103,10 @@ def acquisition_funnel(days: int = 30) -> list[dict] | None:
     actuel), juste le compte à chaque étape sur la période."""
     rows = _run_hogql(
         "SELECT event, count(DISTINCT distinct_id) AS users FROM events "
-        "WHERE event IN {events} AND timestamp >= now() - INTERVAL {days} DAY "
+        "WHERE event IN {events} AND properties.env = 'production' AND properties.market = {market} "
+        "AND timestamp >= now() - INTERVAL {days} DAY "
         "GROUP BY event",
-        {"events": _FUNNEL_EVENTS, "days": days},
+        {"events": _FUNNEL_EVENTS, "days": days, "market": settings.market},
     )
     if rows is None:
         return None

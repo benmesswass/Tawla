@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     posthog_app_host: str = "https://eu.posthog.com"
     posthog_project_id: str = "263083"
 
+    # Étiquette `env` posée sur chaque événement émis par ce backend (voir
+    # analytics.py) — délibérément SÉPARÉE de `env` ci-dessus, qui contrôle
+    # les garde-fous de sécurité (JWT_SECRET, etc.) et vaut déjà "production"
+    # sur tawla-backend-fr/tawla-backend.onrender.com. Ces deux backends sont
+    # bien "production" au sens sécurité, mais pas encore le vrai site public
+    # (juste les URLs Vercel actuelles) — donc "staging" ici tant que le vrai
+    # domaine n'est pas branché. Défaut "development" : une instance qui ne
+    # pose jamais cette variable ne se fait jamais passer pour du trafic réel.
+    posthog_env: str = "development"
+
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":
         if self.env == "production" and self.jwt_secret == _DEV_JWT_SECRET:
