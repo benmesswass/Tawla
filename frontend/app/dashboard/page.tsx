@@ -2154,10 +2154,11 @@ export default function DashboardPage() {
 
           {restaurant && (
             <Card padding="sm" className="mt-4">
-              <span className="font-medium">Réseaux sociaux</span>
+              <span className="font-medium">Réseaux sociaux et avis Google</span>
               <p className="text-xs text-neutral-500 mt-1">
                 Affichés en petites icônes dans l&apos;en-tête du menu client. Facultatifs, indépendants les uns des
-                autres — laisser un champ vide retire son icône sans toucher aux autres.
+                autres — laisser un champ vide retire son icône sans toucher aux autres. Un seul bouton
+                Enregistrer pour les cinq liens ci-dessous.
               </p>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="text-sm">
@@ -2213,27 +2214,26 @@ export default function DashboardPage() {
                   />
                 </label>
               </div>
-            </Card>
-          )}
 
-          {restaurant && (
-            <Card padding="sm" className="mt-4">
-              <span className="font-medium">Avis Google</span>
-              <p className="text-xs text-neutral-500 mt-1">
-                Une fois l&apos;addition réglée, le client voit une invitation à laisser un avis Google avec ce
-                lien. Facultatif — sans lui, rien ne s&apos;affiche après le paiement.
-              </p>
-              <label className="text-sm mt-2 block">
-                <span className="text-xs text-neutral-500 mb-0.5 block">Lien vers la fiche d&apos;avis</span>
-                <input
-                  type="url"
-                  value={googleReviewUrl}
-                  disabled={savingReseaux}
-                  onChange={(e) => setGoogleReviewUrl(e.target.value)}
-                  placeholder="https://g.page/r/…/review"
-                  className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
-                />
-              </label>
+              <div className="mt-4 pt-3 border-t border-[var(--line)]">
+                <span className="text-xs text-neutral-500 font-medium">Avis Google</span>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Une fois l&apos;addition réglée, le client voit une invitation à laisser un avis Google avec ce
+                  lien. Facultatif — sans lui, rien ne s&apos;affiche après le paiement.
+                </p>
+                <label className="text-sm mt-2 block">
+                  <span className="text-xs text-neutral-500 mb-0.5 block">Lien vers la fiche d&apos;avis</span>
+                  <input
+                    type="url"
+                    value={googleReviewUrl}
+                    disabled={savingReseaux}
+                    onChange={(e) => setGoogleReviewUrl(e.target.value)}
+                    placeholder="https://g.page/r/…/review"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+              </div>
+
               <div className="mt-3">
                 <Button size="sm" onClick={saveReseaux} disabled={savingReseaux}>
                   {savingReseaux ? "Enregistrement..." : "Enregistrer"}
