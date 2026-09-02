@@ -512,14 +512,21 @@ def start_subscription_checkout(
         # trois. `is_active=True` passe à `True` une bonne fois pour toutes
         # (voir Restaurant.is_active/is_usable) ; c'est `subscription_period_end`
         # qui porte le renouvellement, pas ce booléen.
-        now = datetime.now(timezone.utc)
-        base = (
-            as_utc(restaurant.subscription_period_end)
-            if restaurant.subscription_period_end and as_utc(restaurant.subscription_period_end) > now
-            else now
-        )
         restaurant.subscription_tier = target
-        restaurant.subscription_period_end = base + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
+        if not restaurant.is_demo:
+            now = datetime.now(timezone.utc)
+            base = (
+                as_utc(restaurant.subscription_period_end)
+                if restaurant.subscription_period_end and as_utc(restaurant.subscription_period_end) > now
+                else now
+            )
+            restaurant.subscription_period_end = base + timedelta(days=SUBSCRIPTION_DURATION_DAYS)
+        # Établissement de démo : `subscription_period_end` reste celui posé
+        # à la création (~2h, voir demo/service.py) — la session s'efface à
+        # cette échéance quoi qu'il arrive, jamais la peine (et trompeur à
+        # l'affichage, "Valable jusqu'au" sautant à +30 jours à chaque
+        # simulation) de le prolonger comme pour un vrai renouvellement
+        # (retour utilisateur, 2026-09-02 quater).
         restaurant.is_active = True
         restaurant.has_paid_for_subscription = True
         db.commit()
