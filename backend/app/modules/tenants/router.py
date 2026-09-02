@@ -459,7 +459,19 @@ def start_subscription_checkout(
     target = payload.tier
     if target not in current_market.tier_prices:
         raise HTTPException(status_code=400, detail={"code": "INVALID_TIER", "message": "unknown tier"})
-    if target != SubscriptionTier.ESSENTIEL:
+    # `restaurant.is_active` : sans cette condition, un compte INACTIF (résilié
+    # — vrai ou simulé, voir simulate_subscription_cancellation) qui tente de
+    # se réactiver au MÊME palier qu'avant (`ActivationRequired.handlePay()`
+    # rejoue toujours `restaurant.subscription_tier`, jamais Essentiel par
+    # défaut — voir handle_stripe_subscription_event) se faisait rejeter à
+    # tort "déjà à ce palier ou plus" — trouvé le 2026-09-02 bis en testant la
+    # résiliation simulée en démo : Business résilié → réactiver échouait
+    # systématiquement (`effective_tier` ignore `is_active`, seulement
+    # `subscription_period_end`). Une fois inactif, N'IMPORTE QUEL palier
+    # (identique, supérieur ou inférieur à l'ancien) doit pouvoir être choisi
+    # librement — ce n'est jamais une "upgrade redondante" mais une
+    # réactivation.
+    if target != SubscriptionTier.ESSENTIEL and restaurant.is_active:
         current = effective_tier(restaurant)
         if tier_includes(current, target):
             raise HTTPException(

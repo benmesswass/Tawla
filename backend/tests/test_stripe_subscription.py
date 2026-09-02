@@ -682,3 +682,55 @@ def test_simulate_cancel_is_rejected_for_a_non_demo_restaurant(client, db_sessio
     assert res.json()["detail"]["code"] == "NOT_A_DEMO_RESTAURANT"
     db_session.refresh(restaurant)
     assert restaurant.is_active is True
+
+
+def test_reactivating_a_cancelled_demo_restaurant_at_the_same_tier_succeeds(client, db_session):
+    """Régression du 2026-09-02 bis, trouvée en testant la résiliation
+    simulée en direct : `ActivationRequired.handlePay()` rejoue toujours
+    `restaurant.subscription_tier` (jamais Essentiel par défaut — voir
+    handle_stripe_subscription_event), donc un Business résilié qui se
+    réactive vise le MÊME palier qu'avant. Le garde-fou NOT_AN_UPGRADE
+    l'bloquait à tort ("erreur" affichée en démo) : `effective_tier` ignore
+    `is_active`, ne regarde que `subscription_period_end`."""
+    restaurant = _demo_restaurant(
+        db_session, slug="demo-reactivate-same-tier", subscription_tier=SubscriptionTier.BUSINESS, is_active=False,
+    )
+    headers = _manager_headers(restaurant.id)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "business"}, headers=headers)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["mode"] == "demo"
+    assert body["restaurant"]["is_active"] is True
+    assert body["restaurant"]["subscription_tier"] == "business"
+
+
+def test_reactivating_a_cancelled_real_subscription_at_the_same_tier_creates_a_fresh_checkout(
+    client, db_session, monkeypatch
+):
+    """Même bug, chemin réel : un vrai abonnement Stripe résilié
+    (`customer.subscription.deleted`, `stripe_subscription_id` effacé mais
+    `subscription_tier` volontairement inchangé) doit pouvoir être racheté
+    au même palier — une NOUVELLE session de paiement, l'ancien abonnement
+    Stripe étant réellement mort, jamais modifiable en place."""
+    restaurant = create_restaurant(
+        slug="real-reactivate-same-tier", subscription_tier=SubscriptionTier.BUSINESS, is_active=False,
+    )
+    restaurant.stripe_customer_id = "cus_old"
+    restaurant.stripe_subscription_id = None
+    db_session.add(restaurant)
+    db_session.commit()
+    db_session.refresh(restaurant)
+    headers = _manager_headers(restaurant.id)
+    monkeypatch.setattr(
+        tenants_router.stripe_gateway, "create_subscription_checkout_session",
+        lambda **kw: ("https://checkout.stripe.example/reactivate", "cs_reactivate"),
+    )
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/checkout", json={"tier": "business"}, headers=headers)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["mode"] == "stripe"
+    assert body["pay_url"] == "https://checkout.stripe.example/reactivate"
