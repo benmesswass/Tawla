@@ -7,6 +7,7 @@ import { trackEvent } from "@/lib/analytics";
 import { TIERS, estimateUpgradeProration } from "@/lib/offer";
 import { currentMarket } from "@/lib/market";
 import { sessionDemo } from "@/lib/visite/etat";
+import { useSubscriptionCheckout } from "@/lib/useSubscriptionCheckout";
 import Button from "@/components/ui/Button";
 
 /**
@@ -36,6 +37,16 @@ export default function UpgradeModal({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Avant le `if (!tier) return null;` ci-dessous : un hook ne peut pas
+  // être appelé après un retour anticipé (Rules of Hooks).
+  const { openPaymentTab, goToPayment } = useSubscriptionCheckout(
+    restaurantId,
+    (r) => {
+      onUpgraded(r);
+      onClose();
+    },
+    (e) => setError(toFrenchMessage(e))
+  );
 
   const tier = TIERS.find((t) => t.id === requiredTier);
   if (!tier) return null; // "essentiel" n'atterrit jamais ici (jamais un required_tier)
@@ -57,15 +68,18 @@ export default function UpgradeModal({
     trackEvent("upgrade_clicked", { target_tier: requiredTier, is_demo: Boolean(sessionDemo()) });
     setSubmitting(true);
     setError(null);
+    const paymentTab = openPaymentTab();
     try {
       const result = await api.startSubscriptionCheckout(restaurantId, requiredTier);
       if (result.pay_url) {
-        window.location.href = result.pay_url;
+        goToPayment(paymentTab, result.pay_url);
         return;
       }
+      paymentTab?.close();
       if (result.restaurant) onUpgraded(result.restaurant);
       onClose();
     } catch (e) {
+      paymentTab?.close();
       setError(toFrenchMessage(e));
     } finally {
       setSubmitting(false);
