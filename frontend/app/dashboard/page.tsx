@@ -219,7 +219,9 @@ export default function DashboardPage() {
   const [couvertureEnCours, setCouvertureEnCours] = useState(false);
   const [logoEnCours, setLogoEnCours] = useState(false);
   // Icônes réseaux sociaux du menu client (Phase D1, point 3) — un seul
-  // formulaire pour les quatre liens, enregistrés ensemble au blur.
+  // formulaire pour les cinq liens, enregistrés ensemble au clic sur
+  // "Enregistrer" (pas au blur : un blur par champ envoyait un PATCH par
+  // champ rempli, et désactivait les inputs suivants pendant l'aller-retour).
   const [facebookUrl, setFacebookUrl] = useState("");
   const [instagramUrl, setInstagramUrl] = useState("");
   const [tiktokUrl, setTiktokUrl] = useState("");
@@ -717,6 +719,7 @@ export default function DashboardPage() {
         google_review_url: googleReviewUrl.trim() || null,
       });
       setRestaurant(misAJour);
+      flash("Liens enregistrés.");
     } catch (e) {
       handleGatedError(e);
     } finally {
@@ -2166,7 +2169,6 @@ export default function DashboardPage() {
                     value={facebookUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setFacebookUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://facebook.com/…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
@@ -2180,7 +2182,6 @@ export default function DashboardPage() {
                     value={instagramUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setInstagramUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://instagram.com/…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
@@ -2194,7 +2195,6 @@ export default function DashboardPage() {
                     value={tiktokUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setTiktokUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://tiktok.com/@…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
@@ -2208,7 +2208,6 @@ export default function DashboardPage() {
                     value={whatsappUrl}
                     disabled={savingReseaux}
                     onChange={(e) => setWhatsappUrl(e.target.value)}
-                    onBlur={saveReseaux}
                     placeholder="https://wa.me/216…"
                     className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                   />
@@ -2231,11 +2230,15 @@ export default function DashboardPage() {
                   value={googleReviewUrl}
                   disabled={savingReseaux}
                   onChange={(e) => setGoogleReviewUrl(e.target.value)}
-                  onBlur={saveReseaux}
                   placeholder="https://g.page/r/…/review"
                   className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
                 />
               </label>
+              <div className="mt-3">
+                <Button size="sm" onClick={saveReseaux} disabled={savingReseaux}>
+                  {savingReseaux ? "Enregistrement..." : "Enregistrer"}
+                </Button>
+              </div>
             </Card>
           )}
 

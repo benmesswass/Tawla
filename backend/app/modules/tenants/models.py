@@ -66,9 +66,11 @@ class Restaurant(Base):
     logo_content_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     # Icônes réseaux sociaux dans l'en-tête du menu client (Phase D1 de
-    # ROADMAP_DESIGN.md, point 3) — liens saisis par le manager, pas de
-    # validation stricte de format (même tolérance que category en texte
-    # libre). Nullable : chaque icône ne s'affiche que si son lien existe.
+    # ROADMAP_DESIGN.md, point 3) — liens saisis par le manager. Validés côté
+    # écriture (schéma http(s) uniquement + longueur, voir
+    # router.py::_clean_social_url) : ils finissent en `href` brut sur le
+    # menu public, un schéma non filtré serait un XSS stocké. Nullable :
+    # chaque icône ne s'affiche que si son lien existe.
     facebook_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     instagram_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     tiktok_url: Mapped[str | None] = mapped_column(String(300), nullable=True)

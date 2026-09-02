@@ -159,6 +159,41 @@ def set_kitchen_sound(
     return schemas.serialize_restaurant(restaurant)
 
 
+def _clean_social_url(value: str | None, field: str) -> str | None:
+    """
+    http(s) uniquement : ces liens finissent en `href` brut sur le menu
+    public (frontend/components/ReseauxSociaux.tsx), donc un schéma non
+    filtré (`javascript:`...) serait un XSS stocké déclenché au clic par
+    n'importe quel client. Bornée à 300 caractères pour matcher la colonne
+    (String(300), models.py) — sans ce contrôle ici, un lien trop long fait
+    échouer le commit avec une erreur Postgres brute au lieu d'un 422 propre.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    if not value.lower().startswith(("http://", "https://")):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_SOCIAL_URL",
+                "message": "link must start with http:// or https://",
+                "field": field,
+            },
+        )
+    if len(value) > 300:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "SOCIAL_URL_TOO_LONG",
+                "message": "link is too long (300 characters max)",
+                "field": field,
+            },
+        )
+    return value
+
+
 @router.patch("/{restaurant_id}/social-links", response_model=schemas.RestaurantOut)
 def set_social_links(
     restaurant_id: int,
@@ -183,11 +218,11 @@ def set_social_links(
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     restaurant = _restaurant_or_404(db, restaurant_id)
 
-    restaurant.facebook_url = payload.facebook_url
-    restaurant.instagram_url = payload.instagram_url
-    restaurant.tiktok_url = payload.tiktok_url
-    restaurant.whatsapp_url = payload.whatsapp_url
-    restaurant.google_review_url = payload.google_review_url
+    restaurant.facebook_url = _clean_social_url(payload.facebook_url, "facebook_url")
+    restaurant.instagram_url = _clean_social_url(payload.instagram_url, "instagram_url")
+    restaurant.tiktok_url = _clean_social_url(payload.tiktok_url, "tiktok_url")
+    restaurant.whatsapp_url = _clean_social_url(payload.whatsapp_url, "whatsapp_url")
+    restaurant.google_review_url = _clean_social_url(payload.google_review_url, "google_review_url")
     db.commit()
     db.refresh(restaurant)
     return schemas.serialize_restaurant(restaurant)

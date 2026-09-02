@@ -46,9 +46,28 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
     const label = TIER_LABELS[ctx.required_tier as string] ?? String(ctx.required_tier);
     return `Cette fonctionnalité demande le palier ${label} ou plus.`;
   },
+  // Réseaux sociaux + avis Google (settings/social-links) — le lien est
+  // affiché en href brut sur le menu public, d'où le filtrage http(s) côté
+  // backend (tenants/router.py::_clean_social_url).
+  INVALID_SOCIAL_URL: (ctx) => {
+    const label = SOCIAL_FIELD_LABELS[ctx.field as string] ?? "Ce lien";
+    return `Le lien ${label} doit commencer par http:// ou https://.`;
+  },
+  SOCIAL_URL_TOO_LONG: (ctx) => {
+    const label = SOCIAL_FIELD_LABELS[ctx.field as string] ?? "Ce lien";
+    return `Le lien ${label} est trop long (300 caractères maximum).`;
+  },
 };
 
 const TIER_LABELS: Record<string, string> = { essentiel: "Essentiel", pro: "Pro", business: "Business" };
+
+const SOCIAL_FIELD_LABELS: Record<string, string> = {
+  facebook_url: "Facebook",
+  instagram_url: "Instagram",
+  tiktok_url: "TikTok",
+  whatsapp_url: "WhatsApp",
+  google_review_url: "avis Google",
+};
 
 export function toFrenchMessage(error: unknown): string {
   if (error instanceof ApiError) {
