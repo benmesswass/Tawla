@@ -60,6 +60,9 @@ export const ar = {
   cashPendingMessage: (amount) => `طلبت تخلص كاش — جرسون باش يجي يقبض ${formatAmount(amount)} د.ت.`,
   cardTerminalPendingMessage: (amount) =>
     `طلبت تخلص بالكارت — جرسون باش يجي بالماكينة يقبض ${formatAmount(amount)} د.ت.`,
+  cardOnlinePendingMessage: (amount) =>
+    `طلبت تخلص أونلاين — كمل الخلاص فالتاب اللي حل باش تخلص ${formatAmount(amount)} د.ت. ` +
+    `الصفحة هاذي باش تتبدل وحدها كي ترجع ليها.`,
   tipLabel: "الإكرامية (إختياري، للخلاص بالكارت)",
   tipNone: "بلا",
   tipPlaceholder: `${formatAmount(0)} د.ت`,
