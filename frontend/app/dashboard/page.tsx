@@ -520,13 +520,18 @@ export default function DashboardPage() {
   async function confirmDowngrade() {
     if (!restaurantId || !confirmingDowngradeTier) return;
     const tier = confirmingDowngradeTier;
+    const isDemo = Boolean(restaurant?.is_demo);
     setError(null);
     setDowngradeSubmitting(true);
     try {
       const updated = await api.scheduleDowngrade(restaurantId, tier);
       setRestaurant(updated);
       setConfirmingDowngradeTier(null);
-      flash(`Passage à ${TIER_LABELS[tier]} programmé pour la prochaine échéance.`);
+      flash(
+        isDemo
+          ? `Simulation — palier ${TIER_LABELS[tier]} appliqué.`
+          : `Passage à ${TIER_LABELS[tier]} programmé pour la prochaine échéance.`
+      );
     } catch (e) {
       handleGatedError(e);
     } finally {
@@ -545,6 +550,22 @@ export default function DashboardPage() {
       // retour prévu — perdre l'onglet du dashboard manager n'aurait aucun
       // intérêt.
       window.open(portal_url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      handleGatedError(e);
+    }
+  }
+
+  async function simulateCancel() {
+    // Établissement de démo uniquement (voir tenants/router.py::
+    // simulate_subscription_cancellation) — jamais de vrai portail à ouvrir
+    // pour un compte sans vrai abonnement Stripe (retour utilisateur,
+    // 2026-09-02 bis : "active tout même pour la démo").
+    if (!restaurantId) return;
+    setError(null);
+    try {
+      const updated = await api.simulateSubscriptionCancel(restaurantId);
+      setRestaurant(updated);
+      flash("Simulation — abonnement résilié, plus aucun accès jusqu'à un nouveau palier.");
     } catch (e) {
       handleGatedError(e);
     }
@@ -1163,6 +1184,7 @@ export default function DashboardPage() {
         <ConfirmDowngradeModal
           tier={confirmingDowngradeTier}
           periodEndLabel={formatDate(restaurant.subscription_period_end)}
+          isDemo={Boolean(restaurant.is_demo)}
           submitting={downgradeSubmitting}
           onConfirm={confirmDowngrade}
           onCancel={() => setConfirmingDowngradeTier(null)}
@@ -2274,10 +2296,24 @@ export default function DashboardPage() {
                     </Button>
                   </>
                 ) : (
-                  <p className="text-xs text-neutral-500 mt-2">
-                    Valable jusqu&apos;au {formatDate(restaurant.subscription_period_end)}. Repasse automatiquement à
-                    Essentiel sans renouvellement d&apos;ici là.
-                  </p>
+                  <>
+                    <p className="text-xs text-neutral-500 mt-2">
+                      Valable jusqu&apos;au {formatDate(restaurant.subscription_period_end)}. Repasse automatiquement
+                      à Essentiel sans renouvellement d&apos;ici là.
+                    </p>
+                    {currentMarket.paymentProvider === "stripe" && restaurant.is_demo && (
+                      // Établissement de démo : jamais de vrai abonnement à
+                      // résilier (voir stripe_subscription_active), donc pas
+                      // de vrai portail — un clic simule directement l'effet
+                      // d'une résiliation réelle (retour utilisateur,
+                      // 2026-09-02 : "un bouton de simulation pour... paiement
+                      // pour tawla", et 2026-09-02 bis : "active tout même
+                      // pour la démo").
+                      <Button variant="secondary" onClick={simulateCancel} className="mt-2">
+                        Simuler la résiliation
+                      </Button>
+                    )}
+                  </>
                 ))}
 
               {UPGRADE_TIERS_ABOVE[restaurant.subscription_tier].length > 0 && (
@@ -2384,18 +2420,23 @@ export default function DashboardPage() {
               )}
 
               {currentMarket.paymentProvider === "stripe" &&
-                restaurant.stripe_subscription_active &&
+                (restaurant.stripe_subscription_active || restaurant.is_demo) &&
                 DOWNGRADE_TIERS_BELOW[restaurant.subscription_tier].length > 0 && (
                   // Rétrogradation en restant abonné, distincte d'annuler
                   // (retour utilisateur, 2026-09-02) — jamais pour Konnect,
                   // qui n'a pas de notion d'abonnement actif à modifier.
+                  // Aussi pour un établissement de démo (2026-09-02 bis :
+                  // "active tout même pour la démo") — sans vrai abonnement à
+                  // programmer, appliqué immédiatement plutôt qu'à une
+                  // échéance que personne ne reverra dans la session de 2h.
                   <div className="mt-4">
                     <p className={`${lalezar.className} text-xl text-[var(--encre)]`}>
                       Ou redescendre à un palier moins cher
                     </p>
                     <p className="text-xs text-neutral-500 mt-1">
-                      Effectif à la prochaine échéance ({formatDate(restaurant.subscription_period_end ?? "")}),
-                      jamais immédiat — vous gardez {TIER_LABELS[restaurant.subscription_tier]} jusque-là.
+                      {restaurant.is_demo
+                        ? "Simulation — appliqué immédiatement."
+                        : `Effectif à la prochaine échéance (${formatDate(restaurant.subscription_period_end ?? "")}), jamais immédiat — vous gardez ${TIER_LABELS[restaurant.subscription_tier]} jusque-là.`}
                     </p>
                     <div className="grid sm:grid-cols-2 gap-3 mt-2">
                       {DOWNGRADE_TIERS_BELOW[restaurant.subscription_tier].map((tier) => {
@@ -2421,9 +2462,11 @@ export default function DashboardPage() {
                               disabled={restaurant.subscription_downgrade_pending_tier === tier.id}
                               className="mt-2 w-full"
                             >
-                              {restaurant.subscription_downgrade_pending_tier === tier.id
-                                ? "Déjà programmé ✓"
-                                : `Passer à ${tier.name}`}
+                              {restaurant.is_demo
+                                ? `Simuler ${tier.name}`
+                                : restaurant.subscription_downgrade_pending_tier === tier.id
+                                  ? "Déjà programmé ✓"
+                                  : `Passer à ${tier.name}`}
                             </Button>
                           </div>
                         );

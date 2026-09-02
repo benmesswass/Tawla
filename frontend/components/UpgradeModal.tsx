@@ -45,6 +45,13 @@ export default function UpgradeModal({
     restaurant?.stripe_subscription_active && restaurant.subscription_period_end && currentTier
       ? estimateUpgradeProration(currentTier.priceDT, tier.priceDT, restaurant.subscription_period_end)
       : null;
+  // `restaurant` est facultatif (voir sa docstring) — absent depuis
+  // dashboard/equipe et dashboard/preuve, qui n'ont que le `restaurantId`.
+  // `sessionDemo()` (déjà lu plus bas pour le tracking) reste le seul signal
+  // disponible dans ce cas — retour utilisateur, 2026-09-02 bis : "active
+  // tout même pour la démo" ne doit pas dépendre de QUEL écran a ouvert
+  // cette modale.
+  const isDemo = restaurant ? Boolean(restaurant.is_demo) : Boolean(sessionDemo());
 
   async function handleUpgrade() {
     trackEvent("upgrade_clicked", { target_tier: requiredTier, is_demo: Boolean(sessionDemo()) });
@@ -92,7 +99,7 @@ export default function UpgradeModal({
             restants) — {tier.priceDT} {currentMarket.currency.symbol}/mois à partir du prochain prélèvement.
           </p>
         )}
-        {restaurant?.is_demo ? (
+        {isDemo ? (
           // Établissement de démo (jetable, purgé sous 2h) : le backend
           // force le mode simulé quel que soit PAYMENT_MODE (retour
           // utilisateur, 2026-09-02) — jamais le texte de prélèvement réel
@@ -122,7 +129,7 @@ export default function UpgradeModal({
           <Button onClick={handleUpgrade} disabled={submitting}>
             {submitting
               ? "Paiement en cours…"
-              : restaurant?.is_demo
+              : isDemo
                 ? `Simuler ${tier.name}`
                 : proration !== null
                   ? `Passer à ${tier.name} — ${proration} ${currentMarket.currency.symbol} aujourd'hui`

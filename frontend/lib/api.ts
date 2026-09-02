@@ -798,6 +798,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ tier }),
     }),
+  // Résiliation SIMULÉE, réservée aux établissements de démo — pas de vrai
+  // portail Stripe à ouvrir pour un compte sans vrai abonnement, voir
+  // tenants/router.py::simulate_subscription_cancellation.
+  simulateSubscriptionCancel: (restaurantId: number) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/subscription/simulate-cancel`, { method: "POST" }),
   startSubscriptionCheckout: (restaurantId: number, tier: SubscriptionTier) =>
     request<SubscriptionCheckoutResult>(`/api/v1/restaurants/${restaurantId}/subscription/checkout`, {
       method: "POST",

@@ -627,3 +627,58 @@ def test_konnect_credentials_are_rejected_for_a_demo_restaurant(client, db_sessi
     assert res.json()["detail"]["code"] == "DEMO_RESTAURANT"
     db_session.refresh(restaurant)
     assert restaurant.konnect_wallet_id is None
+
+
+def test_downgrade_applies_immediately_for_a_demo_restaurant(client, db_session, monkeypatch):
+    """Retour utilisateur, 2026-09-02 bis : "active tout même pour la démo"
+    — un établissement de démo n'a jamais de vrai stripe_subscription_id
+    (donc rien à programmer chez Stripe, et la session de 2h ne survivrait
+    pas à une échéance différée de toute façon)."""
+    restaurant = _demo_restaurant(db_session, slug="demo-downgrade-immediate", subscription_tier=SubscriptionTier.BUSINESS)
+    headers = _manager_headers(restaurant.id)
+
+    def _boom(**kw):
+        raise AssertionError("un établissement de démo ne doit jamais appeler stripe_gateway pour une rétrogradation")
+
+    monkeypatch.setattr(tenants_router.stripe_gateway, "schedule_tier_change", _boom)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/downgrade", json={"tier": "essentiel"}, headers=headers)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["subscription_tier"] == "essentiel"
+    assert body["subscription_downgrade_pending_tier"] is None
+    db_session.refresh(restaurant)
+    assert restaurant.subscription_tier == SubscriptionTier.ESSENTIEL
+
+
+def test_simulate_cancel_deactivates_a_demo_restaurant(client, db_session):
+    """Même effet que la vraie résiliation (customer.subscription.deleted) :
+    plus aucun service, quel que soit le palier — jamais un repli gratuit."""
+    restaurant = _demo_restaurant(
+        db_session, slug="demo-simulate-cancel", subscription_tier=SubscriptionTier.BUSINESS,
+        subscription_downgrade_pending_tier=SubscriptionTier.ESSENTIEL,
+    )
+    headers = _manager_headers(restaurant.id)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/simulate-cancel", headers=headers)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["is_active"] is False
+    assert body["subscription_tier"] == "business"  # inchangé, jamais un repli sur essentiel
+    db_session.refresh(restaurant)
+    assert restaurant.is_active is False
+    assert restaurant.subscription_downgrade_pending_tier is None
+
+
+def test_simulate_cancel_is_rejected_for_a_non_demo_restaurant(client, db_session):
+    restaurant = _subscribed_restaurant(db_session, slug="simulate-cancel-not-demo")
+    headers = _manager_headers(restaurant.id)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/subscription/simulate-cancel", headers=headers)
+
+    assert res.status_code == 400
+    assert res.json()["detail"]["code"] == "NOT_A_DEMO_RESTAURANT"
+    db_session.refresh(restaurant)
+    assert restaurant.is_active is True

@@ -90,13 +90,22 @@ export default function ActivationRequired({
               </span>
               <span className="text-sm" style={{ color: "var(--ink-soft)" }}> / mois</span>
             </p>
-            {currentMarket.paymentProvider === "stripe" && (
-              // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) — même
-              // divulgation que UpgradeModal/SubscriptionReminderModal.
+            {restaurant.is_demo ? (
+              // Établissement de démo : jamais un vrai prélèvement, même ici
+              // après une résiliation simulée (retour utilisateur,
+              // 2026-09-02 bis : "active tout même pour la démo").
               <p className="text-xs mt-1" style={{ color: "var(--ink-soft)" }}>
-                Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail
-                d&apos;abonnement.
+                Simulation — aucun prélèvement réel en démo.
               </p>
+            ) : (
+              currentMarket.paymentProvider === "stripe" && (
+                // Abonnement RÉCURRENT (mode Netflix, 2026-09-02) — même
+                // divulgation que UpgradeModal/SubscriptionReminderModal.
+                <p className="text-xs mt-1" style={{ color: "var(--ink-soft)" }}>
+                  Prélevé automatiquement chaque mois, résiliable à tout moment depuis votre portail
+                  d&apos;abonnement.
+                </p>
+              )
             )}
             <ul className="mt-3 space-y-1 text-sm text-left" style={{ color: "var(--ink-soft)" }}>
               {tier.features.map((feature) => (
@@ -110,7 +119,11 @@ export default function ActivationRequired({
 
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={handlePay} disabled={submitting}>
-            {submitting ? "Paiement en cours…" : `Payer ${price} ${currentMarket.currency.symbol} pour activer`}
+            {submitting
+              ? "Paiement en cours…"
+              : restaurant.is_demo
+                ? "Simuler l'activation"
+                : `Payer ${price} ${currentMarket.currency.symbol} pour activer`}
           </Button>
           <Button variant="secondary" onClick={handleLogout} disabled={submitting}>
             Se déconnecter
