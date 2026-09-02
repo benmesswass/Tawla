@@ -219,16 +219,6 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [customerEmail, setCustomerEmail] = useState("");
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
-  // Paiement carte ouvert dans un nouvel onglet (retour utilisateur,
-  // 2026-09-02) : cet onglet-ci ne quitte jamais Tawla, donc ni le webhook
-  // ni la page de retour (`?konnect=success`, qui atterrit dans le nouvel
-  // onglet) ne peuvent le prévenir — seul lui sait quand le client revient
-  // dessus (effet plus bas, sur "visibilitychange"). Garde l'id/token de LA
-  // commande payée plutôt que de relire trackedOrder/orderToken au retour :
-  // le client peut avoir basculé sur le suivi d'une autre commande ouverte
-  // (suivreCommande) pendant l'attente — une table a souvent plusieurs
-  // commandes ouvertes à la fois (l'ardoise).
-  const [awaitingCardPaymentFor, setAwaitingCardPaymentFor] = useState<{ id: number; token: string } | null>(null);
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
   const [waiterCallState, setWaiterCallState] = useState<"idle" | "calling" | "called">("idle");
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
@@ -401,33 +391,6 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       .catch((e) => setPaymentError(toLocalizedMessage(e, locale)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Retour sur CET onglet après un paiement carte ouvert dans un nouvel
-  // onglet par payByCard : c'est le seul signal disponible ici (voir la
-  // note sur awaitingCardPaymentFor plus haut). `checkCardPayment` est sans
-  // effet tant que rien n'est réglé côté fournisseur (idempotent, orders/
-  // service.py::settle_card_payment) — sans risque à rappeler à chaque
-  // retour sur l'onglet tant que le paiement n'est pas confirmé.
-  useEffect(() => {
-    if (!awaitingCardPaymentFor) return;
-    const { id, token } = awaitingCardPaymentFor;
-    function onVisibilityChange() {
-      if (document.visibilityState !== "visible") return;
-      api
-        .checkCardPayment(id, token)
-        .then((updated) => {
-          setOpenOrders((prev) => prev.map((r) => (r.order.id === updated.id ? { order: updated, token } : r)));
-          // Seulement si le client suit toujours CETTE commande — il a pu
-          // basculer sur une autre commande ouverte (suivreCommande)
-          // pendant l'attente, sans quoi on écraserait celle qu'il regarde.
-          setTrackedOrder((prev) => (prev && prev.id === updated.id ? updated : prev));
-          if (updated.payment_status === "paid") setAwaitingCardPaymentFor(null);
-        })
-        .catch((e) => setPaymentError(toLocalizedMessage(e, locale)));
-    }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [awaitingCardPaymentFor, locale]);
 
   // PWA offline-first : une commande mise de côté faute de réseau (voir
   // validateOrder) est stockée sur l'appareil du client, pas en mémoire —
@@ -720,43 +683,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }, [activeCategoryAnchor]);
 
   async function payByCard() {
-    if (!trackedOrder || !orderToken) return;
+    if (!trackedOrder) return;
     setPaying(true);
     setPaymentError(null);
     const tip = Number(tipInput.replace(",", ".")) || 0;
-    // Ouvert AVANT l'appel réseau, sur le clic direct : après un `await`,
-    // Safari ne relie plus `window.open` au geste utilisateur et le bloque
-    // comme un popup. Volontairement sans "noopener" — il en faudrait un
-    // pour rediriger cet onglet vide vers `pay_url` une fois connu ci-dessous
-    // (retour utilisateur, 2026-09-02 : nouvel onglet plutôt qu'une
-    // redirection sur place, pour que cet onglet-ci reste sur le suivi de
-    // commande pendant que le client paie — comparer au portail Stripe du
-    // dashboard manager, qui n'a rien à garder ouvert derrière lui).
-    const paymentTab = window.open("", "_blank");
     try {
+      if (!orderToken) return;
       const updated = await api.payByCard(trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined);
-      // Restaurant ayant connecté son propre Konnect/Stripe (modèle direct,
-      // 2026-08-19) : la commande reste "pending" jusqu'au retour du client,
-      // détecté soit par `?konnect=success` dans l'onglet de paiement lui-
-      // même, soit par "visibilitychange" sur cet onglet-ci (effet plus
-      // haut). Sans `pay_url` : mode démo, déjà payée — rien de plus à
-      // faire, fermer l'onglet resté vide.
+      // Restaurant ayant connecté son propre Konnect (modèle direct,
+      // 2026-08-19) : rediriger pour régler, la commande reste "pending"
+      // jusqu'au retour (`?konnect=success`, voir l'effet plus bas). Sans
+      // `pay_url` : mode démo, déjà payée, rien de plus à faire.
       if (updated.pay_url) {
-        if (paymentTab) {
-          paymentTab.location.href = updated.pay_url;
-          setAwaitingCardPaymentFor({ id: trackedOrder.id, token: orderToken });
-        } else {
-          // Popup bloqué malgré tout (réglage navigateur) : comportement
-          // historique, cet onglet-ci se charge de la redirection.
-          window.location.href = updated.pay_url;
-        }
-        setTrackedOrder(updated);
+        window.location.href = updated.pay_url;
         return;
       }
-      paymentTab?.close();
       setTrackedOrder(updated);
     } catch (e) {
-      paymentTab?.close();
       setPaymentError(toLocalizedMessage(e, locale));
     } finally {
       setPaying(false);
@@ -1465,8 +1408,6 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <p className="text-sm text-[#8a6420] bg-[rgba(184,134,46,.12)] border border-[rgba(184,134,46,.55)] rounded-xl p-3">
                 {trackedOrder.payment_method === "card_terminal"
                   ? t.cardTerminalPendingMessage(trackedOrder.total_amount)
-                  : trackedOrder.payment_method === "card"
-                  ? t.cardOnlinePendingMessage(trackedOrder.total_amount)
                   : t.cashPendingMessage(trackedOrder.total_amount)}
               </p>
             )}

@@ -62,9 +62,6 @@ export const fr = {
     `Paiement en espèces demandé — un serveur va passer encaisser ${formatMoney(amount)}.`,
   cardTerminalPendingMessage: (amount: number) =>
     `Paiement carte demandé — un serveur va passer avec le terminal pour encaisser ${formatMoney(amount)}.`,
-  cardOnlinePendingMessage: (amount: number) =>
-    `Paiement en ligne demandé — finalisez-le dans l'onglet ouvert pour régler ${formatMoney(amount)}. ` +
-    `Cette page se met à jour toute seule à votre retour.`,
   tipLabel: "Pourboire (facultatif, pour un paiement par carte)",
   tipNone: "Sans",
   tipPlaceholder: formatMoney(0),
