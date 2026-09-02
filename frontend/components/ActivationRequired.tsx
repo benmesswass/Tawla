@@ -7,6 +7,7 @@ import { toFrenchMessage } from "@/lib/errors";
 import { clearToken } from "@/lib/auth";
 import { TIERS } from "@/lib/offer";
 import { currentMarket } from "@/lib/market";
+import { useSubscriptionCheckout } from "@/lib/useSubscriptionCheckout";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import TawlaMark from "@/components/brand/TawlaMark";
@@ -27,6 +28,9 @@ export default function ActivationRequired({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { openPaymentTab, goToPayment } = useSubscriptionCheckout(restaurant.id, onActivated, (e) =>
+    setError(toFrenchMessage(e))
+  );
 
   const tier = TIERS.find((t) => t.id === restaurant.subscription_tier);
   // Offre de lancement (2026-08-21) : réduction figée à l'inscription de ce
@@ -44,14 +48,17 @@ export default function ActivationRequired({
   async function handlePay() {
     setSubmitting(true);
     setError(null);
+    const paymentTab = openPaymentTab();
     try {
       const result = await api.startSubscriptionCheckout(restaurant.id, restaurant.subscription_tier);
       if (result.pay_url) {
-        window.location.href = result.pay_url;
+        goToPayment(paymentTab, result.pay_url);
         return;
       }
+      paymentTab?.close();
       if (result.restaurant) onActivated(result.restaurant);
     } catch (e) {
+      paymentTab?.close();
       setError(toFrenchMessage(e));
     } finally {
       setSubmitting(false);

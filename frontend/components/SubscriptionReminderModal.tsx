@@ -6,6 +6,7 @@ import { toFrenchMessage } from "@/lib/errors";
 import Button from "@/components/ui/Button";
 import { TIERS } from "@/lib/offer";
 import { currentMarket } from "@/lib/market";
+import { useSubscriptionCheckout } from "@/lib/useSubscriptionCheckout";
 
 function daysRemaining(periodEnd: string): number {
   const ms = new Date(periodEnd).getTime() - Date.now();
@@ -34,6 +35,9 @@ export default function SubscriptionReminderModal({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { openPaymentTab, goToPayment } = useSubscriptionCheckout(restaurant.id, onPaid, (e) =>
+    setError(toFrenchMessage(e))
+  );
 
   const days = restaurant.subscription_period_end ? daysRemaining(restaurant.subscription_period_end) : null;
   const price = TIERS.find((t) => t.id === restaurant.subscription_tier)?.priceDT ?? 50;
@@ -41,14 +45,17 @@ export default function SubscriptionReminderModal({
   async function handlePay() {
     setSubmitting(true);
     setError(null);
+    const paymentTab = openPaymentTab();
     try {
       const result = await api.startSubscriptionCheckout(restaurant.id, restaurant.subscription_tier);
       if (result.pay_url) {
-        window.location.href = result.pay_url;
+        goToPayment(paymentTab, result.pay_url);
         return;
       }
+      paymentTab?.close();
       if (result.restaurant) onPaid(result.restaurant);
     } catch (e) {
+      paymentTab?.close();
       setError(toFrenchMessage(e));
     } finally {
       setSubmitting(false);
