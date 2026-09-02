@@ -74,6 +74,11 @@ class Restaurant(Base):
     tiktok_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     whatsapp_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
+    # Modale d'avis Google après paiement (Phase D1bis de ROADMAP_DESIGN.md)
+    # — même trio léger, même verrou Pro+ que les réseaux sociaux ci-dessus
+    # (require_tier sur la route qui écrit ce champ, pas à la lecture).
+    google_review_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
     # Palier d'abonnement — conditionne l'accès aux fonctionnalités Pro/Business,
     # voir app/core/subscription.py. Essentiel par défaut, mais un palier ne
     # dit rien de si le compte est UTILISABLE (voir `is_active`/`is_usable`

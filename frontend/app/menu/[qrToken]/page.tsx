@@ -98,6 +98,13 @@ function lastOrderStorageKey(qrToken: string): string {
   return `resto-qr-menu:last-order:${qrToken}`;
 }
 
+// Une seule fois par commande : sans ça, rouvrir la page après paiement (ou
+// une reconnexion WebSocket) redéclencherait la modale d'avis Google à
+// chaque fois (Phase D1bis).
+function googleReviewShownStorageKey(orderId: number): string {
+  return `resto-qr-menu:avis-google-propose:${orderId}`;
+}
+
 /**
  * Reprise du suivi après un rafraîchissement de page : il faut désormais
  * conserver le `public_token` en plus de l'identifiant, puisque l'identifiant
@@ -178,6 +185,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // Article en cours de configuration dans le sélecteur d'options (France,
   // MARCHE_FRANCE.md phase F5/A2) — un seul à la fois, comme suggestFor.
   const [optionChooserFor, setOptionChooserFor] = useState<MenuItem | null>(null);
+  // Modale d'avis Google post-paiement (Phase D1bis).
+  const [showGoogleReview, setShowGoogleReview] = useState(false);
   // groupId -> ids des options choisies dans ce groupe, pendant la composition.
   const [chooserSelection, setChooserSelection] = useState<Record<number, number[]>>({});
   // Nombre de personnes à table, demandé seulement quand un plat est marqué
@@ -617,6 +626,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackedOrder?.payment_status]);
 
+  // Modale d'avis Google (Phase D1bis) : même transition que ci-dessus,
+  // identique quel que soit le mode de paiement. Rien si le restaurant n'a
+  // pas renseigné de lien (palier sous Pro compris — le verrou est à
+  // l'écriture côté Réglages, pas ici) ou si déjà proposée pour cette
+  // commande précise.
+  useEffect(() => {
+    if (
+      trackedOrder?.payment_status === "paid" &&
+      restaurant?.google_review_url &&
+      !localStorage.getItem(googleReviewShownStorageKey(trackedOrder.id))
+    ) {
+      localStorage.setItem(googleReviewShownStorageKey(trackedOrder.id), "1");
+      setShowGoogleReview(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackedOrder?.payment_status]);
+
   async function payByCard() {
     if (!trackedOrder) return;
     setPaying(true);
@@ -1021,6 +1047,52 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     );
   }
 
+  // Modale d'avis Google (Phase D1bis) : calculée une seule fois, référencée
+  // depuis les deux branches de retour plus bas (suivi de commande, puis
+  // navigation du menu). Le paiement se termine toujours dans la première —
+  // un retour anticipé séparé du retour principal — donc la modale doit y
+  // être atteignable elle aussi, pas seulement dans le retour principal.
+  const googleReviewModal = showGoogleReview && restaurant.google_review_url && (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={() => setShowGoogleReview(false)}
+    >
+      <div
+        className="w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-[var(--semoule-raised)] p-[22px] text-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-center gap-1 text-[var(--laiton)]">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <svg key={i} viewBox="0 0 24 24" fill="currentColor" className="w-[22px] h-[22px]">
+              <path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1L12 2Z" />
+            </svg>
+          ))}
+        </div>
+        <p className={`${lalezar.className} text-[22px] mt-3`}>{t.googleReviewTitle}</p>
+        <p className="text-[13.5px] text-[var(--ink-soft)] leading-[1.5] mt-1.5">
+          {t.googleReviewBody(restaurant.name)}
+        </p>
+        <a
+          href={restaurant.google_review_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setShowGoogleReview(false)}
+          className="block mt-[18px] bg-[var(--harissa)] text-[var(--semoule)] rounded-full py-[13px] text-[14.5px] font-bold"
+        >
+          {t.googleReviewCta}
+        </a>
+        <button
+          onClick={() => setShowGoogleReview(false)}
+          className="mt-2 text-[13px] text-[var(--ink-faint)] underline"
+        >
+          {t.googleReviewDismiss}
+        </button>
+      </div>
+    </div>
+  );
+
   if (offlineQueuedPayload) {
     return (
       <div dir={dir} className={`min-h-screen bg-[var(--semoule)] p-6 max-w-md mx-auto ${wrapperClassName ?? ""}`}>
@@ -1420,6 +1492,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </button>
         )}
         </div>
+        {googleReviewModal}
       </>
     );
   }
@@ -2069,6 +2142,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </div>
           </div>
         )}
+
+        {googleReviewModal}
 
         {cartLines.length === 0 && cartClearedNotice && (
           <div className="fixed bottom-0 left-0 right-0 bg-[var(--semoule-raised)] border-t border-[var(--line)] p-4">

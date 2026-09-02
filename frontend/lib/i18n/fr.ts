@@ -148,6 +148,13 @@ export const fr = {
   shareOrderButton: "Partager ma commande",
   shareCardTitle: (restaurantName: string) => `Mon repas chez ${restaurantName}`,
   shareCardText: "Commandé sur Tawla 🍽️",
+
+  // Modale d'avis Google après paiement (Phase D1bis, palier Pro+).
+  googleReviewTitle: "Le repas vous a plu ?",
+  googleReviewBody: (restaurantName: string) =>
+    `Un avis Google aide ${restaurantName} à se faire connaître — ça prend trente secondes.`,
+  googleReviewCta: "Laisser un avis Google",
+  googleReviewDismiss: "Plus tard",
 };
 
 export type Dictionary = typeof fr;
