@@ -4,6 +4,7 @@ import { useState } from "react";
 import { lalezar } from "@/lib/fonts";
 import Card from "@/components/ui/Card";
 import { formatMoney } from "@/lib/currency";
+import { BENEFITS_PAR_ROLE } from "@/lib/offer";
 
 /**
  * Vitrine à quatre écrans sur la home (Phase D2bis de ROADMAP_DESIGN.md,
@@ -12,6 +13,14 @@ import { formatMoney } from "@/lib/currency";
  * serveur/cuisine en sombre comme /staff et /kitchen) plutôt qu'une charte
  * inventée pour la démo. Données Dar Chaabane, restaurant de démo déjà utilisé
  * par la visite guidée et le seed (`backend/scripts/seed_demo.py`).
+ *
+ * Les 3 couples problème/solution (`BENEFITS_PAR_ROLE`, lib/offer.ts)
+ * changent avec l'onglet actif : chaque rôle défend son propre triptyque.
+ * Cartes délibérément CLAIRES (bg-white, comme les toutes premières cartes
+ * de la home) même si la section est sombre : un essai précédent les avait
+ * teintées sur le ton de la section (bg-[var(--espresso-card)]) et Wassim
+ * l'a refusé (trop de orange/marron, impression encombrée, 2026-09-03) — le
+ * blanc respire, comme le panneau clair de l'écran serveur plus bas.
  */
 
 type Role = "client" | "manager" | "serveur" | "cuisine";
@@ -66,6 +75,35 @@ export default function ApercuProduit() {
             {r.label}
           </button>
         ))}
+      </div>
+
+      <div className="max-w-xl mx-auto mb-8 space-y-3">
+        {BENEFITS_PAR_ROLE[role].map((b, i) => {
+          const harissa = i % 2 === 0;
+          return (
+            <div
+              key={b.probleme}
+              className={`probleme-apparait flex flex-col gap-3 rounded-lg bg-white p-5 border-l-4 ${
+                harissa ? "border-[var(--harissa)]" : "border-[var(--laiton)]"
+              }`}
+              style={{ animationDelay: `${i * 90}ms` }}
+            >
+              <p className="text-sm text-[var(--ink-soft)]">{b.probleme}</p>
+              <div
+                className={`flex gap-2.5 rounded-md border p-3 text-sm ${
+                  harissa
+                    ? "bg-[var(--tuile-harissa-fond)] border-[var(--tuile-harissa-bord)]"
+                    : "bg-[var(--tuile-laiton-fond)] border-[var(--tuile-laiton-bord)]"
+                }`}
+              >
+                <span className={harissa ? "text-[var(--harissa)]" : "text-[var(--laiton)]"} aria-hidden>
+                  ✓
+                </span>
+                <span className="text-[var(--encre)]">{b.solution}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex justify-center">
