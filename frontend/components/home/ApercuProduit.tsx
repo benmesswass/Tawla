@@ -16,11 +16,11 @@ import { BENEFITS_PAR_ROLE } from "@/lib/offer";
  *
  * Les 3 couples problème/solution (`BENEFITS_PAR_ROLE`, lib/offer.ts)
  * changent avec l'onglet actif : chaque rôle défend son propre triptyque.
- * Cartes délibérément CLAIRES (bg-white, comme les toutes premières cartes
- * de la home) même si la section est sombre : un essai précédent les avait
- * teintées sur le ton de la section (bg-[var(--espresso-card)]) et Wassim
- * l'a refusé (trop de orange/marron, impression encombrée, 2026-09-03) — le
- * blanc respire, comme le panneau clair de l'écran serveur plus bas.
+ * Section hôte volontairement SANS fond sombre : un essai avait empilé cette
+ * section en --espresso ET les écrans serveur/cuisine (déjà sombres pour
+ * coller à /staff et /kitchen) — deux grands cadres bruns l'un dans l'autre,
+ * jugé trop sombre et encombré (Wassim, 2026-09-03). Un seul cadre sombre
+ * par écran suffit ; le reste de la page reste clair.
  */
 
 type Role = "client" | "manager" | "serveur" | "cuisine";
@@ -69,7 +69,7 @@ export default function ApercuProduit() {
             className={`rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 ${
               role === r.id
                 ? "bg-[var(--laiton)] text-[var(--espresso)]"
-                : "bg-[var(--line-on-espresso)] text-[var(--ink-on-espresso-strong)] hover:bg-[var(--line-on-espresso-strong)]"
+                : "bg-[var(--creme)] text-[var(--ink-soft)] hover:bg-[var(--line)]"
             }`}
           >
             {r.label}
@@ -88,7 +88,12 @@ export default function ApercuProduit() {
               }`}
               style={{ animationDelay: `${i * 90}ms` }}
             >
-              <p className="text-sm text-[var(--ink-soft)]">{b.probleme}</p>
+              <p className="flex gap-1.5 items-start text-sm text-[var(--ink-soft)]">
+                <span className="text-[var(--ink-faint)] shrink-0" aria-hidden>
+                  ✗
+                </span>
+                <span>{b.probleme}</span>
+              </p>
               <div
                 className={`flex gap-2.5 rounded-md border p-3 text-sm ${
                   harissa

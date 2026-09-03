@@ -69,12 +69,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="bg-[var(--espresso)]" data-visite="accueil-benefices">
+      <section data-visite="accueil-benefices">
         <div className="max-w-4xl mx-auto px-6 py-14">
-          <h2 className={`${lalezar.className} text-2xl sm:text-3xl text-[var(--semoule)] text-center mb-3`}>
-            Un produit, quatre écrans
-          </h2>
-          <p className="text-sm text-[var(--ink-on-espresso-strong)] text-center max-w-xl mx-auto mb-10">
+          <h2 className={`${lalezar.className} text-2xl sm:text-3xl text-center mb-3`}>Un produit, quatre écrans</h2>
+          <p className="text-sm text-[var(--ink-soft)] text-center max-w-xl mx-auto mb-10">
             Le client commande depuis son téléphone. Le serveur, le manager et la cuisine suivent chacun le même
             service, sur l&apos;écran qui leur correspond.
           </p>
