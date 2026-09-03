@@ -444,7 +444,7 @@ def test_a_failing_pdf_generation_never_breaks_the_payment_itself(client, monkey
     cœur latin-1 uniquement) — le paiement, lui, doit rester acquis."""
     monkeypatch.setenv("RESEND_API_KEY", "test-key")
 
-    def _boom(order, restaurant_name):
+    def _boom(order, restaurant):
         raise ValueError("rendu PDF impossible")
 
     monkeypatch.setattr(orders_service, "generate_invoice_pdf", _boom)

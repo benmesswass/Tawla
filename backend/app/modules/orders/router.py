@@ -201,7 +201,7 @@ async def get_order_invoice(order: Order = Depends(get_paid_order_by_query_token
     en-tête possible, voir get_paid_order_by_query_token.
     """
     restaurant = db.get(Restaurant, order.restaurant_id)
-    pdf_bytes = generate_invoice_pdf(order, restaurant.name if restaurant else "Tawla")
+    pdf_bytes = generate_invoice_pdf(order, restaurant)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

@@ -244,6 +244,19 @@ class Restaurant(Base):
     # en cache ici pour ne pas devenir périmé).
     stripe_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Mentions légales affichées sur la facture PDF (VAT breakdown, Phase F5) —
+    # nullable : tant qu'elles sont vides, la facture reste comme avant (juste
+    # le nom du restaurant), jamais bloquante pour un pilote qui n'a pas
+    # encore renseigné son dashboard. `tax_id` est un champ texte libre plutôt
+    # que "siret"/"matricule_fiscal" séparés : le même champ convient aux deux
+    # marchés (SIRET en France, matricule fiscal en Tunisie), le manager y
+    # saisit ce qui est pertinent pour son pays. `vat_number` (TVA
+    # intracommunautaire) n'a de sens qu'en France mais reste saisissable
+    # partout, comme le reste de ce bloc.
+    legal_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    tax_id: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    vat_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     @property
     def konnect_configured(self) -> bool:
         return bool(self.konnect_api_key_encrypted and self.konnect_wallet_id)
