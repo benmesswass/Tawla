@@ -1803,6 +1803,10 @@ export default function DashboardPage() {
                   setTables(await api.savePlan(restaurantId, placements));
                 } catch (e) {
                   handleGatedError(e);
+                  // Renvoyé à EditeurDePlan : sans ce throw, son brouillon local
+                  // croit l'enregistrement réussi et garde la table affichée posée
+                  // sur le plan alors que le serveur l'a refusée (palier Essentiel).
+                  throw e;
                 } finally {
                   setSavingPlan(false);
                 }
@@ -2499,6 +2503,23 @@ export default function DashboardPage() {
                   Simulation — paiement carte confirmé immédiatement, sans vrai débit. La connexion d&apos;un
                   vrai wallet Konnect n&apos;est pas proposée sur un établissement de démonstration.
                 </p>
+              ) : restaurant.subscription_tier === "essentiel" ? (
+                <>
+                  <p className="text-xs text-neutral-500 mt-2 mb-3">
+                    Le paiement carte est réservé aux paliers Pro et Business. En Essentiel, vos clients
+                    règlent uniquement en espèces.
+                  </p>
+                  <Button variant="secondary" disabled>
+                    Connecter
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setUpgradeTier("pro")}
+                    className="block text-xs text-[var(--harissa)] underline mt-2"
+                  >
+                    Passer à Pro pour l&apos;activer
+                  </button>
+                </>
               ) : (
                 <>
                   <p className="text-xs text-neutral-500 mt-2 mb-3">
@@ -2552,6 +2573,23 @@ export default function DashboardPage() {
                   Simulation — paiement carte confirmé immédiatement, sans vrai débit. La connexion d&apos;un
                   vrai compte Stripe n&apos;est pas proposée sur un établissement de démonstration.
                 </p>
+              ) : restaurant.subscription_tier === "essentiel" ? (
+                <>
+                  <p className="text-xs text-neutral-500 mt-2 mb-3">
+                    Le paiement carte est réservé aux paliers Pro et Business. En Essentiel, vos clients
+                    règlent uniquement en espèces.
+                  </p>
+                  <Button variant="secondary" disabled>
+                    Connecter Stripe
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setUpgradeTier("pro")}
+                    className="block text-xs text-[var(--harissa)] underline mt-2"
+                  >
+                    Passer à Pro pour l&apos;activer
+                  </button>
+                </>
               ) : (
                 <>
                   <p className="text-xs text-neutral-500 mt-2 mb-3">
