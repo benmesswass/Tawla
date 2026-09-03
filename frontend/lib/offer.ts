@@ -147,21 +147,23 @@ export const INCLUDED = [
 
 /**
  * Ce que le produit fait, dit du point de vue du restaurateur et non de la
- * fonctionnalité.
+ * fonctionnalité — présenté en problème/solution sur la home (Phase D2bis de
+ * ROADMAP_DESIGN.md, comparatif BipOrder). `probleme` est la douleur telle
+ * qu'un patron la formulerait, `detail` reste la solution telle quelle.
  */
 export const BENEFITS = [
   {
-    title: "Plus une commande oubliée",
+    probleme: "Les commandes se perdent à l'oral — un plat mal entendu, une table oubliée.",
     detail:
       "La commande du client arrive sur l'écran partagé de vos serveurs. Un serveur la prend en charge, la confirme à table, et elle part en cuisine. Rien ne se perd entre les deux.",
   },
   {
-    title: "Votre serveur garde la main",
+    probleme: "D'autres systèmes envoient tout direct en cuisine, sans repasser par la salle.",
     detail:
       "Rien n'entre en cuisine sans qu'un serveur l'ait vérifié à table. Le client commande depuis son téléphone, votre équipe reste maîtresse du service.",
   },
   {
-    title: "Vous voyez enfin vos chiffres",
+    probleme: "Aucune visibilité sur ce qui se passe vraiment en salle chaque soir.",
     detail:
       "Commandes perdues, délai entre la commande et la cuisine, panier moyen, activité par serveur. De quoi décider d'une prime sur des chiffres plutôt que sur une impression.",
   },
