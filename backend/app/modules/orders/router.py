@@ -38,6 +38,21 @@ async def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_d
     return await service.create_order(db, payload)
 
 
+@router.put("/{order_id}/items", response_model=schemas.OrderOut)
+async def update_order_items(
+    payload: schemas.OrderItemsUpdate,
+    order: Order = Depends(get_order_by_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Le client modifie lui-même sa commande — uniquement tant qu'elle est
+    encore en attente de confirmation (409 sinon, voir service.py). Passé la
+    confirmation, une modification passe par
+    `POST /{order_id}/modification-requests`.
+    """
+    return await service.update_order_items(db, order, payload)
+
+
 @router.get("/by-restaurant/{restaurant_id}/active", response_model=list[schemas.OrderOutStaff])
 async def list_active_orders(
     restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(require_active_restaurant)

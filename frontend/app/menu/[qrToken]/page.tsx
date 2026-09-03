@@ -40,6 +40,9 @@ import {
   WifiOffIcon,
   ShareIcon,
   StampIcon,
+  PencilIcon,
+  ChevronLeftIcon,
+  ClockIcon,
 } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
@@ -65,6 +68,22 @@ type CartLine = {
   // F5/A2) — un seul jeu de choix par article au panier (v1) : rouvrir le
   // sélecteur remplace la sélection plutôt que d'ajouter une seconde ligne.
   selectedOptions: SelectedOption[];
+};
+
+/**
+ * Une ligne de la commande en cours de révision (fenêtre 1 : édition directe
+ * tant que la commande est en attente de confirmation). Volontairement plus
+ * simple que `CartLine` : pas d'options ni de partage détaillé par convive —
+ * une commande déjà envoyée qui a besoin de ça se recommande plutôt que de
+ * se rééditer en détail.
+ */
+type EditLine = {
+  menuItemId: number;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  notes: string;
+  isShared: boolean;
 };
 
 type SelectedOption = { optionId: number; groupName: string; optionName: string; priceDelta: number };
@@ -215,6 +234,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // Reçu une seule fois à la création de la commande : sans lui, plus aucun
   // appel de suivi ni de paiement n'est autorisé (Phase 12.2).
   const [orderToken, setOrderToken] = useState<string | null>(null);
+  // Modification directe de la commande envoyée (fenêtre 1, tant qu'elle est
+  // encore en attente de confirmation) — panier séparé de `cart` : celui-ci
+  // sert à composer une commande, celui-là à en réviser une déjà envoyée, et
+  // les deux ne doivent jamais se marcher dessus.
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editItems, setEditItems] = useState<Record<number, EditLine>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [tipInput, setTipInput] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [paying, setPaying] = useState(false);
@@ -865,6 +892,89 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], note } } : prev));
   }
 
+  // --- Modification directe de la commande envoyée (fenêtre 1) -------------
+
+  function startEditingOrder() {
+    if (!trackedOrder) return;
+    const seeded: Record<number, EditLine> = {};
+    for (const item of trackedOrder.items) {
+      seeded[item.menu_item_id] = {
+        menuItemId: item.menu_item_id,
+        name: item.menu_item_name,
+        unitPrice: item.unit_price,
+        quantity: item.quantity,
+        notes: item.notes ?? "",
+        isShared: item.is_shared,
+      };
+    }
+    setEditItems(seeded);
+    setEditError(null);
+    setEditingOrder(true);
+  }
+
+  function editIncrement(item: MenuItem) {
+    setEditItems((prev) => {
+      const existing = prev[item.id];
+      return {
+        ...prev,
+        [item.id]: {
+          menuItemId: item.id,
+          name: item.name,
+          unitPrice: item.price,
+          quantity: (existing?.quantity ?? 0) + 1,
+          notes: existing?.notes ?? "",
+          isShared: existing?.isShared ?? false,
+        },
+      };
+    });
+  }
+
+  function editDecrement(menuItemId: number) {
+    setEditItems((prev) => {
+      const existing = prev[menuItemId];
+      if (!existing) return prev;
+      if (existing.quantity <= 1) {
+        const next = { ...prev };
+        delete next[menuItemId];
+        return next;
+      }
+      return { ...prev, [menuItemId]: { ...existing, quantity: existing.quantity - 1 } };
+    });
+  }
+
+  function editSetNote(menuItemId: number, notes: string) {
+    setEditItems((prev) => (prev[menuItemId] ? { ...prev, [menuItemId]: { ...prev[menuItemId], notes } } : prev));
+  }
+
+  function editSetShared(menuItemId: number, isShared: boolean) {
+    setEditItems((prev) =>
+      prev[menuItemId] ? { ...prev, [menuItemId]: { ...prev[menuItemId], isShared } } : prev
+    );
+  }
+
+  const editTotal = Object.values(editItems).reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+
+  async function saveOrderEdits() {
+    if (!trackedOrder || !orderToken) return;
+    const items = Object.values(editItems).map((l) => ({
+      menu_item_id: l.menuItemId,
+      quantity: l.quantity,
+      notes: l.notes || null,
+      is_shared: l.isShared,
+    }));
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const updated = await api.updateOrderItems(trackedOrder.id, orderToken, items);
+      setTrackedOrder(updated);
+      setEditingOrder(false);
+    } catch (e) {
+      setEditError(toLocalizedMessage(e, locale));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   function setShared(itemId: number, shared: boolean) {
     setCart((prev) =>
       prev[itemId]
@@ -1159,6 +1269,173 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   if (trackedOrder) {
+    if (editingOrder) {
+      const editCategories = Array.from(new Set(menu.map((m) => m.category)));
+      return (
+        <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pt-[20px] px-[18px] pb-[26px] max-w-md mx-auto ${wrapperClassName ?? ""}`}>
+          <button
+            onClick={() => setEditingOrder(false)}
+            className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--ink-soft)] py-1.5"
+          >
+            <ChevronLeftIcon className="w-4 h-4 shrink-0" />
+            {t.editOrderCancel}
+          </button>
+
+          <h1 className={`${lalezar.className} mt-2 text-[22px] leading-tight text-center text-[var(--encre)]`}>
+            {t.editOrderTitle}
+          </h1>
+          <p className="mt-1 text-[12.5px] text-center text-[var(--ink-soft)]">
+            {t.orderSubtitle(table.label, trackedOrder.id)}
+          </p>
+
+          <div className="mt-4 flex items-start gap-2 rounded-xl py-[11px] px-3 text-[12.5px] leading-[1.45] bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)]">
+            <ClockIcon className="w-[14px] h-[14px] shrink-0 mt-0.5" />
+            <span>{t.modifyOrderHint}</span>
+          </div>
+
+          {editError && (
+            <p className="mt-3 text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
+              {editError}
+            </p>
+          )}
+
+          {Object.keys(editItems).length > 0 && (
+            <>
+              <p className="mt-6 mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+                {t.orderDetailsTitle}
+              </p>
+              <div className="space-y-2.5">
+                {Object.values(editItems).map((line) => (
+                  <div key={line.menuItemId} className="bg-white border border-[var(--line)] rounded-xl p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[14.5px] font-semibold">{line.name}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
+                        {formatAmount(line.unitPrice)} {t.currency}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => editDecrement(line.menuItemId)}
+                          aria-label={t.removeFromCartAria(line.name)}
+                          className="w-[34px] h-[34px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                        >
+                          −
+                        </button>
+                        <span className="inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums">
+                          {line.quantity}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const menuItem = menu.find((m) => m.id === line.menuItemId);
+                            if (menuItem) editIncrement(menuItem);
+                          }}
+                          aria-label={t.addToCartAria(line.name)}
+                          className="w-[34px] h-[34px] rounded-full text-[19px] leading-none shadow-sm transition-transform active:scale-90 bg-[var(--harissa)] text-[var(--semoule)]"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      value={line.notes}
+                      onChange={(e) => editSetNote(line.menuItemId, e.target.value)}
+                      placeholder={t.notePlaceholder}
+                      className="mt-2.5 w-full text-xs bg-white border border-[var(--line)] rounded-[10px] px-[10px] py-2 placeholder:text-[var(--ink-soft)]"
+                    />
+                    <label className="mt-2 flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={line.isShared}
+                        onChange={(e) => editSetShared(line.menuItemId, e.target.checked)}
+                        className="sr-only"
+                      />
+                      <span
+                        className="w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: line.isShared ? "var(--menthe)" : "#fff",
+                          borderColor: line.isShared ? "var(--menthe)" : "var(--line-strong)",
+                        }}
+                      >
+                        {line.isShared && (
+                          <svg viewBox="0 0 24 24" className="w-[11px] h-[11px]" fill="none" stroke="var(--semoule)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 12l5 5L20 6" />
+                          </svg>
+                        )}
+                      </span>
+                      <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
+                      <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <p className="mt-6 mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+            {t.suggestionAdd}
+          </p>
+          {editCategories.map((category) => {
+            const addable = menu.filter(
+              // Un article déjà dans la commande a déjà ses propres contrôles
+              // dans "Détail de la commande" ci-dessus : le montrer une
+              // seconde fois ici prêtait à confusion (deux "+" pour la même
+              // ligne, l'un des deux toujours de trop) — et une catégorie
+              // entièrement déjà ajoutée n'a plus rien à afficher.
+              (m) => m.category === category && m.is_available && !editItems[m.id]
+            );
+            if (addable.length === 0) return null;
+            return (
+            <div key={category} className="mb-3">
+              <p className="mb-1.5 text-[12px] font-semibold text-[var(--ink-soft)]">
+                {menuCategoryLabel(category, locale)}
+              </p>
+              <div className="space-y-2">
+                {addable.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2.5 bg-white border border-[var(--line)] rounded-xl px-3 py-2.5"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13.5px] font-semibold truncate">{item.name}</div>
+                        <div className="text-[12px] font-bold tabular-nums text-[var(--harissa)]">
+                          {formatAmount(item.price)} {t.currency}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => editIncrement(item)}
+                        aria-label={t.addToCartAria(item.name)}
+                        className="w-[30px] h-[30px] rounded-full text-[16px] leading-none shrink-0 bg-[var(--harissa)] text-[var(--semoule)]"
+                      >
+                        +
+                      </button>
+                    </div>
+                ))}
+              </div>
+            </div>
+            );
+          })}
+
+          <div className="mt-6 bg-[var(--semoule-raised)] border border-[var(--line)] rounded-2xl p-3.5">
+            <div className="flex justify-between items-baseline mb-2.5">
+              <span className="text-[13px] font-semibold text-[var(--ink-soft)]">{t.total}</span>
+              <span className="text-[19px] font-bold tabular-nums text-[var(--encre)]">
+                {formatAmount(editTotal)} {t.currency}
+              </span>
+            </div>
+            <button
+              onClick={saveOrderEdits}
+              disabled={savingEdit || Object.keys(editItems).length === 0}
+              className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-3 font-bold text-[14.5px] shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
+            >
+              {savingEdit ? t.sending : t.editOrderSave}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     const currentDisplayIndex = displayStepIndex(trackedOrder.status as StepStatus);
     const cancelled = trackedOrder.status === "cancelled";
     return (
@@ -1187,7 +1464,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         {/* Même `data-visite` que le bouton d'appel de la carte, plus bas : les
             deux écrans ne coexistent jamais (celui-ci sort par un retour
             anticipé), et la visite trouve sa cible sur l'un comme sur l'autre. */}
-        <div className="mt-4 text-center" data-visite="client-appel">
+        <div className="mt-4 flex justify-center gap-2 flex-wrap" data-visite="client-appel">
           <button
             onClick={callWaiter}
             disabled={waiterCallState !== "idle"}
@@ -1202,8 +1479,26 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </>
             )}
           </button>
-          {waiterCallError && <p className="mt-2 text-sm text-[var(--harissa)]">{waiterCallError}</p>}
+          {/* Modification directe (fenêtre 1) — seulement tant que rien n'a
+              encore été confirmé par un serveur ; passé ce point, la fenêtre 2
+              (demande de modification) prend le relais ailleurs sur cet écran. */}
+          {trackedOrder.status === "pending_confirmation" && (
+            <button
+              onClick={startEditingOrder}
+              className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-[11px]"
+            >
+              <PencilIcon className="w-[14px] h-[14px] shrink-0" />
+              {t.modifyOrderButton}
+            </button>
+          )}
         </div>
+        {waiterCallError && <p className="mt-2 text-sm text-center text-[var(--harissa)]">{waiterCallError}</p>}
+        {trackedOrder.status === "pending_confirmation" && (
+          <p className="mt-1.5 flex items-center justify-center gap-1 text-[11.5px] text-[var(--ink-soft)] text-center">
+            <ClockIcon className="w-3 h-3 shrink-0" />
+            {t.modifyOrderHint}
+          </p>
+        )}
 
         {!cancelled && trackedOrder.scheduled_for && (
           <p className="mt-4 text-sm text-center bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)] rounded-xl py-2 px-3 flex items-center justify-center gap-1.5">
@@ -1309,9 +1604,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
 
         <div className="mt-8 border-t border-[var(--line)] pt-[14px]">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)] mb-2">
-            {t.orderDetailsTitle}
-          </p>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+              {t.orderDetailsTitle}
+            </p>
+            {trackedOrder.items_updated_at && (
+              <span className="text-[11px] text-[var(--ink-faint)] italic">
+                {t.itemsUpdatedAt(formatTime(trackedOrder.items_updated_at))}
+              </span>
+            )}
+          </div>
           <ul className="text-[13px] leading-[1.75] text-[var(--ink-soft)] space-y-0">
             {trackedOrder.items.map((it) => (
               <li key={it.id}>

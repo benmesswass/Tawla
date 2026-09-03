@@ -44,6 +44,17 @@ class OrderItemCreate(BaseModel):
     selected_option_ids: list[int] = Field(default_factory=list)
 
 
+class OrderItemsUpdate(BaseModel):
+    """
+    Édition directe fenêtre 1 (`PUT /orders/{id}/items`) — le panier
+    *souhaité* dans son ensemble, jamais un delta : le service compare aux
+    `OrderItem` actuels lui-même. Même forme que `OrderCreate.items`, pour
+    que l'écran d'édition réutilise telle quelle la logique panier du menu.
+    """
+
+    items: list[OrderItemCreate]
+
+
 class OrderCreate(BaseModel):
     # Le client prouve qu'il a scanné le QR de cette table : ni `table_id` ni
     # `restaurant_id` ne sont acceptés, ils sont déduits du token. Sans ça,
@@ -149,6 +160,10 @@ class OrderOut(BaseModel):
     status: OrderStatus
     created_at: UtcDatetime
     confirmed_at: UtcDatetime | None
+    # Posé uniquement par une édition directe fenêtre 1 (jamais par une
+    # transition de statut) — sert au client comme au serveur à savoir que le
+    # contenu affiché a changé depuis l'envoi initial.
+    items_updated_at: UtcDatetime | None
     sent_to_kitchen_at: UtcDatetime | None
     preparation_started_at: UtcDatetime | None
     ready_at: UtcDatetime | None

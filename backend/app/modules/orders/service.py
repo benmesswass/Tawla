@@ -210,6 +210,67 @@ def _resolve_selected_options(menu_item: MenuItem, selected_option_ids: list[int
     return selected
 
 
+def _build_order_items(
+    db: Session, restaurant_id: int, items: list[schemas.OrderItemCreate]
+) -> list[OrderItem]:
+    """
+    Valide et construit des `OrderItem` à partir d'un panier envoyé par le
+    client — commun à `create_order` et `update_order_items` (fenêtre 1) :
+    même règles de disponibilité, de rattachement au restaurant et de prix
+    figé des deux côtés, pour ne jamais les faire diverger.
+    """
+    built: list[OrderItem] = []
+    for line in items:
+        menu_item = db.get(MenuItem, line.menu_item_id)
+        if not menu_item or menu_item.restaurant_id != restaurant_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "ITEM_NOT_FOUND",
+                    "message": f"menu item {line.menu_item_id} not found",
+                    "menu_item_id": line.menu_item_id,
+                },
+            )
+        if not menu_item.is_available:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ITEM_UNAVAILABLE",
+                    "message": f"'{menu_item.name}' is no longer available",
+                    "item_name": menu_item.name,
+                    "menu_item_id": menu_item.id,
+                },
+            )
+
+        selected_options = _resolve_selected_options(menu_item, line.selected_option_ids)
+
+        # Prix figé au moment T : voir commentaire dans models.py. Le
+        # supplément des options choisies (France, F5/A2) est ajouté une
+        # fois pour toutes ici — total_amount, la facture et le contrôle de
+        # montant Konnect n'ont ensuite jamais besoin de connaître les options,
+        # ils lisent unit_price comme avant.
+        options_total = sum(float(opt.price_delta) for opt in selected_options)
+        built.append(
+            OrderItem(
+                menu_item_id=menu_item.id,
+                menu_item_name=menu_item.name,
+                unit_price=float(menu_item.price) + options_total,
+                quantity=line.quantity,
+                notes=line.notes,
+                is_shared=line.is_shared,
+                shared_with=",".join(str(p) for p in line.shared_with) or None,
+                from_suggestion=line.from_suggestion,
+                options=[
+                    OrderItemOption(
+                        group_name=opt.group.name, option_name=opt.name, price_delta=opt.price_delta
+                    )
+                    for opt in selected_options
+                ],
+            )
+        )
+    return built
+
+
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # La table est retrouvée par son token de QR code, et le restaurant en est
     # déduit : aucun identifiant numérique n'est accepté du client, donc rien
@@ -259,54 +320,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
         client_order_id=payload.client_order_id,
     )
 
-    for line in payload.items:
-        menu_item = db.get(MenuItem, line.menu_item_id)
-        if not menu_item or menu_item.restaurant_id != restaurant_id:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "code": "ITEM_NOT_FOUND",
-                    "message": f"menu item {line.menu_item_id} not found",
-                    "menu_item_id": line.menu_item_id,
-                },
-            )
-        if not menu_item.is_available:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "ITEM_UNAVAILABLE",
-                    "message": f"'{menu_item.name}' is no longer available",
-                    "item_name": menu_item.name,
-                    "menu_item_id": menu_item.id,
-                },
-            )
-
-        selected_options = _resolve_selected_options(menu_item, line.selected_option_ids)
-
-        # Prix figé au moment T : voir commentaire dans models.py. Le
-        # supplément des options choisies (France, F5/A2) est ajouté une
-        # fois pour toutes ici — total_amount, la facture et le contrôle de
-        # montant Konnect n'ont ensuite jamais besoin de connaître les options,
-        # ils lisent unit_price comme avant.
-        options_total = sum(float(opt.price_delta) for opt in selected_options)
-        order.items.append(
-            OrderItem(
-                menu_item_id=menu_item.id,
-                menu_item_name=menu_item.name,
-                unit_price=float(menu_item.price) + options_total,
-                quantity=line.quantity,
-                notes=line.notes,
-                is_shared=line.is_shared,
-                shared_with=",".join(str(p) for p in line.shared_with) or None,
-                from_suggestion=line.from_suggestion,
-                options=[
-                    OrderItemOption(
-                        group_name=opt.group.name, option_name=opt.name, price_delta=opt.price_delta
-                    )
-                    for opt in selected_options
-                ],
-            )
-        )
+    order.items.extend(_build_order_items(db, restaurant_id, payload.items))
 
     db.add(order)
     db.commit()
@@ -346,6 +360,58 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             title="Nouvelle commande",
             body=f"Table {order.table_label} vient de commander.",
         )
+    return order
+
+
+async def update_order_items(db: Session, order: Order, payload: schemas.OrderItemsUpdate) -> Order:
+    """
+    Édition directe par le client — fenêtre 1 uniquement, tant que la
+    commande est encore `PENDING_CONFIRMATION`. Passé ce point, une
+    modification doit passer par une demande (voir `create_modification_request`)
+    plutôt que remplacer silencieusement une commande déjà confirmée : le
+    serveur a pu confirmer entre l'ouverture de cet écran et cet appel, d'où
+    le 409 explicite plutôt qu'un écrasement.
+    """
+    if order.status != OrderStatus.PENDING_CONFIRMATION:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ORDER_NOT_MODIFIABLE",
+                "message": "order can no longer be edited directly, it has already been confirmed",
+            },
+        )
+    if not payload.items:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "EMPTY_ORDER", "message": "order must contain at least one item"},
+        )
+
+    new_items = _build_order_items(db, order.restaurant_id, payload.items)
+    # `cascade="all, delete-orphan"` sur `Order.items` (models.py) : vider la
+    # collection supprime réellement les anciennes lignes au commit, pas
+    # seulement le lien — jamais de ligne orpheline en base.
+    order.items.clear()
+    order.items.extend(new_items)
+    order.items_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.items_updated",
+        restaurant_id=order.restaurant_id, order_id=order.id, table_id=order.table_id,
+    )
+
+    # Le pool serveur doit voir que la commande a changé avant de confirmer —
+    # sans ce broadcast, un serveur qui a ouvert l'écran juste avant l'édition
+    # confirmerait sur l'ancien contenu affiché à l'écran.
+    await manager.broadcast(
+        order.restaurant_id, channel="staff",
+        message={
+            "event": "order.items_updated",
+            "order_id": order.id,
+            "items_updated_at": order.items_updated_at.isoformat(),
+        },
+    )
     return order
 
 

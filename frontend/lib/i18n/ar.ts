@@ -40,6 +40,13 @@ export const ar = {
   preorderBadge: (time) => `طلبية مسبقة للفطور — التحضير مبرمج للساعة ${time}.`,
   dedicatedServer: (staffName) => `${staffName} باش يكون الجرسون تاعك لهاذي الطلبية.`,
 
+  modifyOrderButton: "بدّل الطلبية",
+  modifyOrderHint: "تنجم تبدلها ما دام الجرسون ما أكدهاش",
+  editOrderTitle: "بدّل الطلبية",
+  editOrderSave: "سجل التبديلات",
+  editOrderCancel: "الغي",
+  itemsUpdatedAt: (heure) => `تبدلت الساعة ${heure}`,
+
   trackingSteps: {
     received: "تبعثت",
     confirmed: "تأكدت من الجرسون",

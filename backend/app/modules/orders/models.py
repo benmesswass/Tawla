@@ -94,6 +94,13 @@ class Order(Base):
     ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     served_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Posé par le client lui-même (édition directe tant que la commande est
+    # PENDING_CONFIRMATION, voir service.py::update_order_items) — jamais par
+    # une transition de statut. C'est ce qui alimente le badge « Modifiée » du
+    # pool serveur : sans lui, un ajout fait juste avant la confirmation
+    # restait invisible pour le serveur qui s'apprête à confirmer.
+    items_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Pré-commande mode Ramadan : le client commande avant l'iftar, ce qui
     # permet à la cuisine de voir le volume à venir à l'avance ("anticipation
     # du pic de charge"). Null = commande normale, à traiter dès que possible.

@@ -20,7 +20,7 @@ import PlanDeSalle from "@/components/plan/PlanDeSalle";
 import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
 import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
-import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
+import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 
 // Seuil propre à cet écran (2026-08-28, ex-partagé avec la définition de
@@ -40,6 +40,10 @@ type PendingOrder = {
   taken_by_staff_name: string | null;
   created_at: string | null;
   scheduled_for: string | null;
+  // Posé uniquement par une édition directe du client (fenêtre "modifier la
+  // commande" tant qu'elle attend confirmation) — jamais par une transition
+  // de statut. Alimente le badge "Modifiée" ci-dessous.
+  items_updated_at: string | null;
 };
 type ReadyOrder = { order_id: number; table_id: number; table_label: string; ready_at: string | null };
 type CashRequest = {
@@ -67,6 +71,7 @@ function fromApi(o: Order): PendingOrder {
     taken_by_staff_name: o.taken_by_staff_name,
     created_at: o.created_at ?? null,
     scheduled_for: o.scheduled_for,
+    items_updated_at: o.items_updated_at,
   };
 }
 
@@ -304,6 +309,7 @@ export default function StaffPage() {
                 taken_by_staff_name: null,
                 created_at: msg.created_at ?? null,
                 scheduled_for: msg.scheduled_for ?? null,
+                items_updated_at: null,
               },
             ]
       );
@@ -322,6 +328,14 @@ export default function StaffPage() {
             ? { ...o, taken_by_staff_id: msg.taken_by_staff_id, taken_by_staff_name: msg.taken_by_staff_name }
             : o
         )
+      );
+    }
+    // Le client a modifié sa commande pendant qu'elle attendait encore d'être
+    // confirmée — sans ce badge, un serveur qui confirme sur ce qu'il a vu à
+    // l'ouverture de l'écran confirmerait un contenu déjà périmé.
+    if (msg.event === "order.items_updated") {
+      setPending((prev) =>
+        prev.map((o) => (o.order_id === msg.order_id ? { ...o, items_updated_at: msg.items_updated_at } : o))
       );
     }
     if (msg.event === "order.ready") {
@@ -779,6 +793,17 @@ export default function StaffPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-semibold text-[var(--encre)]">Commande #{o.order_id}</div>
+                      {o.items_updated_at && (
+                        <div className="mt-0.5 flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[var(--harissa-dark)] bg-[rgba(214,64,30,.12)] border border-[rgba(214,64,30,.4)] rounded-full pl-[6px] pr-[7px] py-[2px]">
+                            <PencilIcon className="w-[9px] h-[9px] shrink-0" />
+                            Modifiée
+                          </span>
+                          <span className="text-[11px] text-[var(--ink-soft)]">
+                            il y a {duree(elapsedSeconds(o.items_updated_at, maintenant) ?? 0)}
+                          </span>
+                        </div>
+                      )}
                       {o.scheduled_for && (
                         <div className="text-xs text-[var(--laiton)] mt-0.5 flex items-center gap-1">
                           <MoonIcon className="w-3.5 h-3.5 shrink-0" />

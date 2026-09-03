@@ -41,6 +41,15 @@ export const fr = {
   preorderBadge: (time: string) => `Pré-commande pour l'iftar — préparation prévue pour ${time}.`,
   dedicatedServer: (staffName: string) => `${staffName} est votre serveur dédié pour cette commande.`,
 
+  // Modification directe (fenêtre 1, tant que la commande est en attente de
+  // confirmation) — voir orders/service.py::update_order_items.
+  modifyOrderButton: "Modifier la commande",
+  modifyOrderHint: "Modifiable tant que le serveur n'a pas confirmé",
+  editOrderTitle: "Modifier la commande",
+  editOrderSave: "Enregistrer les modifications",
+  editOrderCancel: "Annuler",
+  itemsUpdatedAt: (heure: string) => `Modifiée à ${heure}`,
+
   trackingSteps: {
     received: "Commande reçue",
     confirmed: "Confirmée par le serveur",
