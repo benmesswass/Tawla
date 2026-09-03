@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { lalezar } from "@/lib/fonts";
 import Card from "@/components/ui/Card";
+import { formatMoney } from "@/lib/currency";
 
 /**
  * Vitrine à quatre écrans sur la home (Phase D2bis de ROADMAP_DESIGN.md,
@@ -120,7 +121,7 @@ function EcranClient() {
             <div key={plat.nom} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[var(--encre)] truncate">{plat.nom}</p>
-                <p className="text-xs text-[var(--ink-soft)]">{plat.prix} DT</p>
+                <p className="text-xs text-[var(--ink-soft)]">{formatMoney(plat.prix)}</p>
               </div>
               <span
                 aria-hidden
@@ -148,7 +149,7 @@ function EcranManager() {
             <p className="text-[10px] text-[var(--ink-soft)]">Commandes</p>
           </Card>
           <Card padding="sm" className="text-center">
-            <p className="text-lg font-semibold tabular-nums text-[var(--encre)]">28 DT</p>
+            <p className="text-lg font-semibold tabular-nums text-[var(--encre)]">{formatMoney(28)}</p>
             <p className="text-[10px] text-[var(--ink-soft)]">Panier moyen</p>
           </Card>
           <Card padding="sm" className="text-center">
