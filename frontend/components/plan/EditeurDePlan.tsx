@@ -74,19 +74,27 @@ export default function EditeurDePlan({
   useEffect(() => {
     if (!modifie) return;
     const t = setTimeout(async () => {
-      await enregistrerRef.current(
-        posees.map((t) => ({
-          table_id: t.id,
-          pos_x: t.pos_x as number,
-          pos_y: t.pos_y as number,
-          shape: t.shape,
-          seats: t.seats,
-        }))
-      );
+      try {
+        await enregistrerRef.current(
+          posees.map((t) => ({
+            table_id: t.id,
+            pos_x: t.pos_x as number,
+            pos_y: t.pos_y as number,
+            shape: t.shape,
+            seats: t.seats,
+          }))
+        );
+      } catch {
+        // Le parent a déjà affiché l'erreur (ex: palier insuffisant) — ici on
+        // revient au dernier état confirmé par le serveur, sinon le brouillon
+        // garderait la table affichée posée sur le plan alors que rien n'a
+        // été enregistré.
+        setBrouillon(tables);
+      }
       setModifie(false);
     }, DELAI_ENREGISTREMENT);
     return () => clearTimeout(t);
-  }, [modifie, posees]);
+  }, [modifie, posees, tables]);
 
   function deplacer(tableId: number, x: number, y: number) {
     setBrouillon((prev) => prev.map((t) => (t.id === tableId ? { ...t, pos_x: x, pos_y: y } : t)));

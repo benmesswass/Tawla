@@ -311,6 +311,28 @@ def test_someone_elses_manager_cannot_connect_konnect_credentials(client):
     assert res.status_code == 403
 
 
+def test_essentiel_manager_cannot_connect_konnect_credentials(client):
+    """Paiement carte listé Pro+ dans offer.ts — la connexion doit être
+    bloquée au même titre que l'encaissement (start_card_payment), sinon un
+    manager Essentiel complète un onboarding réel pour rien."""
+    restaurant = create_restaurant(slug="card-connect-essentiel", subscription_tier=SubscriptionTier.ESSENTIEL)
+    headers = _manager_headers(restaurant.id)
+
+    res = client.put(
+        f"/api/v1/restaurants/{restaurant.id}/konnect-credentials",
+        json={"api_key": "sk-live-xyz", "wallet_id": "wallet-123"},
+        headers=headers,
+    )
+
+    assert res.status_code == 403
+    assert res.json()["detail"]["code"] == "UPGRADE_REQUIRED"
+    db = _TestingSessionLocal()
+    db_restaurant = db.get(Restaurant, restaurant.id)
+    credentials = db_restaurant.konnect_credentials()
+    db.close()
+    assert credentials is None
+
+
 def test_restaurant_without_credentials_reports_not_configured(client):
     restaurant = create_restaurant(slug="card-not-configured")
     headers = _manager_headers(restaurant.id)

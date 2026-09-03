@@ -26,6 +26,7 @@ from app.core.subscription import (
     tier_price,
     require_tier,
     tier_includes,
+    upgrade_required_error,
 )
 from app.core.subscription_payments import handle_stripe_subscription_event, settle_subscription_payment
 from app.modules.staff.dependencies import get_current_staff, require_role, require_role_regardless_of_activation
@@ -429,6 +430,15 @@ def set_konnect_credentials(
     réaffichée après coup (voir RestaurantOut.konnect_configured), même
     logique que le mot de passe temporaire d'un compte staff — on peut la
     remplacer, jamais la relire.
+
+    Réservé à Pro et Business (offer.ts : "Paiement carte" n'apparaît qu'à
+    partir de Pro) — sans cette garde, un manager Essentiel pouvait connecter
+    un vrai wallet depuis Réglages alors que start_card_payment le bloque de
+    toute façon à l'encaissement ; onboarding réel pour une fonctionnalité
+    qui ne s'active jamais avant l'upgrade. Vérifié à la main (pas
+    `Depends(require_tier(...))`) et après le garde is_demo ci-dessous : un
+    compte démo doit toujours voir DEMO_RESTAURANT, jamais UPGRADE_REQUIRED,
+    quel que soit son palier.
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
@@ -444,6 +454,8 @@ def set_konnect_credentials(
             status_code=400,
             detail={"code": "DEMO_RESTAURANT", "message": "card payment is already simulated in demo mode"},
         )
+    if not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
+        raise upgrade_required_error(SubscriptionTier.PRO)
 
     restaurant.konnect_api_key_encrypted = encrypt_field(payload.api_key)
     restaurant.konnect_wallet_id = payload.wallet_id
@@ -454,14 +466,20 @@ def set_konnect_credentials(
 
 
 @router.post("/{restaurant_id}/stripe-connect/start", response_model=schemas.StripeConnectStartOut)
-def start_stripe_connect(restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+def start_stripe_connect(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+):
     """
     Démarre (ou reprend) l'onboarding Stripe Connect du restaurant —
     équivalent Stripe de `set_konnect_credentials` ci-dessus, mais le
     restaurant ne saisit rien ici : il est redirigé vers une page hébergée
     par Stripe (Account Links), voir `stripe_gateway.create_onboarding_link`.
     Réutilise le compte existant si l'inscription avait déjà démarré, plutôt
-    que d'en créer un second orphelin à chaque clic.
+    que d'en créer un second orphelin à chaque clic. Même garde de palier
+    (vérifiée à la main, après is_demo) que `set_konnect_credentials`
+    ci-dessus — voir sa docstring.
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
@@ -476,6 +494,8 @@ def start_stripe_connect(restaurant_id: int, db: Session = Depends(get_db), staf
             status_code=400,
             detail={"code": "DEMO_RESTAURANT", "message": "card payment is already simulated in demo mode"},
         )
+    if not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
+        raise upgrade_required_error(SubscriptionTier.PRO)
 
     account_id = restaurant.stripe_account_id
     if not account_id:
