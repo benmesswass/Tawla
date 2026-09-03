@@ -449,23 +449,6 @@
   }
 }
 
-/* Même animation que .plat-apparait ci-dessus (fondu + léger glissement),
-   réutilisée pour les 3 cartes problème/solution de chaque rôle sur la home
-   (components/home/ApercuProduit.tsx). Une classe séparée : le nom
-   .plat-apparait reste spécifique à la carte client, celle-ci n'a pas de
-   rapport avec un plat. Rejouée à chaque bascule d'onglet parce que chaque
-   `probleme` est une clé React unique — React remonte les cartes plutôt que
-   de réutiliser le DOM existant. */
-.probleme-apparait {
-  animation: plat-apparait 260ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .probleme-apparait {
-    animation: none;
-  }
-}
-
 /* --- Vitrine : fondu d'apparition au scroll (Phase D2 point 2 de
    ROADMAP_DESIGN.md) --------------------------------------------------------
    Contrairement à .plat-apparait ci-dessus (qui joue dès le montage), ici le

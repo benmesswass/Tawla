@@ -4,7 +4,6 @@ import { useState } from "react";
 import { lalezar } from "@/lib/fonts";
 import Card from "@/components/ui/Card";
 import { formatMoney } from "@/lib/currency";
-import { BENEFITS_PAR_ROLE } from "@/lib/offer";
 
 /**
  * Vitrine à quatre écrans sur la home (Phase D2bis de ROADMAP_DESIGN.md,
@@ -13,11 +12,6 @@ import { BENEFITS_PAR_ROLE } from "@/lib/offer";
  * serveur/cuisine en sombre comme /staff et /kitchen) plutôt qu'une charte
  * inventée pour la démo. Données Dar Chaabane, restaurant de démo déjà utilisé
  * par la visite guidée et le seed (`backend/scripts/seed_demo.py`).
- *
- * Les 3 couples problème/solution (`BENEFITS_PAR_ROLE`, lib/offer.ts)
- * changent avec l'onglet actif au lieu de vivre dans un bloc générique
- * au-dessus (test demandé par Wassim, 2026-09-03) : chaque rôle défend son
- * propre triptyque plutôt qu'un compromis valable pour aucun des quatre.
  */
 
 type Role = "client" | "manager" | "serveur" | "cuisine";
@@ -72,36 +66,6 @@ export default function ApercuProduit() {
             {r.label}
           </button>
         ))}
-      </div>
-
-      <div className="max-w-xl mx-auto mb-8 space-y-3">
-        {BENEFITS_PAR_ROLE[role].map((b, i) => {
-          const harissa = i % 2 === 0;
-          return (
-            <div
-              key={b.probleme}
-              className={`probleme-apparait rounded-lg bg-[var(--espresso-card)] p-4 border-l-4 ${
-                harissa ? "border-[var(--harissa)]" : "border-[var(--laiton)]"
-              }`}
-              style={{ animationDelay: `${i * 90}ms` }}
-            >
-              <p className="text-sm text-[var(--ink-on-espresso-strong)]">{b.probleme}</p>
-              <div
-                className={`mt-2.5 flex gap-2 items-start rounded-md p-2.5 text-sm ${
-                  harissa ? "bg-[var(--harissa-on-espresso-bg)]" : "bg-[var(--laiton-on-espresso-bg)]"
-                }`}
-              >
-                <span
-                  className={harissa ? "text-[var(--harissa-on-espresso-text)]" : "text-[var(--laiton-on-espresso-text)]"}
-                  aria-hidden
-                >
-                  ✓
-                </span>
-                <span className="text-[var(--semoule)]">{b.solution}</span>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       <div className="flex justify-center">

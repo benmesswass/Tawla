@@ -7,7 +7,7 @@ import TrackedLink from "@/components/TrackedLink";
 import TrackedAnchor from "@/components/TrackedAnchor";
 import FadeInOnScroll from "@/components/FadeInOnScroll";
 import ApercuProduit from "@/components/home/ApercuProduit";
-import { INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
+import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
 import { marketBaseUrl } from "@/lib/marketUrls";
 
 /**
@@ -69,7 +69,38 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="bg-[var(--espresso)]" data-visite="accueil-benefices">
+      <section className="max-w-3xl mx-auto px-6 py-12" data-visite="accueil-benefices">
+        <div className="grid gap-6 sm:grid-cols-3 items-stretch">
+          {BENEFITS.map((benefit, i) => {
+            const harissa = i % 2 === 0;
+            return (
+              <FadeInOnScroll key={benefit.probleme} delayMs={i * 90} className="h-full">
+                <div
+                  className={`h-full flex flex-col gap-4 rounded-lg bg-white p-5 border-l-4 ${
+                    harissa ? "border-[var(--harissa)]" : "border-[var(--laiton)]"
+                  }`}
+                >
+                  <p className="text-sm text-[var(--ink-soft)]">{benefit.probleme}</p>
+                  <div
+                    className={`mt-auto flex gap-2.5 rounded-md border p-3 text-sm ${
+                      harissa
+                        ? "bg-[var(--tuile-harissa-fond)] border-[var(--tuile-harissa-bord)]"
+                        : "bg-[var(--tuile-laiton-fond)] border-[var(--tuile-laiton-bord)]"
+                    }`}
+                  >
+                    <span className={harissa ? "text-[var(--harissa)]" : "text-[var(--laiton)]"} aria-hidden>
+                      ✓
+                    </span>
+                    <span className="text-[var(--encre)]">{benefit.detail}</span>
+                  </div>
+                </div>
+              </FadeInOnScroll>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="bg-[var(--espresso)]" data-visite="accueil-en-situation">
         <div className="max-w-4xl mx-auto px-6 py-14">
           <h2 className={`${lalezar.className} text-2xl sm:text-3xl text-[var(--semoule)] text-center mb-3`}>
             Un produit, quatre écrans
@@ -78,9 +109,7 @@ export default function HomePage() {
             Le client commande depuis son téléphone. Le serveur, le manager et la cuisine suivent chacun le même
             service, sur l&apos;écran qui leur correspond.
           </p>
-          <FadeInOnScroll>
-            <ApercuProduit />
-          </FadeInOnScroll>
+          <ApercuProduit />
         </div>
       </section>
 
