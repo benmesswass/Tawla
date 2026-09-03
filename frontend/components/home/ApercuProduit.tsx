@@ -75,17 +75,33 @@ export default function ApercuProduit() {
       </div>
 
       <div className="max-w-xl mx-auto mb-8 space-y-3">
-        {BENEFITS_PAR_ROLE[role].map((b) => (
-          <div key={b.probleme} className="text-sm leading-snug">
-            <p className="text-[var(--ink-on-espresso-strong)]">{b.probleme}</p>
-            <p className="text-[var(--semoule)] flex items-start gap-1.5 mt-0.5">
-              <span className="text-[var(--menthe-on-espresso-text)] shrink-0" aria-hidden>
-                ✓
-              </span>
-              <span>{b.solution}</span>
-            </p>
-          </div>
-        ))}
+        {BENEFITS_PAR_ROLE[role].map((b, i) => {
+          const harissa = i % 2 === 0;
+          return (
+            <div
+              key={b.probleme}
+              className={`probleme-apparait rounded-lg bg-[var(--espresso-card)] p-4 border-l-4 ${
+                harissa ? "border-[var(--harissa)]" : "border-[var(--laiton)]"
+              }`}
+              style={{ animationDelay: `${i * 90}ms` }}
+            >
+              <p className="text-sm text-[var(--ink-on-espresso-strong)]">{b.probleme}</p>
+              <div
+                className={`mt-2.5 flex gap-2 items-start rounded-md p-2.5 text-sm ${
+                  harissa ? "bg-[var(--harissa-on-espresso-bg)]" : "bg-[var(--laiton-on-espresso-bg)]"
+                }`}
+              >
+                <span
+                  className={harissa ? "text-[var(--harissa-on-espresso-text)]" : "text-[var(--laiton-on-espresso-text)]"}
+                  aria-hidden
+                >
+                  ✓
+                </span>
+                <span className="text-[var(--semoule)]">{b.solution}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex justify-center">
