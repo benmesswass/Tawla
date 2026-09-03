@@ -141,6 +141,13 @@ export type Restaurant = RestaurantPublic & {
   // backend/app/modules/tenants/models.py. Empêche le rappel de paiement de
   // s'afficher sur un compte de démo (dashboard/page.tsx).
   is_demo: boolean;
+  // Mentions légales de la facture PDF (invoice.py) — jamais sur
+  // RestaurantPublic, contrairement aux réseaux sociaux : le client n'en a
+  // jamais besoin, seule la génération de facture les lit côté serveur.
+  // Verrouillées Pro+ à l'écriture (voir setLegalInfo ci-dessous).
+  legal_address: string | null;
+  tax_id: string | null;
+  vat_number: string | null;
 };
 
 /**
@@ -767,6 +774,14 @@ export const api = {
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/social-links`, {
       method: "PATCH",
       body: JSON.stringify(links),
+    }),
+  setLegalInfo: (
+    restaurantId: number,
+    info: { legal_address: string | null; tax_id: string | null; vat_number: string | null }
+  ) =>
+    request<Restaurant>(`/api/v1/restaurants/${restaurantId}/legal-info`, {
+      method: "PATCH",
+      body: JSON.stringify(info),
     }),
   // Connexion du wallet Konnect PROPRE au restaurant (modèle direct,
   // 2026-08-19) — jamais réaffiché après coup, seul `konnect_configured` le

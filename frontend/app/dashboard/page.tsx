@@ -228,6 +228,10 @@ export default function DashboardPage() {
   const [whatsappUrl, setWhatsappUrl] = useState("");
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [savingReseaux, setSavingReseaux] = useState(false);
+  const [legalAddress, setLegalAddress] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
+  const [savingLegalInfo, setSavingLegalInfo] = useState(false);
   // Photo choisie pour un plat pas encore créé : elle attend d'avoir un
   // identifiant à qui être rattachée.
   const [nouvellePhoto, setNouvellePhoto] = useState<File | null>(null);
@@ -347,6 +351,9 @@ export default function DashboardPage() {
       setTiktokUrl(rest.tiktok_url ?? "");
       setWhatsappUrl(rest.whatsapp_url ?? "");
       setGoogleReviewUrl(rest.google_review_url ?? "");
+      setLegalAddress(rest.legal_address ?? "");
+      setTaxId(rest.tax_id ?? "");
+      setVatNumber(rest.vat_number ?? "");
       if (!rest.is_active) return;
 
       const [menu, tableList, teamList, suggested, regimeList, dayStats] = await Promise.all([
@@ -724,6 +731,25 @@ export default function DashboardPage() {
       handleGatedError(e);
     } finally {
       setSavingReseaux(false);
+    }
+  }
+
+  async function saveLegalInfo() {
+    if (!restaurantId) return;
+    setError(null);
+    setSavingLegalInfo(true);
+    try {
+      const misAJour = await api.setLegalInfo(restaurantId, {
+        legal_address: legalAddress.trim() || null,
+        tax_id: taxId.trim() || null,
+        vat_number: vatNumber.trim() || null,
+      });
+      setRestaurant(misAJour);
+      flash("Mentions légales enregistrées.");
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setSavingLegalInfo(false);
     }
   }
 
@@ -2237,6 +2263,58 @@ export default function DashboardPage() {
               <div className="mt-3">
                 <Button size="sm" onClick={saveReseaux} disabled={savingReseaux}>
                   {savingReseaux ? "Enregistrement..." : "Enregistrer"}
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {restaurant && (
+            <Card padding="sm" className="mt-4">
+              <span className="font-medium">Mentions légales de la facture</span>
+              <p className="text-xs text-neutral-500 mt-1">
+                Affichées sur la facture PDF envoyée à vos clients (adresse, SIRET ou matricule fiscal, TVA
+                intracommunautaire). Facultatives, indépendantes les unes des autres — laisser un champ vide le
+                retire sans toucher aux autres.
+              </p>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="text-sm sm:col-span-2">
+                  <span className="text-xs text-neutral-500 mb-0.5 block">Adresse</span>
+                  <input
+                    type="text"
+                    value={legalAddress}
+                    disabled={savingLegalInfo}
+                    onChange={(e) => setLegalAddress(e.target.value)}
+                    placeholder="12 rue de la République, 75011 Paris"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="text-xs text-neutral-500 mb-0.5 block">SIRET / matricule fiscal</span>
+                  <input
+                    type="text"
+                    value={taxId}
+                    disabled={savingLegalInfo}
+                    onChange={(e) => setTaxId(e.target.value)}
+                    placeholder="812 345 678 00019"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="text-xs text-neutral-500 mb-0.5 block">TVA intracommunautaire</span>
+                  <input
+                    type="text"
+                    value={vatNumber}
+                    disabled={savingLegalInfo}
+                    onChange={(e) => setVatNumber(e.target.value)}
+                    placeholder="FR32812345678"
+                    className="bg-white border border-[var(--line)] rounded px-2 py-1 w-full"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3">
+                <Button size="sm" onClick={saveLegalInfo} disabled={savingLegalInfo}>
+                  {savingLegalInfo ? "Enregistrement..." : "Enregistrer"}
                 </Button>
               </div>
             </Card>

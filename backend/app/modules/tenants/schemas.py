@@ -84,6 +84,15 @@ class RestaurantOut(RestaurantPublicOut):
     # moins cher" avant la prochaine échéance (retour utilisateur,
     # 2026-09-02 : "aucune indication si c'était pris en compte").
     subscription_downgrade_pending_tier: SubscriptionTier | None
+    # Mentions légales de la facture PDF (invoice.py) — jamais sur
+    # RestaurantPublicOut, contrairement aux réseaux sociaux : aucune route
+    # publique n'en a besoin, seule la génération de facture les lit
+    # directement sur l'objet Restaurant. Verrouillées Pro+ à l'écriture
+    # (voir tenants/router.py::set_legal_info), lisibles ici pour préremplir
+    # le formulaire des Réglages quel que soit le palier actuel.
+    legal_address: str | None
+    tax_id: str | None
+    vat_number: str | None
 
 
 def serialize_restaurant(restaurant: Restaurant) -> RestaurantOut:
@@ -122,6 +131,16 @@ class SocialLinksUpdate(BaseModel):
     tiktok_url: str | None = None
     whatsapp_url: str | None = None
     google_review_url: str | None = None
+
+
+class LegalInfoUpdate(BaseModel):
+    """Les trois champs sont indépendants, même mécanique que
+    SocialLinksUpdate : vide (None) efface le champ correspondant sans
+    toucher aux autres."""
+
+    legal_address: str | None = None
+    tax_id: str | None = None
+    vat_number: str | None = None
 
 
 class KitchenSoundUpdate(BaseModel):
