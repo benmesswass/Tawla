@@ -228,6 +228,57 @@ def set_social_links(
     return schemas.serialize_restaurant(restaurant)
 
 
+def _clean_text_field(value: str | None, field: str, max_length: int) -> str | None:
+    """Même raison d'être que `_clean_social_url` (sans le contrôle de schéma,
+    ces champs ne sont pas des liens) : borné à `max_length` pour matcher la
+    colonne, sinon une valeur trop longue fait échouer le commit avec une
+    erreur Postgres brute au lieu d'un 422 propre."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    if len(value) > max_length:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "FIELD_TOO_LONG",
+                "message": f"{field} is too long ({max_length} characters max)",
+                "field": field,
+            },
+        )
+    return value
+
+
+@router.patch("/{restaurant_id}/legal-info", response_model=schemas.RestaurantOut)
+def set_legal_info(
+    restaurant_id: int,
+    payload: schemas.LegalInfoUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
+):
+    """
+    Mentions légales (adresse, SIRET/matricule fiscal, TVA intracom) affichées
+    sur la facture PDF (app/core/invoice.py) — même palier et même mécanique
+    que les réseaux sociaux ci-dessus (Pro et Business uniquement, verrou
+    posé ici à l'écriture, retour utilisateur 2026-09-03). Jamais exposées sur
+    `RestaurantPublicOut` : contrairement aux réseaux sociaux, aucune route
+    publique n'en a besoin, seule la génération de facture les lit
+    directement sur l'objet `Restaurant`.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    restaurant = _restaurant_or_404(db, restaurant_id)
+
+    restaurant.legal_address = _clean_text_field(payload.legal_address, "legal_address", 300)
+    restaurant.tax_id = _clean_text_field(payload.tax_id, "tax_id", 60)
+    restaurant.vat_number = _clean_text_field(payload.vat_number, "vat_number", 30)
+    db.commit()
+    db.refresh(restaurant)
+    return schemas.serialize_restaurant(restaurant)
+
+
 # --- Bannière de couverture et logo (Phase D1 de ROADMAP_DESIGN.md) ---------
 #
 # Même trio de champs et mêmes contraintes que la photo des plats
