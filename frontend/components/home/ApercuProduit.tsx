@@ -4,6 +4,7 @@ import { useState } from "react";
 import { lalezar } from "@/lib/fonts";
 import Card from "@/components/ui/Card";
 import { formatMoney } from "@/lib/currency";
+import { BENEFITS_PAR_ROLE } from "@/lib/offer";
 
 /**
  * Vitrine à quatre écrans sur la home (Phase D2bis de ROADMAP_DESIGN.md,
@@ -12,6 +13,11 @@ import { formatMoney } from "@/lib/currency";
  * serveur/cuisine en sombre comme /staff et /kitchen) plutôt qu'une charte
  * inventée pour la démo. Données Dar Chaabane, restaurant de démo déjà utilisé
  * par la visite guidée et le seed (`backend/scripts/seed_demo.py`).
+ *
+ * Les 3 couples problème/solution (`BENEFITS_PAR_ROLE`, lib/offer.ts)
+ * changent avec l'onglet actif au lieu de vivre dans un bloc générique
+ * au-dessus (test demandé par Wassim, 2026-09-03) : chaque rôle défend son
+ * propre triptyque plutôt qu'un compromis valable pour aucun des quatre.
  */
 
 type Role = "client" | "manager" | "serveur" | "cuisine";
@@ -65,6 +71,20 @@ export default function ApercuProduit() {
           >
             {r.label}
           </button>
+        ))}
+      </div>
+
+      <div className="max-w-xl mx-auto mb-8 space-y-3">
+        {BENEFITS_PAR_ROLE[role].map((b) => (
+          <div key={b.probleme} className="text-sm leading-snug">
+            <p className="text-[var(--ink-on-espresso-strong)]">{b.probleme}</p>
+            <p className="text-[var(--semoule)] flex items-start gap-1.5 mt-0.5">
+              <span className="text-[var(--menthe-on-espresso-text)] shrink-0" aria-hidden>
+                ✓
+              </span>
+              <span>{b.solution}</span>
+            </p>
+          </div>
         ))}
       </div>
 

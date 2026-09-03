@@ -146,36 +146,88 @@ export const INCLUDED = [
 ];
 
 /**
- * Ce que le produit fait, dit du point de vue du restaurateur et non de la
- * fonctionnalité — présenté en problème/solution sur la home (Phase D2bis de
- * ROADMAP_DESIGN.md, comparatif BipOrder). `probleme` est la douleur telle
- * qu'un patron la formulerait, `detail` reste la solution telle quelle.
+ * Ce que le produit fait, un triptyque problème/solution par écran plutôt
+ * qu'une liste générique (Phase D2bis de ROADMAP_DESIGN.md, test demandé par
+ * Wassim le 2026-09-03 : fondre les bénéfices dans la vitrine à 4 écrans de
+ * `components/home/ApercuProduit.tsx` au lieu d'un bloc séparé au-dessus).
+ * Voix impersonnelle, toujours au même registre que les trois premiers
+ * couples déjà validés — jamais "vos clients"/"vos serveurs".
  *
- * Chaque `detail` est vérifié contre le code réel (2026-09-03), pas juste
- * plausible : les deux premiers correspondent à `OrderStatus`/
- * `ALLOWED_TRANSITIONS` (orders/service.py — la cuisine ne reçoit le
- * broadcast `channel="kitchen"` que sur la transition SENT_TO_KITCHEN,
- * jamais avant). Le troisième a été réécrit : la version précédente listait
- * "commandes perdues" et "panier moyen" comme visibles au même endroit que
- * l'activité par serveur, alors que ce sont deux écrans distincts
- * (`/dashboard` en direct vs `/dashboard/preuve`, un outil de preuve pour un
- * pilote/jury) — voir RecetteDuJour.tsx et stats/schemas.py.
+ * Chaque `solution` est vérifiée contre le code réel (2026-09-03), pas juste
+ * plausible :
+ * - client : suivi en direct (orders/service.py::transition_status,
+ *   broadcast sur le channel de la commande) et appel serveur (module
+ *   `waiter_calls`, déjà vendu comme fonctionnalité Essentiel dans `TIERS`
+ *   ci-dessus).
+ * - manager : mêmes deux chiffres de tête que RecetteDuJour.tsx, la charge
+ *   par serveur de `StaffActiveLoad` (stats/schemas.py — décision de Wassim
+ *   du 2026-08-28, remplace "commandes perdues" en tête), et
+ *   `TeamReport`/`StaffPeriodReport` pour le rapport de prime.
+ * - serveur : le pool partagé (`claim_order`) et le halo rouge des lignes en
+ *   retard (`app/staff/page.tsx`, variable `tardive`), l'alerte "prête"
+ *   (broadcast `order.ready` sur le channel "staff").
+ * - cuisine : le minuteur et le rouge au-delà du délai d'alerte
+ *   (`app/kitchen/page.tsx`, `ELAPSED_ALERT_MINUTES`), les options/notes en
+ *   évidence (`--note-cuisine`).
  */
-export const BENEFITS = [
-  {
-    probleme: "Les commandes se perdent à l'oral — un plat mal entendu, une table oubliée.",
-    detail: "La commande arrive sur l'écran partagé des serveurs, confirmée avant de partir en cuisine.",
-  },
-  {
-    probleme: "D'autres systèmes envoient tout direct en cuisine, sans repasser par la salle.",
-    detail: "Rien n'entre en cuisine sans qu'un serveur l'ait vérifiée à table.",
-  },
-  {
-    probleme: "Aucune visibilité sur ce qui se passe vraiment en salle chaque soir.",
-    detail:
-      "Ventes et temps d'attente moyen dès la connexion, détail par serveur et comparaison avant/après en un clic.",
-  },
-];
+export const BENEFITS_PAR_ROLE: Record<"client" | "manager" | "serveur" | "cuisine", { probleme: string; solution: string }[]> = {
+  client: [
+    {
+      probleme: "Le client attend qu'un serveur soit libre pour passer commande.",
+      solution: "Il commande depuis son téléphone dès qu'il est prêt.",
+    },
+    {
+      probleme: "Une fois la commande envoyée, aucune idée de son avancement.",
+      solution: "Suivi en direct sur son téléphone, jusqu'à « prête ».",
+    },
+    {
+      probleme: "Il faut héler un serveur à travers la salle pour un besoin simple.",
+      solution: "Bouton d'appel serveur direct, depuis la table.",
+    },
+  ],
+  manager: [
+    {
+      probleme: "Aucune visibilité sur ce qui se passe vraiment en salle chaque soir.",
+      solution: "Ventes et temps d'attente moyen dès la connexion.",
+    },
+    {
+      probleme: "Impossible de savoir qui, dans l'équipe, est débordé en plein service.",
+      solution: "Charge en temps réel par serveur, là, maintenant.",
+    },
+    {
+      probleme: "Décider d'une prime au feeling, faute de chiffres.",
+      solution: "Rapport d'équipe par période : commandes, pourboires, montant traité.",
+    },
+  ],
+  serveur: [
+    {
+      probleme: "Courir après chaque table pour savoir qui a commandé quoi.",
+      solution: "Toutes les commandes en attente sur un seul écran, prises en charge en un clic.",
+    },
+    {
+      probleme: "Une commande oubliée en pleine salle, sans que personne ne le voie.",
+      solution: "La ligne se teinte de rouge si elle attend trop longtemps.",
+    },
+    {
+      probleme: "Ne pas savoir quand aller chercher un plat prêt en cuisine.",
+      solution: "Alerte dès qu'un plat est prêt, avec la table concernée.",
+    },
+  ],
+  cuisine: [
+    {
+      probleme: "Recevoir une commande sans savoir depuis combien de temps elle attend.",
+      solution: "Minuteur visible sur chaque commande, dès qu'elle arrive.",
+    },
+    {
+      probleme: "Découvrir un plat en retard seulement quand le client se plaint.",
+      solution: "La carte passe au rouge au-delà du délai d'alerte.",
+    },
+    {
+      probleme: "Faire répéter au serveur les consignes d'un plat.",
+      solution: "Options et notes affichées en évidence sur le ticket.",
+    },
+  ],
+};
 
 /**
  * Résultats de pilotes, à citer sur la page.
