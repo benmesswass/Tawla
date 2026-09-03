@@ -584,7 +584,7 @@ def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> N
     if not order.customer_email or not restaurant or not is_email_enabled():
         return
     try:
-        pdf_bytes = generate_invoice_pdf(order, restaurant.name)
+        pdf_bytes = generate_invoice_pdf(order, restaurant)
         total = order.total_amount + float(order.tip_amount)
         sent = send_email_with_attachment(
             to=order.customer_email,

@@ -15,6 +15,7 @@ from fpdf import FPDF
 from app.core.currency import format_money
 from app.core.markets import Market, current_market
 from app.modules.orders.models import Order, PaymentMethod
+from app.modules.tenants.models import Restaurant
 
 _PAYMENT_LABELS: dict[PaymentMethod, str] = {
     PaymentMethod.CARD: "Carte (en ligne)",
@@ -35,12 +36,70 @@ def _pdf_money(amount: float, market: Market = current_market) -> str:
     return format_money(amount, market).replace("€", "EUR")
 
 
-def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
+def _dashed_divider(pdf: FPDF) -> None:
+    """Séparateur pointillé pleine largeur (inspiré du reçu Tabesto, retour
+    utilisateur 2026-09-03) — casse la facture en sections claires au lieu
+    d'un mur de lignes chiffrées difficile à scanner d'un coup d'œil.
+    `dashed_line()` est dépréciée depuis fpdf2 2.4.6 au profit de
+    `set_dash_pattern()` + `line()`, remis à zéro juste après (motif à trait
+    plein partout ailleurs dans la facture)."""
+    y = pdf.get_y() + 2
+    pdf.set_dash_pattern(dash=1.5, gap=1.5)
+    pdf.line(pdf.l_margin, y, pdf.w - pdf.r_margin, y)
+    pdf.set_dash_pattern()
+    pdf.set_y(y + 4)
+
+
+_SOCIAL_LINKS: list[tuple[str, str]] = [
+    ("facebook_url", "Facebook"),
+    ("instagram_url", "Instagram"),
+    ("tiktok_url", "TikTok"),
+    ("whatsapp_url", "WhatsApp"),
+]
+
+
+def _add_social_links(pdf: FPDF, restaurant: Restaurant | None) -> None:
+    """Liens réseaux sociaux du restaurant (mêmes champs que l'en-tête du menu
+    client, `Restaurant.facebook_url`/etc.) — en texte cliquable plutôt qu'en
+    icônes : Helvetica core (fpdf2) ne sait dessiner aucune icône de marque,
+    seul du texte Latin-1 (voir docstring du module)."""
+    if not restaurant:
+        return
+    links = [(label, getattr(restaurant, field)) for field, label in _SOCIAL_LINKS if getattr(restaurant, field)]
+    if not links:
+        return
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(90, 90, 90)
+    gap = 8
+    widths = [pdf.get_string_width(label) for label, _ in links]
+    x = (pdf.w - (sum(widths) + gap * (len(links) - 1))) / 2
+    y = pdf.get_y()
+    for (label, url), width in zip(links, widths):
+        pdf.set_xy(x, y)
+        pdf.cell(width, 6, label, link=url)
+        x += width + gap
+    pdf.ln(8)
+
+
+def generate_invoice_pdf(order: Order, restaurant: Restaurant | None) -> bytes:
     pdf = FPDF(format="A4")
     pdf.add_page()
 
     pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 12, restaurant_name, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 12, restaurant.name if restaurant else "Tawla", new_x="LMARGIN", new_y="NEXT")
+
+    # Mentions légales (adresse, SIRET/matricule fiscal, TVA intracom) —
+    # facultatives, saisies par le manager dans son dashboard (Restaurant.
+    # legal_address/tax_id/vat_number). Absentes tant qu'il ne les a pas
+    # renseignées : la facture reste comme avant, jamais de ligne vide.
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(90, 90, 90)
+    if restaurant and restaurant.legal_address:
+        pdf.cell(0, 5, restaurant.legal_address, new_x="LMARGIN", new_y="NEXT")
+    ids = [v for v in [restaurant.tax_id if restaurant else None, restaurant.vat_number if restaurant else None] if v]
+    if ids:
+        pdf.cell(0, 5, "  ·  ".join(ids), new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(90, 90, 90)
@@ -73,26 +132,82 @@ def generate_invoice_pdf(order: Order, restaurant_name: str) -> bytes:
             pdf.set_text_color(0, 0, 0)
 
     pdf.ln(4)
+    _dashed_divider(pdf)
     tip = float(order.tip_amount)
+    subtotal = order.total_amount
+
+    # Ventilation TVA — uniquement pour un marché qui en gère une (France,
+    # voir markets.py) et sur le taux "sur_place" : Tawla n'a qu'un seul
+    # parcours de commande (QR code posé sur une table physique), jamais de
+    # vente à emporter à distinguer. Le prix affiché au client est déjà TTC
+    # (convention française d'affichage), donc le HT se déduit du sous-total.
+    # Affichée APRÈS le total, comme un détail complémentaire (mise en page
+    # inspirée du reçu Tabesto, retour utilisateur 2026-09-03) plutôt
+    # qu'avant : ce n'est pas ce qu'un client vérifie en premier.
+    vat_rate = (current_market.vat_rates or {}).get("sur_place")
+
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(145, 7, "Sous-total", align="R")
-    pdf.cell(35, 7, _pdf_money(order.total_amount), align="R", new_x="LMARGIN", new_y="NEXT")
+    if not vat_rate:
+        pdf.cell(145, 7, "Sous-total", align="R")
+        pdf.cell(35, 7, _pdf_money(subtotal), align="R", new_x="LMARGIN", new_y="NEXT")
     if tip > 0:
         pdf.cell(145, 7, "Pourboire", align="R")
         pdf.cell(35, 7, _pdf_money(tip), align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
 
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(145, 9, "Total payé", align="R")
-    pdf.cell(35, 9, _pdf_money(order.total_amount + tip), align="R", new_x="LMARGIN", new_y="NEXT")
+    # Total mis en avant : un seul montant, centré et agrandi — c'est le
+    # seul chiffre qu'un client vérifie systématiquement, il ne doit jamais
+    # se confondre visuellement avec les lignes de détail (retour
+    # utilisateur 2026-09-03 : la ligne "Total payé" alignée à droite passait
+    # inaperçue, contrairement au "TOTAL" centré/agrandi d'un reçu Tabesto).
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_fill_color(235, 235, 235)
+    pdf.cell(0, 14, f"TOTAL  {_pdf_money(subtotal + tip)}", align="C", fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(4)
 
-    pdf.ln(6)
+    if vat_rate:
+        _dashed_divider(pdf)
+        ht = subtotal / (1 + vat_rate)
+        vat_amount = subtotal - ht
+        rate_label = f"{vat_rate * 100:g} %"
+
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 7, "Taxe détaillée", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(40, 7, "Taux")
+        pdf.cell(45, 7, "HT", align="R")
+        pdf.cell(45, 7, "TVA", align="R")
+        pdf.cell(45, 7, "TTC", align="R", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(40, 7, rate_label)
+        pdf.cell(45, 7, _pdf_money(ht), align="R")
+        pdf.cell(45, 7, _pdf_money(vat_amount), align="R")
+        pdf.cell(45, 7, _pdf_money(subtotal), align="R", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(40, 7, "Total")
+        pdf.cell(45, 7, _pdf_money(ht), align="R")
+        pdf.cell(45, 7, _pdf_money(vat_amount), align="R")
+        pdf.cell(45, 7, _pdf_money(subtotal), align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+
+    _dashed_divider(pdf)
     pdf.set_font("Helvetica", "", 10)
     method_label = _PAYMENT_LABELS.get(order.payment_method) if order.payment_method else None
-    pdf.cell(0, 6, f"Moyen de paiement : {method_label or '-'}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, f"Moyen de paiement : {method_label or '-'}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
 
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(150, 150, 150)
-    pdf.ln(10)
-    pdf.cell(0, 5, "Généré automatiquement par Tawla, tawla.tn", new_x="LMARGIN", new_y="NEXT")
+    if vat_rate:
+        pdf.cell(0, 5, "Facture conforme à l'article 289 du CGI", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5, "Généré automatiquement par Tawla", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    _add_social_links(pdf, restaurant)
 
     return bytes(pdf.output())
