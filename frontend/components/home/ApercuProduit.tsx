@@ -137,38 +137,76 @@ function EcranClient() {
   );
 }
 
+// Reprend le vrai en-tête du dashboard manager : mêmes onglets qu'
+// EnteteManager.tsx (PAGES), mêmes deux chiffres de tête qu'
+// RecetteDuJour.tsx — jamais "commandes"/"panier moyen"/"activité par
+// serveur" présentés comme un seul coup d'œil : ces chiffres-là vivent sur
+// les onglets Activité du jour / Preuve du pilote, pas sur l'écran d'accueil.
 function EcranManager() {
   return (
     <div className="w-full max-w-[460px] rounded-xl overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,.5)] bg-white">
       <ChromeBar />
       <div className="p-5">
-        <p className="text-xs text-[var(--ink-soft)] mb-3">Aujourd&apos;hui · Dar Chaabane</p>
-        <div className="grid grid-cols-3 gap-3 mb-5">
-          <Card padding="sm" className="text-center">
-            <p className="text-lg font-semibold tabular-nums text-[var(--encre)]">47</p>
-            <p className="text-[10px] text-[var(--ink-soft)]">Commandes</p>
-          </Card>
-          <Card padding="sm" className="text-center">
-            <p className="text-lg font-semibold tabular-nums text-[var(--encre)]">{formatMoney(28)}</p>
-            <p className="text-[10px] text-[var(--ink-soft)]">Panier moyen</p>
-          </Card>
-          <Card padding="sm" className="text-center">
-            <p className="text-lg font-semibold tabular-nums text-[var(--encre)]">11 min</p>
-            <p className="text-[10px] text-[var(--ink-soft)]">Temps cuisine</p>
+        <div className="flex gap-3 text-xs font-medium border-b border-[var(--line)] pb-2.5 mb-4 overflow-x-auto">
+          <span className="shrink-0 text-[var(--harissa)]">Carte</span>
+          <span className="shrink-0 text-[var(--ink-faint)]">Activité du jour</span>
+          <span className="shrink-0 text-[var(--ink-faint)]">Preuve du pilote</span>
+          <span className="shrink-0 text-[var(--ink-faint)]">Rapport d&apos;équipe</span>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2 rounded-lg bg-[var(--harissa)] text-white p-3">
+            <p className="text-[11px] text-white/80">Ventes du jour</p>
+            <p className="text-2xl font-semibold tabular-nums mt-0.5">{formatMoney(842)}</p>
+          </div>
+          <Card padding="sm" className="text-center flex flex-col justify-center">
+            <p className="text-[10px] text-[var(--ink-soft)]">Attente moyenne</p>
+            <p className="text-lg font-semibold tabular-nums text-[var(--encre)] mt-0.5">6 min</p>
           </Card>
         </div>
-        <p className="text-xs font-semibold text-[var(--encre)] mb-2 uppercase tracking-wide">Activité par serveur</p>
-        <div className="space-y-2">
-          {[
-            { nom: "Sami", commandes: 18 },
-            { nom: "Amine", commandes: 14 },
-          ].map((s) => (
-            <div
-              key={s.nom}
-              className="flex items-center justify-between text-sm rounded-md border border-[var(--line)] px-3 py-2"
-            >
-              <span className="text-[var(--encre)]">{s.nom}</span>
-              <span className="tabular-nums text-[var(--ink-soft)]">{s.commandes} commandes</span>
+        <p className="text-[11px] text-[var(--ink-faint)] mt-3">
+          Détail par serveur et comparaison avant/après sur les deux autres onglets.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Le vrai écran serveur (app/staff/page.tsx) est sombre au niveau de la
+// page, mais le panneau "Commandes à confirmer" lui-même est un carton clair
+// posé dessus (bg-[var(--semoule-raised)]) — jamais des tickets teintés sur
+// fond sombre. Le bouton reste harissa plein dans les deux états : seul son
+// libellé change, "Prendre en charge" devient "Confirmer" une fois la même
+// commande prise en charge par ce serveur.
+function EcranServeur() {
+  const commandes = [
+    { table: "Table 4", numero: "#12", plats: "1× Couscous au poisson · 1× Thé à la menthe", action: "Prendre en charge" },
+    { table: "Table 2", numero: "#11", plats: "2× Salade méchouia", action: "Confirmer" },
+  ];
+  return (
+    <div className="w-full max-w-[460px] rounded-xl overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,.6)] bg-[var(--espresso)]">
+      <ChromeBar dark />
+      <div className="p-5">
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
+          <div className="px-3.5 py-2.5 border-b border-[var(--line)] flex items-center gap-2.5">
+            <span className="w-[9px] h-5 rounded-[3px] shrink-0 bg-[var(--harissa)]" />
+            <span className="text-[13px] font-bold text-[var(--encre)]">Commandes à confirmer</span>
+            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold text-[var(--semoule)] bg-[var(--harissa)]">
+              {commandes.length}
+            </span>
+          </div>
+          {commandes.map((o) => (
+            <div key={o.numero} className="flex items-center gap-3 px-3.5 py-3 border-b border-[#efe6d2] last:border-b-0">
+              <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>{o.table}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-semibold text-[var(--encre)]">Commande {o.numero}</p>
+                <p className="text-[11px] text-[var(--ink-soft)] truncate">{o.plats}</p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg px-3 py-2 text-xs font-bold bg-[var(--harissa)] text-[var(--semoule)]"
+              >
+                {o.action}
+              </button>
             </div>
           ))}
         </div>
@@ -177,56 +215,38 @@ function EcranManager() {
   );
 }
 
-function EcranServeur() {
-  return (
-    <div className="w-full max-w-[460px] rounded-xl overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,.6)] bg-[var(--espresso)]">
-      <ChromeBar dark />
-      <div className="p-5 space-y-3">
-        <p className="text-xs text-[var(--ink-on-espresso)]">Écran serveur</p>
-        <Card dark tone="warning" padding="sm">
-          <p className="text-sm font-semibold text-[var(--semoule)] mb-1.5">Table 4 · Commande #12</p>
-          <p className="text-xs text-[var(--ink-on-espresso-strong)] mb-3">1× Couscous au poisson · 1× Thé à la menthe</p>
-          <button
-            type="button"
-            className="text-xs font-medium rounded-md border border-[var(--laiton-on-espresso-border)] text-[var(--laiton-on-espresso-text)] px-3 py-1.5"
-          >
-            Prendre en charge
-          </button>
-        </Card>
-        <Card dark tone="danger" padding="sm">
-          <p className="text-sm font-semibold text-[var(--semoule)] mb-1.5">Table 2 · Commande #11</p>
-          <p className="text-xs text-[var(--ink-on-espresso-strong)] mb-3">2× Salade méchouia</p>
-          <button type="button" className="text-xs font-medium rounded-md bg-[var(--harissa)] text-white px-3 py-1.5">
-            Confirmer
-          </button>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
+// La vraie cuisine (app/kitchen/page.tsx) n'a pas de colonnes par statut :
+// une commande "prête" quitte l'écran (c'est au serveur de venir la
+// chercher, plus à la cuisine). Une seule grille, l'urgence se lit à la
+// couleur de la carte — neutre en attente, verte en préparation.
 function EcranCuisine() {
-  const colonnes = [
-    { titre: "Confirmée", tickets: ["Table 4 · Couscous au poisson"] },
-    { titre: "En préparation", tickets: ["Table 2 · Salade méchouia", "Table 7 · Baklawa"] },
-    { titre: "Prête", tickets: ["Table 1 · Thé à la menthe"] },
+  const commandes = [
+    { table: "Table 4", depuis: "1 min", enCours: false, plats: ["1× Couscous au poisson"] },
+    { table: "Table 2", depuis: "4 min", enCours: true, plats: ["2× Salade méchouia"] },
+    { table: "Table 7", depuis: "2 min", enCours: false, plats: ["1× Baklawa"] },
   ];
   return (
     <div className="w-full max-w-[600px] rounded-xl overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,.6)] bg-[var(--espresso)]">
       <ChromeBar dark />
       <div className="p-5">
         <p className="text-xs text-[var(--ink-on-espresso)] mb-3">Écran cuisine</p>
-        <div className="grid grid-cols-3 gap-3">
-          {colonnes.map((col) => (
-            <div key={col.titre}>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-on-espresso-strong)] mb-2">
-                {col.titre}
-              </p>
-              <div className="space-y-2">
-                {col.tickets.map((t) => (
-                  <Card key={t} dark padding="sm" className="text-[11px] leading-snug text-[var(--semoule)]">
-                    {t}
-                  </Card>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {commandes.map((c) => (
+            <div
+              key={c.table}
+              className="rounded-[10px] overflow-hidden bg-[var(--espresso-card)]"
+              style={{ border: `1px solid ${c.enCours ? "rgba(31,107,79,.55)" : "var(--line-on-espresso-strong)"}` }}
+            >
+              <div
+                className="px-2.5 py-1.5 flex items-center justify-between"
+                style={{ backgroundColor: c.enCours ? "rgba(31,107,79,.22)" : "var(--line-on-espresso)" }}
+              >
+                <span className="text-[13px] font-semibold text-[var(--semoule)]">{c.table}</span>
+                <span className="text-[11px] font-bold tabular-nums text-[var(--semoule)]">{c.depuis}</span>
+              </div>
+              <div className="px-2.5 py-2 text-[11px] leading-snug text-[var(--semoule)] space-y-0.5">
+                {c.plats.map((p) => (
+                  <div key={p}>{p}</div>
                 ))}
               </div>
             </div>

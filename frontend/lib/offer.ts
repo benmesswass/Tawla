@@ -150,22 +150,30 @@ export const INCLUDED = [
  * fonctionnalité — présenté en problème/solution sur la home (Phase D2bis de
  * ROADMAP_DESIGN.md, comparatif BipOrder). `probleme` est la douleur telle
  * qu'un patron la formulerait, `detail` reste la solution telle quelle.
+ *
+ * Chaque `detail` est vérifié contre le code réel (2026-09-03), pas juste
+ * plausible : les deux premiers correspondent à `OrderStatus`/
+ * `ALLOWED_TRANSITIONS` (orders/service.py — la cuisine ne reçoit le
+ * broadcast `channel="kitchen"` que sur la transition SENT_TO_KITCHEN,
+ * jamais avant). Le troisième a été réécrit : la version précédente listait
+ * "commandes perdues" et "panier moyen" comme visibles au même endroit que
+ * l'activité par serveur, alors que ce sont deux écrans distincts
+ * (`/dashboard` en direct vs `/dashboard/preuve`, un outil de preuve pour un
+ * pilote/jury) — voir RecetteDuJour.tsx et stats/schemas.py.
  */
 export const BENEFITS = [
   {
     probleme: "Les commandes se perdent à l'oral — un plat mal entendu, une table oubliée.",
-    detail:
-      "La commande du client arrive sur l'écran partagé de vos serveurs. Un serveur la prend en charge, la confirme à table, et elle part en cuisine. Rien ne se perd entre les deux.",
+    detail: "La commande arrive sur l'écran partagé des serveurs, confirmée avant de partir en cuisine.",
   },
   {
     probleme: "D'autres systèmes envoient tout direct en cuisine, sans repasser par la salle.",
-    detail:
-      "Rien n'entre en cuisine sans qu'un serveur l'ait vérifié à table. Le client commande depuis son téléphone, votre équipe reste maîtresse du service.",
+    detail: "Rien n'entre en cuisine sans qu'un serveur l'ait vérifiée à table.",
   },
   {
     probleme: "Aucune visibilité sur ce qui se passe vraiment en salle chaque soir.",
     detail:
-      "Commandes perdues, délai entre la commande et la cuisine, panier moyen, activité par serveur. De quoi décider d'une prime sur des chiffres plutôt que sur une impression.",
+      "Ventes et temps d'attente moyen dès la connexion, détail par serveur et comparaison avant/après en un clic.",
   },
 ];
 
