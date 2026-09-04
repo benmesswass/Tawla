@@ -12,6 +12,7 @@ c'est la logique de routage de l'évènement qui est sous test ici, pas le SDK
 Stripe lui-même (déjà couvert côté `construct_webhook_event`/abonnement).
 """
 from app.core import stripe_gateway
+from app.core.rate_limit import _hits
 from app.modules.orders import router as orders_router
 from app.modules.orders.models import Order, PaymentMethod, PaymentStatus
 from app.modules.staff.models import StaffRole
@@ -153,3 +154,82 @@ def test_webhook_ignores_an_unrelated_event_type(client, monkeypatch):
 
     assert res.status_code == 200
     assert res.json()["result"] == "ignored"
+
+
+# --- Corrections (revue adversariale post-merge) ----------------------------
+
+
+def test_webhook_settles_on_async_payment_succeeded_too(client, db_session, monkeypatch):
+    """Régression : un moyen de paiement ASYNCHRONE (virement, certains
+    prélèvements — proposables sur Checkout selon la config du compte
+    connecté) ne confirme jamais via `checkout.session.completed` seul,
+    Stripe déclenche `checkout.session.async_payment_succeeded` une fois
+    l'argent réellement reçu. L'ignorer aurait laissé ces commandes-là
+    bloquées en `pending` pour toujours — exactement le défaut que ce
+    webhook existe pour fermer."""
+    restaurant = create_restaurant(slug="stripe-card-webhook-async")
+    order = _setup_pending_stripe_order(client, restaurant)
+    event = _event(
+        "checkout.session.async_payment_succeeded",
+        {"mode": "payment", "id": "cs_test_123", "metadata": {"order_id": str(order["id"])}},
+    )
+    monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
+    monkeypatch.setattr(orders_router.service, "settle_card_payment", _make_async_settle_stub("paid"))
+
+    res = client.post(
+        "/api/v1/orders/stripe-card-webhook", content=b"{}", headers={"stripe-signature": "whatever"}
+    )
+
+    assert res.status_code == 200
+    assert res.json()["result"] == "paid"
+
+
+def test_webhook_ignores_a_non_numeric_order_id_instead_of_crashing(client, monkeypatch):
+    """Régression : `int(order_id_raw)` non protégé levait une ValueError
+    non rattrapée sur toute valeur illisible — un 500 aurait fait rejouer
+    l'évènement par Stripe indéfiniment (poison webhook) plutôt que de
+    l'ignorer proprement."""
+    event = _event(
+        "checkout.session.completed",
+        {"mode": "payment", "id": "cs_test_bad_id", "metadata": {"order_id": "not-a-number"}},
+    )
+    monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
+
+    def _boom(*a, **kw):
+        raise AssertionError("un order_id illisible ne doit jamais atteindre settle_card_payment")
+
+    monkeypatch.setattr(orders_router.service, "settle_card_payment", _boom)
+
+    res = client.post(
+        "/api/v1/orders/stripe-card-webhook", content=b"{}", headers={"stripe-signature": "whatever"}
+    )
+
+    assert res.status_code == 200
+    assert res.json()["result"] == "ignored"
+
+
+def test_webhook_is_rate_limited_like_its_konnect_sibling(client, monkeypatch):
+    """Régression : contrairement à `order_card_payment_webhook` (Konnect,
+    même fichier), ce endpoint n'avait aucun plafond — une signature
+    invalide reste bon marché à vérifier, mais rien n'empêchait de la
+    spammer sans limite."""
+    _hits.clear()
+    try:
+        def _boom(**kw):
+            raise stripe_gateway.StripeGatewayError("signature invalide")
+
+        monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", _boom)
+
+        for _ in range(20):
+            res = client.post(
+                "/api/v1/orders/stripe-card-webhook", content=b"{}", headers={"stripe-signature": "bad"}
+            )
+            assert res.status_code == 401  # signature invalide, pas encore limité
+
+        res = client.post(
+            "/api/v1/orders/stripe-card-webhook", content=b"{}", headers={"stripe-signature": "bad"}
+        )
+        assert res.status_code == 429
+        assert res.json()["detail"]["code"] == "RATE_LIMITED"
+    finally:
+        _hits.clear()

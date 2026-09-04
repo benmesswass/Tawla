@@ -130,7 +130,19 @@ async def order_card_payment_webhook(
     return {"received": True, "result": result}
 
 
-@router.post("/stripe-card-webhook")
+# Les deux évènements qui signifient "cette session de paiement est allée
+# au bout" pour un Direct Charge — jamais un seul : `checkout.session.completed`
+# suffit pour un moyen de paiement SYNCHRONE (carte), mais Stripe Checkout
+# peut aussi proposer des moyens ASYNCHRONES (virement, certains prélèvements)
+# selon la configuration du compte connecté. Pour ceux-là, `completed` se
+# déclenche avant que l'argent soit réellement reçu, et c'est
+# `async_payment_succeeded` qui confirme — l'ignorer aurait laissé une
+# commande payée par un moyen asynchrone bloquée en `pending` pour toujours,
+# exactement le défaut que ce webhook existe pour fermer.
+_SETTLEMENT_EVENT_TYPES = {"checkout.session.completed", "checkout.session.async_payment_succeeded"}
+
+
+@router.post("/stripe-card-webhook", dependencies=[Depends(rate_limit())])
 async def order_card_payment_stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Webhook Stripe Connect — confirmation du paiement carte du CLIENT sur un
@@ -148,7 +160,9 @@ async def order_card_payment_stripe_webhook(request: Request, db: Session = Depe
     `order_id` retrouvé dans `metadata.order_id` de la session Checkout
     (posé à l'initiation, voir stripe_gateway.create_checkout_session),
     jamais dans l'URL — Stripe ne connaît rien de nos identifiants avant
-    d'avoir vérifié la signature.
+    d'avoir vérifié la signature. Même plafond que le webhook Konnect
+    ci-dessus (`rate_limit()`, 20/min) : une signature invalide reste bon
+    marché à vérifier, mais rien n'empêche de la spammer sans lui.
 
     `settle_card_payment` relit toujours le paiement depuis l'API Stripe
     (jamais confiance au contenu de l'évènement pour le montant) — même
@@ -168,7 +182,7 @@ async def order_card_payment_stripe_webhook(request: Request, db: Session = Depe
         log_event(logger, "stripe.card_webhook_bad_signature", error=str(err))
         raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"}) from err
 
-    if event["type"] != "checkout.session.completed":
+    if event["type"] not in _SETTLEMENT_EVENT_TYPES:
         return {"received": True, "result": "ignored"}
 
     obj = event["data"]["object"].to_dict()
@@ -183,8 +197,19 @@ async def order_card_payment_stripe_webhook(request: Request, db: Session = Depe
         log_event(logger, "stripe.card_webhook_missing_order_id", session_id=obj.get("id"))
         return {"received": True, "result": "ignored"}
 
-    result = await service.settle_card_payment(db, int(order_id_raw))
-    log_event(logger, "stripe.card_webhook", event_type=event["type"], order_id=order_id_raw, result=result)
+    # `order_id` est censé être l'entier posé par nous-mêmes à l'initiation
+    # (create_checkout_session) — jamais garanti côté Stripe, qui ne connaît
+    # que la chaîne qu'on lui a confiée. Une valeur illisible ne doit jamais
+    # faire 500 : Stripe rejouerait indéfiniment un évènement impossible à
+    # traiter (poison webhook) plutôt que de l'abandonner.
+    try:
+        order_id = int(order_id_raw)
+    except (TypeError, ValueError):
+        log_event(logger, "stripe.card_webhook_invalid_order_id", order_id_raw=order_id_raw)
+        return {"received": True, "result": "ignored"}
+
+    result = await service.settle_card_payment(db, order_id)
+    log_event(logger, "stripe.card_webhook", event_type=event["type"], order_id=order_id, result=result)
     return {"received": True, "result": result}
 
 
