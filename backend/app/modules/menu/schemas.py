@@ -1,6 +1,28 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from app.core.markets import current_market
+
+def _validate_vat_category(value: str | None) -> str | None:
+    """Le vocabulaire valide dépend du marché SERVI, lu sur `current_market`
+    À LA VALIDATION — jamais figé dans un `Literal` à l'import, qui resterait
+    aveugle à un marché re-basculé en cours de process (tests) et fait déjà
+    à l'identique pour `market=None` (voir `core/invoice_number.py`). Une clé
+    qui ne correspond à AUCUN taux du marché servi romprait silencieusement
+    la ventilation TVA de la facture (`.get()` sans valeur trouvée) plutôt
+    que de lever une erreur au moment de la saisie — et sur un marché sans
+    TVA ventilée (Tunisie aujourd'hui, `Market.vat_rates is None`), AUCUNE
+    catégorie n'a de sens, donc aucune n'est acceptée."""
+    if value is None:
+        return None
+    allowed = (current_market.vat_rates or {}).keys()
+    if value not in allowed:
+        raise ValueError(f"vat_category invalide pour le marché {current_market.code!r} : {value!r}")
+    return value
+
+
+VatCategory = Annotated[str | None, AfterValidator(_validate_vat_category)]
 
 
 class MenuItemOptionOut(BaseModel):
@@ -102,6 +124,7 @@ class MenuItemCreate(BaseModel):
     # Vrai par défaut en Tunisie (norme), faux en France (exception) — voir
     # MenuItem.is_halal dans models.py.
     is_halal: bool = Field(default_factory=lambda: current_market.code == "tn")
+    vat_category: VatCategory | None = None
 
 
 class MenuItemOut(BaseModel):
@@ -118,6 +141,7 @@ class MenuItemOut(BaseModel):
     spice_level: int
     allergens: str | None
     is_halal: bool
+    vat_category: str | None
     option_groups: list[MenuItemOptionGroupOut] = Field(default_factory=list)
     regimes: list[MenuRegimeOut] = Field(default_factory=list)
 
@@ -178,3 +202,4 @@ class MenuItemUpdate(BaseModel):
     spice_level: int | None = Field(default=None, ge=0, le=3)
     allergens: str | None = None
     is_halal: bool | None = None
+    vat_category: VatCategory | None = None

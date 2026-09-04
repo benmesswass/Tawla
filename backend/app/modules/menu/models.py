@@ -84,6 +84,17 @@ class MenuItem(Base):
     # False en France (halal n'est qu'un régime parmi d'autres, voir MenuRegime).
     is_halal: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Catégorie de taux de TVA (France, MARCHE_FRANCE.md F5/A4) — une CLÉ de
+    # `Market.vat_rates` ("sur_place", "a_emporter", "alcool"), jamais le taux
+    # lui-même : un taux en dur ici survivrait faux à tout changement légal, et
+    # dupliquerait une donnée qui n'a qu'un seul endroit où vivre
+    # (core/markets.py — « plus jamais de taux en dur », CLAUDE.md). Null =
+    # "sur_place", le cas par défaut (voir core/invoice.py) — la quasi-totalité
+    # de la carte, seule l'alcool s'en écarte en pratique aujourd'hui (Tawla
+    # n'a qu'un parcours de commande, jamais de vente à emporter à distinguer).
+    # Sans effet sur un marché sans TVA (Tunisie, `vat_rates=None`).
+    vat_category: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     option_groups: Mapped[list["MenuItemOptionGroup"]] = relationship(
         back_populates="menu_item", cascade="all, delete-orphan", order_by="MenuItemOptionGroup.display_order"
     )

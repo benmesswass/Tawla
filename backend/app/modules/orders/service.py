@@ -295,6 +295,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 menu_item_id=menu_item.id,
                 menu_item_name=menu_item.name,
                 unit_price=float(menu_item.price) + options_total,
+                vat_category=menu_item.vat_category,
                 quantity=line.quantity,
                 notes=line.notes,
                 is_shared=line.is_shared,
