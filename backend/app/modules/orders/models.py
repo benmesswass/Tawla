@@ -60,7 +60,15 @@ class Order(Base):
     # `public_token` — d'un inconnu qui aurait envoyé la même valeur ailleurs.
     # Ramené à la table, le pire cas se limite à des convives déjà attablés
     # ensemble, qui partagent de toute façon le `qr_token`.
-    __table_args__ = (UniqueConstraint("table_id", "client_order_id", name="uq_orders_table_client_order"),)
+    __table_args__ = (
+        UniqueConstraint("table_id", "client_order_id", name="uq_orders_table_client_order"),
+        # Unicité PAR RESTAURANT, jamais globale : la séquence est propre à
+        # chaque émetteur (voir core/invoice_number.py), donc deux
+        # restaurants émettent légitimement chacun leur `F2026-00001`. Les
+        # valeurs NULL (commande non payée, marché sans obligation de note)
+        # restent distinctes entre elles pour SQLite comme pour Postgres.
+        UniqueConstraint("restaurant_id", "invoice_number", name="uq_orders_restaurant_invoice_number"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
@@ -118,6 +126,16 @@ class Order(Base):
     # symétrique de served_at pour l'étape cuisine -> servie.
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Numéro de facture, attribué UNE SEULE FOIS au paiement confirmé, depuis
+    # une séquence continue par restaurant (voir core/invoice_number.py) —
+    # jamais dérivé de `Order.id`, qui n'est ni continu par restaurant (une
+    # seule séquence pour toute la base, multi-tenant) ni sans rupture (une
+    # commande annulée consomme un id). Null sur les marchés sans obligation
+    # de note (Tunisie, `Market.invoice_threshold is None`) et sur toute
+    # commande non payée. Unicité portée par `__table_args__`, avec
+    # `restaurant_id` — jamais globale, voir le commentaire là-haut.
+    invoice_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Saisi par le client au moment de payer (facultatif, quel que soit le
     # moyen) — sert UNIQUEMENT à envoyer la confirmation + facture PDF une
     # fois payée (voir orders/service.py::_send_payment_confirmation).
@@ -171,6 +189,12 @@ class OrderItem(Base):
     # prix du menu après coup, ça ne doit JAMAIS modifier une commande passée.
     menu_item_name: Mapped[str] = mapped_column(String(120), nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    # Copié depuis `MenuItem.vat_category` au moment de la commande, même
+    # motif que `menu_item_name`/`unit_price` juste au-dessus : si le
+    # restaurant reclasse un article après coup (plat -> boisson alcoolisée),
+    # ça ne doit JAMAIS changer la ventilation TVA d'une facture déjà émise
+    # (core/invoice.py). Null = "sur_place" (voir menu/models.py).
+    vat_category: Mapped[str | None] = mapped_column(String(20), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     notes: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # Plat pensé pour toute la table (entrées communes type salade, mechouia...) —
@@ -222,3 +246,34 @@ class OrderItemOption(Base):
     price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
 
     order_item: Mapped["OrderItem"] = relationship(back_populates="options")
+
+
+class InvoiceCounter(Base):
+    """
+    Séquence de numérotation des factures, une ligne par (restaurant, année).
+
+    Exigence légale française (CGI art. 289, arrêté du 3 octobre 1983) : une
+    numérotation **continue, chronologique et sans rupture** par émetteur.
+    D'où une séquence propre à chaque restaurant plutôt qu'un compteur global
+    — l'émetteur, c'est le restaurant, jamais Tawla (même logique que le
+    modèle Direct Charges côté paiement, voir core/stripe_gateway.py).
+
+    Remise à 1 chaque année civile, pratique admise tant que le millésime
+    fait partie du numéro (`F2026-00001`) : deux factures ne peuvent alors
+    jamais porter le même numéro chez un même émetteur.
+
+    Ligne séparée plutôt qu'une colonne sur `restaurants` : c'est ce qui
+    permet de la verrouiller (SELECT ... FOR UPDATE, voir
+    core/invoice_number.py) sans bloquer toutes les autres écritures sur la
+    fiche du restaurant pendant l'attribution.
+    """
+
+    __tablename__ = "invoice_counters"
+    __table_args__ = (UniqueConstraint("restaurant_id", "year", name="uq_invoice_counter_restaurant_year"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Dernier numéro ATTRIBUÉ (pas le prochain) : une ligne fraîche vaut 0,
+    # la première facture de l'année porte donc le numéro 1.
+    last_number: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

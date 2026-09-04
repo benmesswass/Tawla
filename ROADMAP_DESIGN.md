@@ -77,6 +77,23 @@ renumeroter ce qui suit — même logique que la Phase 19bis de `ROADMAP.md`.
       (0.15–0.25s, easing standard) et un léger fondu d'apparition au scroll
       sur les 3 blocs de bénéfices de la home (PR #137)
 
+## Phase D2bis — Home orientée BipOrder (comparatif du 2026-09-03)
+
+Née d'un comparatif visuel avec le concurrent BipOrder (biporder.com/fr,
+captures fournies par Wassim — le domaine est bloqué à la navigation directe
+depuis cette session). Deux écarts structurels relevés : la home ne
+formule aucun problème avant la solution, et ne montre aucun écran du
+produit. Mockup interactif validé par Wassim avant ce code (deux allers-retours :
+retrait d'une carte « commission plateformes de livraison » sans rapport avec
+Tawla, correction du bezel du téléphone, ajout des écrans Manager/Serveur/Cuisine).
+
+- [ ] Bloc bénéfices de la home reformulé en problème → solution (accent
+      harissa/laiton alterné, encoché "solution") au lieu d'un simple
+      titre/description (`lib/offer.ts`, `app/page.tsx`)
+- [ ] Nouvelle section sombre « Un produit, quatre écrans » entre les
+      bénéfices et la preuve sociale : bascule Client/Manager/Serveur/Cuisine
+      montrant chaque écran réel du produit (`components/home/ApercuProduit.tsx`)
+
 ## Phase D3 — Preuve sociale publique
 
 Bloqué tant qu'aucun chiffre réel n'existe — ne jamais inventer une valeur

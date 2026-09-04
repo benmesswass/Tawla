@@ -23,7 +23,7 @@ import { toLocalizedMessage } from "@/lib/errors";
 import { formatAmount } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
-import { useLocale } from "@/lib/i18n/useLocale";
+import { localeSwitchLabel, useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
@@ -567,7 +567,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   useReconnectingSocket(orderSocketUrl, (msg) => {
     if (msg.event === "order.status_changed" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, status: msg.status } : prev));
-      if (msg.status === "served" || msg.status === "cancelled") {
+      // Servie ET réglée seulement : servie mais impayée doit rester
+      // atteignable, sinon un client qui regarde sa commande passer "servie"
+      // en direct perd l'accès à son addition avant d'avoir pu payer (même
+      // condition que le chemin de rechargement, plus haut dans ce fichier).
+      if (msg.status === "cancelled" || (msg.status === "served" && trackedOrder.payment_status === "paid")) {
         localStorage.removeItem(lastOrderStorageKey(qrToken));
       }
     }
@@ -1792,7 +1796,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         onClick={toggleLocale}
         className="min-h-[44px] inline-flex items-center text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] whitespace-nowrap"
       >
-        {t.localeSwitchLabel}
+        {localeSwitchLabel(locale)}
       </button>
       <button
         onClick={callWaiter}

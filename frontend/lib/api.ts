@@ -45,6 +45,11 @@ export type MenuItem = {
   spice_level: number;
   allergens: string | null;
   is_halal: boolean;
+  // Catégorie de taux de TVA (France, MARCHE_FRANCE.md phase F5/A4) —
+  // "sur_place" | "a_emporter" | "alcool", null = "sur_place". Pas encore
+  // réglable depuis le dashboard manager (backend seulement pour l'instant) ;
+  // présent ici pour que ce type reste fidèle à ce que l'API renvoie.
+  vat_category: string | null;
   // Cuisson, sauce, accompagnement... (France, MARCHE_FRANCE.md phase F5/A2).
   // Toujours présent (liste vide par défaut) : la quasi-totalité des articles
   // n'en ont aucun tant qu'un manager ne les configure pas.
