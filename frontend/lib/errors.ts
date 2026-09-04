@@ -151,6 +151,11 @@ export const EN_MESSAGES: Record<string, (ctx: Record<string, unknown>) => strin
   ORDER_CANCELLED: () => "This order has been cancelled, payment is no longer possible.",
   NO_PENDING_CASH_PAYMENT: () => "No pending cash payment for this order.",
   ORDER_NOT_CONFIRMED: () => "This order must be confirmed by a waiter before it can be paid.",
+  ORDER_NOT_MODIFIABLE: () => "The waiter just confirmed your order, it can no longer be edited directly.",
+  MODIFICATION_REQUEST_NOT_ALLOWED: () => "This order is no longer in a state where a change request is possible.",
+  MODIFICATION_REQUEST_ALREADY_PENDING: () =>
+    "A change request is already pending for this order — wait for the waiter's response before sending another one.",
+  NO_CHANGES_REQUESTED: () => "You haven't changed anything in your order.",
   RATE_LIMITED: () => "Too many attempts. Wait a minute before trying again.",
   // Rare côté client : seul le paiement carte peut déclencher ce code ici,
   // les autres fonctionnalités par palier sont toutes côté dashboard manager.
