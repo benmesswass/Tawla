@@ -456,10 +456,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   // Anecdote culturelle qui tourne pendant l'attente cuisine (10-20 min en
   // moyenne) — un petit plus pendant l'attente plutôt qu'un écran silencieux.
+  // Retirée par drapeau de marché (currentMarket.culturalFactsEnabled) :
+  // leur contenu est spécifiquement tunisien (couscous, harissa, thé à la
+  // menthe...), pas des faits génériques à traduire pour la France.
   const inKitchenWait =
     trackedOrder?.status === "sent_to_kitchen" || trackedOrder?.status === "in_preparation";
   useEffect(() => {
-    if (!inKitchenWait) return;
+    if (!inKitchenWait || !currentMarket.culturalFactsEnabled) return;
     const timer = setInterval(() => {
       setCulturalFactIndex((i) => (i + 1) % CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"].length);
     }, 8000);
@@ -1301,7 +1304,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </ol>
         )}
 
-        {!cancelled && inKitchenWait && (
+        {!cancelled && inKitchenWait && currentMarket.culturalFactsEnabled && (
           <div className="mt-4 text-[12.5px] leading-[1.5] rounded-xl py-[11px] px-3 flex items-start gap-2 bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--encre)]">
             <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton)]" />
             <span>{CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"][culturalFactIndex]}</span>

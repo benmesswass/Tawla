@@ -3,6 +3,11 @@
 // d'attente, plutôt qu'un écran silencieux. Faits vérifiés (UNESCO,
 // géographie, traditions), pas de contenu spécifique à un plat précis du
 // menu (celui-ci variant d'un restaurant à l'autre).
+//
+// Contenu SPÉCIFIQUEMENT tunisien (couscous, harissa, thé à la menthe...),
+// jamais affiché en France : gardé par `currentMarket.culturalFactsEnabled`
+// (lib/market.ts, MARCHE_FRANCE.md phase F3) — pas de variante "en" ici,
+// ce dictionnaire ne sert que le marché tunisien.
 export const CULTURAL_FACTS: Record<"fr" | "ar", string[]> = {
   fr: [
     "Le couscous est inscrit au patrimoine culturel immatériel de l'UNESCO depuis 2020, une tradition partagée par l'Algérie, le Maroc, la Mauritanie et la Tunisie.",
