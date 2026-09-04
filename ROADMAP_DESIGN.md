@@ -87,12 +87,33 @@ produit. Mockup interactif validé par Wassim avant ce code (deux allers-retours
 retrait d'une carte « commission plateformes de livraison » sans rapport avec
 Tawla, correction du bezel du téléphone, ajout des écrans Manager/Serveur/Cuisine).
 
-- [ ] Bloc bénéfices de la home reformulé en problème → solution (accent
+- [x] Bloc bénéfices de la home reformulé en problème → solution (accent
       harissa/laiton alterné, encoché "solution") au lieu d'un simple
-      titre/description (`lib/offer.ts`, `app/page.tsx`)
-- [ ] Nouvelle section sombre « Un produit, quatre écrans » entre les
-      bénéfices et la preuve sociale : bascule Client/Manager/Serveur/Cuisine
-      montrant chaque écran réel du produit (`components/home/ApercuProduit.tsx`)
+      titre/description (`lib/offer.ts`, `app/page.tsx`) — [PR #141](https://github.com/benmesswass/Tawla/pull/141)
+      (case restée décochée par oubli après le merge — corrigé ici)
+- [x] Nouvelle section « Un produit, quatre écrans » entre les bénéfices et la
+      preuve sociale : bascule Client/Manager/Serveur/Cuisine montrant chaque
+      écran réel du produit (`components/home/ApercuProduit.tsx`) —
+      [PR #141](https://github.com/benmesswass/Tawla/pull/141) (case restée
+      décochée par oubli après le merge — corrigé ici). Scope réduit sur un
+      point : SANS fond sombre au niveau de la section (retour de Wassim,
+      2026-09-03 — deux grands cadres bruns imbriqués avec les écrans
+      serveur/cuisine déjà sombres, jugé encombré). Rendue market-aware
+      ensuite (Dar Chaabane en Tunisie, Le Petit Bouchon en France) — [PR #154](https://github.com/benmesswass/Tawla/pull/154)
+- [x] **Carrousel de 3 écrans distincts côte à côte** pour Client/Manager/
+      Serveur (retour de Wassim, 2026-09-03 : « je veux 3 iPhones distincts
+      côte à côte », pas un seul écran dont le contenu change comme livré par
+      PR #141 ci-dessus) : écran actif net et centré, les deux voisins coupés
+      à moitié et assombris, glisser au doigt ou à la souris, débordement
+      hors du conteneur de la page pour laisser les voisins visibles sur les
+      côtés (`components/home/EcranCarrousel.tsx`, mécanique partagée par les
+      3 rôles). Client (Menu→Panier→Suivi→Paiement), Manager (Carte→Activité→
+      Preuve→Équipe), Serveur (À confirmer→Appels→Prête→Encaisser, 4 des 5
+      vrais panneaux de `app/staff/page.tsx`, « Demandes de modification »
+      omis). La Cuisine reste un poste fixe unique, sans carrousel (son vrai
+      fonctionnement à onglets tient déjà sur un seul écran). Exploration
+      d'abord validée en mockup HTML (artifact « Home version problème »,
+      2026-09-04) avant ce code — [PR #156](https://github.com/benmesswass/Tawla/pull/156)
 
 ## Phase D3 — Preuve sociale publique
 
