@@ -1,7 +1,7 @@
 """add items_updated_at to orders
 
 Revision ID: cf9d95d06e07
-Revises: 27641fde1134
+Revises: 080e1bc60b7b
 Create Date: 2026-09-03 13:42:13.264470
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'cf9d95d06e07'
-down_revision: Union[str, None] = '27641fde1134'
+down_revision: Union[str, None] = '080e1bc60b7b'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
