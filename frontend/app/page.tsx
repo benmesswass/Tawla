@@ -6,7 +6,8 @@ import BoutonVisite from "@/components/visite/BoutonVisite";
 import TrackedLink from "@/components/TrackedLink";
 import TrackedAnchor from "@/components/TrackedAnchor";
 import FadeInOnScroll from "@/components/FadeInOnScroll";
-import { BENEFITS, INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
+import ApercuProduit from "@/components/home/ApercuProduit";
+import { INCLUDED, PILOT_RESULTS, TIERS } from "@/lib/offer";
 import { marketBaseUrl } from "@/lib/marketUrls";
 
 /**
@@ -68,14 +69,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="max-w-3xl mx-auto px-6 py-12" data-visite="accueil-benefices">
-        <div className="grid gap-6 sm:grid-cols-3">
-          {BENEFITS.map((benefit, i) => (
-            <FadeInOnScroll key={benefit.title} delayMs={i * 90}>
-              <h2 className="font-semibold mb-1">{benefit.title}</h2>
-              <p className="text-sm text-[var(--ink-soft)]">{benefit.detail}</p>
-            </FadeInOnScroll>
-          ))}
+      <section data-visite="accueil-benefices">
+        <div className="max-w-4xl mx-auto px-6 py-14">
+          <h2 className={`${lalezar.className} text-2xl sm:text-3xl text-center mb-3`}>Un produit, quatre écrans</h2>
+          <p className="text-sm text-[var(--ink-soft)] text-center max-w-xl mx-auto mb-10">
+            Le client commande depuis son téléphone. Le serveur, le manager et la cuisine suivent chacun le même
+            service, sur l&apos;écran qui leur correspond.
+          </p>
+          <FadeInOnScroll>
+            <ApercuProduit />
+          </FadeInOnScroll>
         </div>
       </section>
 

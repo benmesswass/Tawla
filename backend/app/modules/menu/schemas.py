@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.markets import current_market
+
 
 class MenuItemOptionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -97,7 +99,9 @@ class MenuItemCreate(BaseModel):
     price: float
     spice_level: int = Field(default=0, ge=0, le=3)
     allergens: str | None = None
-    is_halal: bool = True
+    # Vrai par défaut en Tunisie (norme), faux en France (exception) — voir
+    # MenuItem.is_halal dans models.py.
+    is_halal: bool = Field(default_factory=lambda: current_market.code == "tn")
 
 
 class MenuItemOut(BaseModel):

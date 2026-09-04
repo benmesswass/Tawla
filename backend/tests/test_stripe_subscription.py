@@ -610,6 +610,25 @@ def test_stripe_connect_start_is_rejected_for_a_demo_restaurant(client, db_sessi
     assert restaurant.stripe_account_id is None
 
 
+def test_stripe_connect_start_is_rejected_below_pro(client, monkeypatch):
+    """Paiement carte listé Pro+ dans offer.ts — un restaurant Essentiel réel
+    (pas démo) ne doit pas pouvoir démarrer un onboarding Connect réel pour
+    une fonctionnalité que start_card_payment refuse de toute façon à
+    l'encaissement tant qu'il n'a pas upgradé."""
+    restaurant = create_restaurant(slug="essentiel-stripe-connect-blocked", subscription_tier=SubscriptionTier.ESSENTIEL)
+    headers = _manager_headers(restaurant.id)
+
+    def _boom(**kw):
+        raise AssertionError("un restaurant Essentiel ne doit jamais créer de vrai compte Connect")
+
+    monkeypatch.setattr(tenants_router.stripe_gateway, "create_connected_account", _boom)
+
+    res = client.post(f"/api/v1/restaurants/{restaurant.id}/stripe-connect/start", headers=headers)
+
+    assert res.status_code == 403
+    assert res.json()["detail"]["code"] == "UPGRADE_REQUIRED"
+
+
 def test_konnect_credentials_are_rejected_for_a_demo_restaurant(client, db_session):
     """Équivalent Tunisie du test Stripe Connect ci-dessus — même risque
     (paiement carte du client basculant de simulé à réel sur un compte

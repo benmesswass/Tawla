@@ -214,6 +214,31 @@ def test_ramadan_mode_forbidden_for_essentiel(client):
     assert res.json()["detail"]["code"] == "UPGRADE_REQUIRED"
 
 
+def test_legal_info_forbidden_for_essentiel(client):
+    restaurant, manager_headers, _table, _item = _setup(client, SubscriptionTier.ESSENTIEL, "gating-legal-essentiel")
+
+    res = client.patch(
+        f"/api/v1/restaurants/{restaurant.id}/legal-info",
+        json={"legal_address": "12 rue de la République, 75011 Paris"},
+        headers=manager_headers,
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"]["code"] == "UPGRADE_REQUIRED"
+    assert res.json()["detail"]["required_tier"] == "pro"
+
+
+def test_legal_info_allowed_for_pro(client):
+    restaurant, manager_headers, _table, _item = _setup(client, SubscriptionTier.PRO, "gating-legal-pro")
+
+    res = client.patch(
+        f"/api/v1/restaurants/{restaurant.id}/legal-info",
+        json={"legal_address": "12 rue de la République, 75011 Paris"},
+        headers=manager_headers,
+    )
+    assert res.status_code == 200
+    assert res.json()["legal_address"] == "12 rue de la République, 75011 Paris"
+
+
 def test_proof_stats_forbidden_for_essentiel(client):
     restaurant, manager_headers, _table, _item = _setup(client, SubscriptionTier.ESSENTIEL, "gating-preuve-essentiel")
 

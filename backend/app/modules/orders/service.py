@@ -9,6 +9,7 @@ from app.core.currency import format_money
 from app.core.dates import service_day_start
 from app.core.email import is_email_enabled, send_email_with_attachment
 from app.core.invoice import generate_invoice_pdf
+from app.core.invoice_number import ensure_invoice_number
 from app.core.logging import get_logger, log_event
 from app.core.payment_provider import PaymentProviderError, get_payment_provider
 from app.core.push import send_push_notification
@@ -919,7 +920,7 @@ def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> N
     if not order.customer_email or not restaurant or not is_email_enabled():
         return
     try:
-        pdf_bytes = generate_invoice_pdf(order, restaurant.name)
+        pdf_bytes = generate_invoice_pdf(order, restaurant)
         total = order.total_amount + float(order.tip_amount)
         sent = send_email_with_attachment(
             to=order.customer_email,
@@ -962,6 +963,7 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float, c
     order.paid_at = datetime.now(timezone.utc)
     if customer_email:
         order.customer_email = customer_email
+    ensure_invoice_number(db, order)
     db.commit()
     db.refresh(order)
 
@@ -1114,6 +1116,13 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
         .filter(Order.id == order.id, Order.payment_ref == payment_ref)
         .update({"payment_status": PaymentStatus.PAID, "paid_at": datetime.now(timezone.utc)})
     )
+    # Seulement quand CET appel a effectué le règlement : un webhook rejoué
+    # (ou la course webhook / retour client) ne doit jamais consommer un
+    # second numéro pour la même facture — `ensure_invoice_number` est déjà
+    # idempotent, la garde ici évite jusqu'à la lecture du compteur.
+    if updated:
+        db.refresh(order)
+        ensure_invoice_number(db, order)
     db.commit()
     db.refresh(order)
 
@@ -1194,6 +1203,7 @@ async def confirm_cash_payment(db: Session, order_id: int, staff: Staff) -> Orde
 
     order.payment_status = PaymentStatus.PAID
     order.paid_at = datetime.now(timezone.utc)
+    ensure_invoice_number(db, order)
     db.commit()
     db.refresh(order)
 
@@ -1271,6 +1281,7 @@ async def confirm_card_terminal_payment(db: Session, order_id: int, staff: Staff
 
     order.payment_status = PaymentStatus.PAID
     order.paid_at = datetime.now(timezone.utc)
+    ensure_invoice_number(db, order)
     db.commit()
     db.refresh(order)
 
