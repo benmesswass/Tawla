@@ -40,6 +40,31 @@ export const en = {
   preorderBadge: (time) => `Pre-order for iftar — preparation planned for ${time}.`,
   dedicatedServer: (staffName) => `${staffName} is your dedicated waiter for this order.`,
 
+  // Direct edit (window 1, while the order is still awaiting confirmation) —
+  // see orders/service.py::update_order_items.
+  modifyOrderButton: "Edit order",
+  modifyOrderHint: "Editable until the waiter confirms",
+  editOrderTitle: "Edit order",
+  editOrderSave: "Save changes",
+  editOrderCancel: "Cancel",
+  itemsUpdatedAt: (time) => `Edited at ${time}`,
+
+  // Modification request (window 2, once the order is confirmed) — see
+  // orders/service.py::create_modification_request/resolve_modification_request.
+  requestModificationButton: "Request a change",
+  requestModificationHint: "The waiter must check with the kitchen before any change",
+  requestEditBanner: "This request must be approved by the waiter with the kitchen before it takes effect.",
+  requestEditSend: "Send change request",
+  requestEditSubcopy: "The waiter will check with the kitchen before applying these changes.",
+  requestEditNewTotalLabel: "New total if accepted",
+  requestEditCurrentTotal: (total) => `Current order total: ${total}`,
+  requestSentButton: "✓ Request sent",
+  requestPendingBanner: "Request sent — waiting for the waiter's response.",
+  requestOutcomeTitle: "Waiter's response",
+  requestLineAccepted: "accepted",
+  requestLineDeclined: "declined",
+  requestOrderSeparately: "Order separately",
+
   trackingSteps: {
     received: "Order received",
     confirmed: "Confirmed by the waiter",

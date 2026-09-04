@@ -18,7 +18,18 @@ from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem, MenuItemOption
 from app.modules.notifications.manager import manager
 from app.modules.orders import schemas
-from app.modules.orders.models import Order, OrderItem, OrderItemOption, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.models import (
+    ModificationLineStatus,
+    ModificationRequestStatus,
+    Order,
+    OrderItem,
+    OrderItemOption,
+    OrderModificationLine,
+    OrderModificationRequest,
+    OrderStatus,
+    PaymentMethod,
+    PaymentStatus,
+)
 from app.modules.staff import service as staff_service
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
@@ -35,6 +46,16 @@ ACTIVE_STATUSES: set[OrderStatus] = {
     OrderStatus.SENT_TO_KITCHEN,
     OrderStatus.IN_PREPARATION,
     OrderStatus.READY,
+}
+
+# Fenêtre 2 : une fois la commande confirmée, une modification ne s'applique
+# plus directement (voir update_order_items) — elle passe par une demande.
+# `READY`/`SERVED`/`CANCELLED` en sont volontairement exclus : rien à changer
+# une fois le plat prêt ou la commande terminée.
+MODIFICATION_REQUEST_STATUSES: set[OrderStatus] = {
+    OrderStatus.CONFIRMED,
+    OrderStatus.SENT_TO_KITCHEN,
+    OrderStatus.IN_PREPARATION,
 }
 
 # Transitions autorisées : on refuse explicitement tout le reste plutôt
@@ -211,6 +232,68 @@ def _resolve_selected_options(menu_item: MenuItem, selected_option_ids: list[int
     return selected
 
 
+def _build_order_items(
+    db: Session, restaurant_id: int, items: list[schemas.OrderItemCreate]
+) -> list[OrderItem]:
+    """
+    Valide et construit des `OrderItem` à partir d'un panier envoyé par le
+    client — commun à `create_order` et `update_order_items` (fenêtre 1) :
+    même règles de disponibilité, de rattachement au restaurant et de prix
+    figé des deux côtés, pour ne jamais les faire diverger.
+    """
+    built: list[OrderItem] = []
+    for line in items:
+        menu_item = db.get(MenuItem, line.menu_item_id)
+        if not menu_item or menu_item.restaurant_id != restaurant_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "ITEM_NOT_FOUND",
+                    "message": f"menu item {line.menu_item_id} not found",
+                    "menu_item_id": line.menu_item_id,
+                },
+            )
+        if not menu_item.is_available:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ITEM_UNAVAILABLE",
+                    "message": f"'{menu_item.name}' is no longer available",
+                    "item_name": menu_item.name,
+                    "menu_item_id": menu_item.id,
+                },
+            )
+
+        selected_options = _resolve_selected_options(menu_item, line.selected_option_ids)
+
+        # Prix figé au moment T : voir commentaire dans models.py. Le
+        # supplément des options choisies (France, F5/A2) est ajouté une
+        # fois pour toutes ici — total_amount, la facture et le contrôle de
+        # montant Konnect n'ont ensuite jamais besoin de connaître les options,
+        # ils lisent unit_price comme avant.
+        options_total = sum(float(opt.price_delta) for opt in selected_options)
+        built.append(
+            OrderItem(
+                menu_item_id=menu_item.id,
+                menu_item_name=menu_item.name,
+                unit_price=float(menu_item.price) + options_total,
+                vat_category=menu_item.vat_category,
+                quantity=line.quantity,
+                notes=line.notes,
+                is_shared=line.is_shared,
+                shared_with=",".join(str(p) for p in line.shared_with) or None,
+                from_suggestion=line.from_suggestion,
+                options=[
+                    OrderItemOption(
+                        group_name=opt.group.name, option_name=opt.name, price_delta=opt.price_delta
+                    )
+                    for opt in selected_options
+                ],
+            )
+        )
+    return built
+
+
 async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # La table est retrouvée par son token de QR code, et le restaurant en est
     # déduit : aucun identifiant numérique n'est accepté du client, donc rien
@@ -260,55 +343,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
         client_order_id=payload.client_order_id,
     )
 
-    for line in payload.items:
-        menu_item = db.get(MenuItem, line.menu_item_id)
-        if not menu_item or menu_item.restaurant_id != restaurant_id:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "code": "ITEM_NOT_FOUND",
-                    "message": f"menu item {line.menu_item_id} not found",
-                    "menu_item_id": line.menu_item_id,
-                },
-            )
-        if not menu_item.is_available:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "ITEM_UNAVAILABLE",
-                    "message": f"'{menu_item.name}' is no longer available",
-                    "item_name": menu_item.name,
-                    "menu_item_id": menu_item.id,
-                },
-            )
-
-        selected_options = _resolve_selected_options(menu_item, line.selected_option_ids)
-
-        # Prix figé au moment T : voir commentaire dans models.py. Le
-        # supplément des options choisies (France, F5/A2) est ajouté une
-        # fois pour toutes ici — total_amount, la facture et le contrôle de
-        # montant Konnect n'ont ensuite jamais besoin de connaître les options,
-        # ils lisent unit_price comme avant.
-        options_total = sum(float(opt.price_delta) for opt in selected_options)
-        order.items.append(
-            OrderItem(
-                menu_item_id=menu_item.id,
-                menu_item_name=menu_item.name,
-                unit_price=float(menu_item.price) + options_total,
-                vat_category=menu_item.vat_category,
-                quantity=line.quantity,
-                notes=line.notes,
-                is_shared=line.is_shared,
-                shared_with=",".join(str(p) for p in line.shared_with) or None,
-                from_suggestion=line.from_suggestion,
-                options=[
-                    OrderItemOption(
-                        group_name=opt.group.name, option_name=opt.name, price_delta=opt.price_delta
-                    )
-                    for opt in selected_options
-                ],
-            )
-        )
+    order.items.extend(_build_order_items(db, restaurant_id, payload.items))
 
     db.add(order)
     db.commit()
@@ -349,6 +384,306 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             body=f"Table {order.table_label} vient de commander.",
         )
     return order
+
+
+async def update_order_items(db: Session, order: Order, payload: schemas.OrderItemsUpdate) -> Order:
+    """
+    Édition directe par le client — fenêtre 1 uniquement, tant que la
+    commande est encore `PENDING_CONFIRMATION`. Passé ce point, une
+    modification doit passer par une demande (voir `create_modification_request`)
+    plutôt que remplacer silencieusement une commande déjà confirmée : le
+    serveur a pu confirmer entre l'ouverture de cet écran et cet appel, d'où
+    le 409 explicite plutôt qu'un écrasement.
+    """
+    if order.status != OrderStatus.PENDING_CONFIRMATION:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ORDER_NOT_MODIFIABLE",
+                "message": "order can no longer be edited directly, it has already been confirmed",
+            },
+        )
+    if not payload.items:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "EMPTY_ORDER", "message": "order must contain at least one item"},
+        )
+
+    new_items = _build_order_items(db, order.restaurant_id, payload.items)
+    # `cascade="all, delete-orphan"` sur `Order.items` (models.py) : vider la
+    # collection supprime réellement les anciennes lignes au commit, pas
+    # seulement le lien — jamais de ligne orpheline en base.
+    order.items.clear()
+    order.items.extend(new_items)
+    order.items_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(order)
+
+    log_event(
+        logger, "order.items_updated",
+        restaurant_id=order.restaurant_id, order_id=order.id, table_id=order.table_id,
+    )
+
+    # Le pool serveur doit voir que la commande a changé avant de confirmer —
+    # sans ce broadcast, un serveur qui a ouvert l'écran juste avant l'édition
+    # confirmerait sur l'ancien contenu affiché à l'écran.
+    await manager.broadcast(
+        order.restaurant_id, channel="staff",
+        message={
+            "event": "order.items_updated",
+            "order_id": order.id,
+            "items_updated_at": order.items_updated_at.isoformat(),
+        },
+    )
+    return order
+
+
+async def create_modification_request(
+    db: Session, order: Order, payload: schemas.ModificationRequestCreate
+) -> OrderModificationRequest:
+    """
+    Fenêtre 2 : la commande est déjà confirmée (peut-être déjà en cuisine),
+    le client ne modifie plus directement — il demande, et le serveur décide
+    ligne par ligne après vérification avec la cuisine (voir
+    `resolve_modification_request`). Même forme de payload que
+    `update_order_items` (le panier souhaité dans son ensemble) : le diff est
+    calculé ici, jamais envoyé tel quel par le client.
+    """
+    if order.status not in MODIFICATION_REQUEST_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MODIFICATION_REQUEST_NOT_ALLOWED",
+                "message": "order is not in a state that accepts modification requests",
+            },
+        )
+    if order.pending_modification_request is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MODIFICATION_REQUEST_ALREADY_PENDING",
+                "message": "a modification request is already pending for this order",
+            },
+        )
+
+    # Même validation qu'une commande (existence, rattachement au restaurant,
+    # disponibilité) — le résultat n'est pas gardé, seulement les erreurs
+    # qu'il peut lever : un article inexistant ou indisponible ne doit jamais
+    # se retrouver dans une demande.
+    _build_order_items(db, order.restaurant_id, payload.items)
+
+    current_by_menu_item = {item.menu_item_id: item for item in order.items}
+    requested_by_menu_item = {line.menu_item_id: line for line in payload.items}
+
+    lines: list[OrderModificationLine] = []
+    for menu_item_id in set(current_by_menu_item) | set(requested_by_menu_item):
+        current_item = current_by_menu_item.get(menu_item_id)
+        requested_line = requested_by_menu_item.get(menu_item_id)
+        previous_quantity = current_item.quantity if current_item else 0
+        requested_quantity = requested_line.quantity if requested_line else 0
+        if previous_quantity == requested_quantity:
+            continue
+
+        if current_item is not None:
+            # Ajustement (hausse ou baisse) d'un article déjà commandé : nom
+            # et prix déjà figés à la commande d'origine, jamais relus depuis
+            # MenuItem, qui a pu changer entre-temps.
+            menu_item_name = current_item.menu_item_name
+            unit_price = float(current_item.unit_price)
+        else:
+            # Article pas encore dans la commande : rien à réutiliser, on part
+            # du prix actuel de la carte — même règle qu'une commande neuve.
+            menu_item = db.get(MenuItem, menu_item_id)
+            menu_item_name = menu_item.name
+            unit_price = float(menu_item.price)
+
+        lines.append(
+            OrderModificationLine(
+                menu_item_id=menu_item_id,
+                menu_item_name=menu_item_name,
+                unit_price=unit_price,
+                previous_quantity=previous_quantity,
+                requested_quantity=requested_quantity,
+                notes=(requested_line.notes if requested_line else current_item.notes),
+                is_shared=(requested_line.is_shared if requested_line else current_item.is_shared),
+            )
+        )
+
+    if not lines:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "NO_CHANGES_REQUESTED",
+                "message": "requested items are identical to the current order",
+            },
+        )
+
+    request = OrderModificationRequest(order_id=order.id, restaurant_id=order.restaurant_id, lines=lines)
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+
+    log_event(
+        logger, "order.modification_requested",
+        restaurant_id=order.restaurant_id, order_id=order.id, request_id=request.id,
+    )
+
+    # La file dédiée du pool serveur doit voir la demande sans recharger la
+    # page — même principe que "order.pending_confirmation" à la création.
+    await manager.broadcast(
+        order.restaurant_id, channel="staff",
+        message={
+            "event": "order.modification_requested",
+            "order_id": order.id,
+            "table_id": order.table_id,
+            "table_label": order.table_label,
+            "request_id": request.id,
+            "created_at": request.created_at.isoformat(),
+            "lines": [
+                {
+                    "menu_item_name": line.menu_item_name,
+                    "previous_quantity": line.previous_quantity,
+                    "requested_quantity": line.requested_quantity,
+                }
+                for line in lines
+            ],
+        },
+    )
+    return request
+
+
+async def list_pending_modification_requests(db: Session, restaurant_id: int) -> list[OrderModificationRequest]:
+    """Rechargement d'état pour la file serveur au montage — même raison
+    d'être que list_active_orders : le WebSocket seul ne rattrape jamais ce
+    qui s'est passé avant la connexion."""
+    return (
+        db.query(OrderModificationRequest)
+        .options(
+            selectinload(OrderModificationRequest.lines),
+            selectinload(OrderModificationRequest.order).selectinload(Order.table),
+        )
+        .filter(
+            OrderModificationRequest.restaurant_id == restaurant_id,
+            OrderModificationRequest.status == ModificationRequestStatus.PENDING,
+        )
+        .order_by(OrderModificationRequest.created_at)
+        .all()
+    )
+
+
+async def resolve_modification_request(
+    db: Session,
+    order: Order,
+    request_id: int,
+    decisions: list[schemas.ModificationLineDecision],
+    staff: Staff,
+) -> OrderModificationRequest:
+    """
+    Le serveur répond ligne par ligne, après vérification avec la cuisine —
+    en un seul appel qui doit couvrir exactement les lignes encore en
+    attente (jamais de résolution silencieusement partielle). Les lignes
+    acceptées sont appliquées aux vraies `OrderItem` ; les refusées ne
+    touchent à rien, le client peut ensuite commander séparément ce qui a
+    été refusé (flux normal de création, aucune route dédiée).
+    """
+    request = db.get(OrderModificationRequest, request_id)
+    if not request or request.order_id != order.id or request.restaurant_id != staff.restaurant_id:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "MODIFICATION_REQUEST_NOT_FOUND", "message": "modification request not found"},
+        )
+    if request.status != ModificationRequestStatus.PENDING:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MODIFICATION_REQUEST_ALREADY_RESOLVED",
+                "message": "this modification request has already been resolved",
+            },
+        )
+
+    lines_by_id = {line.id: line for line in request.lines}
+    pending_ids = {line.id for line in request.lines if line.status == ModificationLineStatus.PENDING}
+    decided_ids = {decision.line_id for decision in decisions}
+    if decided_ids != pending_ids or any(decision.line_id not in lines_by_id for decision in decisions):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INCOMPLETE_RESOLUTION",
+                "message": "every pending line must receive a decision, exactly once",
+            },
+        )
+
+    items_by_menu_item = {item.menu_item_id: item for item in order.items}
+    for decision in decisions:
+        line = lines_by_id[decision.line_id]
+        line.status = ModificationLineStatus.ACCEPTED if decision.accepted else ModificationLineStatus.DECLINED
+        if not decision.accepted:
+            continue
+
+        existing = items_by_menu_item.get(line.menu_item_id)
+        if line.requested_quantity == 0:
+            if existing:
+                order.items.remove(existing)
+        elif existing:
+            existing.quantity = line.requested_quantity
+            existing.notes = line.notes
+            existing.is_shared = line.is_shared
+        else:
+            new_item = OrderItem(
+                menu_item_id=line.menu_item_id,
+                menu_item_name=line.menu_item_name,
+                unit_price=line.unit_price,
+                quantity=line.requested_quantity,
+                notes=line.notes,
+                is_shared=line.is_shared,
+            )
+            order.items.append(new_item)
+            items_by_menu_item[line.menu_item_id] = new_item
+
+    request.status = ModificationRequestStatus.RESOLVED
+    request.resolved_at = datetime.now(timezone.utc)
+    order.items_updated_at = request.resolved_at
+    db.commit()
+    db.refresh(request)
+    db.refresh(order)
+
+    log_event(
+        logger, "order.modification_resolved",
+        restaurant_id=order.restaurant_id, order_id=order.id, request_id=request.id, staff_id=staff.id,
+    )
+
+    # Le client attend la réponse sur l'écran de suivi — détail ligne par
+    # ligne pour qu'un refus partiel ne se lise jamais comme un refus global
+    # ni comme une acceptation totale.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={
+            "event": "order.modification_resolved",
+            "order_id": order.id,
+            "request_id": request.id,
+            "lines": [
+                {
+                    "id": line.id,
+                    "menu_item_id": line.menu_item_id,
+                    "menu_item_name": line.menu_item_name,
+                    "unit_price": float(line.unit_price),
+                    "previous_quantity": line.previous_quantity,
+                    "requested_quantity": line.requested_quantity,
+                    "notes": line.notes,
+                    "is_shared": line.is_shared,
+                    "status": line.status.value,
+                }
+                for line in request.lines
+            ],
+        },
+    )
+    # Retire la demande de la file serveur partagée, chez les collègues qui
+    # ne sont pas celui qui vient de répondre.
+    await manager.broadcast(
+        order.restaurant_id, channel="staff",
+        message={"event": "order.modification_resolved", "order_id": order.id, "request_id": request.id},
+    )
+    return request
 
 
 async def claim_order(db: Session, order_id: int, staff: Staff) -> Order:
