@@ -43,6 +43,7 @@ import {
 } from "@/components/icons";
 import { reduirePhoto } from "@/lib/photo";
 import PhotoDuPlat, { ZonePhoto, ZonePhotoNouveau } from "@/components/PhotoDuPlat";
+import ChampsVatAllergenes from "@/components/ChampsVatAllergenes";
 import RecetteDuJour from "@/components/RecetteDuJour";
 import EditeurDePlan from "@/components/plan/EditeurDePlan";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -135,6 +136,13 @@ type Draft = {
   spiceLevel: string;
   allergens: string;
   isHalal: boolean;
+  // "" = pas de catégorie (facture au taux "sur_place" par défaut) — voir
+  // VAT_CATEGORY_LABELS plus bas. N'a de sens qu'en France (Market.vatRates).
+  vatCategory: string;
+  // Sous-ensemble de ALLERGEN_CODES ci-dessous, jamais une saisie libre —
+  // le backend rejette (422) tout code hors de cette liste fixe (UE,
+  // règlement 1169/2011). Coexiste avec `allergens` (texte libre).
+  allergenCodes: string[];
 };
 
 // Les <option> HTML ne peuvent afficher que du texte brut, jamais un
@@ -151,6 +159,8 @@ function itemToDraft(item: MenuItem): Draft {
     spiceLevel: String(item.spice_level),
     allergens: item.allergens ?? "",
     isHalal: item.is_halal,
+    vatCategory: item.vat_category ?? "",
+    allergenCodes: item.allergen_codes ? item.allergen_codes.split(",").filter(Boolean) : [],
   };
 }
 
@@ -164,6 +174,8 @@ const EMPTY_DRAFT: Draft = {
   // Vrai par défaut en Tunisie (norme), faux en France — voir MenuItem.is_halal
   // côté backend (menu/models.py).
   isHalal: currentMarket.code === "tn",
+  vatCategory: "",
+  allergenCodes: [],
 };
 
 // Options et suppléments sur un article (« Cuisson », « Sauce »...) — France,
@@ -621,7 +633,9 @@ export default function DashboardPage() {
         // prix après avoir déposé une photo l'aurait effacée.
         spice_level: Number(draft.spiceLevel),
         allergens: draft.allergens.trim() || null,
+        allergen_codes: draft.allergenCodes.length ? draft.allergenCodes.join(",") : null,
         is_halal: draft.isHalal,
+        vat_category: draft.vatCategory || null,
       });
       flash(`« ${draft.name} » enregistré.`);
       trackEvent("menu_edited", { feature: "edit_item", is_demo: Boolean(sessionDemo()) });
@@ -797,7 +811,9 @@ export default function DashboardPage() {
         description: newItem.description.trim() || null,
         spice_level: Number(newItem.spiceLevel),
         allergens: newItem.allergens.trim() || null,
+        allergen_codes: newItem.allergenCodes.length ? newItem.allergenCodes.join(",") : null,
         is_halal: newItem.isHalal,
+        vat_category: newItem.vatCategory || null,
       });
       // La photo part après coup : elle a besoin de l'identifiant du plat, qui
       // n'existe qu'une fois celui-ci créé. Un échec ici ne doit pas faire
@@ -1445,6 +1461,16 @@ export default function DashboardPage() {
                           Halal
                         </label>
                       </div>
+                      <ChampsVatAllergenes
+                        vatCategory={draft.vatCategory}
+                        allergenCodes={draft.allergenCodes}
+                        onVatCategoryChange={(value) =>
+                          setDrafts((d) => ({ ...d, [item.id]: { ...draft, vatCategory: value } }))
+                        }
+                        onAllergenCodesChange={(codes) =>
+                          setDrafts((d) => ({ ...d, [item.id]: { ...draft, allergenCodes: codes } }))
+                        }
+                      />
                       <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
                         <label className="flex items-center gap-2 text-sm">
                           <input
@@ -1685,6 +1711,12 @@ export default function DashboardPage() {
                     Halal
                   </label>
                 </div>
+                <ChampsVatAllergenes
+                  vatCategory={newItem.vatCategory}
+                  allergenCodes={newItem.allergenCodes}
+                  onVatCategoryChange={(value) => setNewItem({ ...newItem, vatCategory: value })}
+                  onAllergenCodesChange={(codes) => setNewItem({ ...newItem, allergenCodes: codes })}
+                />
                 <div className="flex gap-2 mt-3">
                   <Button onClick={addItem}>Ajouter au menu</Button>
                   <Button
