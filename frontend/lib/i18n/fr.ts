@@ -25,6 +25,10 @@ export const fr = {
   removeFromCartAria: (name: string) => `Retirer un ${name} du panier`,
   allergensLabel: (allergens: string) => `Allergènes : ${allergens}`,
   notHalalBadge: "Non halal",
+  // Polarité inverse, marché France (F5/A6) — voir Market.defaultHalal et
+  // son commentaire dans lib/market.ts : le badge signale l'EXCEPTION,
+  // jamais la norme du marché servi.
+  halalBadge: "Halal",
   callWaiterButton: "Appeler le serveur",
   callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",

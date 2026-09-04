@@ -52,3 +52,16 @@ describe("menuCategories", () => {
     );
   });
 });
+
+describe("defaultHalal", () => {
+  // Pilote la polarité du badge affiché sur le menu client (F5/A6, retour
+  // terrain 2026-09-04) — le badge doit toujours signaler l'EXCEPTION au
+  // marché, jamais sa norme.
+  it("is true for Tunisia — halal is the norm there, the badge flags the rare exception", () => {
+    expect(getMarket("tn").defaultHalal).toBe(true);
+  });
+
+  it("is false for France — the badge should flag Halal when set, not tag every item Not halal", () => {
+    expect(getMarket("fr").defaultHalal).toBe(false);
+  });
+});

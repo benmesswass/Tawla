@@ -1617,11 +1617,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   ))}
                 </span>
               )}
-              {!item.is_halal && (
-                <span className="ms-1 text-xs font-normal text-[var(--harissa)] border border-[var(--harissa)] rounded px-1 align-middle">
-                  {t.notHalalBadge}
-                </span>
-              )}
+              {/* Le badge signale l'EXCEPTION au marché, jamais sa norme
+                  (F5/A6, retour terrain 2026-09-04) — comme un régime, on
+                  tague le cas notable, pas la valeur par défaut. En Tunisie
+                  (défaut halal), l'exception est "Non halal" ; en France
+                  (défaut non-halal), l'exception est "Halal". Jamais les
+                  deux badges affichés en même temps. */}
+              {currentMarket.defaultHalal
+                ? !item.is_halal && (
+                    <span className="ms-1 text-xs font-normal text-[var(--harissa)] border border-[var(--harissa)] rounded px-1 align-middle">
+                      {t.notHalalBadge}
+                    </span>
+                  )
+                : item.is_halal && (
+                    <span className="ms-1 text-xs font-normal text-[var(--menthe)] border border-[var(--menthe)] rounded px-1 align-middle">
+                      {t.halalBadge}
+                    </span>
+                  )}
             </div>
             {item.description && (
               <div className="text-[12.5px] leading-[1.35] text-[var(--ink-soft)] mt-[3px]">{item.description}</div>

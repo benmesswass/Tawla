@@ -24,6 +24,7 @@ export const en = {
   removeFromCartAria: (name) => `Remove one ${name} from cart`,
   allergensLabel: (allergens) => `Allergens: ${allergens}`,
   notHalalBadge: "Not halal",
+  halalBadge: "Halal",
   callWaiterButton: "Call the waiter",
   callWaiterSent: "✓ Waiter notified, on their way",
   notePlaceholder: "Note for the kitchen (optional, e.g. no onions)",

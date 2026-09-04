@@ -54,6 +54,13 @@ export type MarketConfig = {
   // c'est spécifiquement tunisien. Servir « le couscous est reconnu par
   // l'UNESCO » à une table de brasserie parisienne n'a pas de sens.
   culturalFactsEnabled: boolean;
+  // Valeur par défaut d'`is_halal` à la création d'un article (France,
+  // MARCHE_FRANCE.md F5/A6) — miroir exact de core/markets.py::default_halal.
+  // Pilote la POLARITÉ du badge affiché sur le menu client : le badge signale
+  // toujours l'EXCEPTION au marché, jamais sa norme (voir
+  // menu/[qrToken]/page.tsx) — "Non halal" en Tunisie (rare), "Halal" en
+  // France (rare dans l'autre sens), jamais les deux en même temps.
+  defaultHalal: boolean;
 };
 
 const TUNISIA: MarketConfig = {
@@ -69,6 +76,7 @@ const TUNISIA: MarketConfig = {
   menuCategories: ["Entrées", "Plats", "Desserts", "Boissons", "Ftour", "Autre"],
   ramadanModeAvailable: true,
   culturalFactsEnabled: true,
+  defaultHalal: true,
 };
 
 const FRANCE: MarketConfig = {
@@ -86,6 +94,7 @@ const FRANCE: MarketConfig = {
   menuCategories: ["Entrées", "Plats", "Desserts", "Boissons", "Formules", "Vins", "À emporter", "Autre"],
   ramadanModeAvailable: false,
   culturalFactsEnabled: false,
+  defaultHalal: false,
 };
 
 const MARKETS: Record<string, MarketConfig> = { tn: TUNISIA, fr: FRANCE };
