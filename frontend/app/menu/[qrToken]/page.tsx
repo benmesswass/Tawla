@@ -51,7 +51,7 @@ import CelebrationOverlay from "@/components/CelebrationOverlay";
 import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
 import LoyaltyStampCard from "@/components/LoyaltyStampCard";
 import QrCode from "@/components/QrCode";
-import { CULTURAL_FACTS } from "@/lib/culturalFacts";
+import { culturalFactsFor } from "@/lib/culturalFacts";
 import { generateShareCardBlob } from "@/lib/shareCard";
 
 type CartLine = {
@@ -498,18 +498,32 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   // Anecdote culturelle qui tourne pendant l'attente cuisine (10-20 min en
   // moyenne) — un petit plus pendant l'attente plutôt qu'un écran silencieux.
-  // Retirée par drapeau de marché (currentMarket.culturalFactsEnabled) :
-  // leur contenu est spécifiquement tunisien (couscous, harissa, thé à la
-  // menthe...), pas des faits génériques à traduire pour la France.
+  // Contenu propre à chaque marché, et au type d'établissement en France
+  // (`restaurant?.cafe_mode_enabled`) — voir lib/culturalFacts.ts.
   const inKitchenWait =
     trackedOrder?.status === "sent_to_kitchen" || trackedOrder?.status === "in_preparation";
+  const culturalFacts = culturalFactsFor(locale, restaurant?.cafe_mode_enabled ?? false);
+  // Une seule condition, consommée à la fois par l'effet (qui fait tourner
+  // l'anecdote) et par le rendu plus bas (qui l'affiche) — #151 avait déjà
+  // corrigé cette duplication pour `currentMarket.culturalFactsEnabled`,
+  // appliqué ici à `culturalFacts.length` : `culturalFactsFor` ne renvoie
+  // jamais un tableau vide pour un marché servi, mais la condition doit
+  // rester unique pour ne pas se dédoubler une seconde fois.
+  const showCulturalFacts = inKitchenWait && culturalFacts.length > 0;
   useEffect(() => {
-    if (!inKitchenWait || !currentMarket.culturalFactsEnabled) return;
+    if (!showCulturalFacts) return;
+    // `cafe_mode_enabled` peut basculer en direct (dashboard manager)
+    // pendant que le client a cette page ouverte (vérifié en live, voir le
+    // message de ce commit) — `culturalFacts` change alors de longueur (7
+    // anecdotes resto vs 6 café). Remettre l'index à 0 à chaque changement
+    // de tableau : sans ça, un index resté à 6 sur un tableau de 6 (indices
+    // 0-5) affiche `undefined` jusqu'au prochain tick de l'intervalle.
+    setCulturalFactIndex(0);
     const timer = setInterval(() => {
-      setCulturalFactIndex((i) => (i + 1) % CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"].length);
+      setCulturalFactIndex((i) => (i + 1) % culturalFacts.length);
     }, 8000);
     return () => clearInterval(timer);
-  }, [inKitchenWait, locale]);
+  }, [showCulturalFacts, culturalFacts]);
 
   // Carte de fidélité — pré-remplit le numéro déjà utilisé sur ce resto
   // (évite de le retaper à chaque visite), sans jamais le rendre obligatoire.
@@ -1791,10 +1805,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </ol>
         )}
 
-        {!cancelled && inKitchenWait && currentMarket.culturalFactsEnabled && (
+        {!cancelled && showCulturalFacts && (
           <div className="mt-4 text-[12.5px] leading-[1.5] rounded-xl py-[11px] px-3 flex items-start gap-2 bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--encre)]">
             <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton)]" />
-            <span>{CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"][culturalFactIndex]}</span>
+            <span>{culturalFacts[culturalFactIndex]}</span>
           </div>
         )}
 
