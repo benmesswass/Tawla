@@ -36,16 +36,22 @@ def _validate_allergen_codes(value: str | None) -> str | None:
     `setattr` générique, sans traitement spécial pour ce champ. Validé ici
     (comme `VatCategory` ci-dessus) : un code hors ALLERGEN_CODES romprait
     silencieusement tout affichage futur plutôt que d'échouer à la saisie.
+
+    Insensible à la casse ("GLUTEN"/"Milk"/"gluten" désignent le même code
+    ALLERGEN_CODES, tous en minuscules) et dédupliqué (ordre de première
+    apparition conservé) : un manager qui recopie sa liste depuis un CSV ou
+    colle deux fois le même allergène par erreur ne doit ni voir sa saisie
+    rejetée, ni stocker une répétition qui doublerait son affichage.
     """
     if not value:
         return None
-    codes = [c.strip() for c in value.split(",") if c.strip()]
+    codes = [c.strip().lower() for c in value.split(",") if c.strip()]
     unknown = [c for c in codes if c not in ALLERGEN_CODES]
     if unknown:
         raise ValueError(
             f"code(s) allergène inconnu(s) : {', '.join(unknown)} — attendu parmi {', '.join(ALLERGEN_CODES)}"
         )
-    return ",".join(codes)
+    return ",".join(dict.fromkeys(codes))
 
 
 AllergenCodes = Annotated[str | None, AfterValidator(_validate_allergen_codes)]
