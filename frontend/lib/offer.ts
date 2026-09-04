@@ -146,26 +146,88 @@ export const INCLUDED = [
 ];
 
 /**
- * Ce que le produit fait, dit du point de vue du restaurateur et non de la
- * fonctionnalité.
+ * Ce que le produit fait, un triptyque problème/solution par écran plutôt
+ * qu'une liste générique (Phase D2bis de ROADMAP_DESIGN.md, demande de
+ * Wassim le 2026-09-03) : les onglets Client/Manager/Serveur/Cuisine de
+ * `components/home/ApercuProduit.tsx` pilotent à la fois quel écran et
+ * quelles 3 cartes s'affichent. Voix impersonnelle, comme les couples déjà
+ * validés — jamais "vos clients"/"vos serveurs".
+ *
+ * Chaque `solution` est vérifiée contre le code réel (2026-09-03), pas juste
+ * plausible :
+ * - client : suivi en direct (orders/service.py::transition_status,
+ *   broadcast sur le channel de la commande) et appel serveur (module
+ *   `waiter_calls`, déjà vendu comme fonctionnalité Essentiel dans `TIERS`
+ *   ci-dessus).
+ * - manager : mêmes deux chiffres de tête que RecetteDuJour.tsx, la charge
+ *   par serveur de `StaffActiveLoad` (stats/schemas.py — décision de Wassim
+ *   du 2026-08-28, remplace "commandes perdues" en tête), et
+ *   `TeamReport`/`StaffPeriodReport` pour le rapport de prime.
+ * - serveur : le pool partagé (`claim_order`) et le halo rouge des lignes en
+ *   retard (`app/staff/page.tsx`, variable `tardive`), l'alerte "prête"
+ *   (broadcast `order.ready` sur le channel "staff").
+ * - cuisine : le minuteur et le rouge au-delà du délai d'alerte
+ *   (`app/kitchen/page.tsx`, `ELAPSED_ALERT_MINUTES`), les options/notes en
+ *   évidence (`--note-cuisine`).
  */
-export const BENEFITS = [
-  {
-    title: "Plus une commande oubliée",
-    detail:
-      "La commande du client arrive sur l'écran partagé de vos serveurs. Un serveur la prend en charge, la confirme à table, et elle part en cuisine. Rien ne se perd entre les deux.",
-  },
-  {
-    title: "Votre serveur garde la main",
-    detail:
-      "Rien n'entre en cuisine sans qu'un serveur l'ait vérifié à table. Le client commande depuis son téléphone, votre équipe reste maîtresse du service.",
-  },
-  {
-    title: "Vous voyez enfin vos chiffres",
-    detail:
-      "Commandes perdues, délai entre la commande et la cuisine, panier moyen, activité par serveur. De quoi décider d'une prime sur des chiffres plutôt que sur une impression.",
-  },
-];
+export const BENEFITS_PAR_ROLE: Record<"client" | "manager" | "serveur" | "cuisine", { probleme: string; solution: string }[]> = {
+  client: [
+    {
+      probleme: "Le client attend qu'un serveur soit libre pour passer commande.",
+      solution: "Il commande depuis son téléphone dès qu'il est prêt.",
+    },
+    {
+      probleme: "Une fois la commande envoyée, aucune idée de son avancement.",
+      solution: "Suivi en direct sur son téléphone, jusqu'à « prête ».",
+    },
+    {
+      probleme: "Il faut héler un serveur à travers la salle pour un besoin simple.",
+      solution: "Bouton d'appel serveur direct, depuis la table.",
+    },
+  ],
+  manager: [
+    {
+      probleme: "Aucune visibilité sur ce qui se passe vraiment en salle chaque soir.",
+      solution: "Ventes et temps d'attente moyen dès la connexion.",
+    },
+    {
+      probleme: "Impossible de savoir qui, dans l'équipe, est débordé en plein service.",
+      solution: "Charge en temps réel par serveur, là, maintenant.",
+    },
+    {
+      probleme: "Décider d'une prime au feeling, faute de chiffres.",
+      solution: "Rapport d'équipe par période : commandes, pourboires, montant traité.",
+    },
+  ],
+  serveur: [
+    {
+      probleme: "Courir après chaque table pour savoir qui a commandé quoi.",
+      solution: "Toutes les commandes en attente sur un seul écran, prises en charge en un clic.",
+    },
+    {
+      probleme: "Une commande oubliée en pleine salle, sans que personne ne le voie.",
+      solution: "La ligne se teinte de rouge si elle attend trop longtemps.",
+    },
+    {
+      probleme: "Ne pas savoir quand aller chercher un plat prêt en cuisine.",
+      solution: "Alerte dès qu'un plat est prêt, avec la table concernée.",
+    },
+  ],
+  cuisine: [
+    {
+      probleme: "Recevoir une commande sans savoir depuis combien de temps elle attend.",
+      solution: "Minuteur visible sur chaque commande, dès qu'elle arrive.",
+    },
+    {
+      probleme: "Découvrir un plat en retard seulement quand le client se plaint.",
+      solution: "La carte passe au rouge au-delà du délai d'alerte.",
+    },
+    {
+      probleme: "Faire répéter au serveur les consignes d'un plat.",
+      solution: "Options et notes affichées en évidence sur le ticket.",
+    },
+  ],
+};
 
 /**
  * Résultats de pilotes, à citer sur la page.

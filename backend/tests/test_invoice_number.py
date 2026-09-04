@@ -146,6 +146,55 @@ def test_a_cancelled_order_never_consumes_a_number(db_session):
     assert cancelled.invoice_number is None
 
 
+def test_ensure_invoice_number_refuses_a_non_paid_order(db_session):
+    """Invariant défensif : un numéro définitif ne doit jamais être brûlé sur
+    une commande dont le paiement n'est pas confirmé, même si un futur
+    appelant oubliait de le garantir — ce n'était jusqu'ici assuré que par la
+    discipline des appelants (constat de revue)."""
+    restaurant = create_restaurant(slug="invoice-number-unpaid-guard")
+    order = _paid_order(db_session, restaurant)
+    order.payment_status = PaymentStatus.PENDING
+    db_session.flush()
+
+    with pytest.raises(AssertionError):
+        ensure_invoice_number(db_session, order, market=FRANCE)
+
+
+def test_a_same_second_race_on_a_new_counter_recovers_via_retry(db_session, monkeypatch):
+    """StaticPool sérialise les tests (une seule connexion SQLite partagée),
+    donc deux vraies transactions concurrentes ne peuvent pas être reproduites
+    par des threads ici. On force le même scénario autrement : un « gagnant »
+    a déjà committé la ligne du compteur, mais on fait mine que notre propre
+    SELECT verrouillé ne l'a pas vue — exactement ce qui arriverait si les
+    deux transactions démarraient dans la même seconde. L'INSERT qui suit
+    échoue alors sur la vraie contrainte d'unicité, et le rattrapage doit
+    relire le numéro du gagnant au lieu de laisser planter un paiement
+    pourtant encaissé."""
+    restaurant = create_restaurant(slug="invoice-number-race")
+    winner_order = _paid_order(db_session, restaurant)
+    assert ensure_invoice_number(db_session, winner_order, market=FRANCE) == "F2026-00001"
+
+    loser_order = _paid_order(db_session, restaurant)
+
+    real_execute = db_session.execute
+    seen = {"n": 0}
+
+    class _EmptyResult:
+        def scalar_one_or_none(self):
+            return None
+
+    def _racy_execute(statement, *args, **kwargs):
+        seen["n"] += 1
+        if seen["n"] == 1:
+            return _EmptyResult()
+        return real_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "execute", _racy_execute)
+
+    assert ensure_invoice_number(db_session, loser_order, market=FRANCE) == "F2026-00002"
+    assert loser_order.invoice_number == "F2026-00002"
+
+
 # --- Bout en bout : le numéro est posé par le parcours de paiement réel -----
 
 

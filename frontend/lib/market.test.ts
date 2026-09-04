@@ -26,6 +26,16 @@ describe("getMarket", () => {
   });
 });
 
+describe("culturalFactsEnabled", () => {
+  it("stays on for Tunisia — the kitchen-wait anecdotes are Tunisian content", () => {
+    expect(getMarket("tn").culturalFactsEnabled).toBe(true);
+  });
+
+  it("is off for France — the content (couscous, harissa...) doesn't translate", () => {
+    expect(getMarket("fr").culturalFactsEnabled).toBe(false);
+  });
+});
+
 describe("menuCategories", () => {
   it("keeps Ftour for Tunisia, without any French-only category", () => {
     const tn = getMarket("tn");
@@ -40,5 +50,18 @@ describe("menuCategories", () => {
     expect(fr.menuCategories).toEqual(
       expect.arrayContaining(["Entrées", "Plats", "Desserts", "Boissons", "Formules", "Vins", "À emporter", "Autre"])
     );
+  });
+});
+
+describe("defaultHalal", () => {
+  // Pilote la polarité du badge affiché sur le menu client (F5/A6, retour
+  // terrain 2026-09-04) — le badge doit toujours signaler l'EXCEPTION au
+  // marché, jamais sa norme.
+  it("is true for Tunisia — halal is the norm there, the badge flags the rare exception", () => {
+    expect(getMarket("tn").defaultHalal).toBe(true);
+  });
+
+  it("is false for France — the badge should flag Halal when set, not tag every item Not halal", () => {
+    expect(getMarket("fr").defaultHalal).toBe(false);
   });
 });

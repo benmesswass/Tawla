@@ -22,6 +22,23 @@ table) → `SENT_TO_KITCHEN` (visible à l'écran cuisine) → `IN_PREPARATION` 
 `READY` → `SERVED`. `CANCELLED` n'est atteignable que depuis les trois
 premiers états, et devient impossible une fois la commande payée.
 
+**Modification de commande** :
+Deux fenêtres distinctes, jamais une troisième voie. Tant que la commande est
+`PENDING_CONFIRMATION`, le client la modifie lui-même, sans validation
+(`PUT /orders/{id}/items`). Passé ce point (`CONFIRMED`/`SENT_TO_KITCHEN`/
+`IN_PREPARATION`), il envoie une **Demande de modification
+(OrderModificationRequest)** — le service compare le panier envoyé aux
+`OrderItem` actuels et n'en garde que les écarts, une **Ligne de demande
+(OrderModificationLine)** par article dont la quantité change
+(`previous_quantity` à 0 pour un ajout, `requested_quantity` à 0 pour un
+retrait complet). Le serveur répond ligne par ligne, jamais tout ou rien : une
+ligne acceptée s'applique à la vraie commande, une ligne refusée n'y touche
+pas. Une seule demande non résolue à la fois par commande. Un ajout refusé
+peut repartir comme commande séparée (flux normal de création) ; un retrait
+refusé n'a aucune suite, l'article reste tel quel.
+_Avoid_: Édition de commande (trop large — ne dit pas laquelle des deux
+fenêtres), Avenant
+
 **Prise en charge (Claim)** :
 L'action par laquelle un serveur retire une commande du pool partagé (visible
 de tous les serveurs) pour se l'attribuer. Se produit explicitement (bouton

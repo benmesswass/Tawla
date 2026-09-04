@@ -59,6 +59,14 @@ def _vat_rate_for(order_item, market: Market) -> float:
     repli sur "sur_place", le taux par défaut de la carte — jamais une
     exception qui ferait échouer la génération de toute la facture pour une
     seule ligne mal classée.
+
+    Limitation connue : les suppléments (`order_item.options`, ex. un verre
+    de vin ajouté à un plat) n'ont pas leur propre `vat_category` — leur
+    prix est plié dans `unit_price` et ventilé au taux de l'article parent.
+    Un supplément dont le taux réel diffère (alcool à 20 % ajouté à un plat
+    "sur_place" à 10 %) est donc ventilé au taux du plat, pas au sien. Coûteux
+    à corriger (colonne + migration par option, service.py, ce module) pour
+    un cas rare tant qu'aucun pilote France ne vend de suppléments alcool.
     """
     rates = market.vat_rates or {}
     return rates.get(order_item.vat_category or "sur_place", rates.get("sur_place", 0.0))

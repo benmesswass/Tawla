@@ -9,6 +9,9 @@ doit rester lisible. On vérifie donc qu'un PDF valide sort, que la logique de
 répartition du libellé de table (disque à deux étages vs libellé entier) est
 correcte, et que la mise en page ne casse pas sur les cas limites.
 """
+from datetime import datetime, timezone
+from unittest.mock import patch
+
 from app.modules.tables.poster import _digit_font_size, _split_table_label, generate_table_poster_pdf
 
 
@@ -29,8 +32,14 @@ def test_poster_is_a_valid_pdf():
 
 
 def test_zone_is_not_repeated_when_the_label_already_says_it():
-    with_zone = _poster(table_label="Terrasse 1", zone="Terrasse")
-    without_zone = _poster(table_label="Terrasse 1")
+    # Comparaison octet à octet de deux PDF générés séparément : fpdf2 capture
+    # `datetime.now()` à la construction pour /CreationDate (et l'/ID en
+    # dérive), donc geler l'horloge évite un faux négatif si les deux appels
+    # tombent de part et d'autre d'une frontière de seconde.
+    with patch("fpdf.fpdf.datetime") as frozen_datetime:
+        frozen_datetime.now.return_value = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with_zone = _poster(table_label="Terrasse 1", zone="Terrasse")
+        without_zone = _poster(table_label="Terrasse 1")
     assert with_zone == without_zone
 
 

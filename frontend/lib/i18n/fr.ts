@@ -13,11 +13,6 @@ export const fr = {
   // marchés (TN et FR), l'arabe (ar.ts) reste écrit pour la Tunisie seule
   // pour l'instant — voir sa propre valeur, fixe, à cet endroit.
   currency: currentMarket.currency.symbol,
-  // Le français sert les DEUX marchés, mais chacun bascule vers une langue
-  // différente (Tunisie : derja tunisienne : France : anglais, F5/A9 — voir
-  // `Market.languages`, jamais les deux en dur ici) : même raisonnement que
-  // `currency` juste au-dessus, calculé une fois au chargement du module.
-  localeSwitchLabel: currentMarket.languages.includes("en") ? "English" : "عربي",
 
   retry: "Réessayer",
   loadingMenu: "Chargement du menu...",
@@ -30,6 +25,10 @@ export const fr = {
   removeFromCartAria: (name: string) => `Retirer un ${name} du panier`,
   allergensLabel: (allergens: string) => `Allergènes : ${allergens}`,
   notHalalBadge: "Non halal",
+  // Polarité inverse, marché France (F5/A6) — voir Market.defaultHalal et
+  // son commentaire dans lib/market.ts : le badge signale l'EXCEPTION,
+  // jamais la norme du marché servi.
+  halalBadge: "Halal",
   callWaiterButton: "Appeler le serveur",
   callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",
@@ -44,6 +43,31 @@ export const fr = {
   orderSubtitle: (tableLabel: string, orderId: number) => `${tableLabel} — commande #${orderId}`,
   preorderBadge: (time: string) => `Pré-commande pour l'iftar — préparation prévue pour ${time}.`,
   dedicatedServer: (staffName: string) => `${staffName} est votre serveur dédié pour cette commande.`,
+
+  // Modification directe (fenêtre 1, tant que la commande est en attente de
+  // confirmation) — voir orders/service.py::update_order_items.
+  modifyOrderButton: "Modifier la commande",
+  modifyOrderHint: "Modifiable tant que le serveur n'a pas confirmé",
+  editOrderTitle: "Modifier la commande",
+  editOrderSave: "Enregistrer les modifications",
+  editOrderCancel: "Annuler",
+  itemsUpdatedAt: (heure: string) => `Modifiée à ${heure}`,
+
+  // Demande de modification (fenêtre 2, une fois la commande confirmée) —
+  // voir orders/service.py::create_modification_request/resolve_modification_request.
+  requestModificationButton: "Demander une modification",
+  requestModificationHint: "Le serveur doit valider avec la cuisine avant toute modification",
+  requestEditBanner: "Cette demande doit être validée par le serveur avec la cuisine avant d'être appliquée.",
+  requestEditSend: "Envoyer la demande de modification",
+  requestEditSubcopy: "Le serveur vérifiera avec la cuisine avant d'appliquer ces changements.",
+  requestEditNewTotalLabel: "Nouveau total si accepté",
+  requestEditCurrentTotal: (total: string) => `Total actuel de la commande : ${total}`,
+  requestSentButton: "✓ Demande envoyée",
+  requestPendingBanner: "Demande envoyée — en attente de la réponse du serveur.",
+  requestOutcomeTitle: "Réponse du serveur",
+  requestLineAccepted: "accepté",
+  requestLineDeclined: "refusé",
+  requestOrderSeparately: "Commander séparément",
 
   trackingSteps: {
     received: "Commande reçue",

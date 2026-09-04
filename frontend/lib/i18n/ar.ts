@@ -12,7 +12,6 @@ export const ar = {
   // propre variante arabe littéraire (§6 F1 de MARCHE_FRANCE.md), elle aura
   // son propre dictionnaire, pas ce symbole rendu dynamique ici.
   currency: "د.ت",
-  localeSwitchLabel: "Français",
 
   retry: "عاود المحاولة",
   loadingMenu: "قاعد يحمّل المينيو...",
@@ -25,6 +24,7 @@ export const ar = {
   removeFromCartAria: (name) => `نقّص ${name} من القفة`,
   allergensLabel: (allergens) => `مسببات الحساسية: ${allergens}`,
   notHalalBadge: "مش حلال",
+  halalBadge: "حلال",
   callWaiterButton: "نادي على الجرسون",
   callWaiterSent: "✓ الجرسون تعرّف، باش يجي دلوقتي",
   notePlaceholder: "ملاحظة للكوجينة (إختياري، مثال: بلا بصل)",
@@ -39,6 +39,27 @@ export const ar = {
   orderSubtitle: (tableLabel, orderId) => `${tableLabel} — الطلبية رقم ${orderId}`,
   preorderBadge: (time) => `طلبية مسبقة للفطور — التحضير مبرمج للساعة ${time}.`,
   dedicatedServer: (staffName) => `${staffName} باش يكون الجرسون تاعك لهاذي الطلبية.`,
+
+  modifyOrderButton: "بدّل الطلبية",
+  modifyOrderHint: "تنجم تبدلها ما دام الجرسون ما أكدهاش",
+  editOrderTitle: "بدّل الطلبية",
+  editOrderSave: "سجل التبديلات",
+  editOrderCancel: "الغي",
+  itemsUpdatedAt: (heure) => `تبدلت الساعة ${heure}`,
+
+  requestModificationButton: "اطلب تبديل",
+  requestModificationHint: "لازم الجرسون يتأكد مع الكوجينة قبل أي تبديل",
+  requestEditBanner: "هاذا الطلب لازم الجرسون يتأكد منه مع الكوجينة قبل ما يتطبق.",
+  requestEditSend: "ابعث طلب التبديل",
+  requestEditSubcopy: "الجرسون باش يتأكد مع الكوجينة قبل ما يطبق هاذم التبديلات.",
+  requestEditNewTotalLabel: "المجموع الجديد إذا تقبل",
+  requestEditCurrentTotal: (total) => `المجموع الحالي للطلبية : ${total}`,
+  requestSentButton: "✓ الطلب تبعث",
+  requestPendingBanner: "الطلب تبعث — قاعدين ننتظرو جواب الجرسون.",
+  requestOutcomeTitle: "جواب الجرسون",
+  requestLineAccepted: "تقبل",
+  requestLineDeclined: "ترفض",
+  requestOrderSeparately: "اطلبها وحدها",
 
   trackingSteps: {
     received: "تبعثت",

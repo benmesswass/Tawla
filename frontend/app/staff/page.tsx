@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lalezar } from "@/lib/fonts";
-import { api, staffWsUrl, LoyaltyMember, MyShift, Order, PlanTable } from "@/lib/api";
+import { api, staffWsUrl, LoyaltyMember, ModificationRequest, MyShift, Order, PlanTable } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
@@ -20,7 +20,7 @@ import PlanDeSalle from "@/components/plan/PlanDeSalle";
 import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
 import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
-import { BellIcon, MoonIcon, GiftIcon, CakeIcon } from "@/components/icons";
+import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 
 // Seuil propre à cet écran (2026-08-28, ex-partagé avec la définition de
@@ -40,6 +40,10 @@ type PendingOrder = {
   taken_by_staff_name: string | null;
   created_at: string | null;
   scheduled_for: string | null;
+  // Posé uniquement par une édition directe du client (fenêtre "modifier la
+  // commande" tant qu'elle attend confirmation) — jamais par une transition
+  // de statut. Alimente le badge "Modifiée" ci-dessous.
+  items_updated_at: string | null;
 };
 type ReadyOrder = { order_id: number; table_id: number; table_label: string; ready_at: string | null };
 type CashRequest = {
@@ -67,6 +71,7 @@ function fromApi(o: Order): PendingOrder {
     taken_by_staff_name: o.taken_by_staff_name,
     created_at: o.created_at ?? null,
     scheduled_for: o.scheduled_for,
+    items_updated_at: o.items_updated_at,
   };
 }
 
@@ -112,6 +117,12 @@ export default function StaffPage() {
   const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
   const [cardTerminalRequests, setCardTerminalRequests] = useState<CardTerminalRequest[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
+  const [modificationRequests, setModificationRequests] = useState<ModificationRequest[]>([]);
+  // Décisions prises localement avant l'envoi (line_id -> accepté) : le
+  // serveur choisit ligne par ligne, mais rien n'est appliqué tant qu'il n'a
+  // pas cliqué "Envoyer la réponse" — jamais de décision à moitié envoyée.
+  const [lineDecisions, setLineDecisions] = useState<Record<number, boolean>>({});
+  const [resolvingRequestId, setResolvingRequestId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [myShift, setMyShift] = useState<MyShift | null>(null);
   const [plan, setPlan] = useState<PlanTable[]>([]);
@@ -276,6 +287,15 @@ export default function StaffPage() {
     }
   }, [restaurantId]);
 
+  const loadModificationRequests = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      setModificationRequests(await api.listPendingModificationRequests(restaurantId));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
   // Recharge au montage : le WebSocket seul ne rattrape jamais les
   // commandes déjà en attente avant l'ouverture de cette page.
   useEffect(() => {
@@ -284,10 +304,11 @@ export default function StaffPage() {
       loadCashRequests();
       loadCardTerminalRequests();
       loadWaiterCalls();
+      loadModificationRequests();
       loadMyShift();
       loadPlan();
     }
-  }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadMyShift, loadPlan]);
+  }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan]);
 
   const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
@@ -304,6 +325,7 @@ export default function StaffPage() {
                 taken_by_staff_name: null,
                 created_at: msg.created_at ?? null,
                 scheduled_for: msg.scheduled_for ?? null,
+                items_updated_at: null,
               },
             ]
       );
@@ -323,6 +345,25 @@ export default function StaffPage() {
             : o
         )
       );
+    }
+    // Le client a modifié sa commande pendant qu'elle attendait encore d'être
+    // confirmée — sans ce badge, un serveur qui confirme sur ce qu'il a vu à
+    // l'ouverture de l'écran confirmerait un contenu déjà périmé.
+    if (msg.event === "order.items_updated") {
+      setPending((prev) =>
+        prev.map((o) => (o.order_id === msg.order_id ? { ...o, items_updated_at: msg.items_updated_at } : o))
+      );
+    }
+    // Nouvelle demande de modification (fenêtre 2) — le message ne porte pas
+    // l'id de chaque ligne (nécessaire pour répondre), donc on relit la file
+    // plutôt que de reconstruire un objet partiel à la main.
+    if (msg.event === "order.modification_requested") {
+      loadModificationRequests();
+    }
+    // Un collègue vient de répondre (ou nous-même) : la demande sort de la
+    // file partagée chez tout le monde.
+    if (msg.event === "order.modification_resolved") {
+      setModificationRequests((prev) => prev.filter((r) => r.id !== msg.request_id));
     }
     if (msg.event === "order.ready") {
       setReadyToServe((prev) =>
@@ -397,9 +438,10 @@ export default function StaffPage() {
       loadCashRequests();
       loadCardTerminalRequests();
       loadWaiterCalls();
+      loadModificationRequests();
       loadMyShift();
     }
-  }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadMyShift]);
+  }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift]);
 
   const etatsDesTables = useMemo(
     () =>
@@ -487,6 +529,36 @@ export default function StaffPage() {
       loadMyShift();
     } catch (e) {
       setError(toFrenchMessage(e));
+    }
+  }
+
+  function setLineDecision(lineId: number, accepted: boolean) {
+    setLineDecisions((prev) => ({ ...prev, [lineId]: accepted }));
+  }
+
+  async function resolveModificationRequest(request: ModificationRequest) {
+    const decisions = request.lines
+      .filter((line) => line.status === "pending")
+      .map((line) => ({ line_id: line.id, accepted: lineDecisions[line.id] }));
+    // Bouton désactivé tant que toutes les lignes n'ont pas de décision (voir
+    // le JSX) : cette garde est la dernière ligne de défense, jamais la seule.
+    if (decisions.some((d) => d.accepted === undefined)) return;
+
+    setError(null);
+    setResolvingRequestId(request.id);
+    try {
+      await api.resolveModificationRequest(request.order_id, request.id, decisions as { line_id: number; accepted: boolean }[]);
+      setModificationRequests((prev) => prev.filter((r) => r.id !== request.id));
+      setLineDecisions((prev) => {
+        const next = { ...prev };
+        for (const line of request.lines) delete next[line.id];
+        return next;
+      });
+    } catch (e) {
+      setError(toFrenchMessage(e));
+      loadModificationRequests();
+    } finally {
+      setResolvingRequestId(null);
     }
   }
 
@@ -779,6 +851,17 @@ export default function StaffPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-semibold text-[var(--encre)]">Commande #{o.order_id}</div>
+                      {o.items_updated_at && (
+                        <div className="mt-0.5 flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[var(--harissa-dark)] bg-[rgba(214,64,30,.12)] border border-[rgba(214,64,30,.4)] rounded-full pl-[6px] pr-[7px] py-[2px]">
+                            <PencilIcon className="w-[9px] h-[9px] shrink-0" />
+                            Modifiée
+                          </span>
+                          <span className="text-[11px] text-[var(--ink-soft)]">
+                            il y a {duree(elapsedSeconds(o.items_updated_at, maintenant) ?? 0)}
+                          </span>
+                        </div>
+                      )}
                       {o.scheduled_for && (
                         <div className="text-xs text-[var(--laiton)] mt-0.5 flex items-center gap-1">
                           <MoonIcon className="w-3.5 h-3.5 shrink-0" />
@@ -805,6 +888,76 @@ export default function StaffPage() {
                         {takenByMe ? "Confirmer" : "Prendre en charge"}
                       </button>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden">
+              <EntetePanneau titre="Demandes de modification" couleur="var(--laiton)" count={modificationRequests.length} />
+              {modificationRequests.length === 0 && <FileVide message="Rien en attente" />}
+              {modificationRequests.map((request) => {
+                const decidedCount = request.lines.filter((l) => lineDecisions[l.id] !== undefined).length;
+                const allDecided = decidedCount === request.lines.length;
+                return (
+                  <div key={request.id} className="px-[14px] py-[11px] border-b border-[#efe6d2] last:border-b-0">
+                    <div className="flex items-center gap-[14px]">
+                      <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                        {request.table_label}
+                      </span>
+                      <div className="min-w-0 flex-1 text-[13.5px] font-semibold text-[var(--encre)]">
+                        Commande #{request.order_id}
+                      </div>
+                    </div>
+                    <p className="mt-2 mb-1.5 text-[11px] text-[var(--ink-faint)]">
+                      Répondez ligne par ligne, après vérification avec la cuisine.
+                    </p>
+                    <div className="divide-y divide-[var(--line)]">
+                      {request.lines.map((line) => {
+                        const decision = lineDecisions[line.id];
+                        const sign = line.requested_quantity > line.previous_quantity ? "+" : "−";
+                        const delta = Math.abs(line.requested_quantity - line.previous_quantity);
+                        return (
+                          <div key={line.id} className="flex items-center justify-between gap-2 py-[9px]">
+                            <span className="text-[13px] font-semibold text-[var(--encre)]">
+                              {sign}
+                              {delta}× {line.menu_item_name}
+                            </span>
+                            <div className="flex gap-1.5 shrink-0">
+                              <button
+                                onClick={() => setLineDecision(line.id, false)}
+                                className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
+                                style={
+                                  decision === false
+                                    ? { background: "var(--ink-soft)", color: "var(--semoule)" }
+                                    : { background: "#fff", color: "var(--ink-faint)", border: "1px solid var(--line)" }
+                                }
+                              >
+                                {decision === false ? "✗ Refuser" : "Refuser"}
+                              </button>
+                              <button
+                                onClick={() => setLineDecision(line.id, true)}
+                                className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
+                                style={
+                                  decision === true
+                                    ? { background: "var(--menthe)", color: "var(--semoule)" }
+                                    : { background: "#fff", color: "var(--ink-faint)", border: "1px solid var(--line)" }
+                                }
+                              >
+                                {decision === true ? "✓ Accepter" : "Accepter"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={() => resolveModificationRequest(request)}
+                      disabled={!allDecided || resolvingRequestId === request.id}
+                      className="w-full mt-[10px] rounded-[10px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)] disabled:opacity-50"
+                    >
+                      Envoyer la réponse au client
+                    </button>
                   </div>
                 );
               })}

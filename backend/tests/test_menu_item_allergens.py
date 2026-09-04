@@ -54,6 +54,37 @@ def test_menu_item_can_be_created_with_valid_allergen_codes(client):
     assert item["allergen_codes"] == "gluten,milk,eggs"
 
 
+def test_menu_item_allergen_codes_are_case_insensitive(client):
+    """"GLUTEN"/"Milk" désignent le même code que "gluten"/"milk" — un
+    manager qui recopie sa liste depuis un CSV ou une autre carte ne doit
+    pas voir sa saisie rejetée pour une simple différence de casse."""
+    restaurant, headers = _setup_restaurant(client, "allergens-case-insensitive")
+    item = client.post(
+        "/api/v1/menu-items",
+        json={"restaurant_id": restaurant.id, "name": "Gratin", "price": 12.0, "allergen_codes": "GLUTEN, Milk"},
+        headers=headers,
+    ).json()
+
+    assert item["allergen_codes"] == "gluten,milk"
+
+
+def test_menu_item_allergen_codes_are_deduplicated(client):
+    """Un allergène collé deux fois (copier-coller, casse différente) ne
+    doit ni être rejeté ni stocker une répétition qui doublerait
+    l'affichage — l'ordre de première apparition est conservé."""
+    restaurant, headers = _setup_restaurant(client, "allergens-dedup")
+    item = client.post(
+        "/api/v1/menu-items",
+        json={
+            "restaurant_id": restaurant.id, "name": "Gratin", "price": 12.0,
+            "allergen_codes": "milk,gluten,MILK,eggs,milk",
+        },
+        headers=headers,
+    ).json()
+
+    assert item["allergen_codes"] == "milk,gluten,eggs"
+
+
 def test_menu_item_rejects_an_unknown_allergen_code(client):
     restaurant, headers = _setup_restaurant(client, "allergens-invalid")
     res = client.post(

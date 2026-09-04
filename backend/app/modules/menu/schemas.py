@@ -1,16 +1,30 @@
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from app.core.markets import current_market
 from app.modules.menu.models import ALLERGEN_CODES
 
-# Clés de `core/markets.py::FRANCE.vat_rates` — le seul marché à en définir
-# aujourd'hui. Validé ici (contrairement à `category`/`allergens`, du texte
-# libre assumé) car une clé qui ne correspond à AUCUN taux du marché servi
-# romprait silencieusement la ventilation TVA de la facture (`.get()` sans
-# valeur trouvée) plutôt que de lever une erreur au moment de la saisie.
-VatCategory = Literal["sur_place", "a_emporter", "alcool"]
+
+def _validate_vat_category(value: str | None) -> str | None:
+    """Le vocabulaire valide dépend du marché SERVI, lu sur `current_market`
+    À LA VALIDATION — jamais figé dans un `Literal` à l'import, qui resterait
+    aveugle à un marché re-basculé en cours de process (tests) et fait déjà
+    à l'identique pour `market=None` (voir `core/invoice_number.py`). Une clé
+    qui ne correspond à AUCUN taux du marché servi romprait silencieusement
+    la ventilation TVA de la facture (`.get()` sans valeur trouvée) plutôt
+    que de lever une erreur au moment de la saisie — et sur un marché sans
+    TVA ventilée (Tunisie aujourd'hui, `Market.vat_rates is None`), AUCUNE
+    catégorie n'a de sens, donc aucune n'est acceptée."""
+    if value is None:
+        return None
+    allowed = (current_market.vat_rates or {}).keys()
+    if value not in allowed:
+        raise ValueError(f"vat_category invalide pour le marché {current_market.code!r} : {value!r}")
+    return value
+
+
+VatCategory = Annotated[str | None, AfterValidator(_validate_vat_category)]
 
 
 def _validate_allergen_codes(value: str | None) -> str | None:
@@ -22,16 +36,22 @@ def _validate_allergen_codes(value: str | None) -> str | None:
     `setattr` générique, sans traitement spécial pour ce champ. Validé ici
     (comme `VatCategory` ci-dessus) : un code hors ALLERGEN_CODES romprait
     silencieusement tout affichage futur plutôt que d'échouer à la saisie.
+
+    Insensible à la casse ("GLUTEN"/"Milk"/"gluten" désignent le même code
+    ALLERGEN_CODES, tous en minuscules) et dédupliqué (ordre de première
+    apparition conservé) : un manager qui recopie sa liste depuis un CSV ou
+    colle deux fois le même allergène par erreur ne doit ni voir sa saisie
+    rejetée, ni stocker une répétition qui doublerait son affichage.
     """
     if not value:
         return None
-    codes = [c.strip() for c in value.split(",") if c.strip()]
+    codes = [c.strip().lower() for c in value.split(",") if c.strip()]
     unknown = [c for c in codes if c not in ALLERGEN_CODES]
     if unknown:
         raise ValueError(
             f"code(s) allergène inconnu(s) : {', '.join(unknown)} — attendu parmi {', '.join(ALLERGEN_CODES)}"
         )
-    return ",".join(codes)
+    return ",".join(dict.fromkeys(codes))
 
 
 AllergenCodes = Annotated[str | None, AfterValidator(_validate_allergen_codes)]

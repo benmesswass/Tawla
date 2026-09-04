@@ -13,7 +13,9 @@ import {
   LoyaltyMember,
   MenuItem,
   MenuItemOptionGroup,
+  ModificationLine,
   Order,
+  OrderItemPayload,
   OrderStatus,
   RestaurantPublic,
   Table,
@@ -23,7 +25,7 @@ import { toLocalizedMessage } from "@/lib/errors";
 import { formatAmount } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
-import { useLocale } from "@/lib/i18n/useLocale";
+import { localeSwitchLabel, useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
@@ -40,13 +42,16 @@ import {
   WifiOffIcon,
   ShareIcon,
   StampIcon,
+  PencilIcon,
+  ChevronLeftIcon,
+  ClockIcon,
 } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
 import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
 import LoyaltyStampCard from "@/components/LoyaltyStampCard";
 import QrCode from "@/components/QrCode";
-import { CULTURAL_FACTS } from "@/lib/culturalFacts";
+import { culturalFactsFor } from "@/lib/culturalFacts";
 import { generateShareCardBlob } from "@/lib/shareCard";
 
 type CartLine = {
@@ -65,6 +70,22 @@ type CartLine = {
   // F5/A2) — un seul jeu de choix par article au panier (v1) : rouvrir le
   // sélecteur remplace la sélection plutôt que d'ajouter une seconde ligne.
   selectedOptions: SelectedOption[];
+};
+
+/**
+ * Une ligne de la commande en cours de révision (fenêtre 1 : édition directe
+ * tant que la commande est en attente de confirmation). Volontairement plus
+ * simple que `CartLine` : pas d'options ni de partage détaillé par convive —
+ * une commande déjà envoyée qui a besoin de ça se recommande plutôt que de
+ * se rééditer en détail.
+ */
+type EditLine = {
+  menuItemId: number;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  notes: string;
+  isShared: boolean;
 };
 
 type SelectedOption = { optionId: number; groupName: string; optionName: string; priceDelta: number };
@@ -215,6 +236,27 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // Reçu une seule fois à la création de la commande : sans lui, plus aucun
   // appel de suivi ni de paiement n'est autorisé (Phase 12.2).
   const [orderToken, setOrderToken] = useState<string | null>(null);
+  // Révision de la commande envoyée — panier séparé de `cart` : celui-ci sert
+  // à composer une commande, celui-là à en réviser une déjà envoyée, et les
+  // deux ne doivent jamais se marcher dessus. `editIntent` distingue les deux
+  // fenêtres : "self" (édition directe, tant que PENDING_CONFIRMATION) écrit
+  // immédiatement ; "request" (commande déjà confirmée, jusqu'en cuisine)
+  // passe par une demande que le serveur valide ligne par ligne.
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editIntent, setEditIntent] = useState<"self" | "request">("self");
+  const [editItems, setEditItems] = useState<Record<number, EditLine>>({});
+  // Photo de la quantité au moment d'ouvrir l'écran d'édition — jamais
+  // modifiée ensuite : sert uniquement à afficher "ancien → nouveau" quand le
+  // client change une quantité (barré/nouveau), demandé explicitement pour
+  // qu'une ligne réduite ou ajoutée se voie d'un coup d'œil.
+  const [originalQuantities, setOriginalQuantities] = useState<Record<number, number>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  // Résultat de la dernière demande de modification résolue par le serveur —
+  // transitoire (pas besoin de survivre à un rafraîchissement, contrairement
+  // à `pending_modification_request` qui vient du backend) : juste de quoi
+  // afficher "Réponse du serveur" une fois, ligne par ligne.
+  const [lastResolution, setLastResolution] = useState<ModificationLine[] | null>(null);
   const [tipInput, setTipInput] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [paying, setPaying] = useState(false);
@@ -456,15 +498,32 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   // Anecdote culturelle qui tourne pendant l'attente cuisine (10-20 min en
   // moyenne) — un petit plus pendant l'attente plutôt qu'un écran silencieux.
+  // Contenu propre à chaque marché, et au type d'établissement en France
+  // (`restaurant?.cafe_mode_enabled`) — voir lib/culturalFacts.ts.
   const inKitchenWait =
     trackedOrder?.status === "sent_to_kitchen" || trackedOrder?.status === "in_preparation";
+  const culturalFacts = culturalFactsFor(locale, restaurant?.cafe_mode_enabled ?? false);
+  // Une seule condition, consommée à la fois par l'effet (qui fait tourner
+  // l'anecdote) et par le rendu plus bas (qui l'affiche) — #151 avait déjà
+  // corrigé cette duplication pour `currentMarket.culturalFactsEnabled`,
+  // appliqué ici à `culturalFacts.length` : `culturalFactsFor` ne renvoie
+  // jamais un tableau vide pour un marché servi, mais la condition doit
+  // rester unique pour ne pas se dédoubler une seconde fois.
+  const showCulturalFacts = inKitchenWait && culturalFacts.length > 0;
   useEffect(() => {
-    if (!inKitchenWait) return;
+    if (!showCulturalFacts) return;
+    // `cafe_mode_enabled` peut basculer en direct (dashboard manager)
+    // pendant que le client a cette page ouverte (vérifié en live, voir le
+    // message de ce commit) — `culturalFacts` change alors de longueur (7
+    // anecdotes resto vs 6 café). Remettre l'index à 0 à chaque changement
+    // de tableau : sans ça, un index resté à 6 sur un tableau de 6 (indices
+    // 0-5) affiche `undefined` jusqu'au prochain tick de l'intervalle.
+    setCulturalFactIndex(0);
     const timer = setInterval(() => {
-      setCulturalFactIndex((i) => (i + 1) % CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"].length);
+      setCulturalFactIndex((i) => (i + 1) % culturalFacts.length);
     }, 8000);
     return () => clearInterval(timer);
-  }, [inKitchenWait, locale]);
+  }, [showCulturalFacts, culturalFacts]);
 
   // Carte de fidélité — pré-remplit le numéro déjà utilisé sur ce resto
   // (évite de le retaper à chaque visite), sans jamais le rendre obligatoire.
@@ -550,7 +609,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   useReconnectingSocket(orderSocketUrl, (msg) => {
     if (msg.event === "order.status_changed" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, status: msg.status } : prev));
-      if (msg.status === "served" || msg.status === "cancelled") {
+      // Servie ET réglée seulement : servie mais impayée doit rester
+      // atteignable, sinon un client qui regarde sa commande passer "servie"
+      // en direct perd l'accès à son addition avant d'avoir pu payer (même
+      // condition que le chemin de rechargement, plus haut dans ce fichier).
+      if (msg.status === "cancelled" || (msg.status === "served" && trackedOrder.payment_status === "paid")) {
         localStorage.removeItem(lastOrderStorageKey(qrToken));
       }
     }
@@ -564,6 +627,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // client sait qui s'occupe de sa table sans avoir à demander.
     if (msg.event === "order.staff_assigned" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, taken_by_staff_name: msg.staff_name } : prev));
+    }
+    // Le serveur a répondu à la demande de modification (fenêtre 2) — on
+    // relit la commande pour ses vraies lignes/total (les lignes acceptées
+    // ont été appliquées côté backend) et on garde le détail ligne par ligne
+    // du message pour l'afficher : "accepté"/"refusé" ne se devine pas
+    // depuis le nouveau contenu seul.
+    if (msg.event === "order.modification_resolved" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
+      setLastResolution(msg.lines);
+      api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
     }
   });
 
@@ -865,6 +937,149 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], note } } : prev));
   }
 
+  // --- Révision de la commande envoyée (fenêtres 1 et 2) --------------------
+
+  function seedEditItemsFromOrder(): Record<number, EditLine> {
+    const seeded: Record<number, EditLine> = {};
+    for (const item of trackedOrder?.items ?? []) {
+      seeded[item.menu_item_id] = {
+        menuItemId: item.menu_item_id,
+        name: item.menu_item_name,
+        unitPrice: item.unit_price,
+        quantity: item.quantity,
+        notes: item.notes ?? "",
+        isShared: item.is_shared,
+      };
+    }
+    return seeded;
+  }
+
+  function snapshotOriginalQuantities(seeded: Record<number, EditLine>) {
+    const snapshot: Record<number, number> = {};
+    for (const line of Object.values(seeded)) snapshot[line.menuItemId] = line.quantity;
+    setOriginalQuantities(snapshot);
+  }
+
+  // Fenêtre 1 : tant que rien n'a encore été confirmé, la commande s'édite
+  // directement, sans validation.
+  function startEditingOrder() {
+    if (!trackedOrder) return;
+    setEditIntent("self");
+    const seeded = seedEditItemsFromOrder();
+    setEditItems(seeded);
+    snapshotOriginalQuantities(seeded);
+    setEditError(null);
+    setEditingOrder(true);
+  }
+
+  // Fenêtre 2 : commande déjà confirmée (jusqu'en cuisine) — composer ici ne
+  // fait qu'esquisser la demande, `sendModificationRequest` l'envoie.
+  function startRequestingModification() {
+    if (!trackedOrder) return;
+    setEditIntent("request");
+    const seeded = seedEditItemsFromOrder();
+    setEditItems(seeded);
+    snapshotOriginalQuantities(seeded);
+    setEditError(null);
+    setEditingOrder(true);
+  }
+
+  function editIncrement(item: MenuItem) {
+    setEditItems((prev) => {
+      const existing = prev[item.id];
+      return {
+        ...prev,
+        [item.id]: {
+          menuItemId: item.id,
+          name: item.name,
+          unitPrice: item.price,
+          quantity: (existing?.quantity ?? 0) + 1,
+          notes: existing?.notes ?? "",
+          isShared: existing?.isShared ?? false,
+        },
+      };
+    });
+  }
+
+  function editDecrement(menuItemId: number) {
+    setEditItems((prev) => {
+      const existing = prev[menuItemId];
+      if (!existing) return prev;
+      if (existing.quantity <= 1) {
+        const next = { ...prev };
+        delete next[menuItemId];
+        return next;
+      }
+      return { ...prev, [menuItemId]: { ...existing, quantity: existing.quantity - 1 } };
+    });
+  }
+
+  function editSetNote(menuItemId: number, notes: string) {
+    setEditItems((prev) => (prev[menuItemId] ? { ...prev, [menuItemId]: { ...prev[menuItemId], notes } } : prev));
+  }
+
+  function editSetShared(menuItemId: number, isShared: boolean) {
+    setEditItems((prev) =>
+      prev[menuItemId] ? { ...prev, [menuItemId]: { ...prev[menuItemId], isShared } } : prev
+    );
+  }
+
+  const editTotal = Object.values(editItems).reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+
+  async function saveOrderEdits() {
+    if (!trackedOrder || !orderToken) return;
+    const items = Object.values(editItems).map((l) => ({
+      menu_item_id: l.menuItemId,
+      quantity: l.quantity,
+      notes: l.notes || null,
+      is_shared: l.isShared,
+    }));
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const updated = await api.updateOrderItems(trackedOrder.id, orderToken, items);
+      setTrackedOrder(updated);
+      setEditingOrder(false);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "ORDER_NOT_MODIFIABLE") {
+        // Le serveur vient de confirmer pile pendant l'édition : la fenêtre 1
+        // vient de se refermer, mais rien de ce que le client vient de
+        // composer n'est perdu — ça part comme demande de modification
+        // (fenêtre 2) au lieu d'un échec sec qui l'obligerait à recommencer.
+        setEditIntent("request");
+        await sendModificationRequest(items);
+        return;
+      }
+      setEditError(toLocalizedMessage(e, locale));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function sendModificationRequest(itemsOverride?: OrderItemPayload[]) {
+    if (!trackedOrder || !orderToken) return;
+    const items =
+      itemsOverride ??
+      Object.values(editItems).map((l) => ({
+        menu_item_id: l.menuItemId,
+        quantity: l.quantity,
+        notes: l.notes || null,
+        is_shared: l.isShared,
+      }));
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const request = await api.requestModification(trackedOrder.id, orderToken, items);
+      setTrackedOrder((prev) => (prev ? { ...prev, pending_modification_request: request } : prev));
+      setLastResolution(null);
+      setEditingOrder(false);
+    } catch (e) {
+      setEditError(toLocalizedMessage(e, locale));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   function setShared(itemId: number, shared: boolean) {
     setCart((prev) =>
       prev[itemId]
@@ -1002,6 +1217,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   function addSuggestionAndOrderAgain(item: MenuItem) {
     addToCart(item, true);
+    orderAgain();
+  }
+
+  // "Commander séparément" un ajout refusé (fenêtre 2, réponse partielle) —
+  // même mécanique que addSuggestionAndOrderAgain : la cuisine ne peut rien
+  // rattacher à la commande déjà en cours, mais rien n'empêche d'en ouvrir
+  // une nouvelle pour cet article précis.
+  function orderDeclinedLineSeparately(line: ModificationLine) {
+    const menuItem = menu.find((m) => m.id === line.menu_item_id);
+    if (!menuItem) return;
+    addToCart(menuItem, false);
     orderAgain();
   }
 
@@ -1159,8 +1385,199 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   if (trackedOrder) {
+    if (editingOrder) {
+      const editCategories = Array.from(new Set(menu.map((m) => m.category)));
+      return (
+        <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pt-[20px] px-[18px] pb-[26px] max-w-md mx-auto ${wrapperClassName ?? ""}`}>
+          <button
+            onClick={() => setEditingOrder(false)}
+            className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--ink-soft)] py-1.5"
+          >
+            <ChevronLeftIcon className="w-4 h-4 shrink-0" />
+            {t.editOrderCancel}
+          </button>
+
+          <h1 className={`${lalezar.className} mt-2 text-[22px] leading-tight text-center text-[var(--encre)]`}>
+            {editIntent === "request" ? t.requestModificationButton : t.editOrderTitle}
+          </h1>
+          <p className="mt-1 text-[12.5px] text-center text-[var(--ink-soft)]">
+            {t.orderSubtitle(table.label, trackedOrder.id)}
+          </p>
+
+          <div className="mt-4 flex items-start gap-2 rounded-xl py-[11px] px-3 text-[12.5px] leading-[1.45] bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)]">
+            <ClockIcon className="w-[14px] h-[14px] shrink-0 mt-0.5" />
+            <span>{editIntent === "request" ? t.requestEditBanner : t.modifyOrderHint}</span>
+          </div>
+
+          {editError && (
+            <p className="mt-3 text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
+              {editError}
+            </p>
+          )}
+
+          {Object.keys(editItems).length > 0 && (
+            <>
+              <p className="mt-6 mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+                {t.orderDetailsTitle}
+              </p>
+              <div className="space-y-2.5">
+                {Object.values(editItems).map((line) => (
+                  <div key={line.menuItemId} className="bg-white border border-[var(--line)] rounded-xl p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[14.5px] font-semibold">{line.name}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
+                        {formatAmount(line.unitPrice)} {t.currency}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => editDecrement(line.menuItemId)}
+                          aria-label={t.removeFromCartAria(line.name)}
+                          className="w-[34px] h-[34px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                        >
+                          −
+                        </button>
+                        <span className="inline-flex items-baseline justify-center gap-1 min-w-[16px] text-center text-[14px] font-bold tabular-nums">
+                          {(originalQuantities[line.menuItemId] ?? 0) !== line.quantity && (
+                            <span className="text-[12px] font-semibold text-[var(--ink-faint)] line-through">
+                              {originalQuantities[line.menuItemId] ?? 0}
+                            </span>
+                          )}
+                          {line.quantity}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const menuItem = menu.find((m) => m.id === line.menuItemId);
+                            if (menuItem) editIncrement(menuItem);
+                          }}
+                          aria-label={t.addToCartAria(line.name)}
+                          className="w-[34px] h-[34px] rounded-full text-[19px] leading-none shadow-sm transition-transform active:scale-90 bg-[var(--harissa)] text-[var(--semoule)]"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      value={line.notes}
+                      onChange={(e) => editSetNote(line.menuItemId, e.target.value)}
+                      placeholder={t.notePlaceholder}
+                      className="mt-2.5 w-full text-xs bg-white border border-[var(--line)] rounded-[10px] px-[10px] py-2 placeholder:text-[var(--ink-soft)]"
+                    />
+                    <label className="mt-2 flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={line.isShared}
+                        onChange={(e) => editSetShared(line.menuItemId, e.target.checked)}
+                        className="sr-only"
+                      />
+                      <span
+                        className="w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: line.isShared ? "var(--menthe)" : "#fff",
+                          borderColor: line.isShared ? "var(--menthe)" : "var(--line-strong)",
+                        }}
+                      >
+                        {line.isShared && (
+                          <svg viewBox="0 0 24 24" className="w-[11px] h-[11px]" fill="none" stroke="var(--semoule)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 12l5 5L20 6" />
+                          </svg>
+                        )}
+                      </span>
+                      <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
+                      <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <p className="mt-6 mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+            {t.suggestionAdd}
+          </p>
+          {editCategories.map((category) => {
+            const addable = menu.filter(
+              // Un article déjà dans la commande a déjà ses propres contrôles
+              // dans "Détail de la commande" ci-dessus : le montrer une
+              // seconde fois ici prêtait à confusion (deux "+" pour la même
+              // ligne, l'un des deux toujours de trop) — et une catégorie
+              // entièrement déjà ajoutée n'a plus rien à afficher.
+              (m) => m.category === category && m.is_available && !editItems[m.id]
+            );
+            if (addable.length === 0) return null;
+            return (
+            <div key={category} className="mb-3">
+              <p className="mb-1.5 text-[12px] font-semibold text-[var(--ink-soft)]">
+                {menuCategoryLabel(category, locale)}
+              </p>
+              <div className="space-y-2">
+                {addable.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2.5 bg-white border border-[var(--line)] rounded-xl px-3 py-2.5"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13.5px] font-semibold truncate">{item.name}</div>
+                        <div className="text-[12px] font-bold tabular-nums text-[var(--harissa)]">
+                          {formatAmount(item.price)} {t.currency}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => editIncrement(item)}
+                        aria-label={t.addToCartAria(item.name)}
+                        className="w-[30px] h-[30px] rounded-full text-[16px] leading-none shrink-0 bg-[var(--harissa)] text-[var(--semoule)]"
+                      >
+                        +
+                      </button>
+                    </div>
+                ))}
+              </div>
+            </div>
+            );
+          })}
+
+          <div className="mt-6 bg-[var(--semoule-raised)] border border-[var(--line)] rounded-2xl p-3.5">
+            <div className="flex justify-between items-baseline mb-0.5">
+              <span className="text-[13px] font-semibold text-[var(--ink-soft)]">
+                {editIntent === "request" ? t.requestEditNewTotalLabel : t.total}
+              </span>
+              <span className="text-[19px] font-bold tabular-nums text-[var(--encre)]">
+                {formatAmount(editTotal)} {t.currency}
+              </span>
+            </div>
+            {editIntent === "request" && (
+              <p className="mb-2.5 text-[11px] text-[var(--ink-faint)]">
+                {t.requestEditCurrentTotal(`${formatAmount(trackedOrder.total_amount)} ${t.currency}`)}
+              </p>
+            )}
+            <button
+              onClick={editIntent === "request" ? () => sendModificationRequest() : saveOrderEdits}
+              disabled={savingEdit || Object.keys(editItems).length === 0}
+              className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-3 font-bold text-[14.5px] shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
+            >
+              {savingEdit ? t.sending : editIntent === "request" ? t.requestEditSend : t.editOrderSave}
+            </button>
+            {editIntent === "request" && (
+              <p className="mt-2 text-[11px] text-center text-[var(--ink-soft)] leading-[1.4]">
+                {t.requestEditSubcopy}
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     const currentDisplayIndex = displayStepIndex(trackedOrder.status as StepStatus);
     const cancelled = trackedOrder.status === "cancelled";
+    // Fenêtre 2 : la commande est confirmée mais pas encore prête — même
+    // fenêtre que l'étape affichée "En cuisine" (displayStepIndex regroupe
+    // déjà SENT_TO_KITCHEN et IN_PREPARATION), plus CONFIRMED pour le cas
+    // rare où le serveur confirme sans enchaîner tout de suite sur l'envoi.
+    const kitchenModificationWindow = (
+      ["confirmed", "sent_to_kitchen", "in_preparation"] as OrderStatus[]
+    ).includes(trackedOrder.status);
     return (
       <>
         {showCelebration && <CelebrationOverlay />}
@@ -1187,7 +1604,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         {/* Même `data-visite` que le bouton d'appel de la carte, plus bas : les
             deux écrans ne coexistent jamais (celui-ci sort par un retour
             anticipé), et la visite trouve sa cible sur l'un comme sur l'autre. */}
-        <div className="mt-4 text-center" data-visite="client-appel">
+        <div className="mt-4 flex justify-center gap-2 flex-wrap" data-visite="client-appel">
           <button
             onClick={callWaiter}
             disabled={waiterCallState !== "idle"}
@@ -1202,8 +1619,95 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </>
             )}
           </button>
-          {waiterCallError && <p className="mt-2 text-sm text-[var(--harissa)]">{waiterCallError}</p>}
+          {/* Fenêtre 1 : rien n'a encore été confirmé, la commande s'édite
+              directement. */}
+          {trackedOrder.status === "pending_confirmation" && (
+            <button
+              onClick={startEditingOrder}
+              className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-[11px]"
+            >
+              <PencilIcon className="w-[14px] h-[14px] shrink-0" />
+              {t.modifyOrderButton}
+            </button>
+          )}
+          {/* Fenêtre 2 : commande déjà confirmée, jusqu'en cuisine — toute
+              modification passe désormais par une demande. */}
+          {kitchenModificationWindow && (
+            <button
+              onClick={startRequestingModification}
+              disabled={!!trackedOrder.pending_modification_request}
+              className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-[11px] disabled:opacity-70"
+            >
+              {trackedOrder.pending_modification_request ? (
+                t.requestSentButton
+              ) : (
+                <>
+                  <PencilIcon className="w-[14px] h-[14px] shrink-0" />
+                  {t.requestModificationButton}
+                </>
+              )}
+            </button>
+          )}
         </div>
+        {waiterCallError && <p className="mt-2 text-sm text-center text-[var(--harissa)]">{waiterCallError}</p>}
+        {trackedOrder.status === "pending_confirmation" && (
+          <p className="mt-1.5 flex items-center justify-center gap-1 text-[11.5px] text-[var(--ink-soft)] text-center">
+            <ClockIcon className="w-3 h-3 shrink-0" />
+            {t.modifyOrderHint}
+          </p>
+        )}
+        {kitchenModificationWindow && !trackedOrder.pending_modification_request && (
+          <p className="mt-1.5 flex items-center justify-center gap-1 text-[11.5px] text-[var(--ink-soft)] text-center">
+            <ClockIcon className="w-3 h-3 shrink-0" />
+            {t.requestModificationHint}
+          </p>
+        )}
+        {trackedOrder.pending_modification_request && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl py-[11px] px-3 text-[12.5px] leading-[1.45] bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)]">
+            <ClockIcon className="w-[14px] h-[14px] shrink-0 mt-0.5" />
+            <span>{t.requestPendingBanner}</span>
+          </div>
+        )}
+        {lastResolution && (
+          <div className="mt-4 border border-[var(--line)] bg-[var(--semoule-raised)] rounded-xl p-3">
+            <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+              {t.requestOutcomeTitle}
+            </p>
+            <div className="space-y-2">
+              {lastResolution.map((line) => (
+                <div key={line.id} className="flex items-start gap-2">
+                  <span
+                    className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+                    style={{
+                      backgroundColor: line.status === "accepted" ? "var(--menthe)" : "var(--ink-soft)",
+                      color: "var(--semoule)",
+                    }}
+                  >
+                    {line.status === "accepted" ? "✓" : "✗"}
+                  </span>
+                  <div>
+                    <span className="text-[13px] text-[var(--encre)]">
+                      <strong>{line.menu_item_name}</strong>
+                      {" — "}
+                      {line.status === "accepted" ? t.requestLineAccepted : t.requestLineDeclined}
+                    </span>
+                    {/* Un retrait refusé n'a aucune suite possible (l'article
+                        reste tel quel) — seul un ajout refusé peut encore
+                        partir comme commande séparée. */}
+                    {line.status === "declined" && line.previous_quantity === 0 && (
+                      <button
+                        onClick={() => orderDeclinedLineSeparately(line)}
+                        className="mt-1 block text-[12px] font-semibold text-[var(--harissa)] underline"
+                      >
+                        {t.requestOrderSeparately}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {!cancelled && trackedOrder.scheduled_for && (
           <p className="mt-4 text-sm text-center bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)] rounded-xl py-2 px-3 flex items-center justify-center gap-1.5">
@@ -1301,17 +1805,24 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </ol>
         )}
 
-        {!cancelled && inKitchenWait && (
+        {!cancelled && showCulturalFacts && (
           <div className="mt-4 text-[12.5px] leading-[1.5] rounded-xl py-[11px] px-3 flex items-start gap-2 bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--encre)]">
             <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton)]" />
-            <span>{CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"][culturalFactIndex]}</span>
+            <span>{culturalFacts[culturalFactIndex]}</span>
           </div>
         )}
 
         <div className="mt-8 border-t border-[var(--line)] pt-[14px]">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)] mb-2">
-            {t.orderDetailsTitle}
-          </p>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+              {t.orderDetailsTitle}
+            </p>
+            {trackedOrder.items_updated_at && (
+              <span className="text-[11px] text-[var(--ink-faint)] italic">
+                {t.itemsUpdatedAt(formatTime(trackedOrder.items_updated_at))}
+              </span>
+            )}
+          </div>
           <ul className="text-[13px] leading-[1.75] text-[var(--ink-soft)] space-y-0">
             {trackedOrder.items.map((it) => (
               <li key={it.id}>
@@ -1610,11 +2121,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   ))}
                 </span>
               )}
-              {!item.is_halal && (
-                <span className="ms-1 text-xs font-normal text-[var(--harissa)] border border-[var(--harissa)] rounded px-1 align-middle">
-                  {t.notHalalBadge}
-                </span>
-              )}
+              {/* Le badge signale l'EXCEPTION au marché, jamais sa norme
+                  (F5/A6, retour terrain 2026-09-04) — comme un régime, on
+                  tague le cas notable, pas la valeur par défaut. En Tunisie
+                  (défaut halal), l'exception est "Non halal" ; en France
+                  (défaut non-halal), l'exception est "Halal". Jamais les
+                  deux badges affichés en même temps. */}
+              {currentMarket.defaultHalal
+                ? !item.is_halal && (
+                    <span className="ms-1 text-xs font-normal text-[var(--harissa)] border border-[var(--harissa)] rounded px-1 align-middle">
+                      {t.notHalalBadge}
+                    </span>
+                  )
+                : item.is_halal && (
+                    <span className="ms-1 text-xs font-normal text-[var(--menthe)] border border-[var(--menthe)] rounded px-1 align-middle">
+                      {t.halalBadge}
+                    </span>
+                  )}
             </div>
             {item.description && (
               <div className="text-[12.5px] leading-[1.35] text-[var(--ink-soft)] mt-[3px]">{item.description}</div>
@@ -1775,7 +2298,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         onClick={toggleLocale}
         className="min-h-[44px] inline-flex items-center text-xs font-semibold bg-[rgba(36,24,17,.2)] border border-[rgba(246,239,221,.34)] rounded-full px-3 py-[11px] whitespace-nowrap"
       >
-        {t.localeSwitchLabel}
+        {localeSwitchLabel(locale)}
       </button>
       <button
         onClick={callWaiter}

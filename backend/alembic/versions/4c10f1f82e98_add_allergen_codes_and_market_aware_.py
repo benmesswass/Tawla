@@ -1,7 +1,7 @@
 """add allergen codes and market aware halal default
 
 Revision ID: 4c10f1f82e98
-Revises: 080e1bc60b7b
+Revises: f620a92ca76a
 Create Date: 2026-09-04 10:40:56.420430
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '4c10f1f82e98'
-down_revision: Union[str, None] = '080e1bc60b7b'
+down_revision: Union[str, None] = 'f620a92ca76a'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
