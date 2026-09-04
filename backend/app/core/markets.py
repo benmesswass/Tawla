@@ -51,6 +51,12 @@ class Market:
     vat_rates: dict[str, float] | None
     # Seuil de note obligatoire (25 € TTC en France, arrêté du 3 octobre 1983).
     invoice_threshold: float | None
+    # Valeur par défaut d'`is_halal` à la création d'un article (F5/A6) — la
+    # quasi-totalité des restos TUNISIENS sont halal (la norme, pas
+    # l'exception) ; en France, l'exception inverse (halal signalé, pas
+    # supposé). Jamais un `current_market.code == "fr"` en dur ailleurs dans
+    # le code — cette valeur est le seul endroit où vit cette règle.
+    default_halal: bool
 
 
 TUNISIA = Market(
@@ -67,6 +73,7 @@ TUNISIA = Market(
     },
     vat_rates=None,
     invoice_threshold=None,
+    default_halal=True,
 )
 
 FRANCE = Market(
@@ -83,6 +90,7 @@ FRANCE = Market(
     },
     vat_rates={"sur_place": 0.10, "a_emporter": 0.055, "alcool": 0.20},
     invoice_threshold=25.0,
+    default_halal=False,
 )
 
 _MARKETS: dict[str, Market] = {"tn": TUNISIA, "fr": FRANCE}
