@@ -12,7 +12,6 @@ export const ar = {
   // propre variante arabe littéraire (§6 F1 de MARCHE_FRANCE.md), elle aura
   // son propre dictionnaire, pas ce symbole rendu dynamique ici.
   currency: "د.ت",
-  localeSwitchLabel: "Français",
 
   retry: "عاود المحاولة",
   loadingMenu: "قاعد يحمّل المينيو...",
