@@ -232,6 +232,50 @@ export type OrderStatus =
 export type PaymentMethod = "card" | "card_terminal" | "cash";
 export type PaymentStatus = "unpaid" | "pending" | "paid";
 
+/**
+ * Une ligne de panier telle qu'envoyée au backend — forme commune à la
+ * création d'une commande, son édition directe (fenêtre 1) et une demande de
+ * modification (fenêtre 2), pour que les trois ne divergent jamais.
+ */
+export type OrderItemPayload = {
+  menu_item_id: number;
+  quantity: number;
+  notes?: string | null;
+  is_shared?: boolean;
+  shared_with?: number[];
+  from_suggestion?: boolean;
+  selected_option_ids?: number[];
+};
+
+export type ModificationLineStatus = "pending" | "accepted" | "declined";
+
+/** Une ligne d'une demande de modification (fenêtre 2) : un article dont la
+ *  quantité demandée diffère de la quantité actuelle de la commande —
+ *  `previous_quantity` à 0 pour un ajout, `requested_quantity` à 0 pour un
+ *  retrait complet. */
+export type ModificationLine = {
+  id: number;
+  menu_item_id: number;
+  menu_item_name: string;
+  unit_price: number;
+  previous_quantity: number;
+  requested_quantity: number;
+  notes: string | null;
+  is_shared: boolean;
+  status: ModificationLineStatus;
+};
+
+export type ModificationRequest = {
+  id: number;
+  order_id: number;
+  table_id: number;
+  table_label: string;
+  status: "pending" | "resolved";
+  created_at: string;
+  resolved_at: string | null;
+  lines: ModificationLine[];
+};
+
 export type Order = {
   id: number;
   restaurant_id: number;
@@ -243,6 +287,14 @@ export type Order = {
   taken_by_staff_id: number | null;
   taken_by_staff_name: string | null;
   created_at: string;
+  // Posé uniquement par une édition directe du client (fenêtre "modifier la
+  // commande" tant qu'elle est en attente de confirmation) — jamais par une
+  // transition de statut. Sert à afficher "Modifiée à HH:MM" côté client et
+  // le badge "Modifiée" côté pool serveur.
+  items_updated_at: string | null;
+  // Non-null tant qu'au moins une ligne de la dernière demande de
+  // modification (fenêtre 2) attend une réponse du serveur.
+  pending_modification_request: ModificationRequest | null;
   scheduled_for: string | null;
   sent_to_kitchen_at: string | null;
   preparation_started_at: string | null;
@@ -640,15 +692,7 @@ export const api = {
     // Le token du QR scanné, d'où le backend déduit la table et le restaurant :
     // aucun identifiant numérique n'est envoyé par le client (Phase 12.2).
     qr_token: string;
-    items: {
-      menu_item_id: number;
-      quantity: number;
-      notes?: string | null;
-      is_shared?: boolean;
-      shared_with?: number[];
-      from_suggestion?: boolean;
-      selected_option_ids?: number[];
-    }[];
+    items: OrderItemPayload[];
     scheduled_for?: string | null;
     loyalty_phone?: string | null;
     loyalty_birth_date?: string | null;
@@ -659,6 +703,42 @@ export const api = {
   }) => request<OrderCreated>("/api/v1/orders", { method: "POST", body: JSON.stringify(payload) }),
   getOrder: (orderId: number, orderToken: string) =>
     request<Order>(`/api/v1/orders/${orderId}`, { headers: orderHeaders(orderToken) }),
+  /**
+   * Édition directe par le client — uniquement tant que la commande est
+   * encore en attente de confirmation (409 `ORDER_NOT_MODIFIABLE` sinon, à
+   * rejouer vers `requestModification`). Le panier envoyé remplace
+   * entièrement le contenu de la commande, jamais un delta.
+   */
+  updateOrderItems: (orderId: number, orderToken: string, items: OrderItemPayload[]) =>
+    request<Order>(`/api/v1/orders/${orderId}/items`, {
+      method: "PUT",
+      headers: orderHeaders(orderToken),
+      body: JSON.stringify({ items }),
+    }),
+  /**
+   * Fenêtre 2 — la commande est déjà confirmée : ceci n'applique rien tout de
+   * suite, ça crée une demande que le serveur doit valider avec la cuisine.
+   * Même forme de panier que `updateOrderItems`.
+   */
+  requestModification: (orderId: number, orderToken: string, items: OrderItemPayload[]) =>
+    request<ModificationRequest>(`/api/v1/orders/${orderId}/modification-requests`, {
+      method: "POST",
+      headers: orderHeaders(orderToken),
+      body: JSON.stringify({ items }),
+    }),
+  listPendingModificationRequests: (restaurantId: number) =>
+    request<ModificationRequest[]>(
+      `/api/v1/orders/by-restaurant/${restaurantId}/pending-modification-requests`
+    ),
+  resolveModificationRequest: (
+    orderId: number,
+    requestId: number,
+    decisions: { line_id: number; accepted: boolean }[]
+  ) =>
+    request<ModificationRequest>(`/api/v1/orders/${orderId}/modification-requests/${requestId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ decisions }),
+    }),
   listActiveOrders: (restaurantId: number) =>
     request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/active`),
   claimOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/claim`, { method: "POST" }),

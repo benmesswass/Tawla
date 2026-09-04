@@ -39,6 +39,68 @@ async def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_d
     return await service.create_order(db, payload)
 
 
+@router.put("/{order_id}/items", response_model=schemas.OrderOut)
+async def update_order_items(
+    payload: schemas.OrderItemsUpdate,
+    order: Order = Depends(get_order_by_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Le client modifie lui-même sa commande — uniquement tant qu'elle est
+    encore en attente de confirmation (409 sinon, voir service.py). Passé la
+    confirmation, une modification passe par
+    `POST /{order_id}/modification-requests`.
+    """
+    return await service.update_order_items(db, order, payload)
+
+
+@router.post(
+    "/{order_id}/modification-requests", response_model=schemas.ModificationRequestOut, status_code=201
+)
+async def create_modification_request(
+    payload: schemas.ModificationRequestCreate,
+    order: Order = Depends(get_order_by_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Le client demande une modification — fenêtre 2, une fois la commande déjà
+    confirmée. Le serveur doit vérifier avec la cuisine avant d'appliquer quoi
+    que ce soit (voir `/modification-requests/{request_id}/resolve`).
+    """
+    return await service.create_modification_request(db, order, payload)
+
+
+@router.get(
+    "/by-restaurant/{restaurant_id}/pending-modification-requests",
+    response_model=list[schemas.ModificationRequestOut],
+)
+async def list_pending_modification_requests(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+):
+    """Demandes de modification en attente d'une réponse — file dédiée du
+    pool serveur."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return await service.list_pending_modification_requests(db, restaurant_id)
+
+
+@router.post(
+    "/{order_id}/modification-requests/{request_id}/resolve", response_model=schemas.ModificationRequestOut
+)
+async def resolve_modification_request(
+    order_id: int,
+    request_id: int,
+    payload: schemas.ModificationRequestResolve,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_WAITER_OR_MANAGER),
+):
+    """Le serveur répond ligne par ligne, après vérification avec la cuisine."""
+    order = db.get(Order, order_id)
+    if not order or order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    return await service.resolve_modification_request(db, order, request_id, payload.decisions, staff)
+
+
 @router.get("/by-restaurant/{restaurant_id}/active", response_model=list[schemas.OrderOutStaff])
 async def list_active_orders(
     restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(require_active_restaurant)

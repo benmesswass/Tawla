@@ -17,3 +17,6 @@ export { default as FacebookIcon } from "./FacebookIcon";
 export { default as InstagramIcon } from "./InstagramIcon";
 export { default as TikTokIcon } from "./TikTokIcon";
 export { default as WhatsAppIcon } from "./WhatsAppIcon";
+export { default as PencilIcon } from "./PencilIcon";
+export { default as ChevronLeftIcon } from "./ChevronLeftIcon";
+export { default as ClockIcon } from "./ClockIcon";

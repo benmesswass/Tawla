@@ -40,6 +40,31 @@ export const fr = {
   preorderBadge: (time: string) => `Pré-commande pour l'iftar — préparation prévue pour ${time}.`,
   dedicatedServer: (staffName: string) => `${staffName} est votre serveur dédié pour cette commande.`,
 
+  // Modification directe (fenêtre 1, tant que la commande est en attente de
+  // confirmation) — voir orders/service.py::update_order_items.
+  modifyOrderButton: "Modifier la commande",
+  modifyOrderHint: "Modifiable tant que le serveur n'a pas confirmé",
+  editOrderTitle: "Modifier la commande",
+  editOrderSave: "Enregistrer les modifications",
+  editOrderCancel: "Annuler",
+  itemsUpdatedAt: (heure: string) => `Modifiée à ${heure}`,
+
+  // Demande de modification (fenêtre 2, une fois la commande confirmée) —
+  // voir orders/service.py::create_modification_request/resolve_modification_request.
+  requestModificationButton: "Demander une modification",
+  requestModificationHint: "Le serveur doit valider avec la cuisine avant toute modification",
+  requestEditBanner: "Cette demande doit être validée par le serveur avec la cuisine avant d'être appliquée.",
+  requestEditSend: "Envoyer la demande de modification",
+  requestEditSubcopy: "Le serveur vérifiera avec la cuisine avant d'appliquer ces changements.",
+  requestEditNewTotalLabel: "Nouveau total si accepté",
+  requestEditCurrentTotal: (total: string) => `Total actuel de la commande : ${total}`,
+  requestSentButton: "✓ Demande envoyée",
+  requestPendingBanner: "Demande envoyée — en attente de la réponse du serveur.",
+  requestOutcomeTitle: "Réponse du serveur",
+  requestLineAccepted: "accepté",
+  requestLineDeclined: "refusé",
+  requestOrderSeparately: "Commander séparément",
+
   trackingSteps: {
     received: "Commande reçue",
     confirmed: "Confirmée par le serveur",
