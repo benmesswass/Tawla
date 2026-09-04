@@ -1,4 +1,13 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+# Clés de `core/markets.py::FRANCE.vat_rates` — le seul marché à en définir
+# aujourd'hui. Validé ici (contrairement à `category`/`allergens`, du texte
+# libre assumé) car une clé qui ne correspond à AUCUN taux du marché servi
+# romprait silencieusement la ventilation TVA de la facture (`.get()` sans
+# valeur trouvée) plutôt que de lever une erreur au moment de la saisie.
+VatCategory = Literal["sur_place", "a_emporter", "alcool"]
 
 
 class MenuItemOptionOut(BaseModel):
@@ -98,6 +107,7 @@ class MenuItemCreate(BaseModel):
     spice_level: int = Field(default=0, ge=0, le=3)
     allergens: str | None = None
     is_halal: bool = True
+    vat_category: VatCategory | None = None
 
 
 class MenuItemOut(BaseModel):
@@ -114,6 +124,7 @@ class MenuItemOut(BaseModel):
     spice_level: int
     allergens: str | None
     is_halal: bool
+    vat_category: str | None
     option_groups: list[MenuItemOptionGroupOut] = Field(default_factory=list)
     regimes: list[MenuRegimeOut] = Field(default_factory=list)
 
@@ -174,3 +185,4 @@ class MenuItemUpdate(BaseModel):
     spice_level: int | None = Field(default=None, ge=0, le=3)
     allergens: str | None = None
     is_halal: bool | None = None
+    vat_category: VatCategory | None = None
