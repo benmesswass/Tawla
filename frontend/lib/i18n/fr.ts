@@ -7,13 +7,17 @@ import { formatMoney } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
 
 export const fr = {
-  locale: "fr" as "fr" | "ar",
+  locale: "fr" as "fr" | "ar" | "en",
   dir: "ltr" as "ltr" | "rtl",
   // Symbole du marché courant, jamais "DT" en dur : le français sert les deux
   // marchés (TN et FR), l'arabe (ar.ts) reste écrit pour la Tunisie seule
   // pour l'instant — voir sa propre valeur, fixe, à cet endroit.
   currency: currentMarket.currency.symbol,
-  localeSwitchLabel: "عربي",
+  // Le français sert les DEUX marchés, mais chacun bascule vers une langue
+  // différente (Tunisie : derja tunisienne : France : anglais, F5/A9 — voir
+  // `Market.languages`, jamais les deux en dur ici) : même raisonnement que
+  // `currency` juste au-dessus, calculé une fois au chargement du module.
+  localeSwitchLabel: currentMarket.languages.includes("en") ? "English" : "عربي",
 
   retry: "Réessayer",
   loadingMenu: "Chargement du menu...",
