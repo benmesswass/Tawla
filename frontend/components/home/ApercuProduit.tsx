@@ -18,9 +18,12 @@ import EcranCarrousel, { type EtapeCarrousel } from "@/components/home/EcranCarr
  *
  * Client, Manager et Serveur sont un CARROUSEL de plusieurs écrans distincts
  * (EcranCarrousel) — retour de Wassim du 2026-09-03 : « je veux 3 iPhones
- * distincts côte à côte », pas un seul écran dont le contenu change. La
- * Cuisine reste un poste fixe unique, sans carrousel (son vrai fonctionnement
- * à onglets tient déjà sur un seul écran).
+ * distincts côte à côte », pas un seul écran dont le contenu change. Chaque
+ * écran affiche en haut un onglet (Menu/Panier/Suivi/Paiement, etc. — retour
+ * de Wassim du 2026-09-04) qui navigue directement le carrousel au clic,
+ * plutôt qu'une liste de libellés externe sous les téléphones. La Cuisine
+ * reste un poste fixe unique, sans carrousel (son vrai fonctionnement à
+ * onglets tient déjà sur un seul écran).
  *
  * Données Dar Chaabane (Tunisie) et Le Petit Bouchon (France) — un restaurant
  * de démo par marché, jamais le même sur les deux (même raison que
@@ -201,11 +204,37 @@ export default function ApercuProduit() {
   );
 }
 
-function EnTete({ label, titre }: { label: string; titre?: string }) {
+/**
+ * Onglets en haut de CHAQUE écran (retour de Wassim, 2026-09-04) — jamais une
+ * liste de libellés externe sous le carrousel : cliquer un onglet sur
+ * n'importe quel écran, même flouté/assombri (le voile de EcranCarrousel est
+ * `pointer-events-none`), navigue directement jusqu'à cet écran.
+ */
+function TabsEcran({
+  labels,
+  actifId,
+  onSelect,
+}: {
+  labels: { id: string; label: string }[];
+  actifId: string;
+  onSelect: (id: string) => void;
+}) {
   return (
-    <div className="px-4 pt-3.5 pb-2.5">
-      <p className="text-[9.5px] font-bold uppercase tracking-wide text-[var(--ink-faint)]">{label}</p>
-      {titre && <h3 className="text-lg mt-0.5 text-[var(--encre)]">{titre}</h3>}
+    <div className="flex border-b border-[var(--line)] shrink-0">
+      {labels.map((l) => (
+        <button
+          key={l.id}
+          type="button"
+          onClick={() => onSelect(l.id)}
+          className={`flex-1 min-w-0 truncate text-center py-2 px-1 text-[10px] font-bold uppercase tracking-wide border-b-2 -mb-px transition-colors ${
+            l.id === actifId
+              ? "border-[var(--harissa)] text-[var(--harissa)]"
+              : "border-transparent text-[var(--ink-faint)]"
+          }`}
+        >
+          {l.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -218,21 +247,29 @@ function EnTete({ label, titre }: { label: string; titre?: string }) {
 // commande, Commande envoyée 🎉, la timeline à 5 étapes, Appeler le serveur,
 // Sans/5%/10%, les 3 boutons de paiement) est copié du vrai code, jamais
 // inventé.
+const LABELS_CLIENT = [
+  { id: "menu", label: "Menu" },
+  { id: "panier", label: "Panier" },
+  { id: "suivi", label: "Suivi" },
+  { id: "paiement", label: "Paiement" },
+];
+
 function CarrouselClient() {
   const etapes: EtapeCarrousel[] = [
-    { id: "menu", label: "Menu", contenu: <EtapeMenu /> },
-    { id: "panier", label: "Panier", contenu: <EtapePanier /> },
-    { id: "suivi", label: "Suivi", contenu: <EtapeSuivi /> },
-    { id: "paiement", label: "Paiement", contenu: <EtapePaiement /> },
+    { id: "menu", label: "Menu", contenu: (irA) => <EtapeMenu irA={irA} /> },
+    { id: "panier", label: "Panier", contenu: (irA) => <EtapePanier irA={irA} /> },
+    { id: "suivi", label: "Suivi", contenu: (irA) => <EtapeSuivi irA={irA} /> },
+    { id: "paiement", label: "Paiement", contenu: (irA) => <EtapePaiement irA={irA} /> },
   ];
   return <EcranCarrousel device="phone" etapes={etapes} />;
 }
 
-function EtapeMenu() {
+function EtapeMenu({ irA }: { irA: (id: string) => void }) {
   const [categorie, setCategorie] = useState(0);
   return (
     <div className="h-full flex flex-col">
-      <div className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-3.5 pb-3">
+      <TabsEcran labels={LABELS_CLIENT} actifId="menu" onSelect={irA} />
+      <div className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-3 pb-3">
         <h3 className={`${lalezar.className} text-xl leading-none text-balance`}>{DEMO.restaurant}</h3>
         <p className="text-[11px] font-medium text-[rgba(246,239,221,.82)] mt-1">{DEMO.table}</p>
       </div>
@@ -272,12 +309,12 @@ function EtapeMenu() {
   );
 }
 
-function EtapePanier() {
+function EtapePanier({ irA }: { irA: (id: string) => void }) {
   const total = DEMO.panier.reduce((sum, l) => sum + l.prix, 0);
   return (
     <div className="h-full flex flex-col">
-      <EnTete label={DEMO.table} titre="Votre panier" />
-      <div className="px-4 space-y-3 flex-1">
+      <TabsEcran labels={LABELS_CLIENT} actifId="panier" onSelect={irA} />
+      <div className="px-4 pt-3 space-y-3 flex-1">
         {DEMO.panier.map((ligne) => (
           <div key={ligne.nom} className="flex items-center justify-between gap-2">
             <div className="min-w-0">
@@ -313,7 +350,7 @@ function EtapePanier() {
 
 // Timeline copiée de fr.ts (orderStatusLabels) : Commande reçue, Confirmée
 // par le serveur, En cuisine, Prête à servir, Servie.
-function EtapeSuivi() {
+function EtapeSuivi({ irA }: { irA: (id: string) => void }) {
   const etapes = [
     { texte: "Commande reçue", etat: "fait" as const },
     { texte: "Confirmée par le serveur", etat: "fait" as const },
@@ -322,76 +359,82 @@ function EtapeSuivi() {
     { texte: "Servie", etat: "reste" as const },
   ];
   return (
-    <div className="h-full px-4 pt-5 pb-4 flex flex-col">
-      <p className="text-base font-bold text-[var(--encre)]">Commande envoyée 🎉</p>
-      <p className="text-[11px] text-[var(--ink-faint)] mb-4">
-        {DEMO.table} — commande #{DEMO.commandeNumero}
-      </p>
-      <ol className="space-y-2 flex-1">
-        {etapes.map((e) => (
-          <li key={e.texte} className="flex items-center gap-2.5 text-xs">
-            <span
-              className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                e.etat === "fait"
-                  ? "bg-[var(--menthe)] text-white"
-                  : e.etat === "actif"
-                    ? "bg-[var(--harissa)] text-white"
-                    : "bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--ink-faint)]"
-              }`}
-            >
-              {e.etat === "fait" ? "✓" : ""}
-            </span>
-            <span
-              className={
-                e.etat === "reste" ? "text-[var(--ink-faint)]" : "text-[var(--encre)] font-semibold"
-              }
-            >
-              {e.texte}
-            </span>
-          </li>
-        ))}
-      </ol>
-      <span className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-2.5 self-start">
-        <BellIcon className="w-3.5 h-3.5 shrink-0" />
-        Appeler le serveur
-      </span>
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_CLIENT} actifId="suivi" onSelect={irA} />
+      <div className="px-4 pt-4 pb-4 flex-1 flex flex-col">
+        <p className="text-base font-bold text-[var(--encre)]">Commande envoyée 🎉</p>
+        <p className="text-[11px] text-[var(--ink-faint)] mb-4">
+          {DEMO.table} — commande #{DEMO.commandeNumero}
+        </p>
+        <ol className="space-y-2 flex-1">
+          {etapes.map((e) => (
+            <li key={e.texte} className="flex items-center gap-2.5 text-xs">
+              <span
+                className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                  e.etat === "fait"
+                    ? "bg-[var(--menthe)] text-white"
+                    : e.etat === "actif"
+                      ? "bg-[var(--harissa)] text-white"
+                      : "bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--ink-faint)]"
+                }`}
+              >
+                {e.etat === "fait" ? "✓" : ""}
+              </span>
+              <span
+                className={
+                  e.etat === "reste" ? "text-[var(--ink-faint)]" : "text-[var(--encre)] font-semibold"
+                }
+              >
+                {e.texte}
+              </span>
+            </li>
+          ))}
+        </ol>
+        <span className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-2.5 self-start">
+          <BellIcon className="w-3.5 h-3.5 shrink-0" />
+          Appeler le serveur
+        </span>
+      </div>
     </div>
   );
 }
 
 // Pourboire et 3 boutons copiés de app/menu/[qrToken]/page.tsx (tipNone,
 // payByCard, payByCardTerminal, payByCash) et du taux réel [0, 0.05, 0.1].
-function EtapePaiement() {
+function EtapePaiement({ irA }: { irA: (id: string) => void }) {
   const total = DEMO.panier.reduce((sum, l) => sum + l.prix, 0);
   return (
-    <div className="h-full px-4 pt-5 pb-4 flex flex-col">
-      <p className="text-base font-bold text-[var(--encre)]">Paiement</p>
-      <p className="text-[11px] text-[var(--ink-faint)] mb-4">Total à régler : {formatMoney(total)}</p>
-      <p className="text-[10.5px] text-[var(--ink-soft)] mb-1.5">Pourboire (facultatif, pour un paiement par carte)</p>
-      <div className="flex gap-1.5 mb-4">
-        {["Sans", "5%", "10%"].map((label, i) => (
-          <span
-            key={label}
-            className={`flex-1 text-center rounded-lg border py-1.5 text-xs font-semibold ${
-              i === 1
-                ? "bg-[var(--laiton)] border-[var(--laiton)] text-[var(--encre)]"
-                : "border-[var(--line)] text-[var(--encre)]"
-            }`}
-          >
-            {label}
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_CLIENT} actifId="paiement" onSelect={irA} />
+      <div className="px-4 pt-4 pb-4 flex-1 flex flex-col">
+        <p className="text-base font-bold text-[var(--encre)]">Paiement</p>
+        <p className="text-[11px] text-[var(--ink-faint)] mb-4">Total à régler : {formatMoney(total)}</p>
+        <p className="text-[10.5px] text-[var(--ink-soft)] mb-1.5">Pourboire (facultatif, pour un paiement par carte)</p>
+        <div className="flex gap-1.5 mb-4">
+          {["Sans", "5%", "10%"].map((label, i) => (
+            <span
+              key={label}
+              className={`flex-1 text-center rounded-lg border py-1.5 text-xs font-semibold ${
+                i === 1
+                  ? "bg-[var(--laiton)] border-[var(--laiton)] text-[var(--encre)]"
+                  : "border-[var(--line)] text-[var(--encre)]"
+              }`}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+        <div className="mt-auto space-y-1.5">
+          <span className="block text-center rounded-lg bg-[var(--harissa)] text-[var(--semoule)] py-2.5 text-xs font-bold">
+            Payer en ligne par carte
           </span>
-        ))}
-      </div>
-      <div className="mt-auto space-y-1.5">
-        <span className="block text-center rounded-lg bg-[var(--harissa)] text-[var(--semoule)] py-2.5 text-xs font-bold">
-          Payer en ligne par carte
-        </span>
-        <span className="block text-center rounded-lg border border-[var(--line)] text-[var(--encre)] py-2.5 text-xs font-semibold">
-          Carte à table (terminal serveur)
-        </span>
-        <span className="block text-center rounded-lg border border-[var(--line)] text-[var(--encre)] py-2.5 text-xs font-semibold">
-          Espèces (le serveur passe encaisser)
-        </span>
+          <span className="block text-center rounded-lg border border-[var(--line)] text-[var(--encre)] py-2.5 text-xs font-semibold">
+            Carte à table (terminal serveur)
+          </span>
+          <span className="block text-center rounded-lg border border-[var(--line)] text-[var(--encre)] py-2.5 text-xs font-semibold">
+            Espèces (le serveur passe encaisser)
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -404,101 +447,120 @@ function EtapePaiement() {
 // paliers ; Preuve reprend les 3 métriques réelles de dashboard/preuve
 // (Commandes annulées, Délai commande → cuisine, Panier moyen) ; Équipe
 // reprend la colonne "Panier moyen"/pourboires de dashboard/equipe.
+const LABELS_MANAGER = [
+  { id: "carte", label: "Carte" },
+  { id: "activite", label: "Activité" },
+  { id: "preuve", label: "Preuve" },
+  { id: "equipe", label: "Équipe" },
+];
+
 function CarrouselManager() {
   const etapes: EtapeCarrousel[] = [
-    { id: "carte", label: "Carte", contenu: <EtapeManagerCarte /> },
-    { id: "activite", label: "Activité", contenu: <EtapeManagerActivite /> },
-    { id: "preuve", label: "Preuve", contenu: <EtapeManagerPreuve /> },
-    { id: "equipe", label: "Équipe", contenu: <EtapeManagerEquipe /> },
+    { id: "carte", label: "Carte", contenu: (irA) => <EtapeManagerCarte irA={irA} /> },
+    { id: "activite", label: "Activité", contenu: (irA) => <EtapeManagerActivite irA={irA} /> },
+    { id: "preuve", label: "Preuve", contenu: (irA) => <EtapeManagerPreuve irA={irA} /> },
+    { id: "equipe", label: "Équipe", contenu: (irA) => <EtapeManagerEquipe irA={irA} /> },
   ];
   return <EcranCarrousel device="tablet" etapes={etapes} />;
 }
 
-function EtapeManagerCarte() {
+function EtapeManagerCarte({ irA }: { irA: (id: string) => void }) {
   return (
-    <div className="p-4">
-      <EnTeteTablette>Aujourd&apos;hui · {DEMO.restaurant}</EnTeteTablette>
-      <div className="grid grid-cols-2 gap-2.5 mt-2">
-        <div className="rounded-lg bg-[var(--harissa)] text-white p-2.5">
-          <p className="text-[10px] text-white/80">Ventes du jour</p>
-          <p className="text-lg font-semibold tabular-nums mt-0.5">{formatMoney(842)}</p>
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_MANAGER} actifId="carte" onSelect={irA} />
+      <div className="p-4">
+        <EnTeteTablette>Aujourd&apos;hui · {DEMO.restaurant}</EnTeteTablette>
+        <div className="grid grid-cols-2 gap-2.5 mt-2">
+          <div className="rounded-lg bg-[var(--harissa)] text-white p-2.5">
+            <p className="text-[10px] text-white/80">Ventes du jour</p>
+            <p className="text-lg font-semibold tabular-nums mt-0.5">{formatMoney(842)}</p>
+          </div>
+          <Card padding="sm" className="text-center flex flex-col justify-center">
+            <p className="text-[9px] text-[var(--ink-soft)]">Attente moyenne</p>
+            <p className="text-base font-semibold tabular-nums text-[var(--encre)] mt-0.5">6 min</p>
+          </Card>
         </div>
-        <Card padding="sm" className="text-center flex flex-col justify-center">
-          <p className="text-[9px] text-[var(--ink-soft)]">Attente moyenne</p>
-          <p className="text-base font-semibold tabular-nums text-[var(--encre)] mt-0.5">6 min</p>
-        </Card>
       </div>
     </div>
   );
 }
 
-function EtapeManagerActivite() {
+function EtapeManagerActivite({ irA }: { irA: (id: string) => void }) {
   const paliers = [
     { libelle: "En attente de confirmation", valeur: 2, couleur: "var(--harissa)" },
     { libelle: "En cuisine", valeur: 3, couleur: "var(--laiton)" },
     { libelle: "Prêtes à servir", valeur: 1, couleur: "var(--menthe)" },
   ];
   return (
-    <div className="p-4">
-      <EnTeteTablette>Activité du jour</EnTeteTablette>
-      <p className="text-[10px] font-bold text-[var(--ink-soft)] mt-2 mb-1.5">Commandes en cours · 6</p>
-      <div className="space-y-1">
-        {paliers.map((p) => (
-          <div
-            key={p.libelle}
-            className="flex items-center justify-between gap-2 text-[11px] text-[var(--encre)] py-1 border-b border-[var(--line)] last:border-b-0"
-          >
-            <span className="min-w-0">{p.libelle}</span>
-            <span
-              className="shrink-0 min-w-5 h-5 px-1.5 rounded-full text-[10px] font-bold text-[var(--semoule)] flex items-center justify-center"
-              style={{ backgroundColor: p.couleur }}
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_MANAGER} actifId="activite" onSelect={irA} />
+      <div className="p-4">
+        <EnTeteTablette>Activité du jour</EnTeteTablette>
+        <p className="text-[10px] font-bold text-[var(--ink-soft)] mt-2 mb-1.5">Commandes en cours · 6</p>
+        <div className="space-y-1">
+          {paliers.map((p) => (
+            <div
+              key={p.libelle}
+              className="flex items-center justify-between gap-2 text-[11px] text-[var(--encre)] py-1 border-b border-[var(--line)] last:border-b-0"
             >
-              {p.valeur}
-            </span>
-          </div>
-        ))}
+              <span className="min-w-0">{p.libelle}</span>
+              <span
+                className="shrink-0 min-w-5 h-5 px-1.5 rounded-full text-[10px] font-bold text-[var(--semoule)] flex items-center justify-center"
+                style={{ backgroundColor: p.couleur }}
+              >
+                {p.valeur}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function EtapeManagerPreuve() {
+function EtapeManagerPreuve({ irA }: { irA: (id: string) => void }) {
   const metriques = [
     { libelle: "Commandes annulées", valeur: "1", delta: "▼ 2", positif: true },
     { libelle: "Délai commande → cuisine", valeur: "4 min", delta: "▼ 1 min", positif: true },
     { libelle: "Panier moyen", valeur: formatMoney(28), delta: "▲ " + formatMoney(2), positif: true },
   ];
   return (
-    <div className="p-4">
-      <EnTeteTablette>Preuve du pilote</EnTeteTablette>
-      <div className="space-y-1.5 mt-2">
-        {metriques.map((m) => (
-          <div key={m.libelle} className="rounded-lg border border-[var(--line)] bg-[var(--semoule-raised)] px-2.5 py-1.5">
-            <p className="text-[9.5px] text-[var(--ink-soft)]">{m.libelle}</p>
-            <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-[12.5px] font-bold tabular-nums text-[var(--encre)]">{m.valeur}</span>
-              <span className="text-[9.5px] font-bold text-[var(--menthe)]">{m.delta}</span>
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_MANAGER} actifId="preuve" onSelect={irA} />
+      <div className="p-4">
+        <EnTeteTablette>Preuve du pilote</EnTeteTablette>
+        <div className="space-y-1.5 mt-2">
+          {metriques.map((m) => (
+            <div key={m.libelle} className="rounded-lg border border-[var(--line)] bg-[var(--semoule-raised)] px-2.5 py-1.5">
+              <p className="text-[9.5px] text-[var(--ink-soft)]">{m.libelle}</p>
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <span className="text-[12.5px] font-bold tabular-nums text-[var(--encre)]">{m.valeur}</span>
+                <span className="text-[9.5px] font-bold text-[var(--menthe)]">{m.delta}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function EtapeManagerEquipe() {
+function EtapeManagerEquipe({ irA }: { irA: (id: string) => void }) {
   return (
-    <div className="p-4">
-      <EnTeteTablette>Rapport d&apos;équipe</EnTeteTablette>
-      <div className="space-y-1.5 mt-2">
-        {DEMO.equipe.map((membre) => (
-          <div key={membre.nom} className="rounded-lg border border-[var(--line)] bg-[var(--semoule-raised)] px-2.5 py-1.5">
-            <p className="text-[11px] font-bold text-[var(--encre)]">{membre.nom}</p>
-            <p className="text-[9.5px] text-[var(--ink-soft)] mt-0.5">
-              {membre.commandes} commandes · {formatMoney(membre.pourboires)} de pourboires
-            </p>
-          </div>
-        ))}
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_MANAGER} actifId="equipe" onSelect={irA} />
+      <div className="p-4">
+        <EnTeteTablette>Rapport d&apos;équipe</EnTeteTablette>
+        <div className="space-y-1.5 mt-2">
+          {DEMO.equipe.map((membre) => (
+            <div key={membre.nom} className="rounded-lg border border-[var(--line)] bg-[var(--semoule-raised)] px-2.5 py-1.5">
+              <p className="text-[11px] font-bold text-[var(--encre)]">{membre.nom}</p>
+              <p className="text-[9.5px] text-[var(--ink-soft)] mt-0.5">
+                {membre.commandes} commandes · {formatMoney(membre.pourboires)} de pourboires
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -514,17 +576,116 @@ function EnTeteTablette({ children }: { children: React.ReactNode }) {
 // prends"), "Prêtes à servir" (menthe, "Servie"), "Demandes d'encaissement"
 // (laiton, bouton laiton/espresso) — 4 des 5 panneaux réels (« Demandes de
 // modification » omis, narrative déjà assez longue à 4 écrans).
+const LABELS_SERVEUR = [
+  { id: "confirmer", label: "Confirmer" },
+  { id: "appels", label: "Appels" },
+  { id: "prete", label: "Prête" },
+  { id: "encaisser", label: "Encaisser" },
+];
+
 function CarrouselServeur() {
   const etapes: EtapeCarrousel[] = [
-    { id: "confirmer", label: "Confirmer", contenu: <EtapeServeurConfirmer /> },
-    { id: "appels", label: "Appels", contenu: <EtapeServeurAppels /> },
-    { id: "prete", label: "Prête", contenu: <EtapeServeurPrete /> },
-    { id: "encaisser", label: "Encaisser", contenu: <EtapeServeurEncaisser /> },
+    { id: "confirmer", label: "Confirmer", contenu: (irA) => <EtapeServeurConfirmer irA={irA} /> },
+    { id: "appels", label: "Appels", contenu: (irA) => <EtapeServeurAppels irA={irA} /> },
+    { id: "prete", label: "Prête", contenu: (irA) => <EtapeServeurPrete irA={irA} /> },
+    { id: "encaisser", label: "Encaisser", contenu: (irA) => <EtapeServeurEncaisser irA={irA} /> },
   ];
   return <EcranCarrousel device="phone" etapes={etapes} />;
 }
 
-function PanneauServeur({
+function EtapeServeurConfirmer({ irA }: { irA: (id: string) => void }) {
+  return (
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_SERVEUR} actifId="confirmer" onSelect={irA} />
+      <PanneauCorps titre="Commandes à confirmer" couleur="var(--harissa)">
+        <div className="px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>{DEMO.appelTable}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold text-[var(--encre)]">Commande #46</p>
+              <p className="text-[10.5px] text-[var(--ink-soft)] truncate">2× {DEMO.panier[0].nom}</p>
+            </div>
+            <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--harissa)] text-[var(--semoule)]">
+              Confirmer
+            </span>
+          </div>
+        </div>
+      </PanneauCorps>
+    </div>
+  );
+}
+
+function EtapeServeurAppels({ irA }: { irA: (id: string) => void }) {
+  return (
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_SERVEUR} actifId="appels" onSelect={irA} />
+      <PanneauCorps titre="Appels serveur" couleur="var(--harissa)">
+        <div className="px-3 py-2.5" style={{ backgroundColor: "rgba(214,64,30,.06)" }}>
+          <div className="flex items-center gap-2.5">
+            <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>{DEMO.appelTable}</span>
+            <div className="min-w-0 flex-1 text-[12px] font-semibold text-[var(--encre)] inline-flex items-center gap-1.5">
+              <BellIcon className="w-3.5 h-3.5 shrink-0 text-[var(--harissa)]" />
+              Vous appelle
+            </div>
+            <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--harissa)] text-[var(--semoule)]">
+              Je prends
+            </span>
+          </div>
+        </div>
+      </PanneauCorps>
+    </div>
+  );
+}
+
+function EtapeServeurPrete({ irA }: { irA: (id: string) => void }) {
+  return (
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_SERVEUR} actifId="prete" onSelect={irA} />
+      <PanneauCorps titre="Prêtes à servir" couleur="var(--menthe)">
+        <div className="px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>{DEMO.pretTable}</span>
+            <div className="min-w-0 flex-1 text-[12px] font-semibold text-[var(--encre)]">
+              Commande #{DEMO.pretCommandeNumero} — prête en cuisine
+            </div>
+            <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--menthe)] text-[var(--semoule)]">
+              Servie
+            </span>
+          </div>
+        </div>
+      </PanneauCorps>
+    </div>
+  );
+}
+
+function EtapeServeurEncaisser({ irA }: { irA: (id: string) => void }) {
+  const total = DEMO.panier.reduce((sum, l) => sum + l.prix, 0);
+  return (
+    <div className="h-full flex flex-col">
+      <TabsEcran labels={LABELS_SERVEUR} actifId="encaisser" onSelect={irA} />
+      <PanneauCorps titre="Demandes d'encaissement" couleur="var(--laiton)">
+        <div className="px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>
+              {DEMO.encaissementTable}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold text-[var(--encre)]">
+                Commande #{DEMO.encaissementCommandeNumero} — {formatMoney(total)}
+              </p>
+              <p className="text-[10px] text-[var(--ink-soft)] mt-0.5">{DEMO.encaissementMethode}</p>
+            </div>
+            <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--laiton)] text-[var(--espresso)]">
+              Encaisser
+            </span>
+          </div>
+        </div>
+      </PanneauCorps>
+    </div>
+  );
+}
+
+function PanneauCorps({
   titre,
   couleur,
   children,
@@ -534,98 +695,15 @@ function PanneauServeur({
   children: React.ReactNode;
 }) {
   return (
-    <div className="h-full flex flex-col">
-      <EnTete label="Écran serveur" />
-      <div className="mx-3 mb-3 rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden flex-1">
-        <div
-          className="px-3 py-2 flex items-center gap-2 text-[12px] font-bold text-white"
-          style={{ backgroundColor: couleur }}
-        >
-          {titre}
-        </div>
-        {children}
+    <div className="mx-3 mt-3 mb-3 rounded-2xl border border-[var(--line)] bg-[var(--semoule-raised)] overflow-hidden flex-1">
+      <div
+        className="px-3 py-2 flex items-center gap-2 text-[12px] font-bold text-white"
+        style={{ backgroundColor: couleur }}
+      >
+        {titre}
       </div>
+      {children}
     </div>
-  );
-}
-
-function EtapeServeurConfirmer() {
-  return (
-    <PanneauServeur titre="Commandes à confirmer" couleur="var(--harissa)">
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>{DEMO.appelTable}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold text-[var(--encre)]">Commande #46</p>
-            <p className="text-[10.5px] text-[var(--ink-soft)] truncate">2× {DEMO.panier[0].nom}</p>
-          </div>
-          <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--harissa)] text-[var(--semoule)]">
-            Confirmer
-          </span>
-        </div>
-      </div>
-    </PanneauServeur>
-  );
-}
-
-function EtapeServeurAppels() {
-  return (
-    <PanneauServeur titre="Appels serveur" couleur="var(--harissa)">
-      <div className="px-3 py-2.5" style={{ backgroundColor: "rgba(214,64,30,.06)" }}>
-        <div className="flex items-center gap-2.5">
-          <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>{DEMO.appelTable}</span>
-          <div className="min-w-0 flex-1 text-[12px] font-semibold text-[var(--encre)] inline-flex items-center gap-1.5">
-            <BellIcon className="w-3.5 h-3.5 shrink-0 text-[var(--harissa)]" />
-            Vous appelle
-          </div>
-          <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--harissa)] text-[var(--semoule)]">
-            Je prends
-          </span>
-        </div>
-      </div>
-    </PanneauServeur>
-  );
-}
-
-function EtapeServeurPrete() {
-  return (
-    <PanneauServeur titre="Prêtes à servir" couleur="var(--menthe)">
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>{DEMO.pretTable}</span>
-          <div className="min-w-0 flex-1 text-[12px] font-semibold text-[var(--encre)]">
-            Commande #{DEMO.pretCommandeNumero} — prête en cuisine
-          </div>
-          <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--menthe)] text-[var(--semoule)]">
-            Servie
-          </span>
-        </div>
-      </div>
-    </PanneauServeur>
-  );
-}
-
-function EtapeServeurEncaisser() {
-  const total = DEMO.panier.reduce((sum, l) => sum + l.prix, 0);
-  return (
-    <PanneauServeur titre="Demandes d'encaissement" couleur="var(--laiton)">
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`${lalezar.className} text-xl leading-none text-[var(--encre)]`}>
-            {DEMO.encaissementTable}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold text-[var(--encre)]">
-              Commande #{DEMO.encaissementCommandeNumero} — {formatMoney(total)}
-            </p>
-            <p className="text-[10px] text-[var(--ink-soft)] mt-0.5">{DEMO.encaissementMethode}</p>
-          </div>
-          <span className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold bg-[var(--laiton)] text-[var(--espresso)]">
-            Encaisser
-          </span>
-        </div>
-      </div>
-    </PanneauServeur>
   );
 }
 
