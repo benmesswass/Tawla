@@ -17,6 +17,9 @@ pas garde : `is_halal` (F5/A6), la ventilation TVA et le numéro de facture
 (F5/A4, Phase 22), le paiement carte simulé (jamais Konnect/Stripe sans
 PAYMENT_MODE explicite).
 """
+import re
+import zlib
+
 from app.core import invoice as invoice_module
 from app.core.invoice import generate_invoice_pdf
 from app.core.markets import TUNISIA, get_market
@@ -24,6 +27,22 @@ from app.modules.orders.models import Order
 from app.modules.staff.models import StaffRole
 from app.modules.tenants.models import Restaurant
 from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
+
+
+def _pdf_text(pdf_bytes: bytes) -> str:
+    """Texte réellement rendu dans le PDF — fpdf2 compresse chaque page en
+    FlateDecode, donc `b"Sous-total" in pdf_bytes` ne matcherait jamais rien
+    même quand le libellé est bien affiché. Décompresse chaque flux de
+    contenu (`stream ... endstream`) pour vérifier ce que la facture montre
+    VRAIMENT, pas seulement qu'elle se génère sans lever."""
+    streams = re.findall(rb"stream\r?\n(.*?)endstream", pdf_bytes, re.DOTALL)
+    chunks = []
+    for raw in streams:
+        try:
+            chunks.append(zlib.decompress(raw).decode("latin-1", errors="ignore"))
+        except zlib.error:
+            continue
+    return "\n".join(chunks)
 
 
 def test_tunisia_is_the_default_market_for_this_entire_suite():
@@ -69,16 +88,39 @@ def test_tunisia_end_to_end_order_stays_unaffected_by_france_only_features(clien
     assert paid["payment_status"] == "paid"  # réglé immédiatement (mode démo)
     assert paid.get("pay_url") is None  # jamais de redirection Konnect/Stripe
 
+    db_order = db_session.get(Order, order["id"])
+    db_session.refresh(db_order)
+    # Signal indépendant de `pay_url is None` pour la même propriété : en
+    # mode simulé, `payment_ref` reste vide (voir service.py::
+    # pay_by_card_simulated), un vrai règlement Konnect/Stripe le renseigne
+    # toujours. Les deux devant s'accorder, un futur bug qui laisserait
+    # `pay_url` à `None` pour une autre raison qu'une dégradation gracieuse
+    # ferait maintenant échouer ce test au lieu de passer par accident.
+    assert db_order.payment_ref is None
+
     # 3) Facture : jamais de numéro (Phase 22, MARCHE_FRANCE.md F5/A4 —
     # `Market.invoice_threshold is None` en Tunisie), jamais de ventilation
     # TVA, et le rendu PDF continue de fonctionner exactement comme avant
     # que la France n'existe dans ce code.
-    db_order = db_session.get(Order, order["id"])
-    db_session.refresh(db_order)
     assert db_order.invoice_number is None
 
-    assert generate_invoice_pdf(db_order, restaurant)
+    pdf_bytes = generate_invoice_pdf(db_order, restaurant)
+    text = _pdf_text(pdf_bytes)
+    # Preuve sur le contenu réellement rendu, pas seulement l'absence
+    # d'exception : "Sous-total" ne s'affiche QUE quand `has_vat` est faux
+    # (core/invoice.py), et "Taxe" (section "Taxe détaillée") ne s'affiche
+    # QUE quand `ttc_by_rate` contient au moins un taux — jamais le cas ici,
+    # `TUNISIA.vat_rates is None`. "Facture," (sans numéro) confirme le
+    # même en-tête qu'avant que la numérotation France n'existe.
+    assert "Sous-total" in text
+    assert "Taxe" not in text
+    assert "Facture," in text
+
     # `_pdf_money` (core/invoice.py) n'a jamais été appelé qu'avec le marché
     # France dans les tests dédiés à la facture (test_invoice.py) — ici,
-    # c'est le marché RÉELLEMENT servi par ce process qui est exercé.
-    assert invoice_module._pdf_money(paid["total_amount"]).endswith("DT")
+    # c'est le marché RÉELLEMENT servi par ce process qui est exercé. Marché
+    # posé explicitement (jamais l'argument par défaut de `_pdf_money`, figé
+    # à l'import du module — même piège que celui déjà corrigé dans
+    # `generate_invoice_pdf`, voir son commentaire) : ce test doit rester
+    # correct même si un futur import réordonné changeait ce qui est figé.
+    assert invoice_module._pdf_money(paid["total_amount"], TUNISIA).endswith("DT")
