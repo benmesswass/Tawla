@@ -47,14 +47,13 @@ export type MenuItem = {
   // Codes INCO séparés par une virgule, ex. "gluten,milk" (France,
   // MARCHE_FRANCE.md phase F5/A6) — parmi les 14 allergènes à déclaration
   // obligatoire (UE, règlement 1169/2011). Coexiste avec `allergens`
-  // (texte libre) ci-dessus, ne le remplace pas. Pas encore réglable
-  // depuis le dashboard manager, comme `vat_category` ci-dessous.
+  // (texte libre) ci-dessus, ne le remplace pas. Réglable depuis le
+  // dashboard manager (voir ALLERGEN_CODES dans components/ChampsVatAllergenes.tsx).
   allergen_codes: string | null;
   is_halal: boolean;
   // Catégorie de taux de TVA (France, MARCHE_FRANCE.md phase F5/A4) —
-  // "sur_place" | "a_emporter" | "alcool", null = "sur_place". Pas encore
-  // réglable depuis le dashboard manager (backend seulement pour l'instant) ;
-  // présent ici pour que ce type reste fidèle à ce que l'API renvoie.
+  // "sur_place" | "a_emporter" | "alcool", null = "sur_place". Réglable
+  // depuis le dashboard manager (France seulement, currentMarket.vatRates).
   vat_category: string | null;
   // Cuisson, sauce, accompagnement... (France, MARCHE_FRANCE.md phase F5/A2).
   // Toujours présent (liste vide par défaut) : la quasi-totalité des articles
@@ -668,13 +667,20 @@ export const api = {
     price: number;
     spice_level?: number;
     allergens?: string | null;
+    allergen_codes?: string | null;
     is_halal?: boolean;
+    vat_category?: string | null;
   }) => request<MenuItem>("/api/v1/menu-items", { method: "POST", body: JSON.stringify(payload) }),
   // `image_url` n'est pas éditable ici : le backend rejette le champ (422),
   // seules les routes /image gèrent la photo — voir MenuItemUpdate côté serveur.
   updateMenuItem: (
     itemId: number,
-    payload: Partial<Pick<MenuItem, "name" | "description" | "category" | "price" | "spice_level" | "allergens" | "is_halal">>
+    payload: Partial<
+      Pick<
+        MenuItem,
+        "name" | "description" | "category" | "price" | "spice_level" | "allergens" | "allergen_codes" | "is_halal" | "vat_category"
+      >
+    >
   ) => request<MenuItem>(`/api/v1/menu-items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   setMenuItemAvailability: (itemId: number, isAvailable: boolean) =>
     request<MenuItem>(`/api/v1/menu-items/${itemId}/availability`, {
