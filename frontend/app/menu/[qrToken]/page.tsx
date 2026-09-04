@@ -461,13 +461,20 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // menthe...), pas des faits génériques à traduire pour la France.
   const inKitchenWait =
     trackedOrder?.status === "sent_to_kitchen" || trackedOrder?.status === "in_preparation";
+  // Une seule condition, consommée à la fois par l'effet (qui fait tourner
+  // l'anecdote) et par le rendu plus bas (qui l'affiche) : avant ce
+  // correctif, `currentMarket.culturalFactsEnabled` était vérifié
+  // séparément aux deux endroits — un changement futur de l'un sans l'autre
+  // aurait fait tourner l'intervalle en arrière-plan sans jamais rien
+  // afficher (marché sans le flag), ou l'inverse.
+  const showCulturalFacts = inKitchenWait && currentMarket.culturalFactsEnabled;
   useEffect(() => {
-    if (!inKitchenWait || !currentMarket.culturalFactsEnabled) return;
+    if (!showCulturalFacts) return;
     const timer = setInterval(() => {
       setCulturalFactIndex((i) => (i + 1) % CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"].length);
     }, 8000);
     return () => clearInterval(timer);
-  }, [inKitchenWait, locale]);
+  }, [showCulturalFacts, locale]);
 
   // Carte de fidélité — pré-remplit le numéro déjà utilisé sur ce resto
   // (évite de le retaper à chaque visite), sans jamais le rendre obligatoire.
@@ -1304,7 +1311,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </ol>
         )}
 
-        {!cancelled && inKitchenWait && currentMarket.culturalFactsEnabled && (
+        {!cancelled && showCulturalFacts && (
           <div className="mt-4 text-[12.5px] leading-[1.5] rounded-xl py-[11px] px-3 flex items-start gap-2 bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--encre)]">
             <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton)]" />
             <span>{CULTURAL_FACTS[locale === "ar" ? "ar" : "fr"][culturalFactIndex]}</span>
