@@ -114,11 +114,45 @@ const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   UPGRADE_REQUIRED: () => "الخلاص بالكارط ماشي متوفر هنا. خلص كاش.",
 };
 
+// Même sous-ensemble qu'AR_MESSAGES ci-dessus (parcours client uniquement,
+// France — MARCHE_FRANCE.md F5/A9). Régression trouvée en vérifiant A9 en
+// conditions réelles (2026-09-04) : `toLocalizedMessage` ne connaissait que
+// `locale === "ar"`, tout le reste (donc "en" aussi, dès qu'il a existé)
+// retombait sur `toFrenchMessage` — un client anglophone voyait la carte et
+// les boutons en anglais, mais toutes les erreurs API en français.
+const EN_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
+  INVALID_TABLE_CODE: () => "This QR code doesn't match any table. Ask your waiter to check it.",
+  TABLE_NOT_FOUND: () => "This table doesn't exist for this restaurant.",
+  ITEM_UNAVAILABLE: (ctx) =>
+    `"${ctx.item_name}" was just marked unavailable and has been removed from your order. You can still place the rest.`,
+  ITEM_NOT_FOUND: () => "An item in your order no longer exists. The menu has been reloaded.",
+  EMPTY_ORDER: () => "Add at least one item before placing your order.",
+  ORDER_NOT_FOUND: () => "This order no longer exists.",
+  INVALID_TRANSITION: () => "This order's status has already changed. The page will update.",
+  ALREADY_PAID: () => "This order has already been paid.",
+  ORDER_CANCELLED: () => "This order has been cancelled, payment is no longer possible.",
+  NO_PENDING_CASH_PAYMENT: () => "No pending cash payment for this order.",
+  ORDER_NOT_CONFIRMED: () => "This order must be confirmed by a waiter before it can be paid.",
+  RATE_LIMITED: () => "Too many attempts. Wait a minute before trying again.",
+  // Rare côté client : seul le paiement carte peut déclencher ce code ici,
+  // les autres fonctionnalités par palier sont toutes côté dashboard manager.
+  UPGRADE_REQUIRED: () => "Card payment isn't available here. Please pay in cash.",
+};
+
 export function toLocalizedMessage(error: unknown, locale: string): string {
-  if (locale !== "ar") return toFrenchMessage(error);
-  if (error instanceof ApiError) {
-    const translate = AR_MESSAGES[error.code];
-    if (translate) return translate(error.context);
+  if (locale === "ar") {
+    if (error instanceof ApiError) {
+      const translate = AR_MESSAGES[error.code];
+      if (translate) return translate(error.context);
+    }
+    return "صار خطأ. عاود جرب من بعد شوية.";
   }
-  return "صار خطأ. عاود جرب من بعد شوية.";
+  if (locale === "en") {
+    if (error instanceof ApiError) {
+      const translate = EN_MESSAGES[error.code];
+      if (translate) return translate(error.context);
+    }
+    return "Something went wrong. Please try again in a moment.";
+  }
+  return toFrenchMessage(error);
 }
