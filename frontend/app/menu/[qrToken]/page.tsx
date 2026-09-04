@@ -553,7 +553,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   useReconnectingSocket(orderSocketUrl, (msg) => {
     if (msg.event === "order.status_changed" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, status: msg.status } : prev));
-      if (msg.status === "served" || msg.status === "cancelled") {
+      // Servie ET réglée seulement : servie mais impayée doit rester
+      // atteignable, sinon un client qui regarde sa commande passer "servie"
+      // en direct perd l'accès à son addition avant d'avoir pu payer (même
+      // condition que le chemin de rechargement, plus haut dans ce fichier).
+      if (msg.status === "cancelled" || (msg.status === "served" && trackedOrder.payment_status === "paid")) {
         localStorage.removeItem(lastOrderStorageKey(qrToken));
       }
     }
