@@ -1,15 +1,28 @@
-from typing import Literal
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from app.core.markets import current_market
 
-# Clés de `core/markets.py::FRANCE.vat_rates` — le seul marché à en définir
-# aujourd'hui. Validé ici (contrairement à `category`/`allergens`, du texte
-# libre assumé) car une clé qui ne correspond à AUCUN taux du marché servi
-# romprait silencieusement la ventilation TVA de la facture (`.get()` sans
-# valeur trouvée) plutôt que de lever une erreur au moment de la saisie.
-VatCategory = Literal["sur_place", "a_emporter", "alcool"]
+def _validate_vat_category(value: str | None) -> str | None:
+    """Le vocabulaire valide dépend du marché SERVI, lu sur `current_market`
+    À LA VALIDATION — jamais figé dans un `Literal` à l'import, qui resterait
+    aveugle à un marché re-basculé en cours de process (tests) et fait déjà
+    à l'identique pour `market=None` (voir `core/invoice_number.py`). Une clé
+    qui ne correspond à AUCUN taux du marché servi romprait silencieusement
+    la ventilation TVA de la facture (`.get()` sans valeur trouvée) plutôt
+    que de lever une erreur au moment de la saisie — et sur un marché sans
+    TVA ventilée (Tunisie aujourd'hui, `Market.vat_rates is None`), AUCUNE
+    catégorie n'a de sens, donc aucune n'est acceptée."""
+    if value is None:
+        return None
+    allowed = (current_market.vat_rates or {}).keys()
+    if value not in allowed:
+        raise ValueError(f"vat_category invalide pour le marché {current_market.code!r} : {value!r}")
+    return value
+
+
+VatCategory = Annotated[str | None, AfterValidator(_validate_vat_category)]
 
 
 class MenuItemOptionOut(BaseModel):
