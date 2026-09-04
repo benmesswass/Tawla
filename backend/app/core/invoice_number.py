@@ -20,12 +20,13 @@ créée, le comportement tunisien reste inchangé au bit près — c'est le
 critère de sortie de la Phase F3.
 """
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.dates import service_day_start
 from app.core.logging import get_logger, log_event
 from app.core.markets import Market, current_market
-from app.modules.orders.models import InvoiceCounter, Order
+from app.modules.orders.models import InvoiceCounter, Order, PaymentStatus
 
 logger = get_logger("invoice_number")
 
@@ -65,6 +66,14 @@ def ensure_invoice_number(db: Session, order: Order, market: Market | None = Non
     if order.invoice_number:
         return order.invoice_number
 
+    # Un numéro de facture définitif ne doit jamais être brûlé sur une
+    # commande dont le paiement n'est pas confirmé — cet invariant n'était
+    # jusqu'ici garanti que par la discipline des appelants (revue de code).
+    assert order.payment_status == PaymentStatus.PAID, (
+        f"ensure_invoice_number appelé sur la commande {order.id} avec "
+        f"payment_status={order.payment_status!r} au lieu de PAID"
+    )
+
     # Millésime pris sur la journée de SERVICE (fuseau du marché), jamais sur
     # l'UTC brut : une commande payée à 00h30 appartient au service de la
     # veille (core/dates.py), et donc à l'année de la veille au réveillon.
@@ -83,9 +92,24 @@ def ensure_invoice_number(db: Session, order: Order, market: Market | None = Non
     ).scalar_one_or_none()
 
     if counter is None:
-        counter = InvoiceCounter(restaurant_id=order.restaurant_id, year=year, last_number=0)
-        db.add(counter)
-        db.flush()
+        # Deux premiers paiements de l'année pour ce restaurant, dans la même
+        # seconde : les deux SELECT ci-dessus renvoient `None` (la ligne
+        # n'existe pas encore, `with_for_update()` ne verrouille rien), donc
+        # les deux tentent l'INSERT. Le perdant lève IntegrityError sur la
+        # contrainte d'unicité (restaurant_id, year) ; on rejoue alors le
+        # SELECT verrouillé pour récupérer la ligne que le gagnant vient de
+        # committer, au lieu de laisser planter un paiement pourtant encaissé.
+        try:
+            with db.begin_nested():
+                counter = InvoiceCounter(restaurant_id=order.restaurant_id, year=year, last_number=0)
+                db.add(counter)
+                db.flush()
+        except IntegrityError:
+            counter = db.execute(
+                select(InvoiceCounter)
+                .where(InvoiceCounter.restaurant_id == order.restaurant_id, InvoiceCounter.year == year)
+                .with_for_update()
+            ).scalar_one()
 
     counter.last_number += 1
     order.invoice_number = format_invoice_number(year, counter.last_number)
