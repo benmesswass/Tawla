@@ -11,9 +11,11 @@ import { useEffect, useRef, useState } from "react";
 export default function FadeInOnScroll({
   children,
   delayMs = 0,
+  className = "",
 }: {
   children: React.ReactNode;
   delayMs?: number;
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -38,7 +40,7 @@ export default function FadeInOnScroll({
   }, [delayMs]);
 
   return (
-    <div ref={ref} className={`fondu-scroll ${visible ? "visible" : ""}`}>
+    <div ref={ref} className={`fondu-scroll ${visible ? "visible" : ""} ${className}`}>
       {children}
     </div>
   );
