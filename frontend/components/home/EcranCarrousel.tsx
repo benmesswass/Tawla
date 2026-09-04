@@ -12,18 +12,20 @@ import ChevronLeftIcon from "@/components/icons/ChevronLeftIcon";
  *
  * Toujours EXACTEMENT un écran net et centré + une moitié de chaque voisin
  * (retour de Wassim, 2026-09-04, sur une première version en pixels fixes qui
- * laissait 3-4 écrans visibles sur un grand moniteur) : la largeur de chaque
- * écran et le remplissage de la piste sont en `vw`, pas en pixels — au
- * chargement, viewport (100vw) = remplissage gauche (25vw, où se glisse la
- * moitié droite du voisin précédent) + écran actif centré (50vw) +
- * remplissage droit (25vw, moitié gauche du voisin suivant), sans place pour
- * un quatrième fragment. Un dimensionnement en pixels fixes ne peut pas
- * donner ce résultat sur toutes les tailles d'écran à la fois (voir
- * ROADMAP_DESIGN.md pour le détail de cette contrainte).
- *
- * Débordement volontaire hors de son conteneur (max-w-4xl sur la home) vers
- * la pleine largeur de la fenêtre : sans lui, l'écran voisin ne serait pas
- * visible à moitié sur les côtés.
+ * laissait 3-4 écrans visibles sur un grand moniteur) : deux volets d'écartement
+ * invisibles encadrent la piste (25 % chacun) et chaque écran fait 50 % — plutôt
+ * que le `padding` CSS habituel, qui aurait recalculé les pourcentages des
+ * écrans sur la largeur DÉJÀ réduite par ce padding, pas sur la largeur totale
+ * (un piège classique des pourcentages en cascade dans un flex). En dessous de
+ * `lg` (téléphone/tablette, une seule colonne pleine largeur), ces pourcentages
+ * sont comptés en `vw` : le carrousel déborde alors de son conteneur (max-w-4xl
+ * sur la home) jusqu'aux bords de la fenêtre, sinon le voisin ne serait pas
+ * visible à moitié. À `lg` et au-delà (retour de Wassim, 2026-09-04 : cartes
+ * problème/solution et carrousel côte à côte sur PC plutôt qu'empilés avec de
+ * grandes marges), le carrousel vit dans sa propre colonne de grille — plus de
+ * débordement, les pourcentages sont alors comptés sur cette colonne : le même
+ * ratio "1 net + 2 demis" tient, juste à l'échelle de la colonne plutôt que de
+ * l'écran entier.
  *
  * Navigation par trois voies équivalentes : glisser (tactile natif, souris
  * via pointer events), flèches ‹ › cliquables (indispensable sur PC, où
@@ -51,14 +53,16 @@ export default function EcranCarrousel({
   const piste = useRef<HTMLDivElement>(null);
   const [actif, setActif] = useState(0);
 
+  // [data-slide] plutôt que el.children : la piste encadre aussi les écrans
+  // de deux volets d'écartement invisibles (voir plus bas), qui décaleraient
+  // tous les index de 1 si on comptait les enfants bruts.
   const etapeLaPlusProche = useCallback(() => {
     const el = piste.current;
     if (!el) return 0;
     const centreCible = el.scrollLeft + el.clientWidth / 2;
     let meilleurIndex = 0;
     let meilleureDistance = Infinity;
-    Array.from(el.children).forEach((enfant, i) => {
-      const slide = enfant as HTMLElement;
+    el.querySelectorAll<HTMLElement>("[data-slide]").forEach((slide, i) => {
       const distance = Math.abs(slide.offsetLeft + slide.offsetWidth / 2 - centreCible);
       if (distance < meilleureDistance) {
         meilleureDistance = distance;
@@ -87,7 +91,9 @@ export default function EcranCarrousel({
   const allerA = useCallback(
     (index: number) => {
       const el = piste.current;
-      const cible = el?.children[Math.max(0, Math.min(index, etapes.length - 1))] as HTMLElement | undefined;
+      const cible = el?.querySelectorAll<HTMLElement>("[data-slide]")[
+        Math.max(0, Math.min(index, etapes.length - 1))
+      ];
       if (!el || !cible) return;
       const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       el.scrollTo({
@@ -150,8 +156,7 @@ export default function EcranCarrousel({
 
   return (
     <div
-      className="relative w-screen overflow-hidden"
-      style={{ marginInline: "calc(50% - 50vw)" }}
+      className="relative w-screen ml-[calc(50%_-_50vw)] mr-[calc(50%_-_50vw)] lg:w-full lg:ml-0 lg:mr-0 overflow-hidden"
       onKeyDown={(e) => {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
@@ -168,15 +173,18 @@ export default function EcranCarrousel({
         role="group"
         aria-label="Écrans du produit — flèches gauche/droite pour naviguer"
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--harissa)] focus-visible:ring-inset"
-        style={{ paddingInline: "25vw" }}
       >
+        {/* Volet d'écartement gauche — jamais un `padding` sur la piste elle-même
+            (voir le commentaire en tête de fichier sur le piège des pourcentages
+            en cascade dans un flex). */}
+        <div aria-hidden className="shrink-0 w-[25vw] lg:w-[25%]" />
         {etapes.map((etape, i) => (
           <div
             key={etape.id}
-            className={`relative shrink-0 snap-center rounded-[2rem] transition-[filter] duration-200 motion-reduce:transition-none ${
+            data-slide
+            className={`relative shrink-0 snap-center rounded-[2rem] w-[50vw] lg:w-[50%] transition-[filter] duration-200 motion-reduce:transition-none ${
               i === actif ? "" : "blur-[2px]"
             }`}
-            style={{ width: "50vw" }}
           >
             <CadreAppareil device={device}>{etape.contenu(irA)}</CadreAppareil>
             <div
@@ -187,6 +195,7 @@ export default function EcranCarrousel({
             />
           </div>
         ))}
+        <div aria-hidden className="shrink-0 w-[25vw] lg:w-[25%]" />
       </div>
 
       <FlecheCarrousel direction="left" disabled={actif === 0} onClick={() => allerA(actif - 1)} />

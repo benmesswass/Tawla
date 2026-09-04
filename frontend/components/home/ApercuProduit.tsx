@@ -41,6 +41,14 @@ import EcranCarrousel, { type EtapeCarrousel } from "@/components/home/EcranCarr
  * coller à /staff et /kitchen) — deux grands cadres bruns l'un dans l'autre,
  * jugé trop sombre et encombré (Wassim, 2026-09-03). Un seul cadre sombre
  * par écran suffit ; le reste de la page reste clair.
+ *
+ * Cartes et carrousel EMPILÉS en dessous de `lg`, CÔTE À CÔTE à partir de `lg`
+ * (retour de Wassim, 2026-09-04 : les cartes empilées seules prenaient
+ * beaucoup de hauteur avec de grandes marges vides de chaque côté sur PC).
+ * `EcranCarrousel` change alors de mécanique de débordement (colonne plutôt
+ * que fenêtre entière) — voir son commentaire d'en-tête pour le détail ; la
+ * section elle-même s'élargit (`lg:max-w-6xl` dans `app/page.tsx`) pour
+ * laisser de la place aux deux colonnes.
  */
 
 type Role = "client" | "manager" | "serveur" | "cuisine";
@@ -160,45 +168,58 @@ export default function ApercuProduit() {
         ))}
       </div>
 
-      <div className="max-w-xl mx-auto mb-10 space-y-3">
-        {BENEFITS_PAR_ROLE[role].map((b, i) => {
-          const harissa = i % 2 === 0;
-          return (
-            <div
-              key={b.probleme}
-              className={`probleme-apparait flex flex-col gap-3 rounded-lg bg-white p-5 border-l-4 ${
-                harissa ? "border-[var(--harissa)]" : "border-[var(--laiton)]"
-              }`}
-              style={{ animationDelay: `${i * 90}ms` }}
-            >
-              <p className="flex gap-1.5 items-start text-sm text-[var(--ink-soft)]">
-                <span className="text-[var(--ink-faint)] shrink-0" aria-hidden>
-                  ✗
-                </span>
-                <span>{b.probleme}</span>
-              </p>
+      {/* Empilé en dessous de lg (cartes puis vitrine, comme avant — retour de
+          Wassim, 2026-09-04 : « s'assurer que ça casse rien sur l'écran d'un
+          téléphone », donc ce bloc reste inchangé sous ce seuil). À partir de
+          lg, deux colonnes côte à côte : les cartes prenaient toute la largeur
+          en hauteur avec de grandes marges vides à droite et à gauche sur un
+          écran de bureau. */}
+      {/* lg:min-w-0 sur les DEUX colonnes : sans lui, une colonne de grille
+          garde par défaut la largeur minimale de son contenu (ici, la piste
+          défilante du carrousel) plutôt que celle, plus étroite, de sa piste
+          — elle déborde alors de son propre emplacement au lieu de laisser le
+          carrousel scroller à l'intérieur. */}
+      <div className="lg:grid lg:grid-cols-[420px_1fr] lg:gap-12 lg:items-center [&>*]:lg:min-w-0">
+        <div className="max-w-xl mx-auto mb-10 space-y-3 lg:max-w-none lg:mx-0 lg:mb-0">
+          {BENEFITS_PAR_ROLE[role].map((b, i) => {
+            const harissa = i % 2 === 0;
+            return (
               <div
-                className={`flex gap-2.5 rounded-md border p-3 text-sm ${
-                  harissa
-                    ? "bg-[var(--tuile-harissa-fond)] border-[var(--tuile-harissa-bord)]"
-                    : "bg-[var(--tuile-laiton-fond)] border-[var(--tuile-laiton-bord)]"
+                key={b.probleme}
+                className={`probleme-apparait flex flex-col gap-3 rounded-lg bg-white p-5 border-l-4 ${
+                  harissa ? "border-[var(--harissa)]" : "border-[var(--laiton)]"
                 }`}
+                style={{ animationDelay: `${i * 90}ms` }}
               >
-                <span className={harissa ? "text-[var(--harissa)]" : "text-[var(--laiton)]"} aria-hidden>
-                  ✓
-                </span>
-                <span className="text-[var(--encre)]">{b.solution}</span>
+                <p className="flex gap-1.5 items-start text-sm text-[var(--ink-soft)]">
+                  <span className="text-[var(--ink-faint)] shrink-0" aria-hidden>
+                    ✗
+                  </span>
+                  <span>{b.probleme}</span>
+                </p>
+                <div
+                  className={`flex gap-2.5 rounded-md border p-3 text-sm ${
+                    harissa
+                      ? "bg-[var(--tuile-harissa-fond)] border-[var(--tuile-harissa-bord)]"
+                      : "bg-[var(--tuile-laiton-fond)] border-[var(--tuile-laiton-bord)]"
+                  }`}
+                >
+                  <span className={harissa ? "text-[var(--harissa)]" : "text-[var(--laiton)]"} aria-hidden>
+                    ✓
+                  </span>
+                  <span className="text-[var(--encre)]">{b.solution}</span>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
 
-      <div className="flex justify-center">
-        {role === "client" && <CarrouselClient />}
-        {role === "manager" && <CarrouselManager />}
-        {role === "serveur" && <CarrouselServeur />}
-        {role === "cuisine" && <EcranCuisine />}
+        <div className="flex justify-center">
+          {role === "client" && <CarrouselClient />}
+          {role === "manager" && <CarrouselManager />}
+          {role === "serveur" && <CarrouselServeur />}
+          {role === "cuisine" && <EcranCuisine />}
+        </div>
       </div>
     </div>
   );
