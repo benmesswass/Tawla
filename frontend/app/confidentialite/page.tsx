@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
-import { useLocale } from "@/lib/i18n/useLocale";
+import { nextLocaleOf, useLocale } from "@/lib/i18n/useLocale";
 import { PRIVACY } from "@/lib/i18n/privacy";
 
 /**
@@ -30,7 +30,7 @@ export default function PrivacyPage() {
           <button
             onClick={toggleLocale}
             className="text-sm border rounded-lg px-3 py-1.5 bg-white"
-            lang={locale === "fr" ? "ar" : "fr"}
+            lang={nextLocaleOf(locale)}
           >
             {t.localeSwitchLabel}
           </button>
