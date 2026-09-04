@@ -28,6 +28,19 @@ export function nextLocaleOf(locale: string, locales: readonly string[] = AVAILA
   return locales[(index + 1) % locales.length];
 }
 
+// Nom affiché sur le bouton de bascule, dans SA PROPRE langue ("English",
+// "عربي") — dérivé de `nextLocaleOf`, jamais recalculé séparément : avant
+// A9bis, chaque dictionnaire (fr.ts/en.ts/ar.ts) portait son propre
+// `localeSwitchLabel` codé en dur (`currentMarket.languages.includes("en") ?
+// "English" : "عربي"` côté fr.ts), une duplication qui ne resterait juste
+// que pour exactement les paires de langues déjà vues.
+const LOCALE_NAMES: Record<string, string> = { fr: "Français", en: "English", ar: "عربي" };
+
+export function localeSwitchLabel(locale: string, locales: readonly string[] = AVAILABLE_LOCALES): string {
+  const next = nextLocaleOf(locale, locales);
+  return LOCALE_NAMES[next] ?? next;
+}
+
 // Local au parcours client uniquement (page /menu/[qrToken]) — pas de
 // cookie/serveur, la préférence est stockée dans le navigateur du client
 // qui a scanné le QR, jamais partagée avec le staff.

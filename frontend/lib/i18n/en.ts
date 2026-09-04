@@ -12,7 +12,6 @@ export const en = {
   locale: "en",
   dir: "ltr",
   currency: currentMarket.currency.symbol,
-  localeSwitchLabel: "Français",
 
   retry: "Try again",
   loadingMenu: "Loading menu...",

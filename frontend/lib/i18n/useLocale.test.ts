@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextLocaleOf } from "./useLocale";
+import { localeSwitchLabel, nextLocaleOf } from "./useLocale";
 
 // `nextLocaleOf` prend en second paramètre une liste explicite plutôt que de
 // dépendre implicitement du marché du process (comme `AVAILABLE_LOCALES`,
@@ -25,5 +25,25 @@ describe("nextLocaleOf", () => {
 
   it("falls back to the first locale when the current one is unknown", () => {
     expect(nextLocaleOf("xx", ["fr", "en"])).toBe("fr");
+  });
+});
+
+// Avant A9bis, ce libellé était codé en dur dans CHAQUE dictionnaire
+// (fr.ts/en.ts/ar.ts) — `currentMarket.languages.includes("en") ? "English"
+// : "عربي"` côté fr.ts — correct uniquement parce qu'aucun marché n'a
+// jamais eu plus de deux langues. `localeSwitchLabel` dérive le libellé de
+// `nextLocaleOf`, la même source de vérité pour les deux marchés, plutôt que
+// son propre calcul par dictionnaire.
+describe("localeSwitchLabel", () => {
+  it("shows the language name of the target locale, not the current one", () => {
+    const tn = ["fr", "ar"];
+    expect(localeSwitchLabel("fr", tn)).toBe("عربي");
+    expect(localeSwitchLabel("ar", tn)).toBe("Français");
+  });
+
+  it("works the same way on the France language pair (F5/A9)", () => {
+    const fr = ["fr", "en"];
+    expect(localeSwitchLabel("fr", fr)).toBe("English");
+    expect(localeSwitchLabel("en", fr)).toBe("Français");
   });
 });

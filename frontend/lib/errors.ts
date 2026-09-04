@@ -96,7 +96,11 @@ export function requiredTierFromError(error: unknown): "pro" | "business" | null
 // Sous-ensemble des codes rencontrés côté parcours client (page
 // /menu/[qrToken]) — les codes staff-only (FORBIDDEN, INVALID_CREDENTIALS...)
 // n'ont pas besoin d'arabe, ce parcours ne les déclenche jamais.
-const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
+// Exportées uniquement pour le test de parité des clés ci-dessous
+// (errors.test.ts) — la régression EN corrigée le 2026-09-04 (voir
+// commentaire sur EN_MESSAGES) est exactement ce qu'un futur code ajouté à
+// l'une sans l'autre reproduirait en silence.
+export const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   INVALID_TABLE_CODE: () => "هاذا الكود ما ينجمش يتعرف على حتى طاولة. إسأل الجرسون يتأكد منه.",
   TABLE_NOT_FOUND: () => "هاذي الطاولة ما موجودة ش في هاذا المطعم.",
   ITEM_UNAVAILABLE: (ctx) => `« ${ctx.item_name} » ولات ماشي متوفرة ونحيناها من الطلبية. تنجم تأكد الباقي.`,
@@ -120,7 +124,7 @@ const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
 // `locale === "ar"`, tout le reste (donc "en" aussi, dès qu'il a existé)
 // retombait sur `toFrenchMessage` — un client anglophone voyait la carte et
 // les boutons en anglais, mais toutes les erreurs API en français.
-const EN_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
+export const EN_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   INVALID_TABLE_CODE: () => "This QR code doesn't match any table. Ask your waiter to check it.",
   TABLE_NOT_FOUND: () => "This table doesn't exist for this restaurant.",
   ITEM_UNAVAILABLE: (ctx) =>

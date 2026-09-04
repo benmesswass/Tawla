@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { toLocalizedMessage } from "./errors";
+import { AR_MESSAGES, EN_MESSAGES, toLocalizedMessage } from "./errors";
 
 // Régression trouvée en vérifiant A9 (anglais côté client) en conditions
 // réelles, 2026-09-04 : `toLocalizedMessage` ne savait router que "ar",
@@ -37,5 +37,14 @@ describe("toLocalizedMessage", () => {
     expect(toLocalizedMessage(unknown, "en")).toBe("Something went wrong. Please try again in a moment.");
     expect(toLocalizedMessage(unknown, "ar")).toBe("صار خطأ. عاود جرب من بعد شوية.");
     expect(toLocalizedMessage(unknown, "fr")).toBe("Une erreur est survenue. Réessayez dans un instant.");
+  });
+
+  it("keeps AR_MESSAGES and EN_MESSAGES in sync — same client-facing code subset", () => {
+    // La régression EN corrigée le 2026-09-04 était exactement ça : un code
+    // ajouté à AR_MESSAGES (ou l'inverse) sans son pendant dans l'autre
+    // langue retombe en silence sur le message générique de CETTE langue,
+    // jamais sur une erreur visible en dev. Ce test échoue fort à la
+    // prochaine divergence au lieu d'attendre une vérification manuelle.
+    expect(Object.keys(EN_MESSAGES).sort()).toEqual(Object.keys(AR_MESSAGES).sort());
   });
 });
