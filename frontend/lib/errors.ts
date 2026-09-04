@@ -27,6 +27,14 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
     "Cette commande doit d'abord être confirmée par un serveur avant de pouvoir être payée.",
   ORDER_NOT_MODIFIABLE: () =>
     "Le serveur vient de confirmer votre commande, elle ne peut plus être modifiée directement.",
+  MODIFICATION_REQUEST_NOT_ALLOWED: () =>
+    "Cette commande n'est plus dans un état où une demande de modification est possible.",
+  MODIFICATION_REQUEST_ALREADY_PENDING: () =>
+    "Une demande de modification est déjà en cours pour cette commande — attendez la réponse du serveur avant d'en envoyer une nouvelle.",
+  NO_CHANGES_REQUESTED: () => "Vous n'avez rien changé à votre commande.",
+  MODIFICATION_REQUEST_NOT_FOUND: () => "Cette demande de modification n'existe plus.",
+  MODIFICATION_REQUEST_ALREADY_RESOLVED: () => "Cette demande de modification a déjà reçu une réponse.",
+  INCOMPLETE_RESOLUTION: () => "Répondez à chaque ligne de la demande avant d'envoyer votre réponse.",
   EMAIL_EXISTS: () => "Un compte existe déjà avec cet e-mail.",
   ACCOUNT_DISABLED: () => "Ce compte a été désactivé. Demandez à votre manager de le réactiver.",
   CSV_UNREADABLE: () =>
@@ -111,6 +119,9 @@ const AR_MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   NO_PENDING_CASH_PAYMENT: () => "ما فماش طلب خلاص كاش قاعد ينتظر لهاذي الطلبية.",
   ORDER_NOT_CONFIRMED: () => "لازم الجرسون يأكد الطلبية قبل ما تنجم تخلصها.",
   ORDER_NOT_MODIFIABLE: () => "الجرسون تو أكد الطلبية، ما تنجمش تبدلها مباشرة.",
+  MODIFICATION_REQUEST_NOT_ALLOWED: () => "هاذي الطلبية ما عادش ممكن تطلب فيها تبديل.",
+  MODIFICATION_REQUEST_ALREADY_PENDING: () => "عندك طلب تبديل قاعد ينتظر لهاذي الطلبية — استنى جواب الجرسون قبل ما تبعث طلب آخر.",
+  NO_CHANGES_REQUESTED: () => "ما بدلتش حتى حاجة في طلبيتك.",
   RATE_LIMITED: () => "طلبت برشا مرات. استنى دقيقة وعاود جرب.",
   // Rare côté client : seul le paiement carte peut déclencher ce code ici,
   // les autres fonctionnalités par palier sont toutes côté dashboard manager.

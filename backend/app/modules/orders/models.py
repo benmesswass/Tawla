@@ -145,6 +145,9 @@ class Order(Base):
     push_subscription: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    modification_requests: Mapped[list["OrderModificationRequest"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan"
+    )
     taken_by: Mapped["Staff | None"] = relationship()
     table: Mapped["Table"] = relationship()
 
@@ -166,6 +169,19 @@ class Order(Base):
     @property
     def total_amount(self) -> float:
         return sum(float(i.unit_price) * i.quantity for i in self.items)
+
+    @property
+    def pending_modification_request(self) -> "OrderModificationRequest | None":
+        """
+        La demande de modification (fenêtre 2) encore en attente d'une
+        réponse, s'il y en a une — au plus une à la fois (garde-fou dans
+        service.py::create_modification_request). Sert au client à retrouver
+        l'état "en attente" après un rafraîchissement de page.
+        """
+        for request in self.modification_requests:
+            if request.status == ModificationRequestStatus.PENDING:
+                return request
+        return None
 
 
 class OrderItem(Base):
@@ -229,3 +245,79 @@ class OrderItemOption(Base):
     price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
 
     order_item: Mapped["OrderItem"] = relationship(back_populates="options")
+
+
+class ModificationRequestStatus(str, enum.Enum):
+    PENDING = "pending"    # au moins une ligne pas encore tranchée par le serveur
+    RESOLVED = "resolved"  # chaque ligne a été acceptée ou refusée
+
+
+class ModificationLineStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+
+
+class OrderModificationRequest(Base):
+    """
+    Fenêtre 2 : une fois la commande confirmée (CONFIRMED/SENT_TO_KITCHEN/
+    IN_PREPARATION), le client ne modifie plus sa commande lui-même — il
+    demande, et le serveur décide ligne par ligne après vérification avec la
+    cuisine (voir service.py::create_modification_request/resolve_modification_request).
+    Une seule demande non résolue à la fois par commande (règle applicative,
+    voir create_modification_request) : pas de fusion de demandes concurrentes.
+    """
+
+    __tablename__ = "order_modification_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    status: Mapped[ModificationRequestStatus] = mapped_column(
+        Enum(ModificationRequestStatus), default=ModificationRequestStatus.PENDING
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    order: Mapped["Order"] = relationship(back_populates="modification_requests")
+    lines: Mapped[list["OrderModificationLine"]] = relationship(
+        back_populates="request", cascade="all, delete-orphan"
+    )
+
+    @property
+    def table_id(self) -> int:
+        return self.order.table_id
+
+    @property
+    def table_label(self) -> str:
+        return self.order.table_label
+
+
+class OrderModificationLine(Base):
+    """
+    Une ligne = un article dont la quantité demandée diffère de la quantité
+    actuelle dans la commande (`previous_quantity` à 0 pour un ajout). Nom et
+    prix figés au moment de la demande, même principe que `OrderItem` : ne
+    jamais relire `MenuItem` après coup pour ces deux champs d'affichage.
+    """
+
+    __tablename__ = "order_modification_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int] = mapped_column(
+        ForeignKey("order_modification_requests.id"), nullable=False, index=True
+    )
+    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), nullable=False)
+    menu_item_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    previous_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    requested_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[ModificationLineStatus] = mapped_column(
+        Enum(ModificationLineStatus), default=ModificationLineStatus.PENDING
+    )
+
+    request: Mapped["OrderModificationRequest"] = relationship(back_populates="lines")

@@ -4,7 +4,14 @@ from typing import Annotated
 from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
 
 from app.core.dates import UtcDatetime
-from app.modules.orders.models import Order, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.models import (
+    ModificationLineStatus,
+    ModificationRequestStatus,
+    Order,
+    OrderStatus,
+    PaymentMethod,
+    PaymentStatus,
+)
 
 
 def _convives(value: object) -> object:
@@ -53,6 +60,55 @@ class OrderItemsUpdate(BaseModel):
     """
 
     items: list[OrderItemCreate]
+
+
+class ModificationRequestCreate(BaseModel):
+    """
+    Fenêtre 2 (`POST /orders/{id}/modification-requests`) — même principe que
+    `OrderItemsUpdate` : le panier *souhaité* dans son ensemble. Le service
+    compare aux `OrderItem` actuels pour ne garder que ce qui change.
+    """
+
+    items: list[OrderItemCreate]
+
+
+class ModificationLineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    menu_item_id: int
+    menu_item_name: str
+    unit_price: float
+    previous_quantity: int
+    requested_quantity: int
+    notes: str | None
+    is_shared: bool
+    status: ModificationLineStatus
+
+
+class ModificationRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    order_id: int
+    table_id: int
+    table_label: str
+    status: ModificationRequestStatus
+    created_at: UtcDatetime
+    resolved_at: UtcDatetime | None
+    lines: list[ModificationLineOut]
+
+
+class ModificationLineDecision(BaseModel):
+    line_id: int
+    accepted: bool
+
+
+class ModificationRequestResolve(BaseModel):
+    # Doit couvrir exactement les lignes encore `pending` de la demande — ni
+    # plus ni moins (voir service.py::resolve_modification_request) : jamais
+    # de résolution silencieusement partielle.
+    decisions: list[ModificationLineDecision]
 
 
 class OrderCreate(BaseModel):
@@ -177,6 +233,11 @@ class OrderOut(BaseModel):
     tip_amount: float
     total_amount: float
     items: list[OrderItemOut]
+    # Non-null tant qu'au moins une ligne de la dernière demande de
+    # modification (fenêtre 2) attend une réponse — c'est ce qui permet à
+    # l'écran de suivi de retrouver l'état "en attente" après un
+    # rafraîchissement de page, sans dépendre uniquement du WebSocket.
+    pending_modification_request: ModificationRequestOut | None = None
     # Posé UNIQUEMENT par la réponse de `POST /pay/card` quand le restaurant a
     # connecté son propre Konnect (modèle direct, 2026-08-19) : le client doit
     # être redirigé pour régler, `payment_status` reste "pending" jusqu'au

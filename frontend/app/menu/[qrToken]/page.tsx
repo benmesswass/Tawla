@@ -13,7 +13,9 @@ import {
   LoyaltyMember,
   MenuItem,
   MenuItemOptionGroup,
+  ModificationLine,
   Order,
+  OrderItemPayload,
   OrderStatus,
   RestaurantPublic,
   Table,
@@ -234,14 +236,27 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // Reçu une seule fois à la création de la commande : sans lui, plus aucun
   // appel de suivi ni de paiement n'est autorisé (Phase 12.2).
   const [orderToken, setOrderToken] = useState<string | null>(null);
-  // Modification directe de la commande envoyée (fenêtre 1, tant qu'elle est
-  // encore en attente de confirmation) — panier séparé de `cart` : celui-ci
-  // sert à composer une commande, celui-là à en réviser une déjà envoyée, et
-  // les deux ne doivent jamais se marcher dessus.
+  // Révision de la commande envoyée — panier séparé de `cart` : celui-ci sert
+  // à composer une commande, celui-là à en réviser une déjà envoyée, et les
+  // deux ne doivent jamais se marcher dessus. `editIntent` distingue les deux
+  // fenêtres : "self" (édition directe, tant que PENDING_CONFIRMATION) écrit
+  // immédiatement ; "request" (commande déjà confirmée, jusqu'en cuisine)
+  // passe par une demande que le serveur valide ligne par ligne.
   const [editingOrder, setEditingOrder] = useState(false);
+  const [editIntent, setEditIntent] = useState<"self" | "request">("self");
   const [editItems, setEditItems] = useState<Record<number, EditLine>>({});
+  // Photo de la quantité au moment d'ouvrir l'écran d'édition — jamais
+  // modifiée ensuite : sert uniquement à afficher "ancien → nouveau" quand le
+  // client change une quantité (barré/nouveau), demandé explicitement pour
+  // qu'une ligne réduite ou ajoutée se voie d'un coup d'œil.
+  const [originalQuantities, setOriginalQuantities] = useState<Record<number, number>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // Résultat de la dernière demande de modification résolue par le serveur —
+  // transitoire (pas besoin de survivre à un rafraîchissement, contrairement
+  // à `pending_modification_request` qui vient du backend) : juste de quoi
+  // afficher "Réponse du serveur" une fois, ligne par ligne.
+  const [lastResolution, setLastResolution] = useState<ModificationLine[] | null>(null);
   const [tipInput, setTipInput] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [paying, setPaying] = useState(false);
@@ -592,6 +607,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     if (msg.event === "order.staff_assigned" && trackedOrder && msg.order_id === trackedOrder.id) {
       setTrackedOrder((prev) => (prev ? { ...prev, taken_by_staff_name: msg.staff_name } : prev));
     }
+    // Le serveur a répondu à la demande de modification (fenêtre 2) — on
+    // relit la commande pour ses vraies lignes/total (les lignes acceptées
+    // ont été appliquées côté backend) et on garde le détail ligne par ligne
+    // du message pour l'afficher : "accepté"/"refusé" ne se devine pas
+    // depuis le nouveau contenu seul.
+    if (msg.event === "order.modification_resolved" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
+      setLastResolution(msg.lines);
+      api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
+    }
   });
 
   // Rupture de stock en temps réel : un plat qui devient indisponible doit
@@ -892,12 +916,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], note } } : prev));
   }
 
-  // --- Modification directe de la commande envoyée (fenêtre 1) -------------
+  // --- Révision de la commande envoyée (fenêtres 1 et 2) --------------------
 
-  function startEditingOrder() {
-    if (!trackedOrder) return;
+  function seedEditItemsFromOrder(): Record<number, EditLine> {
     const seeded: Record<number, EditLine> = {};
-    for (const item of trackedOrder.items) {
+    for (const item of trackedOrder?.items ?? []) {
       seeded[item.menu_item_id] = {
         menuItemId: item.menu_item_id,
         name: item.menu_item_name,
@@ -907,7 +930,35 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         isShared: item.is_shared,
       };
     }
+    return seeded;
+  }
+
+  function snapshotOriginalQuantities(seeded: Record<number, EditLine>) {
+    const snapshot: Record<number, number> = {};
+    for (const line of Object.values(seeded)) snapshot[line.menuItemId] = line.quantity;
+    setOriginalQuantities(snapshot);
+  }
+
+  // Fenêtre 1 : tant que rien n'a encore été confirmé, la commande s'édite
+  // directement, sans validation.
+  function startEditingOrder() {
+    if (!trackedOrder) return;
+    setEditIntent("self");
+    const seeded = seedEditItemsFromOrder();
     setEditItems(seeded);
+    snapshotOriginalQuantities(seeded);
+    setEditError(null);
+    setEditingOrder(true);
+  }
+
+  // Fenêtre 2 : commande déjà confirmée (jusqu'en cuisine) — composer ici ne
+  // fait qu'esquisser la demande, `sendModificationRequest` l'envoie.
+  function startRequestingModification() {
+    if (!trackedOrder) return;
+    setEditIntent("request");
+    const seeded = seedEditItemsFromOrder();
+    setEditItems(seeded);
+    snapshotOriginalQuantities(seeded);
     setEditError(null);
     setEditingOrder(true);
   }
@@ -967,6 +1018,39 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     try {
       const updated = await api.updateOrderItems(trackedOrder.id, orderToken, items);
       setTrackedOrder(updated);
+      setEditingOrder(false);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "ORDER_NOT_MODIFIABLE") {
+        // Le serveur vient de confirmer pile pendant l'édition : la fenêtre 1
+        // vient de se refermer, mais rien de ce que le client vient de
+        // composer n'est perdu — ça part comme demande de modification
+        // (fenêtre 2) au lieu d'un échec sec qui l'obligerait à recommencer.
+        setEditIntent("request");
+        await sendModificationRequest(items);
+        return;
+      }
+      setEditError(toLocalizedMessage(e, locale));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function sendModificationRequest(itemsOverride?: OrderItemPayload[]) {
+    if (!trackedOrder || !orderToken) return;
+    const items =
+      itemsOverride ??
+      Object.values(editItems).map((l) => ({
+        menu_item_id: l.menuItemId,
+        quantity: l.quantity,
+        notes: l.notes || null,
+        is_shared: l.isShared,
+      }));
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const request = await api.requestModification(trackedOrder.id, orderToken, items);
+      setTrackedOrder((prev) => (prev ? { ...prev, pending_modification_request: request } : prev));
+      setLastResolution(null);
       setEditingOrder(false);
     } catch (e) {
       setEditError(toLocalizedMessage(e, locale));
@@ -1112,6 +1196,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   function addSuggestionAndOrderAgain(item: MenuItem) {
     addToCart(item, true);
+    orderAgain();
+  }
+
+  // "Commander séparément" un ajout refusé (fenêtre 2, réponse partielle) —
+  // même mécanique que addSuggestionAndOrderAgain : la cuisine ne peut rien
+  // rattacher à la commande déjà en cours, mais rien n'empêche d'en ouvrir
+  // une nouvelle pour cet article précis.
+  function orderDeclinedLineSeparately(line: ModificationLine) {
+    const menuItem = menu.find((m) => m.id === line.menu_item_id);
+    if (!menuItem) return;
+    addToCart(menuItem, false);
     orderAgain();
   }
 
@@ -1282,7 +1377,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </button>
 
           <h1 className={`${lalezar.className} mt-2 text-[22px] leading-tight text-center text-[var(--encre)]`}>
-            {t.editOrderTitle}
+            {editIntent === "request" ? t.requestModificationButton : t.editOrderTitle}
           </h1>
           <p className="mt-1 text-[12.5px] text-center text-[var(--ink-soft)]">
             {t.orderSubtitle(table.label, trackedOrder.id)}
@@ -1290,7 +1385,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
           <div className="mt-4 flex items-start gap-2 rounded-xl py-[11px] px-3 text-[12.5px] leading-[1.45] bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)]">
             <ClockIcon className="w-[14px] h-[14px] shrink-0 mt-0.5" />
-            <span>{t.modifyOrderHint}</span>
+            <span>{editIntent === "request" ? t.requestEditBanner : t.modifyOrderHint}</span>
           </div>
 
           {editError && (
@@ -1322,7 +1417,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                         >
                           −
                         </button>
-                        <span className="inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums">
+                        <span className="inline-flex items-baseline justify-center gap-1 min-w-[16px] text-center text-[14px] font-bold tabular-nums">
+                          {(originalQuantities[line.menuItemId] ?? 0) !== line.quantity && (
+                            <span className="text-[12px] font-semibold text-[var(--ink-faint)] line-through">
+                              {originalQuantities[line.menuItemId] ?? 0}
+                            </span>
+                          )}
                           {line.quantity}
                         </span>
                         <button
@@ -1418,19 +1518,31 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           })}
 
           <div className="mt-6 bg-[var(--semoule-raised)] border border-[var(--line)] rounded-2xl p-3.5">
-            <div className="flex justify-between items-baseline mb-2.5">
-              <span className="text-[13px] font-semibold text-[var(--ink-soft)]">{t.total}</span>
+            <div className="flex justify-between items-baseline mb-0.5">
+              <span className="text-[13px] font-semibold text-[var(--ink-soft)]">
+                {editIntent === "request" ? t.requestEditNewTotalLabel : t.total}
+              </span>
               <span className="text-[19px] font-bold tabular-nums text-[var(--encre)]">
                 {formatAmount(editTotal)} {t.currency}
               </span>
             </div>
+            {editIntent === "request" && (
+              <p className="mb-2.5 text-[11px] text-[var(--ink-faint)]">
+                {t.requestEditCurrentTotal(`${formatAmount(trackedOrder.total_amount)} ${t.currency}`)}
+              </p>
+            )}
             <button
-              onClick={saveOrderEdits}
+              onClick={editIntent === "request" ? () => sendModificationRequest() : saveOrderEdits}
               disabled={savingEdit || Object.keys(editItems).length === 0}
               className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-3 font-bold text-[14.5px] shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
             >
-              {savingEdit ? t.sending : t.editOrderSave}
+              {savingEdit ? t.sending : editIntent === "request" ? t.requestEditSend : t.editOrderSave}
             </button>
+            {editIntent === "request" && (
+              <p className="mt-2 text-[11px] text-center text-[var(--ink-soft)] leading-[1.4]">
+                {t.requestEditSubcopy}
+              </p>
+            )}
           </div>
         </div>
       );
@@ -1438,6 +1550,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
     const currentDisplayIndex = displayStepIndex(trackedOrder.status as StepStatus);
     const cancelled = trackedOrder.status === "cancelled";
+    // Fenêtre 2 : la commande est confirmée mais pas encore prête — même
+    // fenêtre que l'étape affichée "En cuisine" (displayStepIndex regroupe
+    // déjà SENT_TO_KITCHEN et IN_PREPARATION), plus CONFIRMED pour le cas
+    // rare où le serveur confirme sans enchaîner tout de suite sur l'envoi.
+    const kitchenModificationWindow = (
+      ["confirmed", "sent_to_kitchen", "in_preparation"] as OrderStatus[]
+    ).includes(trackedOrder.status);
     return (
       <>
         {showCelebration && <CelebrationOverlay />}
@@ -1479,9 +1598,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </>
             )}
           </button>
-          {/* Modification directe (fenêtre 1) — seulement tant que rien n'a
-              encore été confirmé par un serveur ; passé ce point, la fenêtre 2
-              (demande de modification) prend le relais ailleurs sur cet écran. */}
+          {/* Fenêtre 1 : rien n'a encore été confirmé, la commande s'édite
+              directement. */}
           {trackedOrder.status === "pending_confirmation" && (
             <button
               onClick={startEditingOrder}
@@ -1491,6 +1609,24 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               {t.modifyOrderButton}
             </button>
           )}
+          {/* Fenêtre 2 : commande déjà confirmée, jusqu'en cuisine — toute
+              modification passe désormais par une demande. */}
+          {kitchenModificationWindow && (
+            <button
+              onClick={startRequestingModification}
+              disabled={!!trackedOrder.pending_modification_request}
+              className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-semibold border border-[var(--line)] bg-white text-[var(--encre)] rounded-full px-3 py-[11px] disabled:opacity-70"
+            >
+              {trackedOrder.pending_modification_request ? (
+                t.requestSentButton
+              ) : (
+                <>
+                  <PencilIcon className="w-[14px] h-[14px] shrink-0" />
+                  {t.requestModificationButton}
+                </>
+              )}
+            </button>
+          )}
         </div>
         {waiterCallError && <p className="mt-2 text-sm text-center text-[var(--harissa)]">{waiterCallError}</p>}
         {trackedOrder.status === "pending_confirmation" && (
@@ -1498,6 +1634,58 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             <ClockIcon className="w-3 h-3 shrink-0" />
             {t.modifyOrderHint}
           </p>
+        )}
+        {kitchenModificationWindow && !trackedOrder.pending_modification_request && (
+          <p className="mt-1.5 flex items-center justify-center gap-1 text-[11.5px] text-[var(--ink-soft)] text-center">
+            <ClockIcon className="w-3 h-3 shrink-0" />
+            {t.requestModificationHint}
+          </p>
+        )}
+        {trackedOrder.pending_modification_request && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl py-[11px] px-3 text-[12.5px] leading-[1.45] bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)]">
+            <ClockIcon className="w-[14px] h-[14px] shrink-0 mt-0.5" />
+            <span>{t.requestPendingBanner}</span>
+          </div>
+        )}
+        {lastResolution && (
+          <div className="mt-4 border border-[var(--line)] bg-[var(--semoule-raised)] rounded-xl p-3">
+            <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+              {t.requestOutcomeTitle}
+            </p>
+            <div className="space-y-2">
+              {lastResolution.map((line) => (
+                <div key={line.id} className="flex items-start gap-2">
+                  <span
+                    className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+                    style={{
+                      backgroundColor: line.status === "accepted" ? "var(--menthe)" : "var(--ink-soft)",
+                      color: "var(--semoule)",
+                    }}
+                  >
+                    {line.status === "accepted" ? "✓" : "✗"}
+                  </span>
+                  <div>
+                    <span className="text-[13px] text-[var(--encre)]">
+                      <strong>{line.menu_item_name}</strong>
+                      {" — "}
+                      {line.status === "accepted" ? t.requestLineAccepted : t.requestLineDeclined}
+                    </span>
+                    {/* Un retrait refusé n'a aucune suite possible (l'article
+                        reste tel quel) — seul un ajout refusé peut encore
+                        partir comme commande séparée. */}
+                    {line.status === "declined" && line.previous_quantity === 0 && (
+                      <button
+                        onClick={() => orderDeclinedLineSeparately(line)}
+                        className="mt-1 block text-[12px] font-semibold text-[var(--harissa)] underline"
+                      >
+                        {t.requestOrderSeparately}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {!cancelled && trackedOrder.scheduled_for && (

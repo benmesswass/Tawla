@@ -50,6 +50,22 @@ export const fr = {
   editOrderCancel: "Annuler",
   itemsUpdatedAt: (heure: string) => `Modifiée à ${heure}`,
 
+  // Demande de modification (fenêtre 2, une fois la commande confirmée) —
+  // voir orders/service.py::create_modification_request/resolve_modification_request.
+  requestModificationButton: "Demander une modification",
+  requestModificationHint: "Le serveur doit valider avec la cuisine avant toute modification",
+  requestEditBanner: "Cette demande doit être validée par le serveur avec la cuisine avant d'être appliquée.",
+  requestEditSend: "Envoyer la demande de modification",
+  requestEditSubcopy: "Le serveur vérifiera avec la cuisine avant d'appliquer ces changements.",
+  requestEditNewTotalLabel: "Nouveau total si accepté",
+  requestEditCurrentTotal: (total: string) => `Total actuel de la commande : ${total}`,
+  requestSentButton: "✓ Demande envoyée",
+  requestPendingBanner: "Demande envoyée — en attente de la réponse du serveur.",
+  requestOutcomeTitle: "Réponse du serveur",
+  requestLineAccepted: "accepté",
+  requestLineDeclined: "refusé",
+  requestOrderSeparately: "Commander séparément",
+
   trackingSteps: {
     received: "Commande reçue",
     confirmed: "Confirmée par le serveur",
