@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { lalezar } from "@/lib/fonts";
-import { useLocale } from "@/lib/i18n/useLocale";
+import { localeSwitchLabel, nextLocaleOf, useLocale } from "@/lib/i18n/useLocale";
 import { PRIVACY } from "@/lib/i18n/privacy";
 
 /**
@@ -17,7 +17,7 @@ import { PRIVACY } from "@/lib/i18n/privacy";
  */
 export default function PrivacyPage() {
   const router = useRouter();
-  const { locale, toggleLocale, t } = useLocale();
+  const { locale, toggleLocale } = useLocale();
   const page = PRIVACY[locale] ?? PRIVACY.fr;
 
   return (
@@ -30,9 +30,9 @@ export default function PrivacyPage() {
           <button
             onClick={toggleLocale}
             className="text-sm border rounded-lg px-3 py-1.5 bg-white"
-            lang={locale === "fr" ? "ar" : "fr"}
+            lang={nextLocaleOf(locale)}
           >
-            {t.localeSwitchLabel}
+            {localeSwitchLabel(locale)}
           </button>
         </div>
 
