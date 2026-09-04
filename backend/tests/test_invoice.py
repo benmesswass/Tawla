@@ -103,6 +103,46 @@ def test_generate_invoice_pdf_stays_unchanged_without_vat_or_legal_info(db_sessi
     assert generate_invoice_pdf(order, restaurant)
 
 
+def test_generate_invoice_pdf_renders_the_invoice_number_when_assigned(monkeypatch, db_session):
+    """Régression possible : le numéro (core/invoice_number.py) et la
+    ventilation TVA lisaient chacun le marché différemment (l'un un
+    paramètre par défaut figé à l'import, l'autre `current_market` à
+    l'appel) — un test qui monkeypatche seulement `current_market` doit
+    suffire à faire apparaître les DEUX sans réglage séparé."""
+    monkeypatch.setattr(invoice_module, "current_market", FRANCE)
+    restaurant = Restaurant(name="Le Tawla Test", slug="le-tawla-test-invoice-number")
+    db_session.add(restaurant)
+    db_session.commit()
+    db_session.refresh(restaurant)
+
+    order = _order_for_invoice(db_session, restaurant)
+    order.invoice_number = "F2026-00001"
+    db_session.commit()
+
+    assert generate_invoice_pdf(order, restaurant)
+
+
+def test_generate_invoice_pdf_stays_renderable_below_and_above_the_invoice_threshold(monkeypatch, db_session):
+    """Note obligatoire (arrêté du 3 octobre 1983) affichée seulement à
+    partir du seuil du marché — les deux côtés doivent rester générables,
+    la mention n'est qu'un `pdf.cell()` de plus dans les deux cas."""
+    monkeypatch.setattr(invoice_module, "current_market", FRANCE)
+    restaurant = Restaurant(name="Le Tawla Test", slug="le-tawla-test-invoice-threshold")
+    db_session.add(restaurant)
+    db_session.commit()
+    db_session.refresh(restaurant)
+
+    below = _order_for_invoice(db_session, restaurant)  # 2 x 18 EUR = 36 EUR > seuil, garde un cas en dessous aussi
+    below.items[0].quantity = 1
+    below.items[0].unit_price = 10.0
+    db_session.commit()
+
+    above = _order_for_invoice(db_session, restaurant)
+
+    assert generate_invoice_pdf(below, restaurant)
+    assert generate_invoice_pdf(above, restaurant)
+
+
 def test_generate_invoice_pdf_falls_back_to_tawla_when_restaurant_is_none(db_session):
     """`get_paid_order_by_query_token` peut ne trouver aucun restaurant
     (`db.get` -> None, voir orders/router.py) — la facture doit rester
