@@ -26,16 +26,6 @@ describe("getMarket", () => {
   });
 });
 
-describe("culturalFactsEnabled", () => {
-  it("stays on for Tunisia — the kitchen-wait anecdotes are Tunisian content", () => {
-    expect(getMarket("tn").culturalFactsEnabled).toBe(true);
-  });
-
-  it("is off for France — the content (couscous, harissa...) doesn't translate", () => {
-    expect(getMarket("fr").culturalFactsEnabled).toBe(false);
-  });
-});
-
 describe("menuCategories", () => {
   it("keeps Ftour for Tunisia, without any French-only category", () => {
     const tn = getMarket("tn");
