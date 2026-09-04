@@ -44,6 +44,12 @@ export type MenuItem = {
   image_url: string | null;
   spice_level: number;
   allergens: string | null;
+  // Codes INCO séparés par une virgule, ex. "gluten,milk" (France,
+  // MARCHE_FRANCE.md phase F5/A6) — parmi les 14 allergènes à déclaration
+  // obligatoire (UE, règlement 1169/2011). Coexiste avec `allergens`
+  // (texte libre) ci-dessus, ne le remplace pas. Pas encore réglable
+  // depuis le dashboard manager, comme `vat_category` ci-dessous.
+  allergen_codes: string | null;
   is_halal: boolean;
   // Catégorie de taux de TVA (France, MARCHE_FRANCE.md phase F5/A4) —
   // "sur_place" | "a_emporter" | "alcool", null = "sur_place". Pas encore

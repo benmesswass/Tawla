@@ -3,6 +3,8 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from app.core.markets import current_market
+from app.modules.menu.models import ALLERGEN_CODES
+
 
 def _validate_vat_category(value: str | None) -> str | None:
     """Le vocabulaire valide dépend du marché SERVI, lu sur `current_market`
@@ -23,6 +25,30 @@ def _validate_vat_category(value: str | None) -> str | None:
 
 
 VatCategory = Annotated[str | None, AfterValidator(_validate_vat_category)]
+
+
+def _validate_allergen_codes(value: str | None) -> str | None:
+    """
+    `allergen_codes` voyage en chaîne séparée par des virgules côté API,
+    comme en base (`MenuItem.allergen_codes`) — jamais une liste : ça évite
+    toute conversion à l'écriture, `create_menu_item`/`update_menu_item`
+    (menu/router.py) restent un simple `MenuItem(**payload.model_dump())` /
+    `setattr` générique, sans traitement spécial pour ce champ. Validé ici
+    (comme `VatCategory` ci-dessus) : un code hors ALLERGEN_CODES romprait
+    silencieusement tout affichage futur plutôt que d'échouer à la saisie.
+    """
+    if not value:
+        return None
+    codes = [c.strip() for c in value.split(",") if c.strip()]
+    unknown = [c for c in codes if c not in ALLERGEN_CODES]
+    if unknown:
+        raise ValueError(
+            f"code(s) allergène inconnu(s) : {', '.join(unknown)} — attendu parmi {', '.join(ALLERGEN_CODES)}"
+        )
+    return ",".join(codes)
+
+
+AllergenCodes = Annotated[str | None, AfterValidator(_validate_allergen_codes)]
 
 
 class MenuItemOptionOut(BaseModel):
@@ -121,9 +147,11 @@ class MenuItemCreate(BaseModel):
     price: float
     spice_level: int = Field(default=0, ge=0, le=3)
     allergens: str | None = None
-    # Vrai par défaut en Tunisie (norme), faux en France (exception) — voir
-    # MenuItem.is_halal dans models.py.
-    is_halal: bool = Field(default_factory=lambda: current_market.code == "tn")
+    allergen_codes: AllergenCodes = None
+    # `default_factory`, jamais `default=True` figé : lu à CHAQUE création,
+    # pas une seule fois à l'import du module (même raison que le défaut de
+    # colonne dans models.py — voir son commentaire).
+    is_halal: bool = Field(default_factory=lambda: current_market.default_halal)
     vat_category: VatCategory | None = None
 
 
@@ -140,6 +168,7 @@ class MenuItemOut(BaseModel):
     image_url: str | None
     spice_level: int
     allergens: str | None
+    allergen_codes: str | None
     is_halal: bool
     vat_category: str | None
     option_groups: list[MenuItemOptionGroupOut] = Field(default_factory=list)
@@ -201,5 +230,6 @@ class MenuItemUpdate(BaseModel):
     price: float | None = None
     spice_level: int | None = Field(default=None, ge=0, le=3)
     allergens: str | None = None
+    allergen_codes: AllergenCodes = None
     is_halal: bool | None = None
     vat_category: VatCategory | None = None

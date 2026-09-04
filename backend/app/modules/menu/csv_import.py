@@ -53,8 +53,10 @@ class ParsedItem:
     description: str | None = None
     spice_level: int = 0
     allergens: str | None = None
-    # Vrai par défaut en Tunisie (norme), faux en France — voir MenuItem.is_halal.
-    is_halal: bool = field(default_factory=lambda: current_market.code == "tn")
+    # `field(default_factory=...)`, jamais `= True` figé : lu à CHAQUE
+    # instanciation, pas une seule fois à l'import du module (F5/A6 — même
+    # raison que le défaut de colonne dans models.py, voir son commentaire).
+    is_halal: bool = field(default_factory=lambda: current_market.default_halal)
 
 
 @dataclass
@@ -177,7 +179,7 @@ def parse_menu_csv(content: str) -> ParseResult:
                 description=((values.get("description") or "").strip() or None),
                 spice_level=_parse_spice(values.get("spice_level", "")),
                 allergens=((values.get("allergens") or "").strip() or None),
-                is_halal=_parse_bool(values.get("is_halal", ""), default=current_market.code == "tn"),
+                is_halal=_parse_bool(values.get("is_halal", ""), default=current_market.default_halal),
             )
         except ValueError as exc:
             result.errors.append(f"Ligne {line_number} ({name}) : {exc}.")
