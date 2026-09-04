@@ -56,3 +56,19 @@ describe("culturalFactsFor — France", () => {
     expect(culturalFactsFor("ar", false, "fr")).toEqual(culturalFactsFor("fr", false, "fr"));
   });
 });
+
+// Régression réelle, trouvée en réconciliant #153 avec la correction #151 :
+// menu/[qrToken]/page.tsx dépend de `culturalFacts` comme dépendance d'un
+// `useEffect` (voir son commentaire). Si `culturalFactsFor` construisait un
+// nouveau tableau à chaque appel (ex. via `.slice()`/spread) au lieu de
+// renvoyer directement l'un des tableaux constants du module, l'effet se
+// redéclencherait à CHAQUE rendu — l'intervalle se réinitialiserait sans
+// arrêt, et l'anecdote n'avancerait jamais. `toEqual` ne l'aurait jamais
+// attrapé (deux tableaux différents avec le même contenu sont `toEqual`).
+describe("culturalFactsFor — reference stability", () => {
+  it("returns the exact same array reference for the same (locale, mode, market)", () => {
+    expect(culturalFactsFor("fr", false, "fr")).toBe(culturalFactsFor("fr", false, "fr"));
+    expect(culturalFactsFor("en", true, "fr")).toBe(culturalFactsFor("en", true, "fr"));
+    expect(culturalFactsFor("ar", false, "tn")).toBe(culturalFactsFor("ar", false, "tn"));
+  });
+});
