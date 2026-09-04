@@ -2,6 +2,19 @@ from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, Numeri
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.markets import current_market
+
+# Les 14 allergènes à déclaration obligatoire (UE, règlement 1169/2011,
+# annexe II) — F5/A6. Codes stables en anglais (jamais traduits en base, ni
+# ici ni côté API) : la traduction affichée est un problème d'affichage
+# (frontend), pas de stockage. Liste FIXE, contrairement à `MenuRegime`
+# (vocabulaire libre par restaurant, voir plus bas) : ce ne sont pas des
+# préférences maison mais une obligation légale à périmètre déjà arrêté par
+# le réglement lui-même.
+ALLERGEN_CODES: tuple[str, ...] = (
+    "gluten", "crustaceans", "eggs", "fish", "peanuts", "soybeans", "milk",
+    "nuts", "celery", "mustard", "sesame", "sulphites", "lupin", "molluscs",
+)
 
 # Association pure (aucune donnée propre à la ligne) : un article porte 0..N
 # régimes du vocabulaire de son restaurant. `ondelete="CASCADE"` des deux
@@ -74,14 +87,29 @@ class MenuItem(Base):
     image_content_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     # 0 = pas épicé, 1-3 = léger/moyen/fort. Texte libre pour les allergènes
-    # (comme `category`, saisi par le resto — pas de liste fermée qui
-    # obligerait une migration à chaque nouvel allergène courant).
+    # (comme `category`, saisi par le resto) — CONSERVÉ tel quel (nuances
+    # hors des 14 codes UE, ex. "traces possibles de fruits à coque",
+    # habitude tunisienne existante) plutôt que remplacé : voir
+    # `allergen_codes` juste en dessous pour la liste structurée (F5/A6).
     spice_level: Mapped[int] = mapped_column(Integer, default=0)
     allergens: Mapped[str | None] = mapped_column(String(300), nullable=True)
-    # Par défaut à True : la quasi-totalité des restos tunisiens sont
-    # halal — le champ sert surtout à signaler l'exception (établissement
-    # touristique servant alcool/porc), pas la norme.
-    is_halal: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Codes INCO séparés par une virgule (ex. "gluten,milk"), parmi
+    # ALLERGEN_CODES ci-dessus — même forme stockage que
+    # `OrderItem.shared_with` (chaîne plutôt qu'une table de liaison : liste
+    # FIXE de 14 valeurs connues, jamais de requête ni de jointure dessus).
+    # Validé à la saisie côté schéma (menu/schemas.py), pas ici : un code
+    # inconnu doit être rejeté à l'écriture, pas silencieusement toléré en
+    # base. Coexiste avec `allergens` (texte libre) ci-dessus, ne le
+    # remplace pas.
+    allergen_codes: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Par défaut : `current_market.default_halal` (True en Tunisie — la
+    # quasi-totalité des restos y sont halal, c'est la norme et non
+    # l'exception ; False en France, F5/A6 — l'exception inverse). Callable
+    # (pas une valeur figée) : lu à CHAQUE insertion, jamais une seule fois à
+    # l'import du module — un import statique figerait le marché du PREMIER
+    # processus qui importe ce fichier, jamais réévalué ensuite (même piège
+    # que `_pdf_money` corrigé en F5 juste avant A6, voir core/invoice.py).
+    is_halal: Mapped[bool] = mapped_column(Boolean, default=lambda: current_market.default_halal)
 
     # Catégorie de taux de TVA (France, MARCHE_FRANCE.md F5/A4) — une CLÉ de
     # `Market.vat_rates` ("sur_place", "a_emporter", "alcool"), jamais le taux
