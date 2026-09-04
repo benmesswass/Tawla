@@ -4,6 +4,7 @@ import { useState } from "react";
 import { lalezar } from "@/lib/fonts";
 import Card from "@/components/ui/Card";
 import { formatMoney } from "@/lib/currency";
+import { currentMarket } from "@/lib/market";
 import { BENEFITS_PAR_ROLE } from "@/lib/offer";
 
 /**
@@ -11,8 +12,16 @@ import { BENEFITS_PAR_ROLE } from "@/lib/offer";
  * comparatif BipOrder — mockup validé par Wassim avant ce code). Chaque rôle
  * reprend les vraies couleurs de son écran réel (client/manager en clair,
  * serveur/cuisine en sombre comme /staff et /kitchen) plutôt qu'une charte
- * inventée pour la démo. Données Dar Chaabane, restaurant de démo déjà utilisé
- * par la visite guidée et le seed (`backend/scripts/seed_demo.py`).
+ * inventée pour la démo.
+ *
+ * Données Dar Chaabane (Tunisie) et Le Petit Bouchon (France) — un restaurant
+ * de démo par marché, jamais le même sur les deux : le marché tunisien reste
+ * Dar Chaabane, déjà utilisé par la visite guidée et le seed
+ * (`backend/scripts/seed_demo.py`) ; le marché français ne réutilise ni ce
+ * nom ni ces plats, spécifiquement tunisiens (couscous, brik, thé à la
+ * menthe) et hors de propos devant un prospect français. Prix identiques
+ * d'un marché à l'autre (seule la devise change, via `formatMoney`) — ce
+ * mockup illustre l'écran, pas une politique tarifaire.
  *
  * Les 3 couples problème/solution (`BENEFITS_PAR_ROLE`, lib/offer.ts)
  * changent avec l'onglet actif : chaque rôle défend son propre triptyque.
@@ -32,26 +41,75 @@ const ROLES: { id: Role; label: string }[] = [
   { id: "cuisine", label: "Cuisine" },
 ];
 
-const CARTE_DEMO = [
-  {
-    nom: "Entrées",
-    plats: [
-      { nom: "Salade méchouia", prix: 6 },
-      { nom: "Brik à l'œuf", prix: 5 },
-    ],
-  },
-  {
-    nom: "Plats",
-    plats: [
-      { nom: "Couscous au poisson", prix: 22 },
-      { nom: "Kefta grillée", prix: 18 },
-    ],
-  },
-  {
-    nom: "Desserts",
-    plats: [{ nom: "Baklawa", prix: 5 }],
-  },
-];
+const DEMO_TN = {
+  restaurant: "Dar Chaabane",
+  table: "Table 7",
+  carte: [
+    {
+      nom: "Entrées",
+      plats: [
+        { nom: "Salade méchouia", prix: 6 },
+        { nom: "Brik à l'œuf", prix: 5 },
+      ],
+    },
+    {
+      nom: "Plats",
+      plats: [
+        { nom: "Couscous au poisson", prix: 22 },
+        { nom: "Kefta grillée", prix: 18 },
+      ],
+    },
+    {
+      nom: "Desserts",
+      plats: [{ nom: "Baklawa", prix: 5 }],
+    },
+  ],
+  commandesServeur: [
+    { table: "Table 4", numero: "#12", plats: "1× Couscous au poisson · 1× Thé à la menthe", action: "Prendre en charge" },
+    { table: "Table 2", numero: "#11", plats: "2× Salade méchouia", action: "Confirmer" },
+  ],
+  commandesCuisine: [
+    { table: "Table 4", depuis: "1 min", enCours: false, plats: ["1× Couscous au poisson"] },
+    { table: "Table 2", depuis: "4 min", enCours: true, plats: ["2× Salade méchouia"] },
+    { table: "Table 7", depuis: "2 min", enCours: false, plats: ["1× Baklawa"] },
+  ],
+};
+
+const DEMO_FR = {
+  restaurant: "Le Petit Bouchon",
+  table: "Table 7",
+  carte: [
+    {
+      nom: "Entrées",
+      plats: [
+        { nom: "Soupe à l'oignon", prix: 6 },
+        { nom: "Œuf mimosa", prix: 5 },
+      ],
+    },
+    {
+      nom: "Plats",
+      plats: [
+        { nom: "Bœuf bourguignon", prix: 22 },
+        { nom: "Steak-frites", prix: 18 },
+      ],
+    },
+    {
+      nom: "Desserts",
+      plats: [{ nom: "Crème brûlée", prix: 5 }],
+    },
+  ],
+  commandesServeur: [
+    { table: "Table 4", numero: "#12", plats: "1× Bœuf bourguignon · 1× Eau pétillante", action: "Prendre en charge" },
+    { table: "Table 2", numero: "#11", plats: "2× Œuf mimosa", action: "Confirmer" },
+  ],
+  commandesCuisine: [
+    { table: "Table 4", depuis: "1 min", enCours: false, plats: ["1× Bœuf bourguignon"] },
+    { table: "Table 2", depuis: "4 min", enCours: true, plats: ["2× Œuf mimosa"] },
+    { table: "Table 7", depuis: "2 min", enCours: false, plats: ["1× Crème brûlée"] },
+  ],
+};
+
+const DEMO = currentMarket.code === "fr" ? DEMO_FR : DEMO_TN;
 
 export default function ApercuProduit() {
   const [role, setRole] = useState<Role>("client");
@@ -140,11 +198,11 @@ function EcranClient() {
     <div className="w-[240px] rounded-[2rem] bg-[#180f08] p-2 shadow-[0_30px_60px_-20px_rgba(0,0,0,.6)]">
       <div className="rounded-[1.5rem] bg-[var(--semoule)] overflow-hidden">
         <div className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-3 pb-3">
-          <h3 className={`${lalezar.className} text-xl leading-none text-balance`}>Dar Chaabane</h3>
-          <p className="text-[11px] font-medium text-[rgba(246,239,221,.82)] mt-1">Table 7</p>
+          <h3 className={`${lalezar.className} text-xl leading-none text-balance`}>{DEMO.restaurant}</h3>
+          <p className="text-[11px] font-medium text-[rgba(246,239,221,.82)] mt-1">{DEMO.table}</p>
         </div>
         <div className="flex gap-1.5 px-3 py-2.5 overflow-x-auto border-b border-[var(--line)]">
-          {CARTE_DEMO.map((cat, i) => (
+          {DEMO.carte.map((cat, i) => (
             <button
               key={cat.nom}
               type="button"
@@ -160,7 +218,7 @@ function EcranClient() {
           ))}
         </div>
         <div className="px-4 py-3 space-y-3">
-          {CARTE_DEMO[categorie].plats.map((plat) => (
+          {DEMO.carte[categorie].plats.map((plat) => (
             <div key={plat.nom} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[var(--encre)] truncate">{plat.nom}</p>
@@ -221,10 +279,7 @@ function EcranManager() {
 // libellé change, "Prendre en charge" devient "Confirmer" une fois la même
 // commande prise en charge par ce serveur.
 function EcranServeur() {
-  const commandes = [
-    { table: "Table 4", numero: "#12", plats: "1× Couscous au poisson · 1× Thé à la menthe", action: "Prendre en charge" },
-    { table: "Table 2", numero: "#11", plats: "2× Salade méchouia", action: "Confirmer" },
-  ];
+  const commandes = DEMO.commandesServeur;
   return (
     <div className="w-full max-w-[460px] rounded-xl overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,.6)] bg-[var(--espresso)]">
       <ChromeBar dark />
@@ -263,11 +318,7 @@ function EcranServeur() {
 // chercher, plus à la cuisine). Une seule grille, l'urgence se lit à la
 // couleur de la carte — neutre en attente, verte en préparation.
 function EcranCuisine() {
-  const commandes = [
-    { table: "Table 4", depuis: "1 min", enCours: false, plats: ["1× Couscous au poisson"] },
-    { table: "Table 2", depuis: "4 min", enCours: true, plats: ["2× Salade méchouia"] },
-    { table: "Table 7", depuis: "2 min", enCours: false, plats: ["1× Baklawa"] },
-  ];
+  const commandes = DEMO.commandesCuisine;
   return (
     <div className="w-full max-w-[600px] rounded-xl overflow-hidden shadow-[0_30px_60px_-20px_rgba(0,0,0,.6)] bg-[var(--espresso)]">
       <ChromeBar dark />
