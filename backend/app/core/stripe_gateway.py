@@ -28,9 +28,12 @@ pas de récurrence dans son API), donc ce modèle reste Stripe/France
 uniquement (MARCHE_FRANCE.md Phase F6 étape 4). Une facturation qui se
 déclenche toute seule chaque mois ne peut être confirmée que par un webhook
 — jamais par une page de retour, qui suppose un client présent au moment du
-règlement — d'où `construct_webhook_event` ci-dessous, contrairement au
-webhook Connect encore volontairement absent (étape 5, paiement carte du
-client, où le filet de sécurité `/pay/card/check` suffit).
+règlement — d'où `construct_webhook_event` ci-dessous. Le paiement carte du
+CLIENT (Direct Charge, étape 5) a lui aussi son webhook,
+`construct_connect_webhook_event` : jusqu'ici le filet de sécurité
+`/pay/card/check` (retour navigateur) suffisait comme unique confirmation,
+mais un client qui ferme l'onglet juste après avoir payé ne le déclenche
+jamais — la commande restait `pending` pour toujours.
 """
 import os
 import time
@@ -439,6 +442,29 @@ def construct_webhook_event(*, payload: bytes, signature_header: str) -> stripe.
     secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
     if not secret:
         raise StripeGatewayError("STRIPE_WEBHOOK_SECRET manquante")
+    try:
+        return stripe.Webhook.construct_event(payload, signature_header, secret)
+    except (stripe.error.SignatureVerificationError, ValueError) as err:
+        raise StripeGatewayError(str(err)) from err
+
+
+def construct_connect_webhook_event(*, payload: bytes, signature_header: str) -> stripe.Event:
+    """
+    Même mécanique que `construct_webhook_event` ci-dessus, mais pour
+    l'endpoint webhook CONNECT (paiement carte du client sur un Direct
+    Charge — `orders/router.py::order_card_payment_stripe_webhook`), jamais
+    pour l'abonnement Tawla. Un secret DÉDIÉ, jamais `STRIPE_WEBHOOK_SECRET`
+    réutilisé : Stripe attribue une clé de signature distincte à chaque
+    endpoint déclaré dans son tableau de bord (Développeurs > Webhooks, ou
+    Connect > Webhooks), même processus Tawla ou pas — partager la clé de
+    l'abonnement ferait échouer la vérification de l'un des deux dès que les
+    deux endpoints existent réellement. `STRIPE_CONNECT_WEBHOOK_SECRET` :
+    générée par Stripe au moment où CET endpoint précis est déclaré, absente
+    tant que ça n'a pas été fait — voir MARCHE_FRANCE.md Phase F6.
+    """
+    secret = os.environ.get("STRIPE_CONNECT_WEBHOOK_SECRET")
+    if not secret:
+        raise StripeGatewayError("STRIPE_CONNECT_WEBHOOK_SECRET manquante")
     try:
         return stripe.Webhook.construct_event(payload, signature_header, secret)
     except (stripe.error.SignatureVerificationError, ValueError) as err:
