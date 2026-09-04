@@ -3,7 +3,7 @@ fpdf2, limitée au Latin-1/CP1252 simple (voir docstring du module)."""
 from fpdf import FPDF
 
 import app.core.invoice as invoice_module
-from app.core.invoice import _pdf_money, generate_invoice_pdf
+from app.core.invoice import _pdf_money, _vat_rate_for, generate_invoice_pdf
 from app.core.markets import FRANCE, TUNISIA
 from app.modules.menu.models import MenuItem
 from app.modules.orders.models import Order, OrderItem
@@ -39,6 +39,32 @@ def test_pdf_money_stays_renderable_by_the_core_helvetica_font():
         pdf.cell(35, 8, _pdf_money(12.5, market), align="R")
 
     assert bytes(pdf.output())
+
+
+# --- _vat_rate_for : résolution du taux par ligne (France, F5/A4) ----------
+
+
+def test_vat_rate_for_defaults_to_sur_place_when_the_line_has_no_category():
+    line = OrderItem(menu_item_name="x", unit_price=10, vat_category=None)
+    assert _vat_rate_for(line, FRANCE) == FRANCE.vat_rates["sur_place"]
+
+
+def test_vat_rate_for_resolves_the_alcool_category():
+    line = OrderItem(menu_item_name="x", unit_price=10, vat_category="alcool")
+    assert _vat_rate_for(line, FRANCE) == FRANCE.vat_rates["alcool"]
+
+
+def test_vat_rate_for_falls_back_to_sur_place_on_an_unknown_category():
+    """Article créé avant l'existence du champ, ou vocabulaire du marché qui
+    aurait changé depuis : jamais un KeyError qui ferait échouer TOUTE la
+    facture pour une seule ligne mal classée."""
+    line = OrderItem(menu_item_name="x", unit_price=10, vat_category="reduit")
+    assert _vat_rate_for(line, FRANCE) == FRANCE.vat_rates["sur_place"]
+
+
+def test_vat_rate_for_is_zero_on_a_market_without_vat():
+    line = OrderItem(menu_item_name="x", unit_price=10, vat_category="alcool")
+    assert _vat_rate_for(line, TUNISIA) == 0.0
 
 
 def _order_for_invoice(db_session, restaurant, tip_amount: float = 0) -> Order:
@@ -141,6 +167,36 @@ def test_generate_invoice_pdf_stays_renderable_below_and_above_the_invoice_thres
 
     assert generate_invoice_pdf(below, restaurant)
     assert generate_invoice_pdf(above, restaurant)
+
+
+def test_generate_invoice_pdf_ventilates_multiple_vat_rates_in_the_same_order(monkeypatch, db_session):
+    """Cœur de A4 : une table qui commande un plat (10 %) ET une bouteille de
+    vin (20 %) doit voir les deux taux ventilés séparément — avant A4, tout
+    passait au taux unique "sur_place", faux dès qu'une ligne était de
+    l'alcool."""
+    monkeypatch.setattr(invoice_module, "current_market", FRANCE)
+    restaurant = Restaurant(name="Le Tawla Test", slug="le-tawla-test-invoice-multi-vat")
+    db_session.add(restaurant)
+    db_session.commit()
+    db_session.refresh(restaurant)
+
+    table = Table(restaurant_id=restaurant.id, label="Table 4")
+    db_session.add(table)
+    db_session.commit()
+    db_session.refresh(table)
+
+    order = Order(restaurant_id=restaurant.id, table_id=table.id)
+    order.items.append(
+        OrderItem(menu_item_id=1, menu_item_name="Couscous royal", unit_price=18.0, quantity=2, vat_category=None)
+    )
+    order.items.append(
+        OrderItem(menu_item_id=2, menu_item_name="Bouteille de vin", unit_price=25.0, quantity=1, vat_category="alcool")
+    )
+    db_session.add(order)
+    db_session.commit()
+    db_session.refresh(order)
+
+    assert generate_invoice_pdf(order, restaurant)
 
 
 def test_generate_invoice_pdf_falls_back_to_tawla_when_restaurant_is_none(db_session):

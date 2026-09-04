@@ -212,6 +212,12 @@ class OrderItem(Base):
     # prix du menu après coup, ça ne doit JAMAIS modifier une commande passée.
     menu_item_name: Mapped[str] = mapped_column(String(120), nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    # Copié depuis `MenuItem.vat_category` au moment de la commande, même
+    # motif que `menu_item_name`/`unit_price` juste au-dessus : si le
+    # restaurant reclasse un article après coup (plat -> boisson alcoolisée),
+    # ça ne doit JAMAIS changer la ventilation TVA d'une facture déjà émise
+    # (core/invoice.py). Null = "sur_place" (voir menu/models.py).
+    vat_category: Mapped[str | None] = mapped_column(String(20), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     notes: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # Plat pensé pour toute la table (entrées communes type salade, mechouia...) —
