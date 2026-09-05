@@ -70,7 +70,10 @@ export default function HomePage() {
       </section>
 
       <section data-visite="accueil-benefices">
-        <div className="max-w-4xl mx-auto px-6 py-14">
+        {/* lg:max-w-6xl : élargie par rapport aux autres sections (max-w-4xl)
+            pour laisser la place aux deux colonnes de ApercuProduit à partir
+            de lg (retour de Wassim, 2026-09-04) — inchangé en dessous. */}
+        <div className="max-w-4xl lg:max-w-6xl mx-auto px-6 py-14">
           <h2 className={`${lalezar.className} text-2xl sm:text-3xl text-center mb-3`}>Un produit, quatre écrans</h2>
           <p className="text-sm text-[var(--ink-soft)] text-center max-w-xl mx-auto mb-10">
             Le client commande depuis son téléphone. Le serveur, le manager et la cuisine suivent chacun le même
