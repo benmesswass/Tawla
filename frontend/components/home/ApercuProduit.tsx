@@ -36,6 +36,10 @@ import EcranCarrousel, { type EtapeCarrousel } from "@/components/home/EcranCarr
  *
  * Les 3 couples problème/solution (`BENEFITS_PAR_ROLE`, lib/offer.ts)
  * changent avec l'onglet actif : chaque rôle défend son propre triptyque.
+ * Chaque carte est scindée en deux — « Aujourd'hui » en haut, puis une
+ * charnière colorée « ↓ Avec Tawla », puis la solution sur fond teinté :
+ * avant ça, une croix et une coche laissaient deviner que le ✓ venait du
+ * produit sans jamais le nommer (retour de Wassim, 2026-09-05).
  * Section hôte volontairement SANS fond sombre : un essai avait empilé cette
  * section en --espresso ET les écrans serveur/cuisine (déjà sombres pour
  * coller à /staff et /kitchen) — deux grands cadres bruns l'un dans l'autre,
@@ -186,28 +190,35 @@ export default function ApercuProduit() {
             return (
               <div
                 key={b.probleme}
-                className={`probleme-apparait flex flex-col gap-3 rounded-lg bg-white p-5 border-l-4 ${
-                  harissa ? "border-[var(--harissa)]" : "border-[var(--laiton)]"
-                }`}
+                className="probleme-apparait rounded-lg bg-white overflow-hidden border border-[var(--line)]"
                 style={{ animationDelay: `${i * 90}ms` }}
               >
-                <p className="flex gap-1.5 items-start text-sm text-[var(--ink-soft)]">
-                  <span className="text-[var(--ink-faint)] shrink-0" aria-hidden>
-                    ✗
-                  </span>
-                  <span>{b.probleme}</span>
-                </p>
-                <div
-                  className={`flex gap-2.5 rounded-md border p-3 text-sm ${
-                    harissa
-                      ? "bg-[var(--tuile-harissa-fond)] border-[var(--tuile-harissa-bord)]"
-                      : "bg-[var(--tuile-laiton-fond)] border-[var(--tuile-laiton-bord)]"
+                <div className="px-4 pt-3.5 pb-3">
+                  <p className="text-[9.5px] font-bold uppercase tracking-wide text-[var(--ink-faint)] mb-1">
+                    Aujourd&apos;hui
+                  </p>
+                  <p className="text-sm leading-snug text-[var(--ink-soft)]">{b.probleme}</p>
+                </div>
+                {/* La charnière porte le nom du produit : c'est ELLE qui dit que
+                    ce qui suit est ce que Tawla change (retour de Wassim,
+                    2026-09-05 : rien n'attribuait la solution au produit).
+                    Option C du mockup « Quatre autres pistes », validée avant ce
+                    code — préférée à une étiquette de plus au-dessus de chaque
+                    ligne, parce qu'elle se lit sans être lue. */}
+                <p
+                  className={`flex items-center gap-2 px-4 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white ${
+                    harissa ? "bg-[var(--harissa)]" : "bg-[var(--laiton)]"
                   }`}
                 >
-                  <span className={harissa ? "text-[var(--harissa)]" : "text-[var(--laiton)]"} aria-hidden>
-                    ✓
-                  </span>
-                  <span className="text-[var(--encre)]">{b.solution}</span>
+                  <span aria-hidden>↓</span>
+                  Avec Tawla
+                </p>
+                <div
+                  className={`px-4 pt-3 pb-3.5 text-sm leading-snug font-medium text-[var(--encre)] ${
+                    harissa ? "bg-[var(--tuile-harissa-fond)]" : "bg-[var(--tuile-laiton-fond)]"
+                  }`}
+                >
+                  {b.solution}
                 </div>
               </div>
             );
