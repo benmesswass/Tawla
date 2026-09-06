@@ -94,6 +94,13 @@ def test_le_client_apprend_en_direct_que_son_appel_est_resolu(client):
     call = client.post("/api/v1/waiter-calls", json={"qr_token": table["qr_token"]}).json()
 
     with client.websocket_connect(f"/ws/table/{restaurant.id}/{table['qr_token']}") as ws:
+        # Premier message reçu à la connexion : l'état du panier partagé de la
+        # table (chantier « panier synchronisé multi-appareils »), toujours
+        # envoyé avant tout événement, vide ici puisque personne n'a rien
+        # ajouté.
+        snapshot = ws.receive_json()
+        assert snapshot == {"event": "cart.updated", "lines": []}
+
         client.post(f"/api/v1/waiter-calls/{call['id']}/resolve", headers=headers)
         message = ws.receive_json()
 

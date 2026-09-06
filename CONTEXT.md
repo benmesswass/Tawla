@@ -7,6 +7,16 @@ intentions non encore codées.
 
 ## Cycle de vie de la commande
 
+**Panier de table** :
+L'ensemble des articles en cours de composition pour une table, avant
+validation, partagé en temps réel entre tous les téléphones qui ont scanné
+son QR (`orders/table_cart.py`, `ROADMAP.md` §Override — panier synchronisé
+multi-appareils). N'existe qu'en mémoire, jamais en base : devient une
+**Commande** dès qu'un appareil valide, ou disparaît si tous se déconnectent
+sans valider.
+_Avoid_: Session (déjà pris — authentification du personnel), Panier sans
+qualificatif (ambigu avec l'état purement local d'un appareil hors connexion)
+
 **Commande (Order)** :
 Ce qu'un client compose sur son téléphone après avoir scanné le QR de sa
 table, jusqu'à ce qu'elle soit servie ou annulée. Identifiée pour le client

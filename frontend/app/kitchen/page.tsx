@@ -163,7 +163,7 @@ export default function KitchenPage() {
     }
   }, [restaurantId, loadActiveOrders, loadRestaurant, loadTodayCount]);
 
-  const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
+  const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.sent_to_kitchen") {
       setOrders((prev) =>
         prev.some((o) => o.order_id === msg.order_id)

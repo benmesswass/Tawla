@@ -33,6 +33,9 @@ class ConnectionManager:
             conns.remove(websocket)
         log_event(logger, "ws.disconnected", restaurant_id=restaurant_id, channel=channel)
 
+    def has_connections(self, restaurant_id: int, channel: str) -> bool:
+        return bool(self._connections.get((restaurant_id, channel)))
+
     async def broadcast(self, restaurant_id: int, channel: str, message: dict) -> None:
         conns = self._connections.get((restaurant_id, channel), [])
         dead: list[WebSocket] = []
