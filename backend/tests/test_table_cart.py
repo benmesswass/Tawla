@@ -28,12 +28,20 @@ def _connect(client, restaurant, table):
     return client.websocket_connect(f"/ws/table/{restaurant.id}/{table['qr_token']}")
 
 
+def _skip_party_snapshot(ws) -> None:
+    """Deuxième message envoyé à la connexion (convives déclarés) — hors
+    sujet de ce fichier, voir test_table_party.py."""
+    ws.receive_json()
+
+
 def test_deux_appareils_composent_le_meme_panier_en_temps_reel(client):
     restaurant, table, item, _headers = _setup_restaurant_with_item(client)
 
     with _connect(client, restaurant, table) as ws_a, _connect(client, restaurant, table) as ws_b:
         assert ws_a.receive_json() == {"event": "cart.updated", "lines": []}
+        _skip_party_snapshot(ws_a)
         assert ws_b.receive_json() == {"event": "cart.updated", "lines": []}
+        _skip_party_snapshot(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 2})
         expected = {
@@ -63,11 +71,13 @@ def test_un_appareil_qui_rejoint_voit_deja_ce_que_les_autres_ont_ajoute(client):
 
     with _connect(client, restaurant, table) as ws_a:
         ws_a.receive_json()  # snapshot initial, vide
+        _skip_party_snapshot(ws_a)
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()  # écho de sa propre mutation
 
         with _connect(client, restaurant, table) as ws_b:
             snapshot = ws_b.receive_json()
+            _skip_party_snapshot(ws_b)
             assert snapshot["lines"] == [
                 {
                     "menu_item_id": item["id"], "quantity": 1, "notes": None, "is_shared": False,
@@ -81,7 +91,9 @@ def test_nimporte_quel_appareil_peut_valider_pour_toute_la_table(client):
 
     with _connect(client, restaurant, table) as ws_a, _connect(client, restaurant, table) as ws_b:
         ws_a.receive_json()
+        _skip_party_snapshot(ws_a)
         ws_b.receive_json()
+        _skip_party_snapshot(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()
@@ -114,6 +126,7 @@ def test_valider_un_panier_vide_ne_cree_aucune_commande(client):
 
     with _connect(client, restaurant, table) as ws:
         ws.receive_json()
+        _skip_party_snapshot(ws)
         ws.send_json({"action": "cart.validate"})
         error = ws.receive_json()
 
@@ -128,6 +141,7 @@ def test_un_article_indisponible_est_refuse_sans_corrompre_le_panier(client):
 
     with _connect(client, restaurant, table) as ws:
         ws.receive_json()
+        _skip_party_snapshot(ws)
         ws.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         error = ws.receive_json()
         assert error["event"] == "cart.error"
@@ -148,7 +162,9 @@ def test_devenir_indisponible_apres_ajout_ne_perd_pas_le_panier_des_autres(clien
 
     with _connect(client, restaurant, table) as ws_a, _connect(client, restaurant, table) as ws_b:
         ws_a.receive_json()
+        _skip_party_snapshot(ws_a)
         ws_b.receive_json()
+        _skip_party_snapshot(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()
@@ -180,7 +196,9 @@ def test_paniers_isoles_entre_deux_tables(client):
 
     with _connect(client, restaurant, table_a) as ws_a, _connect(client, restaurant, table_b) as ws_b:
         ws_a.receive_json()
+        _skip_party_snapshot(ws_a)
         ws_b.receive_json()
+        _skip_party_snapshot(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()
@@ -198,7 +216,9 @@ def test_paniers_isoles_entre_deux_restaurants(client):
 
     with _connect(client, restaurant_a, table_a) as ws_a, _connect(client, restaurant_b, table_b) as ws_b:
         ws_a.receive_json()
+        _skip_party_snapshot(ws_a)
         ws_b.receive_json()
+        _skip_party_snapshot(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item_a["id"], "quantity": 1})
         ws_a.receive_json()

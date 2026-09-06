@@ -14,6 +14,7 @@ from app.modules.orders import schemas as orders_schemas
 from app.modules.orders import service as orders_service
 from app.modules.orders import table_cart
 from app.modules.staff.models import StaffRole
+from app.modules.tables import party as table_party
 from app.modules.tables.models import Table
 
 router = APIRouter(tags=["notifications"])
@@ -91,7 +92,9 @@ async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: 
     synchronisé multi-appareils » (`ROADMAP.md` §Override), les mutations du
     panier partagé de la table : tout appareil qui scanne ce QR reçoit l'état
     courant à la connexion, puis chaque mise à jour, et peut valider pour
-    toute la table (`table_cart.py`).
+    toute la table (`table_cart.py`). Porte aussi, depuis la même extension,
+    le nombre de convives et leurs prénoms facultatifs (`tables/party.py`) —
+    purement déclaratif, jamais lu pour une règle métier.
     """
     table = await authenticate_table_socket(websocket, restaurant_id, qr_token, db)
     if not table:
@@ -99,9 +102,11 @@ async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: 
     channel = table_channel(table.id)
     await manager.connect(websocket, restaurant_id, channel=channel)
     # Rattrapage : un appareil qui rejoint une table déjà en train de composer
-    # son panier doit voir tout de suite ce que les autres y ont déjà mis,
-    # sans attendre la prochaine mutation de quelqu'un d'autre.
+    # son panier (ou déjà déclarée par un autre convive) doit voir tout de
+    # suite ce que les autres ont déjà fait, sans attendre leur prochaine
+    # mutation.
     await websocket.send_json(table_cart.snapshot_message(table.id))
+    await websocket.send_json(table_party.party_message(table.id))
     await _pump_table(websocket, restaurant_id, table, db, channel)
 
 
@@ -130,6 +135,11 @@ async def _pump_table(websocket: WebSocket, restaurant_id: int, table: Table, db
                     await manager.broadcast(restaurant_id, channel, table_cart.snapshot_message(table.id))
                 elif action == "cart.validate":
                     await orders_service.create_order_from_table_cart(db, table)
+                elif action == "party.set":
+                    size = int(raw.get("size", 0))
+                    names = raw.get("names") or []
+                    table_party.table_party_store.set(table.id, size, names)
+                    await manager.broadcast(restaurant_id, channel, table_party.party_message(table.id))
                 # Action inconnue ou message malformé sans champ "action" :
                 # ignoré plutôt que de casser la connexion — un client d'une
                 # version plus récente ou plus ancienne ne doit jamais faire
@@ -156,6 +166,7 @@ async def _pump_table(websocket: WebSocket, restaurant_id: int, table: Table, db
         # rattaché à aucune requête HTTP qui pourrait la purger à sa sortie).
         if not manager.has_connections(restaurant_id, channel):
             table_cart.table_cart_store.pop_all(table.id)
+            table_party.table_party_store.clear(table.id)
 
 
 @router.websocket("/ws/order/{restaurant_id}/{order_id}")

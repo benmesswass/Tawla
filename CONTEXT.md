@@ -97,10 +97,20 @@ _Avoid_: Tenant, Établissement (utilisé dans la prose, le terme de code fait
 foi), Client (voir ci-dessous — sens différent)
 
 **Client** :
-Le convive attablé qui commande depuis son téléphone. N'a aucun compte :
-identifié uniquement, et temporairement, par le token de sa commande.
-_Avoid_: Utilisateur, Convive (réservé au partage d'une commande entre
-plusieurs personnes attablées ensemble)
+La personne attablée qui commande depuis son téléphone. N'a aucun compte :
+identifiée uniquement, et temporairement, par le token de sa commande.
+_Avoid_: Utilisateur, Convive (voir ci-dessous — sens différent : une place
+déclarée à table, pas un appareil)
+
+**Convive** :
+Une place déclarée à une table — un compte de convives et, facultativement,
+un prénom par place (`tables/party.py::TableParty`). Déclaré une fois par
+table, partagé en temps réel entre tous les appareils connectés (même canal
+que le **Panier de table**) ; sert uniquement à l'affichage (panier partagé,
+calculateur d'addition `SplitBill`), jamais à une identité de connexion ni à
+un paiement séparé. Distinct du **Client** : plusieurs Clients (appareils)
+peuvent composer le même panier sans qu'aucun ne soit rattaché à un Convive
+précis.
 
 **Table** :
 Un emplacement physique du restaurant, identifié par un token QR opaque et

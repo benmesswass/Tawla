@@ -29,6 +29,7 @@ import { localeSwitchLabel, useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
+import PartyPrompt from "@/components/PartyPrompt";
 import TawlaMark from "@/components/brand/TawlaMark";
 import VignetteCategorie from "@/components/VignetteCategorie";
 import ReseauxSociaux from "@/components/ReseauxSociaux";
@@ -321,6 +322,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
   const [waiterCallState, setWaiterCallState] = useState<"idle" | "calling" | "called">("idle");
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
+  // Convives déclarés pour la table (ROADMAP.md §Override, extension) —
+  // `null` tant que rien n'est déclaré, `partyKnown` distingue ça de "pas
+  // encore reçu l'instantané du serveur" pour ne jamais afficher le prompt
+  // avant de savoir si quelqu'un d'autre à table a déjà répondu.
+  const [party, setParty] = useState<{ size: number; names: (string | null)[] } | null>(null);
+  const [partyKnown, setPartyKnown] = useState(false);
+  const [partyPromptDismissed, setPartyPromptDismissed] = useState(false);
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
   const [offlineRetryCountdown, setOfflineRetryCountdown] = useState(5);
@@ -739,6 +747,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { status: tableSocketStatus, send: sendTableAction } = useReconnectingSocket(tableWsUrl, (msg) => {
     if (msg.event === "waiter_call.resolved") {
       setWaiterCallState("idle");
+    } else if (msg.event === "party.updated") {
+      setPartyKnown(true);
+      setParty(msg.size != null ? { size: msg.size, names: msg.names ?? [] } : null);
     } else if (msg.event === "cart.updated") {
       const lines: OrderItemPayload[] = msg.lines ?? [];
       const rebuilt: Record<number, CartLine> = {};
@@ -2101,7 +2112,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {paymentError}
                   </div>
                 )}
-                <SplitBill order={trackedOrder} t={t} />
+                <SplitBill order={trackedOrder} t={t} partySize={party?.size} partyNames={party?.names} />
                 <div>
                   <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
                   <div className="flex gap-2">
@@ -2594,6 +2605,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       )}
 
       <div className="p-4 max-w-md mx-auto">
+        {/* Convives déclarés (ROADMAP.md §Override, extension) : affiché une
+            seule fois par table — jamais si un autre convive y a déjà répondu
+            ou si le canal temps réel n'est pas là pour partager la réponse. */}
+        {tableSocketStatus === "connected" && partyKnown && party === null && !partyPromptDismissed && (
+          <div className="mb-4">
+            <PartyPrompt
+              suggestedSize={table?.seats ?? 2}
+              t={t}
+              onSubmit={(size, names) => {
+                sendTableAction({ action: "party.set", size, names });
+              }}
+              onSkip={() => setPartyPromptDismissed(true)}
+            />
+          </div>
+        )}
+
         {/* Commandes déjà passées et pas encore réglées : sans ce rappel, une
             première tournée s'oubliait dès qu'on retournait au menu, et le
             client repartait sans avoir payé. */}

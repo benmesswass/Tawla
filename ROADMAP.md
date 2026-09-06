@@ -389,6 +389,27 @@ panier en temps réel et valident une seule commande pour la table.
       concurremment, isolation entre tables et restaurants différents (même
       rigueur que les tests d'isolation multi-tenant existants)
 
+**Extension du 2026-09-06, même override, sans nouveau déclencheur** :
+convives déclarés au scan — nombre de personnes à table, prénoms facultatifs
+(défaut « Personne N »), affichage uniquement (`tables/party.py`, même
+mécanique en mémoire/WebSocket que le panier partagé ci-dessus). Utilisé pour
+préremplir `SplitBill` (déjà noté « premier candidat à la coupe » par
+`AUDIT_FINAL.md` faute de demande restaurateur constatée — cette extension ne
+change pas ce diagnostic, elle rend juste l'existant plus lisible en
+attendant l'arbitrage de Phase 21). Aucun paiement séparé par personne : ça
+resterait un chantier bien plus large, explicitement refusé pour l'instant
+(voir le commentaire de tête de `SplitBill.tsx`).
+
+- [ ] `tables/party.py` — nombre de convives + prénoms facultatifs, en
+      mémoire par table, même cycle de vie que le panier (purgé au départ du
+      dernier appareil)
+- [ ] Prompt côté client à l'ouverture du menu, jamais bloquant (« Passer » à
+      chaque étape), suggestion de taille pré-remplie depuis `Table.seats`
+- [ ] `SplitBill` utilise le prénom déclaré à la place de « Personne N »
+      quand il existe
+- [ ] Traduction arabe non relue par un locuteur natif — à vérifier avant un
+      vrai pilote (même règle que le reste du parcours client bilingue)
+
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même

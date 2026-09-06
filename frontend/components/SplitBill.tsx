@@ -16,17 +16,35 @@ type SplitMode = "equal" | "items";
  * par commande) — reporté tant qu'un pilote resto réel n'en confirme pas le
  * besoin (cf. philosophie KISS/YAGNI du projet).
  */
-export default function SplitBill({ order, t = fr }: { order: Order; t?: Dictionary }) {
+export default function SplitBill({
+  order,
+  t = fr,
+  partySize,
+  partyNames,
+}: {
+  order: Order;
+  t?: Dictionary;
+  // Déclarés au scan (ROADMAP.md §Override, extension) — quand présents, ils
+  // priment sur la déduction depuis `shared_with` : la table a déjà répondu
+  // "on est 4", pas la peine de lui refaire la question à partir des plats.
+  partySize?: number;
+  partyNames?: (string | null)[];
+}) {
   const [open, setOpen] = useState(false);
   // Par plat, et non à parts égales : c'est ce que la table demande dès qu'un
   // convive a pris une entrée et l'autre un plat du jour. Et comme le client a
   // déjà dit qui partageait quoi en commandant, la répartition arrive
   // pré-remplie au lieu de lui reposer la question (retour du premier service).
   const [mode, setMode] = useState<SplitMode>("items");
-  const [peopleCount, setPeopleCount] = useState(() => convivesDeLaCommande(order));
+  const [peopleCount, setPeopleCount] = useState(() => partySize ?? convivesDeLaCommande(order));
   const [assignments, setAssignments] = useState<Record<number, number[]>>(() =>
     Object.fromEntries(order.items.map((it) => [it.id, it.shared_with ?? []]))
   );
+  // Prénom déclaré à la place de "Personne N", quand donné — jamais que pour
+  // l'affichage, voir le commentaire de tête sur ce composant.
+  function personLabel(p: number): string {
+    return partyNames?.[p - 1] || t.personLabel(p);
+  }
 
   if (!open) {
     return (
@@ -125,7 +143,7 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
                             : "border-[var(--line)] bg-white text-[var(--encre)]"
                         }`}
                       >
-                        {t.personLabel(p)}
+                        {personLabel(p)}
                       </button>
                     );
                   })}
@@ -140,7 +158,7 @@ export default function SplitBill({ order, t = fr }: { order: Order; t?: Diction
       <div className="pt-2 border-t border-[var(--line)] space-y-1 text-sm text-[var(--encre)]">
         {shares.map((amount, i) => (
           <div key={i} className="flex justify-between">
-            <span>{t.personLabel(i + 1)}</span>
+            <span>{personLabel(i + 1)}</span>
             <span className="font-semibold tabular-nums">
               {formatAmount(amount)} {t.currency}
             </span>

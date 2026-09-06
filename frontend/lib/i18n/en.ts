@@ -111,6 +111,12 @@ export const en = {
   unassignedSharedNote: "Unassigned dishes are shared equally.",
   splitBillDisclaimer: "For guidance only — payment covers the full bill, once for the whole table.",
 
+  partyPromptTitle: "How many of you are there?",
+  partyPromptJustMe: "Just me",
+  partyPromptSkip: "Skip",
+  partyNamesHint: "First names (optional)",
+  partyContinue: "Continue",
+
   offlineQueuedTitle: "Connection lost",
   offlineQueuedMessage:
     "Your order is saved on this phone. It will be sent as soon as the network is back — don't refresh the page.",
