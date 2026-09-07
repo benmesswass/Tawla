@@ -22,10 +22,18 @@ export default function PartyPrompt({
   t?: Dictionary;
 }) {
   const [step, setStep] = useState<"size" | "names">("size");
-  const [size, setSize] = useState(() => Math.max(1, Math.min(20, suggestedSize || 2)));
+  // Texte brut plutôt qu'un nombre déjà clampé : un <input type="number">
+  // contrôlé qui reclampe à chaque frappe empêche de vider le champ pour
+  // retaper un nombre à deux chiffres (chaque backspace retombe sur la borne
+  // basse) — sur mobile, ça obligeait à tout sélectionner puis retaper avant
+  // de pouvoir saisir la nouvelle valeur. Le clamp ne s'applique qu'à la
+  // valeur exploitée (`size`), jamais au texte affiché pendant la frappe.
+  const [sizeText, setSizeText] = useState(() => String(Math.max(1, Math.min(20, suggestedSize || 2))));
   const [names, setNames] = useState<string[]>([]);
+  const size = clampSize(sizeText);
 
   function goToNames() {
+    setSizeText(String(size));
     if (size <= 1) {
       onSubmit(1, [null]);
     } else {
@@ -85,10 +93,12 @@ export default function PartyPrompt({
         <input
           id="party-size"
           type="number"
+          inputMode="numeric"
           min={1}
           max={20}
-          value={size}
-          onChange={(e) => setSize(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+          value={sizeText}
+          onChange={(e) => setSizeText(e.target.value)}
+          onBlur={() => setSizeText(String(size))}
           className="w-16 bg-white border border-[var(--line)] rounded-[10px] px-2 py-1"
         />
       </div>
@@ -115,4 +125,9 @@ export default function PartyPrompt({
       </div>
     </div>
   );
+}
+
+function clampSize(text: string): number {
+  const n = parseInt(text, 10);
+  return Number.isFinite(n) ? Math.max(1, Math.min(20, n)) : 1;
 }

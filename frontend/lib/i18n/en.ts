@@ -116,6 +116,7 @@ export const en = {
   partyPromptSkip: "Skip",
   partyNamesHint: "First names (optional)",
   partyContinue: "Continue",
+  partySummary: (n: number) => `There are ${n} of you at the table`,
 
   offlineQueuedTitle: "Connection lost",
   offlineQueuedMessage:

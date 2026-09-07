@@ -2605,19 +2605,34 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       )}
 
       <div className="p-4 max-w-md mx-auto">
-        {/* Convives déclarés (ROADMAP.md §Override, extension) : affiché une
+        {/* Convives déclarés (ROADMAP.md §Override, extension) : le prompt une
             seule fois par table — jamais si un autre convive y a déjà répondu
-            ou si le canal temps réel n'est pas là pour partager la réponse. */}
-        {tableSocketStatus === "connected" && partyKnown && party === null && !partyPromptDismissed && (
+            ou si le canal temps réel n'est pas là pour partager la réponse —
+            puis, une fois répondu, un rappel qui reste affiché pendant toute
+            la commande, pour cet appareil comme pour tout autre qui scanne le
+            même QR ensuite (état tenu par le serveur, voir `party.updated`). */}
+        {tableSocketStatus === "connected" && partyKnown && (
           <div className="mb-4">
-            <PartyPrompt
-              suggestedSize={table?.seats ?? 2}
-              t={t}
-              onSubmit={(size, names) => {
-                sendTableAction({ action: "party.set", size, names });
-              }}
-              onSkip={() => setPartyPromptDismissed(true)}
-            />
+            {party === null ? (
+              !partyPromptDismissed && (
+                <PartyPrompt
+                  suggestedSize={table?.seats ?? 2}
+                  t={t}
+                  onSubmit={(size, names) => {
+                    sendTableAction({ action: "party.set", size, names });
+                  }}
+                  onSkip={() => setPartyPromptDismissed(true)}
+                />
+              )
+            ) : (
+              party.size > 1 && (
+                <p className="text-sm text-[var(--ink-soft)]">
+                  {t.partySummary(party.size)}
+                  {party.names.some(Boolean) &&
+                    ` — ${party.names.map((n, i) => n || t.personLabel(i + 1)).join(", ")}`}
+                </p>
+              )
+            )}
           </div>
         )}
 
