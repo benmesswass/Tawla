@@ -1,11 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { setToken } from "@/lib/auth";
 import { enregistrerSessionDemo } from "@/lib/visite/etat";
+
+/**
+ * `POST /api/v1/demo/sessions` répond en une seule transaction — pas de
+ * vraies étapes à faire remonter du backend. Mais le palier gratuit Render
+ * met le service en veille après 15 min d'inactivité (voir
+ * `AUDIT_COUTS_PRODUCTION.md` §4.1), et le réveil rapproche l'attente réelle
+ * de la minute : sans rien à l'écran pendant tout ce temps, le bouton a l'air
+ * bloqué. Ces libellés décrivent ce que `creer_demo` fait réellement
+ * (équipe, tables, carte) dans l'ordre où ça se produit — une approximation
+ * du vrai déroulé, pas des étapes mesurées.
+ */
+const ETAPES_PREPARATION = [
+  "Préparation…",
+  "Création de l'établissement…",
+  "Ajout de l'équipe (manager, serveur, cuisine)…",
+  "Installation des tables et QR codes…",
+  "Chargement de la carte…",
+  "Presque prêt…",
+];
+const INTERVALLE_ETAPE_MS = 3000;
 
 /**
  * Ouvre un établissement de démonstration jetable (`POST /api/v1/demo/sessions`),
@@ -34,6 +54,18 @@ export default function BoutonVisite({
 }) {
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
+  const [etapeIndex, setEtapeIndex] = useState(0);
+
+  useEffect(() => {
+    if (!enCours) {
+      setEtapeIndex(0);
+      return;
+    }
+    const intervalle = setInterval(() => {
+      setEtapeIndex((i) => Math.min(i + 1, ETAPES_PREPARATION.length - 1));
+    }, INTERVALLE_ETAPE_MS);
+    return () => clearInterval(intervalle);
+  }, [enCours]);
 
   async function ouvrir() {
     if (enCours) return;
@@ -62,7 +94,7 @@ export default function BoutonVisite({
 
   return (
     <button type="button" onClick={ouvrir} disabled={enCours} className={className}>
-      {enCours ? "Préparation…" : libelle}
+      {enCours ? ETAPES_PREPARATION[etapeIndex] : libelle}
     </button>
   );
 }
