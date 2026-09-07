@@ -17,6 +17,26 @@ export type PlanTable = {
 };
 
 /**
+ * Un repère fixe du plan — le bar, une porte d'entrée. Pas une table : rien
+ * à commander, rien à servir, juste de quoi se repérer dans la salle d'un
+ * coup d'œil (« la 4 est près de l'entrée »). Toujours posé — contrairement
+ * à une table, il n'a pas de réserve où attendre : il naît déjà à sa place.
+ */
+export type LandmarkKind = "bar" | "entrance";
+
+export type PlanLandmark = {
+  id: number;
+  kind: LandmarkKind;
+  pos_x: number;
+  pos_y: number;
+};
+
+export const LIBELLE_REPERE: Record<LandmarkKind, string> = {
+  bar: "Bar",
+  entrance: "Entrée",
+};
+
+/**
  * Ce qu'une table demande à un humain, du plus calme au plus urgent.
  *
  * L'ordre compte : une table peut cumuler plusieurs choses (une commande en

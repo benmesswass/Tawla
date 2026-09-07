@@ -19,6 +19,17 @@ class TableShape(str, enum.Enum):
     RECT = "rect"
 
 
+class LandmarkKind(str, enum.Enum):
+    """
+    Repère fixe du plan — pas une table : rien à commander, rien à servir,
+    juste un point pour se repérer (« la 4 est près de l'entrée »). Deux
+    valeurs seulement, celles qu'on demande pour s'orienter dans une salle ;
+    au-delà, un vrai plan de salle d'architecte prendrait le relais.
+    """
+    BAR = "bar"
+    ENTRANCE = "entrance"
+
+
 def generate_table_token() -> str:
     """
     Token opaque et non-devinable pour le QR code de la table.
@@ -53,3 +64,17 @@ class Table(Base):
     # pense « une table de 4 », pas « un carré ». La forme reste un détail
     # secondaire, et le nombre de chaises dessinées en découle.
     seats: Mapped[int] = mapped_column(Integer, default=4)
+
+
+class PlanLandmark(Base):
+    __tablename__ = "plan_landmarks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    kind: Mapped[LandmarkKind] = mapped_column(Enum(LandmarkKind), nullable=False)
+
+    # Toujours posé, contrairement à une table : un repère n'a rien d'autre à
+    # régler qu'une position, donc pas de réserve où attendre — il naît déjà
+    # sur le plan (voir POST .../landmarks).
+    pos_x: Mapped[float] = mapped_column(Float, nullable=False)
+    pos_y: Mapped[float] = mapped_column(Float, nullable=False)

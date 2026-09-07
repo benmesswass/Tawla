@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lalezar } from "@/lib/fonts";
-import { api, staffWsUrl, LoyaltyMember, ModificationRequest, MyShift, Order, PlanTable } from "@/lib/api";
+import { api, staffWsUrl, LoyaltyMember, ModificationRequest, MyShift, Order, PlanLandmark, PlanTable } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
@@ -126,6 +126,7 @@ export default function StaffPage() {
   const [error, setError] = useState<string | null>(null);
   const [myShift, setMyShift] = useState<MyShift | null>(null);
   const [plan, setPlan] = useState<PlanTable[]>([]);
+  const [reperes, setReperes] = useState<PlanLandmark[]>([]);
   const [enCuisine, setEnCuisine] = useState<EnCuisine[]>([]);
   const [vuePlan, setVuePlan] = useState(true);
   const [tableOuverte, setTableOuverte] = useState<number | null>(null);
@@ -267,6 +268,17 @@ export default function StaffPage() {
     }
   }, [restaurantId]);
 
+  const loadReperes = useCallback(async () => {
+    if (!restaurantId) return;
+    // Best-effort, comme le plan lui-même : le bar et l'entrée sont un
+    // confort de repérage, jamais un blocage du service.
+    try {
+      setReperes(await api.listLandmarks(restaurantId));
+    } catch {
+      setReperes([]);
+    }
+  }, [restaurantId]);
+
   const loadMyShift = useCallback(async () => {
     // Best-effort : ses chiffres personnels ne doivent jamais empêcher l'écran
     // de service de s'afficher.
@@ -307,8 +319,9 @@ export default function StaffPage() {
       loadModificationRequests();
       loadMyShift();
       loadPlan();
+      loadReperes();
     }
-  }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan]);
+  }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan, loadReperes]);
 
   const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
@@ -790,6 +803,7 @@ export default function StaffPage() {
                   <>
                     <PlanDeSalle
                       tables={plan}
+                      landmarks={reperes}
                       etats={etatsDesTables}
                       onTableActivee={(t) => setTableOuverte((ouverte) => (ouverte === t.id ? null : t.id))}
                       tableSelectionnee={tableOuverte}

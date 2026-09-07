@@ -1852,6 +1852,8 @@ export default function DashboardPage() {
           <div className="mb-8">
             <EditeurDePlan
               tables={tables}
+              restaurantId={restaurantId}
+              onErreur={handleGatedError}
               enregistrement={savingPlan}
               onEnregistrer={async (placements) => {
                 if (!restaurantId) return;

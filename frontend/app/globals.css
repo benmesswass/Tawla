@@ -170,6 +170,15 @@
    tenu à la main pendant le service.
    ========================================================================== */
 
+.plan-cadre {
+  /* Sans plafond, la surface (width: 100%) suit la largeur du conteneur —
+     parfait sur un téléphone, énorme dans une colonne de tableau de bord sur
+     grand écran. Les tables gardent une taille en pixels fixe (PieceTable) :
+     au-delà de cette largeur, agrandir la salle n'ajoute que du vide autour
+     d'elles. */
+  max-width: 480px;
+}
+
 .plan-surface {
   position: relative;
   width: 100%;
@@ -377,6 +386,48 @@
 .piece[data-urgente] {
   border-radius: 999px;
   animation: plan-respire 2.6s ease-out infinite;
+}
+
+/* --- Un repère (bar, entrée) ---------------------------------------------
+   Volontairement neutre : jamais la couleur d'une table qui attend, sinon un
+   repère fixe se lirait comme une urgence. */
+.repere {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: transform .14s ease;
+}
+.repere:hover { transform: scale(1.05); }
+.repere:focus-visible { outline: 2px solid var(--harissa); outline-offset: 4px; border-radius: 10px; }
+.plan-surface[data-editable] .repere { cursor: grab; }
+.repere[data-deplacement] { transform: scale(1.08); cursor: grabbing; }
+
+.repere-icone {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(246, 239, 221, .14);
+  border: 1.5px solid rgba(246, 239, 221, .38);
+  fill: none;
+  stroke: rgba(246, 239, 221, .75);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.repere[data-selectionnee] .repere-icone { border-color: var(--harissa); stroke: var(--harissa); }
+
+.repere-etiquette {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: rgba(246, 239, 221, .62);
+  white-space: nowrap;
 }
 
 /* --- Agir depuis la table ------------------------------------------------ */

@@ -98,6 +98,13 @@ non-devinable (jamais un id séquentiel). Porte un libellé, une zone
 facultative, une position sur le plan de salle, une forme et un nombre de
 couverts.
 
+**Repère (PlanLandmark)** :
+Un point fixe du plan de salle qui n'est pas une table — le bar, une porte
+d'entrée — posé uniquement pour se repérer dans la zone. Toujours placé, sans
+réserve où attendre contrairement à une table ; pas de statut, pas de
+couverts.
+_Avoid_: Élément de décor, Meuble
+
 **Palier d'abonnement (SubscriptionTier)** :
 Le niveau payant d'un Restaurant — `ESSENTIEL` / `PRO` / `BUSINESS`, chacun
 incluant les fonctionnalités du précédent. Distinct du **palier effectif**,

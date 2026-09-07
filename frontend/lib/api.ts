@@ -459,6 +459,17 @@ export type PlanTable = {
   seats: number;
 };
 
+export type LandmarkKind = "bar" | "entrance";
+
+/** Un repère fixe du plan — pas une table, juste un point pour se repérer
+ *  (« la 4 est près de l'entrée »), Phase 18 suite. */
+export type PlanLandmark = {
+  id: number;
+  kind: LandmarkKind;
+  pos_x: number;
+  pos_y: number;
+};
+
 export type TeamReport = {
   start: string;
   end: string;
@@ -771,6 +782,20 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ placements }),
     }),
+  listLandmarks: (restaurantId: number) =>
+    request<PlanLandmark[]>(`/api/v1/tables/plan/${restaurantId}/landmarks`),
+  createLandmark: (restaurantId: number, kind: LandmarkKind, pos_x: number, pos_y: number) =>
+    request<PlanLandmark>(`/api/v1/tables/plan/${restaurantId}/landmarks`, {
+      method: "POST",
+      body: JSON.stringify({ kind, pos_x, pos_y }),
+    }),
+  moveLandmark: (restaurantId: number, landmarkId: number, pos_x: number, pos_y: number) =>
+    request<PlanLandmark>(`/api/v1/tables/plan/${restaurantId}/landmarks/${landmarkId}`, {
+      method: "PUT",
+      body: JSON.stringify({ pos_x, pos_y }),
+    }),
+  deleteLandmark: (restaurantId: number, landmarkId: number) =>
+    request<void>(`/api/v1/tables/plan/${restaurantId}/landmarks/${landmarkId}`, { method: "DELETE" }),
   getDashboardStats: (restaurantId: number, date?: string) =>
     request<DashboardStats>(
       `/api/v1/stats/dashboard/${restaurantId}${date ? `?date=${date}` : ""}`
