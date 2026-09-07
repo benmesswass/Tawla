@@ -63,7 +63,10 @@ export default function HomePage() {
               tourner, pas s'inscrire. Elle ne quitte pas la page — les bulles
               s'ouvrent par-dessus celle qu'il est en train de lire. */}
           <div className="mt-7 flex flex-wrap items-center gap-4">
-            <BoutonVisite className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-medium text-[var(--harissa)] shadow-sm transition-colors duration-200 hover:bg-[var(--semoule)]" />
+            <BoutonVisite
+              className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-medium text-[var(--harissa)] shadow-sm transition-colors duration-200 hover:bg-[var(--semoule)]"
+              etapeClassName="text-white/80"
+            />
             <p className="text-sm text-white/80">2 minutes, sans inscription.</p>
           </div>
         </div>
