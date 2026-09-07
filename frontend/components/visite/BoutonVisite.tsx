@@ -15,10 +15,11 @@ import { enregistrerSessionDemo } from "@/lib/visite/etat";
  * de la minute : sans rien à l'écran pendant tout ce temps, le bouton a l'air
  * bloqué. Ces libellés décrivent ce que `creer_demo` fait réellement
  * (équipe, tables, carte) dans l'ordre où ça se produit — une approximation
- * du vrai déroulé, pas des étapes mesurées.
+ * du vrai déroulé, pas des étapes mesurées. Affichés sous le bouton, pas
+ * dedans : le bouton garde toujours le même texte (« Préparation… ») pour ne
+ * pas changer de largeur à chaque étape.
  */
 const ETAPES_PREPARATION = [
-  "Préparation…",
   "Création de l'établissement…",
   "Ajout de l'équipe (manager, serveur, cuisine)…",
   "Installation des tables et QR codes…",
@@ -48,9 +49,13 @@ const INTERVALLE_ETAPE_MS = 3000;
 export default function BoutonVisite({
   className = "",
   libelle = "Voir la démo",
+  etapeClassName = "text-[var(--ink-soft)]",
 }: {
   className?: string;
   libelle?: string;
+  /** Couleur du message d'étape, à adapter au fond derrière le bouton
+   * (le composant ne connaît pas son contexte d'appel). */
+  etapeClassName?: string;
 }) {
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
@@ -93,8 +98,17 @@ export default function BoutonVisite({
   }
 
   return (
-    <button type="button" onClick={ouvrir} disabled={enCours} className={className}>
-      {enCours ? ETAPES_PREPARATION[etapeIndex] : libelle}
-    </button>
+    <span className="relative inline-block">
+      <button type="button" onClick={ouvrir} disabled={enCours} className={className}>
+        {enCours ? "Préparation…" : libelle}
+      </button>
+      {enCours && (
+        <span
+          className={`pointer-events-none absolute left-0 top-full mt-1 w-max max-w-[16rem] text-xs ${etapeClassName}`}
+        >
+          {ETAPES_PREPARATION[etapeIndex]}
+        </span>
+      )}
+    </span>
   );
 }
