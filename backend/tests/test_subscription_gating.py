@@ -7,7 +7,7 @@ fonctionnalité bloquée derrière (voir le commentaire historique dans
 inerte, selon le cas — une fonctionnalité que Pro ou Business autorise.
 """
 from app.modules.staff.models import StaffRole
-from app.modules.tenants.models import SubscriptionTier
+from app.modules.tenants.models import Restaurant, SubscriptionTier
 from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
 
 
@@ -198,6 +198,84 @@ def test_floor_plan_save_forbidden_for_essentiel(client):
     )
     assert res.status_code == 403
     assert res.json()["detail"]["code"] == "UPGRADE_REQUIRED"
+
+
+def test_floor_plan_positions_hidden_from_staff_after_downgrade(client, db_session):
+    """
+    Bug rapporté 2026-09-07 : un restaurant qui a dessiné son plan sous Pro
+    puis repasse Essentiel continuait de le montrer en service, zones et
+    positions comprises, parce que la lecture (read_plan) n'a jamais eu de
+    garde de palier — seule l'écriture (save_plan) en avait une.
+    """
+    restaurant, manager_headers, table, _item = _setup(client, SubscriptionTier.PRO, "gating-plan-downgrade")
+    client.put(
+        f"/api/v1/tables/plan/{restaurant.id}",
+        json={"placements": [{"table_id": table["id"], "pos_x": 30.0, "pos_y": 40.0}]},
+        headers=manager_headers,
+    )
+    client.patch(
+        f"/api/v1/tables/{table['id']}",
+        json={"label": table["label"], "zone": "Terrasse"},
+        headers=manager_headers,
+    )
+
+    db_restaurant = db_session.get(Restaurant, restaurant.id)
+    db_restaurant.subscription_tier = SubscriptionTier.ESSENTIEL
+    db_session.commit()
+
+    plan = client.get(f"/api/v1/tables/plan/{restaurant.id}", headers=manager_headers).json()
+    posee = next(t for t in plan if t["id"] == table["id"])
+    assert posee["pos_x"] is None
+    assert posee["pos_y"] is None
+    assert posee["zone"] is None
+
+
+def test_table_list_hides_zone_and_position_after_downgrade(client, db_session):
+    """Même garde côté dashboard manager (list_tables), pas seulement côté
+    écran de service (read_plan) — les deux servent zone/positions."""
+    restaurant, manager_headers, table, _item = _setup(client, SubscriptionTier.PRO, "gating-liste-downgrade")
+    client.put(
+        f"/api/v1/tables/plan/{restaurant.id}",
+        json={"placements": [{"table_id": table["id"], "pos_x": 15.0, "pos_y": 55.0}]},
+        headers=manager_headers,
+    )
+
+    db_restaurant = db_session.get(Restaurant, restaurant.id)
+    db_restaurant.subscription_tier = SubscriptionTier.ESSENTIEL
+    db_session.commit()
+
+    listing = client.get(f"/api/v1/tables/by-restaurant/{restaurant.id}", headers=manager_headers).json()
+    posee = next(t for t in listing if t["id"] == table["id"])
+    assert posee["pos_x"] is None
+    assert posee["pos_y"] is None
+
+
+def test_floor_plan_data_survives_downgrade_and_reappears_on_upgrade(client, db_session):
+    """
+    Masqué à la lecture, jamais effacé en base : sans quoi un client qui
+    rétrograde puis repasse Pro devrait redessiner toute sa salle pour rien.
+    """
+    restaurant, manager_headers, table, _item = _setup(client, SubscriptionTier.PRO, "gating-plan-reversible")
+    client.put(
+        f"/api/v1/tables/plan/{restaurant.id}",
+        json={"placements": [{"table_id": table["id"], "pos_x": 12.0, "pos_y": 88.0}]},
+        headers=manager_headers,
+    )
+
+    db_restaurant = db_session.get(Restaurant, restaurant.id)
+    db_restaurant.subscription_tier = SubscriptionTier.ESSENTIEL
+    db_session.commit()
+    hidden = client.get(f"/api/v1/tables/plan/{restaurant.id}", headers=manager_headers).json()
+    assert next(t for t in hidden if t["id"] == table["id"])["pos_x"] is None
+
+    db_session.expire_all()
+    db_restaurant = db_session.get(Restaurant, restaurant.id)
+    db_restaurant.subscription_tier = SubscriptionTier.PRO
+    db_session.commit()
+
+    restored = client.get(f"/api/v1/tables/plan/{restaurant.id}", headers=manager_headers).json()
+    posee = next(t for t in restored if t["id"] == table["id"])
+    assert (posee["pos_x"], posee["pos_y"]) == (12.0, 88.0)
 
 
 def test_ramadan_mode_forbidden_for_essentiel(client):

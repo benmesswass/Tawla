@@ -17,6 +17,18 @@ router = APIRouter(prefix="/api/v1/tables", tags=["tables"])
 _MANAGER = require_role(StaffRole.MANAGER)
 
 
+def _allow_plan(db: Session, restaurant_id: int) -> bool:
+    """
+    Palier Pro+ : seule règle qui décide si CE restaurant a accès au plan de
+    salle (positions) et aux zones — utilisée à l'écriture
+    (`_zone_or_none_for_tier` ci-dessous, `require_tier(PRO)` sur
+    `save_plan`) et à la lecture (`_hide_plan_fields`). Un seul calcul,
+    jamais deux qui pourraient diverger.
+    """
+    restaurant = db.get(Restaurant, restaurant_id)
+    return bool(restaurant) and tier_includes(effective_tier(restaurant), SubscriptionTier.PRO)
+
+
 def _zone_or_none_for_tier(db: Session, restaurant_id: int, zone: str | None) -> str | None:
     """
     Les zones de salle (plan visuel, Pro+) n'ont pas de sens sans lui — plutôt
@@ -25,10 +37,24 @@ def _zone_or_none_for_tier(db: Session, restaurant_id: int, zone: str | None) ->
     """
     if not zone:
         return None
-    restaurant = db.get(Restaurant, restaurant_id)
-    if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
-        return None
-    return zone
+    return zone if _allow_plan(db, restaurant_id) else None
+
+
+def _hide_plan_fields(
+    data: schemas.TableOut | schemas.TablePlanOut, allow_plan: bool
+) -> schemas.TableOut | schemas.TablePlanOut:
+    """
+    Filtre de LECTURE, symétrique à `_zone_or_none_for_tier` côté écriture —
+    sans lui, une rétrogradation à Essentiel ne changeait rien à ce que
+    `read_plan`/`list_tables` servaient : une position ou une zone posée
+    pendant un Pro antérieur restait visible telle quelle (bug rapporté
+    2026-09-07). Les valeurs ne sont JAMAIS effacées en base ici — seulement
+    masquées à la réponse — donc un retour à Pro+ les fait réapparaître sans
+    que le manager ait à redessiner sa salle.
+    """
+    if allow_plan:
+        return data
+    return data.model_copy(update={"zone": None, "pos_x": None, "pos_y": None})
 
 
 @router.post("", response_model=schemas.TableOut, status_code=201)
@@ -48,7 +74,9 @@ def list_tables(restaurant_id: int, db: Session = Depends(get_db), staff: Staff 
     """Gestion des tables et de leurs zones de salle côté dashboard manager."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return db.query(Table).filter(Table.restaurant_id == restaurant_id).order_by(Table.id).all()
+    allow_plan = _allow_plan(db, restaurant_id)
+    tables = db.query(Table).filter(Table.restaurant_id == restaurant_id).order_by(Table.id).all()
+    return [_hide_plan_fields(schemas.TableOut.model_validate(t), allow_plan) for t in tables]
 
 
 @router.patch("/{table_id}", response_model=schemas.TableOut)
@@ -63,7 +91,7 @@ def update_table(
     table.zone = _zone_or_none_for_tier(db, table.restaurant_id, payload.zone)
     db.commit()
     db.refresh(table)
-    return table
+    return _hide_plan_fields(schemas.TableOut.model_validate(table), _allow_plan(db, table.restaurant_id))
 
 
 @router.delete("/{table_id}", status_code=204)
@@ -131,7 +159,7 @@ def assign_staff(
     table.assigned_staff_id = payload.staff_id
     db.commit()
     db.refresh(table)
-    return table
+    return _hide_plan_fields(schemas.TableOut.model_validate(table), _allow_plan(db, table.restaurant_id))
 
 
 @router.get("/plan/{restaurant_id}", response_model=list[schemas.TablePlanOut])
@@ -144,7 +172,9 @@ def read_plan(
     et la cuisine regardent la même salle que le manager."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return db.query(Table).filter(Table.restaurant_id == restaurant_id).order_by(Table.id).all()
+    allow_plan = _allow_plan(db, restaurant_id)
+    tables = db.query(Table).filter(Table.restaurant_id == restaurant_id).order_by(Table.id).all()
+    return [_hide_plan_fields(schemas.TablePlanOut.model_validate(t), allow_plan) for t in tables]
 
 
 @router.put("/plan/{restaurant_id}", response_model=list[schemas.TableOut])
