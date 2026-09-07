@@ -1,8 +1,10 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.modules.orders.models import Order
 from app.modules.tables.models import Table
 from app.modules.tenants.models import Restaurant
+from app.modules.waiter_calls.models import WaiterCall
 
 
 def get_table_by_qr_token(db: Session, qr_token: str) -> Table:
@@ -31,3 +33,24 @@ def get_table_by_qr_token(db: Session, qr_token: str) -> Table:
             detail={"code": "INVALID_TABLE_CODE", "message": "invalid table code"},
         )
     return table
+
+
+def delete_table(db: Session, table: Table) -> None:
+    """
+    Une table qui a déjà des commandes ou des appels serveur garde son
+    historique (stats, factures) : la supprimer casserait la FK, ou pire la
+    perdrait en silence (SQLite ne vérifie pas les FK dans les tests). Le
+    manager renomme la table plutôt que d'effacer un passage réel.
+    """
+    if db.query(Order.id).filter(Order.table_id == table.id).first() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "TABLE_HAS_ORDERS", "message": "table has existing orders"},
+        )
+    if db.query(WaiterCall.id).filter(WaiterCall.table_id == table.id).first() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "TABLE_HAS_WAITER_CALLS", "message": "table has existing waiter calls"},
+        )
+    db.delete(table)
+    db.commit()

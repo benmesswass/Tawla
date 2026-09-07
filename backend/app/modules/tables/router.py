@@ -66,6 +66,14 @@ def update_table(
     return table
 
 
+@router.delete("/{table_id}", status_code=204)
+def delete_table(table_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
+    table = db.get(Table, table_id)
+    if not table or table.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "TABLE_NOT_FOUND", "message": "table not found"})
+    service.delete_table(db, table)
+
+
 @router.get("/{table_id}/poster")
 def get_table_poster(table_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
     """

@@ -15,6 +15,10 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
   INVALID_TRANSITION: () => "Cette commande a déjà changé de statut. La page va se mettre à jour.",
   STAFF_NOT_FOUND: () => "Ce membre du personnel n'existe pas.",
   STAFF_WRONG_RESTAURANT: () => "Ce membre du personnel n'appartient pas à ce restaurant.",
+  TABLE_HAS_ORDERS: () =>
+    "Cette table a déjà des commandes : la supprimer effacerait cet historique. Renommez-la plutôt si elle ne sert plus.",
+  TABLE_HAS_WAITER_CALLS: () =>
+    "Cette table a déjà des appels serveur enregistrés : la supprimer effacerait cet historique. Renommez-la plutôt si elle ne sert plus.",
   INVALID_CREDENTIALS: () => "E-mail ou mot de passe incorrect.",
   NOT_AUTHENTICATED: () => "Session expirée, merci de vous reconnecter.",
   INVALID_TOKEN: () => "Session expirée, merci de vous reconnecter.",
