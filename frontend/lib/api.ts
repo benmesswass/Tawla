@@ -593,6 +593,7 @@ export const api = {
     request<Table>("/api/v1/tables", { method: "POST", body: JSON.stringify(payload) }),
   updateTable: (tableId: number, payload: { label: string; zone?: string | null }) =>
     request<Table>(`/api/v1/tables/${tableId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteTable: (tableId: number) => request<void>(`/api/v1/tables/${tableId}`, { method: "DELETE" }),
   // Affiche QR en PDF pour les tables ajoutées en self-service, à imprimer et
   // coller en salle — pas de chevalet fourni à l'installation dans ce cas,
   // contrairement aux pilotes de setup_restaurant.py (2026-08-20).

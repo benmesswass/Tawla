@@ -107,6 +107,79 @@ def test_update_table_from_another_restaurant_is_not_found(client):
     assert res.status_code == 404
 
 
+def test_delete_table(client):
+    restaurant, headers = _setup_restaurant(client)
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
+    ).json()
+
+    res = client.delete(f"/api/v1/tables/{table['id']}", headers=headers)
+    assert res.status_code == 204
+
+    remaining = client.get(f"/api/v1/tables/by-restaurant/{restaurant.id}", headers=headers)
+    assert remaining.json() == []
+
+
+def test_delete_table_requires_manager_role(client):
+    restaurant, headers = _setup_restaurant(client)
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
+    ).json()
+    waiter = create_staff(restaurant.id, role=StaffRole.WAITER)
+
+    res = client.delete(f"/api/v1/tables/{table['id']}", headers=auth_headers(waiter))
+    assert res.status_code == 403
+
+
+def test_delete_table_from_another_restaurant_is_not_found(client):
+    _restaurant_a, headers_a = _setup_restaurant(client)
+    restaurant_b, headers_b = _setup_restaurant(client)
+    table_b = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant_b.id, "label": "Table B"}, headers=headers_b
+    ).json()
+
+    res = client.delete(f"/api/v1/tables/{table_b['id']}", headers=headers_a)
+    assert res.status_code == 404
+
+    still_there = client.get(f"/api/v1/tables/by-restaurant/{restaurant_b.id}", headers=headers_b)
+    assert [t["id"] for t in still_there.json()] == [table_b["id"]]
+
+
+def test_delete_table_with_orders_is_blocked(client):
+    restaurant, headers = _setup_restaurant(client)
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
+    ).json()
+    item = client.post(
+        "/api/v1/menu-items",
+        json={"restaurant_id": restaurant.id, "name": "Plat", "price": 10},
+        headers=headers,
+    ).json()
+    client.post(
+        "/api/v1/orders",
+        json={"qr_token": table["qr_token"], "items": [{"menu_item_id": item["id"], "quantity": 1}]},
+    )
+
+    res = client.delete(f"/api/v1/tables/{table['id']}", headers=headers)
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "TABLE_HAS_ORDERS"
+
+    still_there = client.get(f"/api/v1/tables/by-restaurant/{restaurant.id}", headers=headers)
+    assert [t["id"] for t in still_there.json()] == [table["id"]]
+
+
+def test_delete_table_with_waiter_call_is_blocked(client):
+    restaurant, headers = _setup_restaurant(client)
+    table = client.post(
+        "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=headers
+    ).json()
+    client.post("/api/v1/waiter-calls", json={"qr_token": table["qr_token"]})
+
+    res = client.delete(f"/api/v1/tables/{table['id']}", headers=headers)
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "TABLE_HAS_WAITER_CALLS"
+
+
 def test_get_table_poster_returns_a_pdf(client):
     restaurant, headers = _setup_restaurant(client)
     table = client.post(

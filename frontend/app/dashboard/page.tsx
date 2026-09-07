@@ -310,6 +310,7 @@ export default function DashboardPage() {
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
   const [copiedTableId, setCopiedTableId] = useState<number | null>(null);
   const [downloadingPosterId, setDownloadingPosterId] = useState<number | null>(null);
+  const [deletingTableId, setDeletingTableId] = useState<number | null>(null);
   const [team, setTeam] = useState<Staff[]>([]);
   const [staffDrafts, setStaffDrafts] = useState<Record<number, StaffDraft>>({});
   const [newStaff, setNewStaff] = useState<NewStaffDraft>(EMPTY_STAFF_DRAFT);
@@ -850,6 +851,22 @@ export default function DashboardPage() {
       await load();
     } catch (e) {
       handleGatedError(e);
+    }
+  }
+
+  async function removeTable(table: Table) {
+    if (!confirm(`Supprimer « ${table.label} » ? Le QR code collé sur la table ne fonctionnera plus.`)) return;
+    setError(null);
+    setDeletingTableId(table.id);
+    try {
+      await api.deleteTable(table.id);
+      flash(`« ${table.label} » supprimée.`);
+      trackEvent("table_managed", { feature: "remove_table", is_demo: Boolean(sessionDemo()) });
+      await load();
+    } catch (e) {
+      handleGatedError(e);
+    } finally {
+      setDeletingTableId(null);
     }
   }
 
@@ -1938,6 +1955,15 @@ export default function DashboardPage() {
                       onClick={() => downloadTablePoster(table)}
                     >
                       {downloadingPosterId === table.id ? "Téléchargement..." : "Télécharger l'affiche (PDF)"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      disabled={deletingTableId === table.id}
+                      onClick={() => removeTable(table)}
+                    >
+                      {deletingTableId === table.id ? "Suppression..." : "Supprimer"}
                     </Button>
                   </div>
                   {clientLink && (
