@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import HTTPException
@@ -15,9 +15,10 @@ from app.core.payment_provider import PaymentProviderError, get_payment_provider
 from app.core.push import send_push_notification
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
-from app.modules.menu.models import MenuItem, MenuItemOption
-from app.modules.notifications.manager import manager
+from app.modules.menu.models import MenuItem
+from app.modules.notifications.manager import manager, table_channel
 from app.modules.orders import schemas
+from app.modules.orders.menu_item_resolution import resolve_selected_options
 from app.modules.orders.models import (
     ModificationLineStatus,
     ModificationRequestStatus,
@@ -33,6 +34,7 @@ from app.modules.orders.models import (
 from app.modules.staff import service as staff_service
 from app.modules.staff.models import Staff
 from app.modules.tables import service as tables_service
+from app.modules.tables.models import Table
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 logger = get_logger("orders")
@@ -187,51 +189,6 @@ def purge_terminal_push_subscriptions(db: Session, dry_run: bool = False) -> int
     return len(stale)
 
 
-def _resolve_selected_options(menu_item: MenuItem, selected_option_ids: list[int]) -> list[MenuItemOption]:
-    """
-    Vérifie et retourne les options choisies pour un article — France, F5/A2.
-
-    Le client n'envoie que des ids : ceux qui n'appartiennent pas à un groupe
-    de CET article sont rejetés (jamais un id d'un autre article ou d'un autre
-    restaurant, deviné ou copié depuis une commande différente), et chaque
-    groupe doit recevoir entre min_select et max_select choix.
-    """
-    options_by_id = {opt.id: opt for group in menu_item.option_groups for opt in group.options}
-
-    selected: list[MenuItemOption] = []
-    for option_id in selected_option_ids:
-        option = options_by_id.get(option_id)
-        if option is None:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "code": "OPTION_NOT_FOUND",
-                    "message": f"option {option_id} does not belong to '{menu_item.name}'",
-                    "menu_item_id": menu_item.id,
-                },
-            )
-        selected.append(option)
-
-    counts: dict[int, int] = {}
-    for option in selected:
-        counts[option.group_id] = counts.get(option.group_id, 0) + 1
-
-    for group in menu_item.option_groups:
-        count = counts.get(group.id, 0)
-        if not (group.min_select <= count <= group.max_select):
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "code": "INVALID_OPTION_SELECTION",
-                    "message": f"'{group.name}' requires between {group.min_select} and {group.max_select} choice(s)",
-                    "menu_item_id": menu_item.id,
-                    "group_id": group.id,
-                    "group_name": group.name,
-                },
-            )
-    return selected
-
-
 def _build_order_items(
     db: Session, restaurant_id: int, items: list[schemas.OrderItemCreate]
 ) -> list[OrderItem]:
@@ -264,7 +221,7 @@ def _build_order_items(
                 },
             )
 
-        selected_options = _resolve_selected_options(menu_item, line.selected_option_ids)
+        selected_options = resolve_selected_options(menu_item, line.selected_option_ids)
 
         # Prix figé au moment T : voir commentaire dans models.py. Le
         # supplément des options choisies (France, F5/A2) est ajouté une
@@ -335,15 +292,40 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
         if restaurant and tier_includes(effective_tier(restaurant), SubscriptionTier.PRO)
         else None
     )
-    order = Order(
-        restaurant_id=restaurant_id,
-        table_id=table.id,
+    return await _finalize_order(
+        db, table, _build_order_items(db, restaurant_id, payload.items),
+        client_order_id=payload.client_order_id,
         scheduled_for=payload.scheduled_for,
         loyalty_phone=loyalty_phone,
-        client_order_id=payload.client_order_id,
+        loyalty_birth_date=payload.loyalty_birth_date,
     )
 
-    order.items.extend(_build_order_items(db, restaurant_id, payload.items))
+
+async def _finalize_order(
+    db: Session,
+    table: Table,
+    order_items: list[OrderItem],
+    *,
+    client_order_id: str | None = None,
+    scheduled_for: datetime | None = None,
+    loyalty_phone: str | None = None,
+    loyalty_birth_date: date | None = None,
+) -> Order:
+    """
+    Queue commune à toute création de commande, quelle que soit l'origine des
+    `OrderItem` déjà validés/figés : le panier envoyé par un seul appareil
+    (`create_order`) ou le panier partagé d'une table
+    (`create_order_from_table_cart`). Isolée ici pour que les deux chemins ne
+    puissent jamais diverger sur la fidélité, les logs ou la diffusion staff.
+    """
+    order = Order(
+        restaurant_id=table.restaurant_id,
+        table_id=table.id,
+        scheduled_for=scheduled_for,
+        loyalty_phone=loyalty_phone,
+        client_order_id=client_order_id,
+    )
+    order.items.extend(order_items)
 
     db.add(order)
     db.commit()
@@ -353,9 +335,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     # numéro (même s'il n'est jamais passé par une vérification de statut
     # séparée) — le compteur, lui, n'avance qu'au paiement confirmé.
     if order.loyalty_phone:
-        loyalty_service.get_or_create_member(
-            db, order.restaurant_id, order.loyalty_phone, payload.loyalty_birth_date
-        )
+        loyalty_service.get_or_create_member(db, order.restaurant_id, order.loyalty_phone, loyalty_birth_date)
 
     log_event(
         logger, "order.created",
@@ -383,6 +363,56 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
             title="Nouvelle commande",
             body=f"Table {order.table_label} vient de commander.",
         )
+    return order
+
+
+async def create_order_from_table_cart(db: Session, table: Table) -> Order:
+    """
+    Valide le panier partagé d'une table (voir `table_cart.py`) : n'importe
+    quel appareil connecté au canal de la table peut déclencher cet appel,
+    et la commande créée porte l'état tenu par le serveur au moment de
+    l'appel — jamais un panier local potentiellement périmé (`ROADMAP.md`
+    §Override — Panier synchronisé multi-appareils).
+
+    `pop_all` lit et vide le panier en une seule opération synchrone : deux
+    appareils qui valident au même instant ne peuvent jamais transformer
+    deux fois le même panier en deux commandes distinctes.
+    """
+    # Import différé : `table_cart` importe `resolve_selected_options` depuis
+    # `menu_item_resolution`, jamais depuis ce module, pour éviter le cycle
+    # (`table_cart` a besoin de créer des commandes, ce module a besoin du
+    # panier partagé) — l'import au niveau du module suffirait déjà à casser
+    # le cycle, gardé ici local pour que le lien de dépendance saute aux yeux.
+    from app.modules.orders import table_cart
+
+    items = table_cart.table_cart_store.pop_all(table.id)
+    if not items:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "EMPTY_ORDER", "message": "order must contain at least one item"},
+        )
+
+    try:
+        order_items = _build_order_items(db, table.restaurant_id, items)
+    except HTTPException:
+        # Un article devenu indisponible entre l'ajout et la validation ne
+        # doit jamais faire disparaître le panier des AUTRES convives : on le
+        # restaure tel quel et on informe toute la table, plutôt que de
+        # laisser les autres appareils croire — jusqu'à leur prochaine
+        # mutation — qu'il est resté ce qu'ils avaient sous les yeux.
+        for item in items:
+            table_cart.table_cart_store.set_line(table.id, item)
+        await manager.broadcast(
+            table.restaurant_id, channel=table_channel(table.id), message=table_cart.snapshot_message(table.id)
+        )
+        raise
+
+    order = await _finalize_order(db, table, order_items)
+
+    await manager.broadcast(
+        table.restaurant_id, channel=table_channel(table.id),
+        message={"event": "cart.validated", "order_id": order.id, "public_token": order.public_token},
+    )
     return order
 
 

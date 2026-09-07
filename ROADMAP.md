@@ -338,7 +338,6 @@ est la condition **exacte** qui la ferait entrer dans la roadmap.
 | Chantier | Déclencheur |
 |---|---|
 | **Addition au niveau de la table** — vérifié le 2026-08-18 : `payment_status` vit sur `Order`, et les commandes ouvertes multiples (PR #52) font qu'une table qui commande en deux temps produit deux additions séparées | Trois patrons sur vingt le mentionnent **spontanément** en Phase 21 |
-| **Panier synchronisé / session partagée multi-appareils** — déjà tranché une fois dans l'autre sens, dès la Phase 4 : arbitrage délibéré « un seul appareil compose/valide toujours la commande » (`ROADMAP_ARCHIVE.md:73`, PR #7). Toujours vrai aujourd'hui, vérifié le 2026-09-06 : le panier est un état React local à l'onglet (`frontend/app/menu/[qrToken]/page.tsx:204`), jamais remonté au serveur avant validation. Le canal WebSocket par table existe déjà (`/ws/table/{restaurant_id}/{qr_token}`, `notifications/manager.py::table_channel`) mais ne porte que la résolution de l'appel serveur (`waiter_calls/service.py:92`), aucune synchronisation de panier ou de commande | Un patron ou un pilote signale que plusieurs convives d'une même table n'arrivent pas à commander en parallèle depuis leurs propres téléphones (Phase 21 ou 23) — jamais rouvert sur une intuition, l'arbitrage de PR #7 étant déjà volontaire |
 | **Formules / menus du jour** | Idem — trois mentions spontanées |
 | **Tests frontend** (aucun aujourd'hui, sur 8 466 lignes) — C-1 et D-1 auraient été attrapés par un test de rendu, mais aucun pilote ne les a constatés | Un bug de panier constaté **chez un pilote**, ou un deuxième développeur qui touche `menu/[qrToken]/page.tsx` |
 | **Découper les deux fichiers de plus de 1 000 lignes** (`menu/[qrToken]/page.tsx` : 1 516 ; `dashboard/page.tsx` : 1 292) | Le même déclencheur que ci-dessus. Un refactor qui ne corrige aucun bug ne rapproche d'aucun client |
@@ -347,6 +346,69 @@ est la condition **exacte** qui la ferait entrer dans la roadmap.
 | **Plusieurs instances backend** (WebSocket et limiteur en mémoire ; S-6 en est un symptôme) | Une coupure de service constatée en pleine soirée, ou le 30ᵉ client |
 | **Multi-établissements sous un même compte** | Un client qui possède deux établissements et le demande |
 | **Mode sombre côté client** | Un retour de pilote sur la lisibilité en terrasse le soir |
+
+## Override 🧑 — Panier synchronisé multi-appareils
+
+**Décision de Wassim, 2026-09-06.** Sorti de la table « Sous condition »
+ci-dessus sans que son déclencheur se soit produit — aucun patron ni pilote
+ne l'a signalé, et le produit n'a même pas de pilote actif. Override assumé,
+pas une preuve de besoin terrain : si la Phase 21 montre plus tard que
+personne n'en a besoin en pratique, ce chantier se retire comme n'importe
+quel autre (cf. §21.1 La coupe).
+
+Contexte technique vérifié le 2026-09-06, cf. discussion de session : le
+panier est aujourd'hui un état React local à l'onglet
+(`frontend/app/menu/[qrToken]/page.tsx:204`), jamais remonté au serveur avant
+validation — invariant explicite du modèle actuel
+(`orders/models.py::OrderItem.is_shared`, commentaire : « une seule personne
+compose et valide toujours la commande »), et déjà tranché une fois dans
+l'autre sens dès la Phase 4 (`ROADMAP_ARCHIVE.md:73`, PR #7). Le canal
+WebSocket par table existe déjà (`/ws/table/{restaurant_id}/{qr_token}`,
+`notifications/manager.py::table_channel`) mais ne porte que la résolution de
+l'appel serveur (`waiter_calls/service.py:92`).
+
+Objectif : plusieurs téléphones qui scannent le même QR partagent un seul
+panier en temps réel et valident une seule commande pour la table.
+
+- [ ] État du panier partagé tenu en mémoire côté backend, par table — même
+      choix que le gestionnaire WebSocket actuel (mono-instance déjà
+      assumé, cf. ligne « Plusieurs instances backend » ci-dessus) : aucune
+      migration, rien de persistant à travers un redémarrage
+- [ ] Canal `/ws/table/{restaurant_id}/{qr_token}` existant réutilisé pour
+      diffuser les mutations du panier partagé aux appareils connectés
+- [ ] N'importe quel appareil connecté peut valider : la commande créée
+      porte l'état du panier tenu par le serveur au moment de la
+      validation, jamais un état local potentiellement périmé
+- [ ] `frontend/app/menu/[qrToken]/page.tsx` : le panier cesse d'être un
+      état purement local pour refléter l'état partagé reçu par WebSocket,
+      avec repli sur le comportement actuel (panier local) si la connexion
+      tombe — jamais de régression pour un client seul à sa table
+- [ ] ADR pour le choix « état en mémoire, serveur source de vérité »
+      (`docs/adr/`)
+- [ ] Tests backend : deux navigateurs qui composent le même panier
+      concurremment, isolation entre tables et restaurants différents (même
+      rigueur que les tests d'isolation multi-tenant existants)
+
+**Extension du 2026-09-06, même override, sans nouveau déclencheur** :
+convives déclarés au scan — nombre de personnes à table, prénoms facultatifs
+(défaut « Personne N »), affichage uniquement (`tables/party.py`, même
+mécanique en mémoire/WebSocket que le panier partagé ci-dessus). Utilisé pour
+préremplir `SplitBill` (déjà noté « premier candidat à la coupe » par
+`AUDIT_FINAL.md` faute de demande restaurateur constatée — cette extension ne
+change pas ce diagnostic, elle rend juste l'existant plus lisible en
+attendant l'arbitrage de Phase 21). Aucun paiement séparé par personne : ça
+resterait un chantier bien plus large, explicitement refusé pour l'instant
+(voir le commentaire de tête de `SplitBill.tsx`).
+
+- [ ] `tables/party.py` — nombre de convives + prénoms facultatifs, en
+      mémoire par table, même cycle de vie que le panier (purgé au départ du
+      dernier appareil)
+- [ ] Prompt côté client à l'ouverture du menu, jamais bloquant (« Passer » à
+      chaque étape), suggestion de taille pré-remplie depuis `Table.seats`
+- [ ] `SplitBill` utilise le prénom déclaré à la place de « Personne N »
+      quand il existe
+- [ ] Traduction arabe non relue par un locuteur natif — à vérifier avant un
+      vrai pilote (même règle que le reste du parcours client bilingue)
 
 ## Hors périmètre, définitivement
 

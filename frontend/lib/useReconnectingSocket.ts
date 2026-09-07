@@ -9,6 +9,8 @@ export type SocketStatus = "connecting" | "connected" | "disconnected" | "unauth
 // n'y changera jamais rien.
 const WS_UNAUTHORIZED = 4401;
 
+export type SocketSend = (data: unknown) => boolean;
+
 /**
  * WebSocket avec reconnexion automatique (backoff exponentiel plafonné) et
  * statut exposé pour affichage — avant ce hook, une coupure réseau de
@@ -19,11 +21,20 @@ const WS_UNAUTHORIZED = 4401;
  * refus (session expirée, compte désactivé) arrête définitivement les
  * tentatives et remonte le statut `unauthorized`, au lieu de marteler un canal
  * auquel l'appelant n'aura jamais droit.
+ *
+ * `send` renvoie `false` sans lever d'exception quand la connexion n'est pas
+ * ouverte — à l'appelant de décider du repli (ex. panier local le temps que
+ * la table reconnecte), jamais à ce hook générique, aussi utilisé par les
+ * canaux staff/cuisine qui n'envoient jamais rien.
  */
-export function useReconnectingSocket(url: string | null, onMessage: (data: any) => void): SocketStatus {
+export function useReconnectingSocket(
+  url: string | null,
+  onMessage: (data: any) => void
+): { status: SocketStatus; send: SocketSend } {
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!url) return;
@@ -36,6 +47,7 @@ export function useReconnectingSocket(url: string | null, onMessage: (data: any)
     function connect() {
       setStatus("connecting");
       ws = new WebSocket(url as string);
+      wsRef.current = ws;
 
       ws.onopen = () => {
         attempt = 0;
@@ -67,8 +79,15 @@ export function useReconnectingSocket(url: string | null, onMessage: (data: any)
       closedByUs = true;
       clearTimeout(retryTimer);
       ws?.close();
+      wsRef.current = null;
     };
   }, [url]);
 
-  return status;
+  function send(data: unknown): boolean {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
+    wsRef.current.send(JSON.stringify(data));
+    return true;
+  }
+
+  return { status, send };
 }

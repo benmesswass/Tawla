@@ -106,6 +106,12 @@ export const ar = {
   unassignedSharedNote: "الأكلات إلي ما تعيّنتش تتقسم بالتساوي.",
   splitBillDisclaimer: "إرشادي بركة — الخلاص يبقى للفاتورة الكل مرة وحدة للطاولة.",
 
+  partyPromptTitle: "قداش عددكم فالطاولة؟",
+  partyPromptJustMe: "روحي بركة",
+  partyPromptSkip: "تخطي",
+  partyNamesHint: "الأسامي (مش إجباري)",
+  partyContinue: "كمّل",
+
   offlineQueuedTitle: "ما فماش نات",
   offlineQueuedMessage: "الطلبية تسجلت في تليفونك وباش تتبعث وحدها كي ترجع النات.",
   offlineRetryCountdown: (seconds) => `عاود المحاولة من بعد ${seconds} ثواني…`,

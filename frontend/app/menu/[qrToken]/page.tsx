@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cairo, lalezar } from "@/lib/fonts";
 import {
@@ -29,6 +29,7 @@ import { localeSwitchLabel, useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
+import PartyPrompt from "@/components/PartyPrompt";
 import TawlaMark from "@/components/brand/TawlaMark";
 import VignetteCategorie from "@/components/VignetteCategorie";
 import ReseauxSociaux from "@/components/ReseauxSociaux";
@@ -194,6 +195,63 @@ function genererIdPanier(): string {
 
 type CreateOrderPayload = Parameters<typeof api.createOrder>[0];
 
+// --- Panier de table partagé (ROADMAP.md §Override — panier synchronisé
+// multi-appareils) --------------------------------------------------------
+// Le serveur est la seule source de vérité (voir orders/table_cart.py côté
+// backend) : ces deux fonctions traduisent entre SA représentation par fil
+// (OrderItemPayload, indexée par menu_item_id) et celle du panier local
+// (CartLine, qui garde l'objet MenuItem complet pour l'affichage).
+
+function cartLineToWireItem(itemId: number, line: CartLine): OrderItemPayload {
+  return {
+    menu_item_id: itemId,
+    quantity: line.quantity,
+    notes: line.note || null,
+    is_shared: line.shared,
+    shared_with: line.shared ? line.sharedWith : [],
+    from_suggestion: line.fromSuggestion,
+    selected_option_ids: line.selectedOptions.map((o) => o.optionId),
+  };
+}
+
+// `null` quand l'article a disparu de la carte entre-temps (rupture, ou carte
+// changée) : mieux vaut ignorer la ligne que planter le rendu du panier
+// partagé pour tout le monde à la table.
+function wireItemToCartLine(wireItem: OrderItemPayload, menu: MenuItem[]): CartLine | null {
+  const item = menu.find((m) => m.id === wireItem.menu_item_id);
+  if (!item) return null;
+  const selectedOptions: SelectedOption[] = (wireItem.selected_option_ids ?? []).flatMap((optionId) => {
+    for (const group of item.option_groups) {
+      const option = group.options.find((o) => o.id === optionId);
+      if (option) {
+        return [{ optionId, groupName: group.name, optionName: option.name, priceDelta: option.price_delta }];
+      }
+    }
+    return [];
+  });
+  return {
+    item,
+    quantity: wireItem.quantity,
+    note: wireItem.notes ?? "",
+    shared: wireItem.is_shared ?? false,
+    sharedWith: wireItem.shared_with ?? [],
+    fromSuggestion: wireItem.from_suggestion ?? false,
+    selectedOptions,
+  };
+}
+
+function cartToWireRecord(cart: Record<number, CartLine>): Record<number, OrderItemPayload> {
+  const wire: Record<number, OrderItemPayload> = {};
+  for (const [id, line] of Object.entries(cart)) {
+    wire[Number(id)] = cartLineToWireItem(Number(id), line);
+  }
+  return wire;
+}
+
+function sameWireItem(a: OrderItemPayload, b: OrderItemPayload): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { qrToken } = params;
   const { t, locale, toggleLocale } = useLocale();
@@ -264,6 +322,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
   const [waiterCallState, setWaiterCallState] = useState<"idle" | "calling" | "called">("idle");
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
+  // Convives déclarés pour la table (ROADMAP.md §Override, extension) —
+  // `null` tant que rien n'est déclaré, `partyKnown` distingue ça de "pas
+  // encore reçu l'instantané du serveur" pour ne jamais afficher le prompt
+  // avant de savoir si quelqu'un d'autre à table a déjà répondu.
+  const [party, setParty] = useState<{ size: number; names: (string | null)[] } | null>(null);
+  const [partyKnown, setPartyKnown] = useState(false);
+  const [partyPromptDismissed, setPartyPromptDismissed] = useState(false);
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
   const [offlineRetryCountdown, setOfflineRetryCountdown] = useState(5);
@@ -666,12 +731,124 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // client sans concerner une commande précise. Sans lui, un serveur pouvait
   // répondre à l'appel et cliquer « résolu » sans que le bouton redevienne
   // cliquable côté client — il fallait recharger la page pour s'en apercevoir.
+  // Depuis le chantier « panier synchronisé multi-appareils », il porte aussi
+  // le panier partagé de la table (`orders/table_cart.py` côté backend).
   const tableWsUrl = restaurant ? wsUrl(`/ws/table/${restaurant.id}/${qrToken}`) : null;
-  useReconnectingSocket(tableWsUrl, (msg) => {
+  // Dernier état confirmé par le serveur, pour ne diffuser QUE ce qui a
+  // changé (voir l'effet de synchronisation plus bas) — `null` tant qu'aucun
+  // instantané n'est arrivé, pour ne jamais rejouer un panier local sur un
+  // serveur qui n'a pas encore parlé.
+  const lastSyncedWireRef = useRef<Record<number, OrderItemPayload> | null>(null);
+  // Vrai seulement entre l'envoi d'un "cart.validate" et sa réponse — sert
+  // uniquement à limiter le filet de sécurité ci-dessous à CE cas précis,
+  // sans réagir à une coupure du canal table pendant qu'une validation REST
+  // (repli hors connexion) est par ailleurs en cours, sans rapport avec lui.
+  const pendingSocketValidateRef = useRef(false);
+  const { status: tableSocketStatus, send: sendTableAction } = useReconnectingSocket(tableWsUrl, (msg) => {
     if (msg.event === "waiter_call.resolved") {
       setWaiterCallState("idle");
+    } else if (msg.event === "party.updated") {
+      setPartyKnown(true);
+      setParty(msg.size != null ? { size: msg.size, names: msg.names ?? [] } : null);
+    } else if (msg.event === "cart.updated") {
+      const lines: OrderItemPayload[] = msg.lines ?? [];
+      const rebuilt: Record<number, CartLine> = {};
+      const wire: Record<number, OrderItemPayload> = {};
+      for (const wireItem of lines) {
+        const line = wireItemToCartLine(wireItem, menu);
+        if (line) {
+          rebuilt[wireItem.menu_item_id] = line;
+          wire[wireItem.menu_item_id] = wireItem;
+        }
+      }
+      // Marqué comme déjà synchronisé AVANT `setCart` : sans ça, l'effet de
+      // synchronisation sortant verrait ce même changement au rendu suivant
+      // et le renverrait aussitôt au serveur, qui le rediffuserait — une
+      // boucle d'échos inutiles (sans conséquence sur les données, mais du
+      // trafic WebSocket qui n'a aucune raison d'exister).
+      lastSyncedWireRef.current = wire;
+      setCart(rebuilt);
+    } else if (msg.event === "cart.validated") {
+      // N'importe quel appareil de la table a pu valider — pas forcément
+      // celui-ci : tous doivent basculer sur le suivi de la même commande.
+      pendingSocketValidateRef.current = false;
+      // `public_token` ne revient JAMAIS de `getOrder` (Phase 12.2 : il n'est
+      // renvoyé qu'à la création, `OrderCreatedOut`) — c'est celui que porte
+      // cet événement qui fait foi, pas un champ de la réponse HTTP.
+      const publicToken: string = msg.public_token;
+      api
+        .getOrder(msg.order_id, publicToken)
+        .then((order) => {
+          storeTrackedOrderRef(qrToken, order.id, publicToken);
+          setTrackedOrder(order);
+          setOrderToken(publicToken);
+          setCartOrderId(null);
+          setPreOrderForIftar(false);
+          setShowCelebration(true);
+          setSending(false);
+        })
+        .catch(() => setSending(false));
+    } else if (msg.event === "cart.error") {
+      pendingSocketValidateRef.current = false;
+      setSending(false);
+      if (msg.code === "ITEM_UNAVAILABLE" || msg.code === "ITEM_NOT_FOUND") {
+        const staleId = msg.menu_item_id as number | undefined;
+        if (staleId) {
+          setCart((prev) => {
+            const next = { ...prev };
+            delete next[staleId];
+            return next;
+          });
+        }
+        api.getMenuByToken(qrToken).then(setMenu).catch(() => {});
+      }
+      setOrderError(toLocalizedMessage(new ApiError(msg.code, msg.message, msg), locale));
     }
   });
+
+  // Répercute chaque changement du panier local vers le panier partagé de la
+  // table — jamais l'inverse ici (voir `cart.updated` ci-dessus) : le serveur
+  // reste la seule source de vérité, cet effet ne fait que lui signaler ce
+  // qui a changé depuis le dernier envoi. Tant que le canal n'est pas
+  // connecté, ne fait STRICTEMENT rien : le panier reste purement local,
+  // comportement identique à avant ce chantier (repli automatique).
+  useEffect(() => {
+    if (tableSocketStatus !== "connected") {
+      // Une reconnexion redemandera un instantané complet au serveur — vider
+      // la référence évite de croire, après coup, qu'un ancien état était
+      // déjà connu de lui.
+      lastSyncedWireRef.current = null;
+      return;
+    }
+    const currentWire = cartToWireRecord(cart);
+    const previousWire = lastSyncedWireRef.current ?? {};
+    const changedIds = new Set([...Object.keys(currentWire), ...Object.keys(previousWire)].map(Number));
+    for (const id of changedIds) {
+      const current = currentWire[id];
+      const previous = previousWire[id];
+      if (current && (!previous || !sameWireItem(current, previous))) {
+        sendTableAction({ action: "cart.set", ...current });
+      } else if (!current && previous) {
+        sendTableAction({ action: "cart.set", menu_item_id: id, quantity: 0 });
+      }
+    }
+    lastSyncedWireRef.current = currentWire;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, tableSocketStatus]);
+
+  // Filet de sécurité : si la connexion tombe pendant qu'une validation est
+  // en vol (message envoyé, mais ni "cart.validated" ni "cart.error" jamais
+  // revenu), le bouton « Valider » ne doit pas rester bloqué indéfiniment —
+  // une commande perdue par un blocage d'écran est aussi grave qu'une
+  // commande perdue par une vraie erreur.
+  useEffect(() => {
+    if (pendingSocketValidateRef.current && tableSocketStatus !== "connected") {
+      pendingSocketValidateRef.current = false;
+      setSending(false);
+      setOrderError(toLocalizedMessage(new ApiError("CONNECTION_LOST", "connection lost", {}), locale));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableSocketStatus]);
 
   // La commande suivie évolue (paiement, changement de statut) : on répercute
   // dans la liste des commandes ouvertes, en un seul endroit plutôt qu'à chaque
@@ -1112,17 +1289,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     if (!table || cartLines.length === 0) return;
     setSending(true);
     setOrderError(null);
+
+    // Panier synchronisé : quand le canal de la table est connecté, valider
+    // porte sur l'état tenu par le SERVEUR (potentiellement enrichi par
+    // d'autres appareils), jamais sur une copie locale qui pourrait avoir
+    // pris du retard. La suite (basculer sur le suivi de la commande) se
+    // joue dans le gestionnaire de messages ci-dessus, sur "cart.validated" —
+    // qui arrive à cet appareil comme à tous les autres de la table.
+    if (tableSocketStatus === "connected") {
+      pendingSocketValidateRef.current = true;
+      sendTableAction({ action: "cart.validate" });
+      return;
+    }
+
     const payload: CreateOrderPayload = {
       qr_token: qrToken,
-      items: cartLines.map((l) => ({
-        menu_item_id: l.item.id,
-        quantity: l.quantity,
-        notes: l.note || null,
-        is_shared: l.shared,
-        shared_with: l.shared ? l.sharedWith : [],
-        from_suggestion: l.fromSuggestion,
-        selected_option_ids: l.selectedOptions.map((o) => o.optionId),
-      })),
+      items: cartLines.map((l) => cartLineToWireItem(l.item.id, l)),
       scheduled_for: preOrderForIftar && restaurant?.iftar_time ? restaurant.iftar_time : null,
       loyalty_phone: loyaltyPhone.trim() || null,
       loyalty_birth_date: loyaltyBirthDate || null,
@@ -1930,7 +2112,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {paymentError}
                   </div>
                 )}
-                <SplitBill order={trackedOrder} t={t} />
+                <SplitBill order={trackedOrder} t={t} partySize={party?.size} partyNames={party?.names} />
                 <div>
                   <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
                   <div className="flex gap-2">
@@ -2423,6 +2605,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       )}
 
       <div className="p-4 max-w-md mx-auto">
+        {/* Convives déclarés (ROADMAP.md §Override, extension) : affiché une
+            seule fois par table — jamais si un autre convive y a déjà répondu
+            ou si le canal temps réel n'est pas là pour partager la réponse. */}
+        {tableSocketStatus === "connected" && partyKnown && party === null && !partyPromptDismissed && (
+          <div className="mb-4">
+            <PartyPrompt
+              suggestedSize={table?.seats ?? 2}
+              t={t}
+              onSubmit={(size, names) => {
+                sendTableAction({ action: "party.set", size, names });
+              }}
+              onSkip={() => setPartyPromptDismissed(true)}
+            />
+          </div>
+        )}
+
         {/* Commandes déjà passées et pas encore réglées : sans ce rappel, une
             première tournée s'oubliait dès qu'on retournait au menu, et le
             client repartait sans avoir payé. */}

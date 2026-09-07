@@ -310,7 +310,7 @@ export default function StaffPage() {
     }
   }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan]);
 
-  const status = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
+  const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
       setPending((prev) =>
         prev.some((o) => o.order_id === msg.order_id)

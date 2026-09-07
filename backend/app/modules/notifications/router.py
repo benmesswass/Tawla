@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -9,7 +10,12 @@ from app.modules.notifications.dependencies import (
     authenticate_table_socket,
 )
 from app.modules.notifications.manager import manager, table_channel
+from app.modules.orders import schemas as orders_schemas
+from app.modules.orders import service as orders_service
+from app.modules.orders import table_cart
 from app.modules.staff.models import StaffRole
+from app.modules.tables import party as table_party
+from app.modules.tables.models import Table
 
 router = APIRouter(tags=["notifications"])
 
@@ -80,16 +86,87 @@ async def ws_menu(websocket: WebSocket, restaurant_id: int):
 async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: Session = Depends(get_db)):
     """
     Canal de la table scannée : ce qui concerne le client attablé sans
-    concerner une commande précise. Aujourd'hui la résolution de son appel
-    serveur — sans lui, le bouton « Appeler le serveur » restait grisé jusqu'à
-    ce que le client pense à recharger sa page.
+    concerner une commande précise. Porte la résolution de l'appel serveur —
+    sans lui, le bouton « Appeler le serveur » restait grisé jusqu'à ce que le
+    client pense à recharger sa page — et, depuis le chantier « panier
+    synchronisé multi-appareils » (`ROADMAP.md` §Override), les mutations du
+    panier partagé de la table : tout appareil qui scanne ce QR reçoit l'état
+    courant à la connexion, puis chaque mise à jour, et peut valider pour
+    toute la table (`table_cart.py`). Porte aussi, depuis la même extension,
+    le nombre de convives et leurs prénoms facultatifs (`tables/party.py`) —
+    purement déclaratif, jamais lu pour une règle métier.
     """
     table = await authenticate_table_socket(websocket, restaurant_id, qr_token, db)
     if not table:
         return
     channel = table_channel(table.id)
     await manager.connect(websocket, restaurant_id, channel=channel)
-    await _pump(websocket, restaurant_id, channel)
+    # Rattrapage : un appareil qui rejoint une table déjà en train de composer
+    # son panier (ou déjà déclarée par un autre convive) doit voir tout de
+    # suite ce que les autres ont déjà fait, sans attendre leur prochaine
+    # mutation.
+    await websocket.send_json(table_cart.snapshot_message(table.id))
+    await websocket.send_json(table_party.party_message(table.id))
+    await _pump_table(websocket, restaurant_id, table, db, channel)
+
+
+def _cart_error_payload(exc: HTTPException) -> dict:
+    detail = exc.detail if isinstance(exc.detail, dict) else {"code": "ERROR", "message": str(exc.detail)}
+    return {"event": "cart.error", **detail}
+
+
+async def _pump_table(websocket: WebSocket, restaurant_id: int, table: Table, db: Session, channel: str) -> None:
+    """
+    Boucle de la table : contrairement à `_pump`, les messages entrants sont
+    lus et traités (panier partagé) plutôt que seulement gardés pour détecter
+    la déconnexion.
+    """
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            action = raw.get("action") if isinstance(raw, dict) else None
+            try:
+                if action == "cart.set":
+                    item = orders_schemas.OrderItemCreate.model_validate(
+                        {k: v for k, v in raw.items() if k != "action"}
+                    )
+                    table_cart.validate_cart_line(db, restaurant_id, item)
+                    table_cart.table_cart_store.set_line(table.id, item)
+                    await manager.broadcast(restaurant_id, channel, table_cart.snapshot_message(table.id))
+                elif action == "cart.validate":
+                    await orders_service.create_order_from_table_cart(db, table)
+                elif action == "party.set":
+                    size = int(raw.get("size", 0))
+                    names = raw.get("names") or []
+                    table_party.table_party_store.set(table.id, size, names)
+                    await manager.broadcast(restaurant_id, channel, table_party.party_message(table.id))
+                # Action inconnue ou message malformé sans champ "action" :
+                # ignoré plutôt que de casser la connexion — un client d'une
+                # version plus récente ou plus ancienne ne doit jamais faire
+                # tomber le canal des autres appareils de la table.
+            except HTTPException as exc:
+                # Rollback défensif : aucune écriture n'a pu aboutir sur ces
+                # chemins (échec de validation avant tout commit), mais la
+                # session reste ouverte pour toute la durée de la connexion —
+                # sans ça, une transaction implicite resterait ouverte sans
+                # raison entre deux messages du même appareil.
+                db.rollback()
+                await websocket.send_json(_cart_error_payload(exc))
+            except (ValidationError, TypeError, ValueError):
+                db.rollback()
+                await websocket.send_json(
+                    {"event": "cart.error", "code": "INVALID_MESSAGE", "message": "malformed cart message"}
+                )
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, restaurant_id, channel)
+        # Dernier appareil de la table parti : le panier partagé n'a plus de
+        # raison d'exister — sans ça, l'entrée en mémoire de `table_cart_store`
+        # survivrait indéfiniment à tout convive qui referme l'onglet sans
+        # valider (fuite lente, jamais nettoyée par ailleurs : ce state n'est
+        # rattaché à aucune requête HTTP qui pourrait la purger à sa sortie).
+        if not manager.has_connections(restaurant_id, channel):
+            table_cart.table_cart_store.pop_all(table.id)
+            table_party.table_party_store.clear(table.id)
 
 
 @router.websocket("/ws/order/{restaurant_id}/{order_id}")

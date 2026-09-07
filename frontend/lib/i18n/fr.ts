@@ -115,6 +115,12 @@ export const fr = {
   unassignedSharedNote: "Les plats non attribués sont partagés équitablement.",
   splitBillDisclaimer: "Indicatif — le paiement se fait pour l'addition complète, une seule fois pour la table.",
 
+  partyPromptTitle: "Vous êtes combien à table ?",
+  partyPromptJustMe: "Juste moi",
+  partyPromptSkip: "Passer",
+  partyNamesHint: "Prénoms (facultatif)",
+  partyContinue: "Continuer",
+
   offlineQueuedTitle: "Connexion perdue",
   offlineQueuedMessage: "Votre commande est enregistrée sur ce téléphone. Elle partira dès le retour du réseau — n'actualisez pas la page.",
   offlineRetryCountdown: (seconds: number) => `Nouvel essai dans ${seconds} s…`,
