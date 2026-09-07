@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.tables.models import TableShape
+from app.modules.tables.models import LandmarkKind, TableShape
 
 
 class TableCreate(BaseModel):
@@ -73,3 +73,26 @@ class PlanUpdate(BaseModel):
     """
 
     placements: list[TablePlacement]
+
+
+class LandmarkCreate(BaseModel):
+    """Poser un repère : il naît déjà placé, pas de réserve pour un point qui
+    n'a rien d'autre à régler qu'une position."""
+
+    kind: LandmarkKind
+    pos_x: float = Field(ge=0, le=100)
+    pos_y: float = Field(ge=0, le=100)
+
+
+class LandmarkOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: LandmarkKind
+    pos_x: float
+    pos_y: float
+
+
+class LandmarkMove(BaseModel):
+    pos_x: float = Field(ge=0, le=100)
+    pos_y: float = Field(ge=0, le=100)

@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import PieceTable from "./PieceTable";
+import PieceRepere from "./PieceRepere";
 import {
   ETAT_LIBRE,
   EtatTable,
+  PlanLandmark,
   PlanTable,
   URGENCES,
   demandeUnServeur,
@@ -29,12 +31,18 @@ const MARGE_ZONE = 7; // en % — l'air autour des tables d'une même zone
 
 type Props = {
   tables: PlanTable[];
+  /** Repères fixes (bar, entrée) — purement visuels côté service. */
+  landmarks?: PlanLandmark[];
   etats?: Record<number, EtatTable>;
   onTableActivee?: (table: PlanTable) => void;
   tableSelectionnee?: number | null;
   /** Mode éditeur : les tables se déplacent à la souris ou au doigt. */
   editable?: boolean;
   onDeplacer?: (tableId: number, x: number, y: number) => void;
+  /** Repère sélectionné (éditeur uniquement — pour lui proposer un retrait). */
+  onRepereActive?: (repere: PlanLandmark) => void;
+  repereSelectionne?: number | null;
+  onDeplacerRepere?: (repereId: number, x: number, y: number) => void;
   /**
    * Panneau d'action pour la table sélectionnée. Rendu **sous** la salle et
    * non par-dessus : posé en surimpression, il recouvrait justement la table
@@ -66,15 +74,22 @@ function zonesDessinees(tables: PlanTable[]) {
 
 export default function PlanDeSalle({
   tables,
+  landmarks = [],
   etats = {},
   onTableActivee,
   tableSelectionnee = null,
   editable = false,
   onDeplacer,
+  onRepereActive,
+  repereSelectionne = null,
+  onDeplacerRepere,
   action,
 }: Props) {
   const surface = useRef<HTMLDivElement>(null);
-  const [attrapee, setAttrapee] = useState<number | null>(null);
+  // Une table et un repère peuvent partager le même id (deux séquences
+  // distinctes côté serveur) : sans le type dans la clé, attraper la table 1
+  // ferait aussi bouger le repère 1.
+  const [attrapee, setAttrapee] = useState<{ type: "table" | "repere"; id: number } | null>(null);
 
   // Les compteurs avancent tout seuls : sans ce battement, une table qui attend
   // depuis huit minutes en afficherait toujours deux. À la seconde, puisque
@@ -156,12 +171,12 @@ export default function PlanDeSalle({
               editable
                 ? (e) => {
                     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-                    setAttrapee(table.id);
+                    setAttrapee({ type: "table", id: table.id });
                   }
                 : undefined
             }
             onPointerMove={
-              editable && attrapee === table.id
+              editable && attrapee?.type === "table" && attrapee.id === table.id
                 ? (e) => {
                     const p = positionDepuisEvenement(e);
                     if (p) onDeplacer?.(table.id, p.x, p.y);
@@ -178,13 +193,46 @@ export default function PlanDeSalle({
               rang={rangs[table.id] ?? null}
               laPlusUrgente={table.id === laPlusUrgente}
               selectionnee={table.id === tableSelectionnee}
-              enDeplacement={attrapee === table.id}
+              enDeplacement={attrapee?.type === "table" && attrapee.id === table.id}
               onActiver={() => onTableActivee?.(table)}
             />
           </div>
         ))}
 
-        {posees.length === 0 && (
+        {landmarks.map((repere) => (
+          <div
+            key={`repere-${repere.id}`}
+            className="plan-emplacement"
+            style={{ left: `${repere.pos_x}%`, top: `${repere.pos_y}%` }}
+            onPointerDown={
+              editable
+                ? (e) => {
+                    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+                    setAttrapee({ type: "repere", id: repere.id });
+                  }
+                : undefined
+            }
+            onPointerMove={
+              editable && attrapee?.type === "repere" && attrapee.id === repere.id
+                ? (e) => {
+                    const p = positionDepuisEvenement(e);
+                    if (p) onDeplacerRepere?.(repere.id, p.x, p.y);
+                  }
+                : undefined
+            }
+            onPointerUp={editable ? () => setAttrapee(null) : undefined}
+            onPointerCancel={editable ? () => setAttrapee(null) : undefined}
+          >
+            <PieceRepere
+              repere={repere}
+              selectionnee={repere.id === repereSelectionne}
+              enDeplacement={attrapee?.type === "repere" && attrapee.id === repere.id}
+              onActiver={() => onRepereActive?.(repere)}
+            />
+          </div>
+        ))}
+
+        {posees.length === 0 && landmarks.length === 0 && (
           <p className="plan-vide">
             {editable
               ? "Faites glisser vos tables depuis la liste ci-dessous pour dessiner votre salle."

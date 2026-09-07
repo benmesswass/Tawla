@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PlanTable, TableShape } from "@/lib/api";
+import { api, LandmarkKind, PlanLandmark, PlanTable, TableShape } from "@/lib/api";
 import PlanDeSalle from "./PlanDeSalle";
 
 /**
@@ -43,16 +43,96 @@ export type Placement = {
 
 export default function EditeurDePlan({
   tables,
+  restaurantId,
   onEnregistrer,
   enregistrement = false,
+  onErreur,
 }: {
   tables: PlanTable[];
+  /** Pour poser/déplacer/retirer les repères (bar, entrée) — gérés en direct
+   *  par cet éditeur, indépendamment du brouillon de tables du parent. */
+  restaurantId: number | null;
   onEnregistrer: (placements: Placement[]) => Promise<void> | void;
   enregistrement?: boolean;
+  /** Ex: handleGatedError du parent — un palier insuffisant doit ouvrir la
+   *  même incitation que partout ailleurs, pas un bandeau différent. */
+  onErreur?: (e: unknown) => void;
 }) {
   const [brouillon, setBrouillon] = useState<PlanTable[]>(tables);
   const [selectionnee, setSelectionnee] = useState<number | null>(null);
   const [modifie, setModifie] = useState(false);
+
+  const [landmarks, setLandmarks] = useState<PlanLandmark[]>([]);
+  const [repereSelectionne, setRepereSelectionne] = useState<number | null>(null);
+  const [repereModifie, setRepereModifie] = useState(false);
+  const derniereRepereDeplaceeRef = useRef<number | null>(null);
+
+  const onErreurRef = useRef(onErreur);
+  onErreurRef.current = onErreur;
+
+  useEffect(() => {
+    if (!restaurantId) return;
+    api.listLandmarks(restaurantId).then(setLandmarks).catch((e) => onErreurRef.current?.(e));
+  }, [restaurantId]);
+
+  // Même politique que les tables : le geste (glisser) est immédiat, l'écriture
+  // réseau attend une seconde de calme — sans ça, chaque pixel de glissement
+  // produirait son propre PUT.
+  useEffect(() => {
+    if (!repereModifie || !restaurantId) return;
+    const t = setTimeout(async () => {
+      setRepereModifie(false);
+      const repere = landmarks.find((r) => r.id === derniereRepereDeplaceeRef.current);
+      if (!repere) return;
+      try {
+        await api.moveLandmark(restaurantId, repere.id, repere.pos_x, repere.pos_y);
+      } catch (e) {
+        onErreurRef.current?.(e);
+      }
+    }, DELAI_ENREGISTREMENT);
+    return () => clearTimeout(t);
+  }, [repereModifie, landmarks, restaurantId]);
+
+  function deplacerRepere(id: number, x: number, y: number) {
+    derniereRepereDeplaceeRef.current = id;
+    setLandmarks((prev) => prev.map((r) => (r.id === id ? { ...r, pos_x: x, pos_y: y } : r)));
+    setRepereModifie(true);
+  }
+
+  async function ajouterRepere(kind: LandmarkKind) {
+    if (!restaurantId) return;
+    // Décalé à chaque ajout, comme une table qui sort de réserve : deux
+    // repères posés coup sur coup ne doivent pas atterrir l'un sur l'autre.
+    const rang = landmarks.length;
+    try {
+      const repere = await api.createLandmark(
+        restaurantId,
+        kind,
+        40 + ((rang * 12) % 24),
+        14 + ((rang * 10) % 8)
+      );
+      setLandmarks((prev) => [...prev, repere]);
+      setRepereSelectionne(repere.id);
+      setSelectionnee(null);
+    } catch (e) {
+      onErreurRef.current?.(e);
+    }
+  }
+
+  async function retirerRepere(id: number) {
+    if (!restaurantId) return;
+    setLandmarks((prev) => prev.filter((r) => r.id !== id));
+    setRepereSelectionne(null);
+    try {
+      await api.deleteLandmark(restaurantId, id);
+    } catch (e) {
+      onErreurRef.current?.(e);
+      // L'optimisme ci-dessus était faux (ex: palier insuffisant) — se
+      // resynchroniser sur l'état serveur plutôt que garder un repère
+      // affiché disparu à tort, ou l'inverse.
+      api.listLandmarks(restaurantId).then(setLandmarks).catch(() => {});
+    }
+  }
 
   // Les tables créées ou supprimées ailleurs dans l'écran doivent apparaître
   // ici sans écraser un placement en cours.
@@ -157,11 +237,48 @@ export default function EditeurDePlan({
     <div className="flex flex-col gap-4">
       <PlanDeSalle
         tables={brouillon}
+        landmarks={landmarks}
         editable
         onDeplacer={deplacer}
-        onTableActivee={(t) => setSelectionnee(t.id)}
+        onTableActivee={(t) => {
+          setSelectionnee(t.id);
+          setRepereSelectionne(null);
+        }}
         tableSelectionnee={selectionnee}
+        onDeplacerRepere={deplacerRepere}
+        onRepereActive={(r) => {
+          setRepereSelectionne((actuel) => (actuel === r.id ? null : r.id));
+          setSelectionnee(null);
+        }}
+        repereSelectionne={repereSelectionne}
       />
+
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-neutral-500">Repères</span>
+        <button
+          type="button"
+          onClick={() => ajouterRepere("bar")}
+          className="rounded-lg border border-dashed border-[var(--line)] px-3 py-1.5"
+        >
+          + Bar
+        </button>
+        <button
+          type="button"
+          onClick={() => ajouterRepere("entrance")}
+          className="rounded-lg border border-dashed border-[var(--line)] px-3 py-1.5"
+        >
+          + Porte d&apos;entrée
+        </button>
+        {repereSelectionne !== null && (
+          <button
+            type="button"
+            onClick={() => retirerRepere(repereSelectionne)}
+            className="text-neutral-500 underline ml-1"
+          >
+            Retirer ce repère
+          </button>
+        )}
+      </div>
 
       {tableSelectionnee ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3 text-sm">

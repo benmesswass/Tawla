@@ -8,7 +8,7 @@ from app.core.subscription import effective_tier, require_tier, tier_includes
 from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import schemas, service
-from app.modules.tables.models import Table
+from app.modules.tables.models import PlanLandmark, Table
 from app.modules.tables.poster import generate_table_poster_pdf
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
@@ -225,3 +225,84 @@ def save_plan(
         .order_by(Table.id)
         .all()
     )
+
+
+@router.get("/plan/{restaurant_id}/landmarks", response_model=list[schemas.LandmarkOut])
+def list_landmarks(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(require_active_restaurant),
+):
+    """Les repères du plan (bar, entrée...) : lus par tout le monde, comme la
+    salle elle-même — jamais gatés par palier, seul le fait de les poser l'est."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return (
+        db.query(PlanLandmark)
+        .filter(PlanLandmark.restaurant_id == restaurant_id)
+        .order_by(PlanLandmark.id)
+        .all()
+    )
+
+
+@router.post("/plan/{restaurant_id}/landmarks", response_model=schemas.LandmarkOut, status_code=201)
+def create_landmark(
+    restaurant_id: int,
+    payload: schemas.LandmarkCreate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
+):
+    """Poser un repère sur le plan — même geste que dessiner la salle, donc
+    même palier requis (Pro+)."""
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    landmark = PlanLandmark(
+        restaurant_id=restaurant_id, kind=payload.kind, pos_x=payload.pos_x, pos_y=payload.pos_y
+    )
+    db.add(landmark)
+    db.commit()
+    db.refresh(landmark)
+    return landmark
+
+
+@router.put("/plan/{restaurant_id}/landmarks/{landmark_id}", response_model=schemas.LandmarkOut)
+def move_landmark(
+    restaurant_id: int,
+    landmark_id: int,
+    payload: schemas.LandmarkMove,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
+):
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    landmark = db.get(PlanLandmark, landmark_id)
+    if not landmark or landmark.restaurant_id != restaurant_id:
+        raise HTTPException(
+            status_code=404, detail={"code": "LANDMARK_NOT_FOUND", "message": "landmark not found"}
+        )
+    landmark.pos_x = payload.pos_x
+    landmark.pos_y = payload.pos_y
+    db.commit()
+    db.refresh(landmark)
+    return landmark
+
+
+@router.delete("/plan/{restaurant_id}/landmarks/{landmark_id}", status_code=204)
+def delete_landmark(
+    restaurant_id: int,
+    landmark_id: int,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_MANAGER),
+    _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
+) -> None:
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    landmark = db.get(PlanLandmark, landmark_id)
+    if not landmark or landmark.restaurant_id != restaurant_id:
+        raise HTTPException(
+            status_code=404, detail={"code": "LANDMARK_NOT_FOUND", "message": "landmark not found"}
+        )
+    db.delete(landmark)
+    db.commit()
