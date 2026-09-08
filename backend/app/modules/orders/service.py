@@ -50,6 +50,14 @@ ACTIVE_STATUSES: set[OrderStatus] = {
     OrderStatus.READY,
 }
 
+# Une fois quittée l'IN_PREPARATION, la cuisine n'agit plus sur la commande —
+# mais doit pouvoir en revoir le détail (onglet "Terminées") en cas de
+# réclamation ou d'erreur signalée après coup. Allowlist explicite plutôt que
+# "pas dans ACTIVE_STATUSES" : une commande ANNULÉE n'est pas non plus dans
+# ACTIVE_STATUSES, alors que la cuisine n'y a rien préparé et ne doit pas la
+# voir apparaître comme terminée.
+KITCHEN_DONE_STATUSES: set[OrderStatus] = {OrderStatus.READY, OrderStatus.SERVED}
+
 # Fenêtre 2 : une fois la commande confirmée, une modification ne s'applique
 # plus directement (voir update_order_items) — elle passe par une demande.
 # `READY`/`SERVED`/`CANCELLED` en sont volontairement exclus : rien à changer
@@ -106,6 +114,28 @@ async def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
             Order.created_at >= service_day_start(),
         )
         .order_by(Order.created_at)
+        .all()
+    )
+
+
+async def list_kitchen_done_orders_today(db: Session, restaurant_id: int) -> list[Order]:
+    """
+    Détail des commandes terminées par la cuisine aujourd'hui (onglet
+    "Terminées" de l'écran cuisine) — jusqu'ici cet onglet n'affichait qu'un
+    compteur (`stats/get_kitchen_today_count`), sans le détail des plats.
+
+    Même borne de journée de service que `list_active_orders` : les onglets
+    de l'écran cuisine doivent s'accorder sur ce qu'est "aujourd'hui".
+    """
+    return (
+        db.query(Order)
+        .options(selectinload(Order.table), selectinload(Order.items).selectinload(OrderItem.options))
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            Order.status.in_(KITCHEN_DONE_STATUSES),
+            Order.created_at >= service_day_start(),
+        )
+        .order_by(Order.ready_at.desc())
         .all()
     )
 

@@ -123,6 +123,30 @@ def test_un_service_de_nuit_reste_affiche(client, db_session):
     assert len(active.json()) == 1
 
 
+def test_une_commande_prete_hier_disparait_de_longlet_termine_cuisine(client, db_session):
+    """Même borne que l'écran serveur ci-dessus : une commande terminée hier
+    ne doit pas polluer l'onglet "Terminées" d'aujourd'hui."""
+    restaurant, table, _item = _setup(db_session)
+    veille = service_day_start() - timedelta(hours=2)
+    order = Order(
+        restaurant_id=restaurant.id,
+        table_id=table.id,
+        created_at=veille,
+        status=OrderStatus.READY,
+        ready_at=veille,
+    )
+    db_session.add(order)
+    db_session.commit()
+    kitchen = create_staff(restaurant.id, StaffRole.KITCHEN)
+
+    done = client.get(
+        f"/api/v1/orders/by-restaurant/{restaurant.id}/kitchen-done-today", headers=auth_headers(kitchen)
+    )
+
+    assert done.status_code == 200
+    assert done.json() == []
+
+
 def test_un_appel_serveur_de_la_veille_disparait_de_lecran(client, db_session):
     """Même borne pour les appels serveur : deux écrans qui filtrent
     différemment finiraient par se contredire."""

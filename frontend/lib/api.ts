@@ -765,6 +765,11 @@ export const api = {
     }),
   listActiveOrders: (restaurantId: number) =>
     request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/active`),
+  // Détail des commandes terminées par la cuisine aujourd'hui (onglet
+  // "Terminées") — séparé de listActiveOrders : la cuisine n'agit plus sur
+  // ces commandes, mais doit pouvoir en revoir le détail après coup.
+  listKitchenDoneOrdersToday: (restaurantId: number) =>
+    request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/kitchen-done-today`),
   claimOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/claim`, { method: "POST" }),
   confirmOrder: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/confirm`, { method: "POST" }),
   sendToKitchen: (orderId: number) =>

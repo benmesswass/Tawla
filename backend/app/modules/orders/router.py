@@ -114,6 +114,20 @@ async def list_active_orders(
     return await service.list_active_orders(db, restaurant_id)
 
 
+@router.get("/by-restaurant/{restaurant_id}/kitchen-done-today", response_model=list[schemas.OrderOutStaff])
+async def list_kitchen_done_orders_today(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_KITCHEN_OR_MANAGER)
+):
+    """
+    Détail des commandes terminées par la cuisine aujourd'hui (onglet
+    "Terminées"). Séparé de `/active` : une fois `READY`/`SERVED`, la cuisine
+    n'agit plus dessus, mais doit pouvoir en revoir le détail après coup.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return await service.list_kitchen_done_orders_today(db, restaurant_id)
+
+
 @router.get("/{order_id}", response_model=schemas.OrderOut)
 async def get_order(order: Order = Depends(get_order_by_token)):
     """

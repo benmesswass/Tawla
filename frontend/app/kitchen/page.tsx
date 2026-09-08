@@ -38,6 +38,18 @@ type KitchenOrder = {
   en_cours: boolean;
 };
 
+// Commande que la cuisine a terminée aujourd'hui (onglet "Terminées") — elle
+// n'agit plus dessus, mais doit pouvoir en revoir le détail après coup
+// (réclamation, erreur signalée après le service).
+type DoneKitchenOrder = {
+  order_id: number;
+  table_label: string;
+  items: KitchenOrder["items"];
+  // "ready" tant que le serveur ne l'a pas encore livrée à table.
+  status: "ready" | "served";
+  ready_at: string | null;
+};
+
 type KitchenTab = "todo" | "in_progress" | "done";
 
 // Au-delà de ce seuil, l'attente cuisine passe en alerte visuelle (harissa).
@@ -47,18 +59,22 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
 
+function mapItems(items: Order["items"]): KitchenOrder["items"] {
+  return items.map((i) => ({
+    name: i.menu_item_name,
+    quantity: i.quantity,
+    notes: i.notes,
+    is_shared: i.is_shared,
+    shared_with: i.shared_with ?? [],
+    options: i.options ?? [],
+  }));
+}
+
 function orderFromApi(o: Order): KitchenOrder {
   return {
     order_id: o.id,
     table_label: o.table_label,
-    items: o.items.map((i) => ({
-      name: i.menu_item_name,
-      quantity: i.quantity,
-      notes: i.notes,
-      is_shared: i.is_shared,
-      shared_with: i.shared_with ?? [],
-      options: i.options ?? [],
-    })),
+    items: mapItems(o.items),
     scheduled_for: o.scheduled_for,
     sent_to_kitchen_at: o.sent_to_kitchen_at,
     preparation_started_at: o.preparation_started_at,
@@ -66,8 +82,54 @@ function orderFromApi(o: Order): KitchenOrder {
   };
 }
 
+function doneOrderFromApi(o: Order): DoneKitchenOrder {
+  return {
+    order_id: o.id,
+    table_label: o.table_label,
+    items: mapItems(o.items),
+    status: o.status === "served" ? "served" : "ready",
+    ready_at: o.ready_at,
+  };
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+// Partagé entre les cartes actives et les cartes de l'onglet "Terminées" :
+// même détail (plats, quantités, options, notes) quel que soit l'onglet.
+function ItemsList({ items }: { items: KitchenOrder["items"] }) {
+  return (
+    <ul className="mt-1 flex-1">
+      {items.map((it, i) => (
+        <li
+          key={i}
+          className="py-[6px] border-b border-[rgba(246,239,221,.09)] last:border-b-0 flex items-baseline gap-2"
+        >
+          <span className="text-[20px] font-bold tabular-nums text-[var(--harissa)] min-w-[26px] shrink-0">
+            {it.quantity}×
+          </span>
+          <span className="min-w-0">
+            <span className="text-[19px] font-semibold leading-[1.25] text-[var(--semoule)]">{it.name}</span>
+            {it.is_shared && (
+              <span className="ms-1.5 inline-flex items-center gap-1 align-middle rounded-full border border-[rgba(184,134,46,.7)] text-[#d8ae62] text-[13px] font-semibold px-[11px] py-[5px]">
+                <UtensilsIcon className="w-3 h-3 shrink-0" />
+                {it.shared_with.length > 0 ? `À partager · ${it.shared_with.length} couverts` : "À partager"}
+              </span>
+            )}
+            {it.options.length > 0 && (
+              <span className="block text-[15px] font-semibold text-[var(--note-cuisine)]">
+                {it.options.map((o) => o.option_name).join(" · ")}
+              </span>
+            )}
+            {it.notes && (
+              <span className="block text-[15px] font-semibold text-[var(--note-cuisine)]">{it.notes}</span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 // Chime synthétisé en Web Audio (deux notes courtes) — zéro fichier audio à
@@ -105,6 +167,8 @@ export default function KitchenPage() {
   const router = useRouter();
   const { staff, loading: staffLoading } = useCurrentStaff(["kitchen", "manager"]);
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
+  // null = pas encore chargé (distingue du "vraiment rien de terminé").
+  const [doneOrders, setDoneOrders] = useState<DoneKitchenOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [todayCount, setTodayCount] = useState<number | null>(null);
@@ -127,6 +191,16 @@ export default function KitchenPage() {
           .filter((o) => o.status === "sent_to_kitchen" || o.status === "in_preparation")
           .map(orderFromApi)
       );
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
+  const loadDoneOrders = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const done = await api.listKitchenDoneOrdersToday(restaurantId);
+      setDoneOrders(done.map(doneOrderFromApi));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -160,8 +234,9 @@ export default function KitchenPage() {
       loadActiveOrders();
       loadRestaurant();
       loadTodayCount();
+      loadDoneOrders();
     }
-  }, [restaurantId, loadActiveOrders, loadRestaurant, loadTodayCount]);
+  }, [restaurantId, loadActiveOrders, loadRestaurant, loadTodayCount, loadDoneOrders]);
 
   const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.sent_to_kitchen") {
@@ -236,8 +311,11 @@ export default function KitchenPage() {
   async function markDone(orderId: number) {
     setError(null);
     try {
-      await api.markReady(orderId);
+      const updated = await api.markReady(orderId);
       setOrders((prev) => prev.filter((o) => o.order_id !== orderId));
+      // Optimiste : évite d'attendre un rechargement pour la voir apparaître
+      // dans l'onglet "Terminées" (déjà chargé au montage, voir loadDoneOrders).
+      setDoneOrders((prev) => [doneOrderFromApi(updated), ...(prev ?? [])]);
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -303,7 +381,7 @@ export default function KitchenPage() {
   const TABS: { key: KitchenTab; label: string; count: number }[] = [
     { key: "todo", label: "À préparer", count: todoOrders.length },
     { key: "in_progress", label: "En cours", count: inProgressOrders.length },
-    { key: "done", label: "Terminées", count: todayCount ?? 0 },
+    { key: "done", label: "Terminées", count: doneOrders?.length ?? 0 },
   ];
 
   const visibleOrders = activeTab === "todo" ? todoOrders : activeTab === "in_progress" ? inProgressOrders : [];
@@ -382,16 +460,47 @@ export default function KitchenPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-3 min-[1440px]:grid-cols-4 gap-4 p-[18px] sm:p-[26px] pt-2">
         {activeTab === "done" ? (
-          <div className="col-span-full">
-            <EmptyState
-              message={
-                todayCount
-                  ? `${todayCount} commande${todayCount > 1 ? "s" : ""} servie${todayCount > 1 ? "s" : ""} aujourd'hui.`
-                  : "Rien de terminé pour l'instant."
-              }
-              dark
-            />
-          </div>
+          doneOrders === null ? (
+            <div className="col-span-full">
+              <EmptyState message="Chargement…" dark />
+            </div>
+          ) : doneOrders.length === 0 ? (
+            <div className="col-span-full">
+              <EmptyState message="Rien de terminé pour l'instant." dark />
+            </div>
+          ) : (
+            <>
+              {doneOrders.map((o) => (
+                <div
+                  key={o.order_id}
+                  className="rounded-[14px] overflow-hidden flex flex-col bg-[var(--espresso-card)]"
+                  style={{ border: "1px solid var(--line-on-espresso-strong)" }}
+                >
+                  <div
+                    className="px-[14px] py-3 flex justify-between items-center"
+                    style={{ backgroundColor: "var(--line-on-espresso)" }}
+                  >
+                    <span className={`${lalezar.className} text-[26px] leading-none text-[var(--semoule)]`}>
+                      {o.table_label}
+                    </span>
+                    <span
+                      className="text-[13px] font-bold uppercase tracking-wide rounded-full px-[11px] py-[5px] text-[var(--semoule)]"
+                      style={{ backgroundColor: o.status === "served" ? "rgba(31,107,79,.55)" : "rgba(184,134,46,.55)" }}
+                    >
+                      {o.status === "served" ? "Servie" : "Prête"}
+                    </span>
+                  </div>
+                  <div className="px-[14px] py-3 flex-1 flex flex-col">
+                    <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.45)]">
+                      #{o.order_id}
+                      {o.ready_at && ` · ${formatTime(o.ready_at)}`}
+                    </div>
+                    <ItemsList items={o.items} />
+                  </div>
+                </div>
+              ))}
+            </>
+          )
         ) : (
           <>
             {visibleOrders.map((o) => {
@@ -437,39 +546,7 @@ export default function KitchenPage() {
                         Iftar {formatTime(o.scheduled_for)}
                       </div>
                     )}
-                    <ul className="mt-1 flex-1">
-                      {o.items.map((it, i) => (
-                        <li
-                          key={i}
-                          className="py-[6px] border-b border-[rgba(246,239,221,.09)] last:border-b-0 flex items-baseline gap-2"
-                        >
-                          <span className="text-[20px] font-bold tabular-nums text-[var(--harissa)] min-w-[26px] shrink-0">
-                            {it.quantity}×
-                          </span>
-                          <span className="min-w-0">
-                            <span className="text-[19px] font-semibold leading-[1.25] text-[var(--semoule)]">
-                              {it.name}
-                            </span>
-                            {it.is_shared && (
-                              <span className="ms-1.5 inline-flex items-center gap-1 align-middle rounded-full border border-[rgba(184,134,46,.7)] text-[#d8ae62] text-[13px] font-semibold px-[11px] py-[5px]">
-                                <UtensilsIcon className="w-3 h-3 shrink-0" />
-                                {it.shared_with.length > 0 ? `À partager · ${it.shared_with.length} couverts` : "À partager"}
-                              </span>
-                            )}
-                            {it.options.length > 0 && (
-                              <span className="block text-[15px] font-semibold text-[var(--note-cuisine)]">
-                                {it.options.map((o) => o.option_name).join(" · ")}
-                              </span>
-                            )}
-                            {it.notes && (
-                              <span className="block text-[15px] font-semibold text-[var(--note-cuisine)]">
-                                {it.notes}
-                              </span>
-                            )}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    <ItemsList items={o.items} />
                   </div>
                   {o.en_cours ? (
                     <button
