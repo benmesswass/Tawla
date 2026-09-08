@@ -32,7 +32,7 @@ export const fr = {
   callWaiterButton: "Appeler le serveur",
   callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",
-  sharedCheckboxLabel: "Plat à partager pour toute la table",
+  sharedCheckboxLabel: "Plat à partager",
   preorderCheckboxLabel: (time: string) => `Commander pour l'iftar (${time}) plutôt que maintenant`,
   sending: "Envoi...",
   validateOrder: "Valider la commande",
@@ -157,8 +157,8 @@ export const fr = {
   tableTotal: "Total à régler",
   tableTotalNote:
     "Le paiement ci-dessous règle uniquement la commande affichée. Revenez sur les autres pour les régler à leur tour, ou demandez au serveur de tout encaisser en une fois.",
-  sharedWithLabel: "Partagé entre :",
-  sharedWithEveryone: "Personne de sélectionnée : partagé par toute la table.",
+  sharedWithLabel: "Pour qui ?",
+  sharedWithEveryone: "Non assigné : réparti équitablement à l'addition.",
   sharedPerPersonAmount: (amount: number) => `${formatMoney(amount)} par personne`,
   dinersLabel: "Personnes à table",
   openOrdersTitle: (count: number, reste: number) =>

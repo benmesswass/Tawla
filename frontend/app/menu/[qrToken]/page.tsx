@@ -208,7 +208,10 @@ function cartLineToWireItem(itemId: number, line: CartLine): OrderItemPayload {
     quantity: line.quantity,
     notes: line.note || null,
     is_shared: line.shared,
-    shared_with: line.shared ? line.sharedWith : [],
+    // Envoyé indépendamment de `shared` : assigner un plat à un convive reste
+    // possible même pour un plat non coché "à partager" (ROADMAP.md §Override
+    // 2026-09-08) — les deux réglages ne se conditionnent plus l'un l'autre.
+    shared_with: line.sharedWith,
     from_suggestion: line.fromSuggestion,
     selected_option_ids: line.selectedOptions.map((o) => o.optionId),
   };
@@ -1303,11 +1306,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   function setShared(itemId: number, shared: boolean) {
-    setCart((prev) =>
-      prev[itemId]
-        ? { ...prev, [itemId]: { ...prev[itemId], shared, sharedWith: shared ? prev[itemId].sharedWith : [] } }
-        : prev
-    );
+    // `sharedWith` n'est plus remis à zéro ici : l'assignation à un convive
+    // est un réglage indépendant de la case "à partager" (ROADMAP.md
+    // §Override 2026-09-08).
+    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], shared } } : prev));
   }
 
   function toggleConvive(itemId: number, place: number) {
@@ -2499,38 +2501,42 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
               <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
             </label>
-            {ligne.shared && (
-              <div className="mt-2">
-                <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
-                <div className="mt-1 flex flex-wrap gap-[6px]">
-                  {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
-                    const choisi = ligne.sharedWith.includes(place);
-                    return (
-                      <button
-                        key={place}
-                        type="button"
-                        onClick={() => toggleConvive(item.id, place)}
-                        aria-pressed={choisi}
-                        className={`rounded-full border px-[12px] py-[5px] text-sm transition-colors ${
-                          choisi
-                            ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
-                            : "border-[var(--line)] bg-white text-[var(--encre)]"
-                        }`}
-                      >
-                        {personLabel(place)}
-                      </button>
-                    );
-                  })}
-                </div>
-                {ligne.sharedWith.length === 0 ? (
-                  <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
-                ) : (
-                  <p className="mt-1 text-[11.5px] text-[var(--ink-soft)]">
-                    {t.sharedPerPersonAmount(perPerson)}
-                  </p>
-                )}
+            {/* Indépendant de la case "à partager" ci-dessus : assigner un
+                plat à un ou plusieurs convives reste facultatif et vaut pour
+                n'importe quel plat, pas seulement les plats à partager
+                (ROADMAP.md §Override 2026-09-08) — alimente directement
+                SplitBill au moment de payer plutôt que de reposer la
+                question. */}
+            <div className="mt-2">
+              <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
+              <div className="mt-1 flex flex-wrap gap-[6px]">
+                {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
+                  const choisi = ligne.sharedWith.includes(place);
+                  return (
+                    <button
+                      key={place}
+                      type="button"
+                      onClick={() => toggleConvive(item.id, place)}
+                      aria-pressed={choisi}
+                      className={`rounded-full border px-[12px] py-[5px] text-sm transition-colors ${
+                        choisi
+                          ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
+                          : "border-[var(--line)] bg-white text-[var(--encre)]"
+                      }`}
+                    >
+                      {personLabel(place)}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+              {ligne.sharedWith.length === 0 ? (
+                <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
+              ) : (
+                <p className="mt-1 text-[11.5px] text-[var(--ink-soft)]">
+                  {t.sharedPerPersonAmount(perPerson)}
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -2938,19 +2944,20 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   </div>
                 ))}
 
-                {cartLines.some((l) => l.shared) && (
-                  <label className="flex items-center justify-between gap-2 text-sm text-[var(--encre)] pt-2">
-                    {t.dinersLabel}
-                    <input
-                      type="number"
-                      min={2}
-                      max={12}
-                      value={convives}
-                      onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
-                      className="w-16 bg-white border border-[var(--line)] rounded-lg px-2 py-1 text-center tabular-nums"
-                    />
-                  </label>
-                )}
+                {/* Utile dès qu'un plat existe, plus seulement les plats
+                    "à partager" : le sélecteur de convive vaut pour toute
+                    ligne (ROADMAP.md §Override 2026-09-08). */}
+                <label className="flex items-center justify-between gap-2 text-sm text-[var(--encre)] pt-2">
+                  {t.dinersLabel}
+                  <input
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={convives}
+                    onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
+                    className="w-16 bg-white border border-[var(--line)] rounded-lg px-2 py-1 text-center tabular-nums"
+                  />
+                </label>
                 {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
                   <label className="flex items-center gap-2 text-sm text-[var(--encre)] pt-2">
                     <input
