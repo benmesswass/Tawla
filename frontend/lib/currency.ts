@@ -31,3 +31,12 @@ export function formatAmount(amount: number, market: MarketConfig = currentMarke
 export function formatMoney(amount: number, market: MarketConfig = currentMarket): string {
   return `${formatAmount(amount, market)}${NBSP}${market.currency.symbol}`;
 }
+
+/**
+ * Inverse de `formatAmount` côté saisie libre (pourboire, montant partagé…) :
+ * virgule ou point acceptés quel que soit le séparateur du marché, texte vide
+ * ou invalide → 0. Un montant faux ici part tel quel dans l'appel de paiement.
+ */
+export function parseAmountInput(input: string): number {
+  return Number(input.replace(",", ".")) || 0;
+}

@@ -87,6 +87,7 @@ export const ar = {
   tipLabel: "الإكرامية (إختياري، للخلاص بالكارت)",
   tipNone: "بلا",
   tipPlaceholder: `${formatAmount(0)} د.ت`,
+  totalToPayLabel: "المجموع إلي باش تخلصه (بالإكرامية)",
   emailLabel: "الإيميل (إختياري، باش توصلك الفاتورة)",
   emailPlaceholder: "انت@مثال.com",
   payByCard: "خلص أونلاين",

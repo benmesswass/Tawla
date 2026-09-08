@@ -99,6 +99,7 @@ export const fr = {
   tipLabel: "Pourboire (facultatif, pour un paiement par carte)",
   tipNone: "Sans",
   tipPlaceholder: formatMoney(0),
+  totalToPayLabel: "Total à payer (pourboire inclus)",
   emailLabel: "E-mail (facultatif, pour recevoir votre facture)",
   emailPlaceholder: "vous@exemple.com",
   payByCard: "Payer en ligne par carte",

@@ -22,7 +22,7 @@ import {
 } from "@/lib/api";
 import { urlBase64ToUint8Array } from "@/lib/webPush";
 import { toLocalizedMessage } from "@/lib/errors";
-import { formatAmount } from "@/lib/currency";
+import { formatAmount, parseAmountInput } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { localeSwitchLabel, useLocale } from "@/lib/i18n/useLocale";
@@ -940,7 +940,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     if (!trackedOrder) return;
     setPaying(true);
     setPaymentError(null);
-    const tip = Number(tipInput.replace(",", ".")) || 0;
+    const tip = parseAmountInput(tipInput);
     try {
       if (!orderToken) return;
       const updated = await api.payByCard(trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined);
@@ -968,7 +968,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       if (!orderToken) return;
       // Le pourboire vaut aussi pour les espèces : il était saisi puis perdu,
       // et le serveur venait encaisser le total sans lui.
-      const tip = Number(tipInput.replace(",", ".")) || 0;
+      const tip = parseAmountInput(tipInput);
       const updated = await api.requestCashPayment(trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined);
       setTrackedOrder(updated);
     } catch (e) {
@@ -984,7 +984,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setPaymentError(null);
     try {
       if (!orderToken) return;
-      const tip = Number(tipInput.replace(",", ".")) || 0;
+      const tip = parseAmountInput(tipInput);
       const updated = await api.requestCardTerminalPayment(
         trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined
       );
@@ -2157,6 +2157,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     placeholder={t.tipPlaceholder}
                     className="mt-2 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
                   />
+                </div>
+                <div className="flex justify-between text-[15px] font-bold text-[var(--encre)] pt-2 border-t border-[var(--line)]">
+                  <span>{t.totalToPayLabel}</span>
+                  <span className="tabular-nums">
+                    {formatAmount(trackedOrder.total_amount + parseAmountInput(tipInput))} {t.currency}
+                  </span>
                 </div>
                 <div>
                   <label htmlFor="customer-email" className="text-sm text-[var(--ink-soft)]">

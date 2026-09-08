@@ -92,6 +92,7 @@ export const en = {
   tipLabel: "Tip (optional, for card payment)",
   tipNone: "None",
   tipPlaceholder: formatMoney(0),
+  totalToPayLabel: "Total to pay (tip included)",
   emailLabel: "Email (optional, to receive your invoice)",
   emailPlaceholder: "you@example.com",
   payByCard: "Pay online by card",
