@@ -68,6 +68,27 @@ def test_cannot_request_modification_before_confirmation(client):
     assert res.json()["detail"]["code"] == "MODIFICATION_REQUEST_NOT_ALLOWED"
 
 
+def test_cannot_request_modification_on_a_paid_order(client):
+    """`MODIFICATION_REQUEST_STATUSES` ne connaît que `status` — une commande
+    CONFIRMED/SENT_TO_KITCHEN/IN_PREPARATION peut déjà être payée. Sans ce
+    garde-fou, un article accepté après coup gonflait `total_amount` sans
+    jamais être réencaissé (même angle mort que F-5, voir test_payments.py)."""
+    restaurant, table, headers, couscous, the, baklawa = _setup(client)
+    order = _confirmed_order(client, table, headers, couscous, the)
+    paid = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
+    )
+    assert paid.json()["payment_status"] == "paid"
+
+    res = client.post(
+        f"/api/v1/orders/{order['id']}/modification-requests",
+        json={"items": [{"menu_item_id": baklawa["id"], "quantity": 1}]},
+        headers=order_headers(order),
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "ORDER_ALREADY_PAID"
+
+
 def test_modification_request_broadcasts_to_the_order_channel_for_other_devices(client):
     """
     Panier de table partagé : les autres appareils qui suivent la même
