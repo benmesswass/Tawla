@@ -201,6 +201,29 @@ def test_cannot_cancel_an_order_that_has_been_paid(client):
     assert cancel.json()["detail"]["code"] == "ORDER_ALREADY_PAID"
 
 
+def test_cannot_pay_while_a_modification_request_is_pending(client):
+    """Fenêtre de course : un client qui a envoyé une demande de modification
+    (fenêtre 2, voir test_order_modification_requests.py) ne doit pas pouvoir
+    payer avant que le serveur ait tranché — sinon la demande peut être
+    acceptée après coup et gonfler `total_amount` sans jamais être
+    réencaissée, même trou que ORDER_ALREADY_PAID mais ouvert par l'autre
+    bout."""
+    restaurant, manager_headers, order = _setup_order(client)
+    menu_item_id = order["items"][0]["menu_item_id"]
+    request = client.post(
+        f"/api/v1/orders/{order['id']}/modification-requests",
+        json={"items": [{"menu_item_id": menu_item_id, "quantity": 3}]},
+        headers=order_headers(order),
+    )
+    assert request.status_code == 201
+
+    paid = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
+    )
+    assert paid.status_code == 409
+    assert paid.json()["detail"]["code"] == "MODIFICATION_REQUEST_PENDING"
+
+
 def test_pending_cash_payment_carries_the_dedicated_server_id(client):
     """
     Le frontend n'affiche la demande de paiement qu'au serveur qui a pris en

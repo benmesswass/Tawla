@@ -559,6 +559,17 @@ async def create_modification_request(
                 "message": "order is not in a state that accepts modification requests",
             },
         )
+    # `MODIFICATION_REQUEST_STATUSES` ne connaît que `status` : une commande
+    # déjà payée (CONFIRMED/SENT_TO_KITCHEN/IN_PREPARATION s'y trouvent tous)
+    # pouvait donc se voir ajouter des articles après paiement, `total_amount`
+    # (models.py, recalculé depuis `order.items`) grimpant sans jamais être
+    # réencaissé — même angle mort que le F-5 (audit 2026-08-18) déjà corrigé
+    # pour l'annulation dans `transition_status`.
+    if order.payment_status == PaymentStatus.PAID:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ORDER_ALREADY_PAID", "message": "cannot request a modification on a paid order"},
+        )
     if order.pending_modification_request is not None:
         raise HTTPException(
             status_code=409,
@@ -1017,6 +1028,21 @@ def _get_payable_order(db: Session, order_id: int) -> Order:
         raise HTTPException(
             status_code=409,
             detail={"code": "ORDER_NOT_CONFIRMED", "message": "cannot pay an order that hasn't been confirmed yet"},
+        )
+    # Sans ce garde-fou, une demande de modification encore en attente (voir
+    # `create_modification_request`) pouvait être résolue APRÈS que le client
+    # ait payé entre-temps — le total accepté par le serveur change alors
+    # sans jamais être réencaissé, le même trou que `ORDER_ALREADY_PAID`
+    # ci-dessus mais ouvert par l'autre bout. On bloque le paiement plutôt
+    # que la résolution : la demande n'a pas de statut "annulée", la laisser
+    # bloquée `pending` pour toujours serait pire.
+    if order.pending_modification_request is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MODIFICATION_REQUEST_PENDING",
+                "message": "cannot pay while a modification request is still pending",
+            },
         )
     return order
 
