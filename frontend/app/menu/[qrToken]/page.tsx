@@ -333,6 +333,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [party, setParty] = useState<{ size: number; names: (string | null)[] } | null>(null);
   const [partyKnown, setPartyKnown] = useState(false);
   const [partyPromptDismissed, setPartyPromptDismissed] = useState(false);
+  // Dès que la table a déclaré son effectif (PartyPrompt / `party.updated`),
+  // il prime sur la valeur par défaut de `convives` : sinon le sélecteur
+  // "Partagé entre" d'un plat reste bloqué à 2 pastilles anonymes même pour
+  // une table de 4 qui a donné ses prénoms.
+  useEffect(() => {
+    if (party) {
+      setConvives(Math.max(2, Math.min(12, party.size)));
+    }
+  }, [party]);
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
   const [offlineRetryCountdown, setOfflineRetryCountdown] = useState(5);
@@ -2254,6 +2263,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     return `cat-${encodeURIComponent(category).replace(/%/g, "")}`;
   }
 
+  // Prénom déclaré à la place de "Personne N", quand donné — même repli que
+  // SplitBill.tsx et le résumé de table ci-dessous.
+  function personLabel(place: number): string {
+    return party?.names[place - 1] || t.personLabel(place);
+  }
+
   function renderItem(item: MenuItem, index = 0) {
     // Un plat en rupture reste sur la carte, barré : le faire disparaître
     // laissait le client chercher un plat qu'il avait vu la minute d'avant, ou
@@ -2465,7 +2480,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                             : "border-[var(--line)] bg-white text-[var(--encre)]"
                         }`}
                       >
-                        {t.personLabel(place)}
+                        {personLabel(place)}
                       </button>
                     );
                   })}
