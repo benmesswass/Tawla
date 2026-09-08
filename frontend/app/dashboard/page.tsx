@@ -51,6 +51,7 @@ import ActivationRequired from "@/components/ActivationRequired";
 import SubscriptionReminderModal from "@/components/SubscriptionReminderModal";
 import WelcomeTierModal from "@/components/WelcomeTierModal";
 import ConfirmDowngradeModal from "@/components/ConfirmDowngradeModal";
+import ConfirmDeleteModal from "@/components/ConfirmDeleteModal";
 import QrCode from "@/components/QrCode";
 
 // Suggestions, pas un enum figé (voir Table.zone côté backend) : tous les
@@ -310,7 +311,14 @@ export default function DashboardPage() {
   const [newTable, setNewTable] = useState<TableDraft>(EMPTY_TABLE_DRAFT);
   const [copiedTableId, setCopiedTableId] = useState<number | null>(null);
   const [downloadingPosterId, setDownloadingPosterId] = useState<number | null>(null);
-  const [deletingTableId, setDeletingTableId] = useState<number | null>(null);
+  // Confirmation avant suppression (table ou article du menu) — modale Tawla
+  // plutôt que window.confirm() natif, même raison que confirmingDowngradeTier
+  // ci-dessus (retour utilisateur, repéré cette fois sur la suppression d'une
+  // table, 2026-09-07).
+  const [pendingDeletion, setPendingDeletion] = useState<
+    { kind: "table"; table: Table } | { kind: "menuItem"; item: MenuItem } | null
+  >(null);
+  const [deletionSubmitting, setDeletionSubmitting] = useState(false);
   const [team, setTeam] = useState<Staff[]>([]);
   const [staffDrafts, setStaffDrafts] = useState<Record<number, StaffDraft>>({});
   const [newStaff, setNewStaff] = useState<NewStaffDraft>(EMPTY_STAFF_DRAFT);
@@ -781,9 +789,13 @@ export default function DashboardPage() {
     }
   }
 
-  async function removeItem(item: MenuItem) {
-    if (!confirm(`Supprimer « ${item.name} » du menu ?`)) return;
+  function askRemoveItem(item: MenuItem) {
+    setPendingDeletion({ kind: "menuItem", item });
+  }
+
+  async function performRemoveItem(item: MenuItem) {
     setError(null);
+    setDeletionSubmitting(true);
     try {
       await api.deleteMenuItem(item.id);
       flash(`« ${item.name} » supprimé.`);
@@ -792,6 +804,9 @@ export default function DashboardPage() {
       await load();
     } catch (e) {
       handleGatedError(e);
+    } finally {
+      setDeletionSubmitting(false);
+      setPendingDeletion(null);
     }
   }
 
@@ -854,10 +869,13 @@ export default function DashboardPage() {
     }
   }
 
-  async function removeTable(table: Table) {
-    if (!confirm(`Supprimer « ${table.label} » ? Le QR code collé sur la table ne fonctionnera plus.`)) return;
+  function askRemoveTable(table: Table) {
+    setPendingDeletion({ kind: "table", table });
+  }
+
+  async function performRemoveTable(table: Table) {
     setError(null);
-    setDeletingTableId(table.id);
+    setDeletionSubmitting(true);
     try {
       await api.deleteTable(table.id);
       flash(`« ${table.label} » supprimée.`);
@@ -866,7 +884,8 @@ export default function DashboardPage() {
     } catch (e) {
       handleGatedError(e);
     } finally {
-      setDeletingTableId(null);
+      setDeletionSubmitting(false);
+      setPendingDeletion(null);
     }
   }
 
@@ -1254,6 +1273,23 @@ export default function DashboardPage() {
           onCancel={() => setConfirmingDowngradeTier(null)}
         />
       )}
+      {pendingDeletion && (
+        <ConfirmDeleteModal
+          title={
+            pendingDeletion.kind === "table"
+              ? `Supprimer « ${pendingDeletion.table.label} » ?`
+              : `Supprimer « ${pendingDeletion.item.name} » du menu ?`
+          }
+          message={pendingDeletion.kind === "table" ? "Le QR code collé sur la table ne fonctionnera plus." : undefined}
+          submitting={deletionSubmitting}
+          onConfirm={() =>
+            pendingDeletion.kind === "table"
+              ? performRemoveTable(pendingDeletion.table)
+              : performRemoveItem(pendingDeletion.item)
+          }
+          onCancel={() => setPendingDeletion(null)}
+        />
+      )}
       <EnteteManager
         titre="Carte"
         sousTitre="Modifier un plat, signaler une rupture, en ajouter un — et déposer les photos en les glissant sur leur vignette."
@@ -1501,7 +1537,7 @@ export default function DashboardPage() {
                         </label>
                         <div className="flex gap-2">
                           <Button onClick={() => saveItem(item)}>Enregistrer</Button>
-                          <Button variant="danger" onClick={() => removeItem(item)}>
+                          <Button variant="danger" onClick={() => askRemoveItem(item)}>
                             Supprimer
                           </Button>
                         </div>
@@ -1958,14 +1994,8 @@ export default function DashboardPage() {
                     >
                       {downloadingPosterId === table.id ? "Téléchargement..." : "Télécharger l'affiche (PDF)"}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="sm"
-                      disabled={deletingTableId === table.id}
-                      onClick={() => removeTable(table)}
-                    >
-                      {deletingTableId === table.id ? "Suppression..." : "Supprimer"}
+                    <Button type="button" variant="danger" size="sm" onClick={() => askRemoveTable(table)}>
+                      Supprimer
                     </Button>
                   </div>
                   {clientLink && (
