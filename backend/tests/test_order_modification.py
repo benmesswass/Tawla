@@ -56,6 +56,33 @@ def test_client_can_edit_order_while_pending_confirmation(client):
     assert updated["total_amount"] == 1 * 24.0 + 3 * 3.0
 
 
+def test_edit_broadcasts_to_the_order_channel_for_other_devices(client):
+    """
+    Panier de table partagé (`table_cart.py`) : plusieurs convives valident
+    ensemble, puis chacun suit le même `order_id` sur son propre appareil.
+    Si l'un d'eux modifie la commande pendant la fenêtre 1, les AUTRES
+    appareils qui suivent cette commande doivent le voir en direct, sans
+    devoir rafraîchir leur page — le seul broadcast vers l'écran serveur ne
+    les couvre pas, eux sont sur `/ws/order/...`.
+    """
+    restaurant, table, couscous, the, _headers = _setup_restaurant_with_two_items(client)
+    order = _create_order(client, table, couscous, quantity=2)
+
+    with client.websocket_connect(
+        f"/ws/order/{restaurant.id}/{order['id']}?token={order['public_token']}"
+    ) as ws:
+        res = client.put(
+            f"/api/v1/orders/{order['id']}/items",
+            json={"items": [{"menu_item_id": the['id'], "quantity": 1}]},
+            headers=order_headers(order),
+        )
+        assert res.status_code == 200
+
+        msg = ws.receive_json()
+        assert msg["event"] == "order.items_updated"
+        assert msg["order_id"] == order["id"]
+
+
 def test_edit_replaces_items_entirely_not_merges(client):
     """
     Envoyer le panier voulu dans son ensemble : un article retiré du payload

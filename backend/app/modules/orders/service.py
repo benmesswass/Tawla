@@ -494,6 +494,19 @@ async def update_order_items(db: Session, order: Order, payload: schemas.OrderIt
             "items_updated_at": order.items_updated_at.isoformat(),
         },
     )
+    # Et les AUTRES appareils qui suivent cette même commande (panier de
+    # table partagé, `table_cart.py` : plusieurs convives valident ensemble
+    # puis suivent tous le même `order_id`) — sans ce second broadcast sur le
+    # canal de la commande, un convive qui n'a pas fait la modification ne la
+    # voit jamais tant qu'il ne rafraîchit pas sa page à la main.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={
+            "event": "order.items_updated",
+            "order_id": order.id,
+            "items_updated_at": order.items_updated_at.isoformat(),
+        },
+    )
     return order
 
 

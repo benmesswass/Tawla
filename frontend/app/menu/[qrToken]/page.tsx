@@ -706,6 +706,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       setLastResolution(msg.lines);
       api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
     }
+    // Un autre appareil suivant la même commande (panier de table partagé —
+    // plusieurs convives valident ensemble puis suivent tous ce même
+    // `order_id`) vient de la modifier — on relit ses items/total, sinon ce
+    // deuxième appareil reste sur l'ancien contenu jusqu'à un rafraîchissement
+    // manuel de la page.
+    if (msg.event === "order.items_updated" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
+      api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
+    }
   });
 
   // Rupture de stock en temps réel : un plat qui devient indisponible doit
