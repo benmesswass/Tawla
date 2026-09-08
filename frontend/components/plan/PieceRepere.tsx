@@ -1,6 +1,6 @@
 "use client";
 
-import { LIBELLE_REPERE, PlanLandmark } from "./types";
+import { DIAMETRE_REPERE, LIBELLE_REPERE, PlanLandmark } from "./types";
 
 /**
  * Un repère fixe du plan — le bar, une porte d'entrée. Volontairement plus
@@ -29,7 +29,12 @@ export default function PieceRepere({
       className="repere"
       aria-label={LIBELLE_REPERE[repere.kind]}
     >
-      <svg className="repere-icone" viewBox="0 0 32 32" aria-hidden="true">
+      <svg
+        className="repere-icone"
+        viewBox="0 0 32 32"
+        style={{ width: DIAMETRE_REPERE[repere.size], height: DIAMETRE_REPERE[repere.size] }}
+        aria-hidden="true"
+      >
         {repere.kind === "bar" ? (
           <>
             <polygon points="6,7 26,7 16,19" />

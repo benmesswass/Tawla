@@ -38,6 +38,29 @@ def test_a_manager_adds_a_landmark(client, salle):
     assert (body["pos_x"], body["pos_y"]) == (50.0, 12.0)
 
 
+def test_a_landmark_defaults_to_medium_size(client, salle):
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+
+    body = _poser(client, salle.id, manager).json()
+
+    assert body["size"] == "medium"
+
+
+def test_a_landmark_can_be_created_with_a_chosen_size(client, salle):
+    """Un bar peut être un coin comptoir ou occuper tout un mur — le manager
+    choisit la taille dès la pose, pas seulement après coup."""
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+
+    response = client.post(
+        f"/api/v1/tables/plan/{salle.id}/landmarks",
+        json={"kind": "bar", "pos_x": 50.0, "pos_y": 12.0, "size": "large"},
+        headers=auth_headers(manager),
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["size"] == "large"
+
+
 def test_a_landmark_is_placed_immediately_no_reserve(client, db_session, salle):
     """Contrairement à une table, un repère naît déjà posé : rien d'autre à
     régler qu'une position, donc pas de réserve où attendre."""
@@ -113,6 +136,35 @@ def test_moving_a_landmark_replaces_its_position(client, db_session, salle):
     db_session.expire_all()
     stored = db_session.get(PlanLandmark, landmark["id"])
     assert (stored.pos_x, stored.pos_y) == (80.0, 20.0)
+
+
+def test_resizing_a_landmark_replaces_its_size(client, db_session, salle):
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+    landmark = _poser(client, salle.id, manager).json()
+    assert landmark["size"] == "medium"
+
+    response = client.put(
+        f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
+        json={"pos_x": 80.0, "pos_y": 20.0, "size": "small"},
+        headers=auth_headers(manager),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["size"] == "small"
+    db_session.expire_all()
+    assert db_session.get(PlanLandmark, landmark["id"]).size.value == "small"
+
+
+def test_an_unknown_size_is_refused(client, salle):
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+
+    response = client.post(
+        f"/api/v1/tables/plan/{salle.id}/landmarks",
+        json={"kind": "bar", "pos_x": 50.0, "pos_y": 12.0, "size": "enorme"},
+        headers=auth_headers(manager),
+    )
+
+    assert response.status_code == 422
 
 
 def test_a_waiter_cannot_move_a_landmark(client, salle):

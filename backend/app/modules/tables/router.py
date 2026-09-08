@@ -258,7 +258,11 @@ def create_landmark(
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     landmark = PlanLandmark(
-        restaurant_id=restaurant_id, kind=payload.kind, pos_x=payload.pos_x, pos_y=payload.pos_y
+        restaurant_id=restaurant_id,
+        kind=payload.kind,
+        pos_x=payload.pos_x,
+        pos_y=payload.pos_y,
+        size=payload.size,
     )
     db.add(landmark)
     db.commit()
@@ -284,6 +288,7 @@ def move_landmark(
         )
     landmark.pos_x = payload.pos_x
     landmark.pos_y = payload.pos_y
+    landmark.size = payload.size
     db.commit()
     db.refresh(landmark)
     return landmark

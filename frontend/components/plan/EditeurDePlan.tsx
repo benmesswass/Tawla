@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, LandmarkKind, PlanLandmark, PlanTable, TableShape } from "@/lib/api";
+import { api, LandmarkKind, LandmarkSize, PlanLandmark, PlanTable, TableShape } from "@/lib/api";
 import PlanDeSalle from "./PlanDeSalle";
+import { LIBELLE_REPERE } from "./types";
 
 /**
  * Le manager dessine sa salle (Phase 18).
@@ -28,6 +29,12 @@ const FORMES: { valeur: TableShape; nom: string }[] = [
   { valeur: "round", nom: "Ronde" },
   { valeur: "square", nom: "Carrée" },
   { valeur: "rect", nom: "Longue" },
+];
+
+const TAILLES: { valeur: LandmarkSize; nom: string }[] = [
+  { valeur: "small", nom: "Petit" },
+  { valeur: "medium", nom: "Moyen" },
+  { valeur: "large", nom: "Grand" },
 ];
 
 /** Temps de calme après le dernier geste avant d'écrire. */
@@ -85,7 +92,7 @@ export default function EditeurDePlan({
       const repere = landmarks.find((r) => r.id === derniereRepereDeplaceeRef.current);
       if (!repere) return;
       try {
-        await api.moveLandmark(restaurantId, repere.id, repere.pos_x, repere.pos_y);
+        await api.moveLandmark(restaurantId, repere.id, repere.pos_x, repere.pos_y, repere.size);
       } catch (e) {
         onErreurRef.current?.(e);
       }
@@ -96,6 +103,13 @@ export default function EditeurDePlan({
   function deplacerRepere(id: number, x: number, y: number) {
     derniereRepereDeplaceeRef.current = id;
     setLandmarks((prev) => prev.map((r) => (r.id === id ? { ...r, pos_x: x, pos_y: y } : r)));
+    setRepereModifie(true);
+  }
+
+  function changerTailleRepere(taille: LandmarkSize) {
+    if (repereSelectionne === null) return;
+    derniereRepereDeplaceeRef.current = repereSelectionne;
+    setLandmarks((prev) => prev.map((r) => (r.id === repereSelectionne ? { ...r, size: taille } : r)));
     setRepereModifie(true);
   }
 
@@ -145,6 +159,7 @@ export default function EditeurDePlan({
   const posees = useMemo(() => brouillon.filter((t) => t.pos_x !== null), [brouillon]);
   const enReserve = useMemo(() => brouillon.filter((t) => t.pos_x === null), [brouillon]);
   const tableSelectionnee = brouillon.find((t) => t.id === selectionnee) ?? null;
+  const repereSelectionneObjet = landmarks.find((r) => r.id === repereSelectionne) ?? null;
 
   // Enregistrement automatique. La référence évite de relancer le compte à
   // rebours quand seule l'identité de la fonction parente change.
@@ -269,16 +284,34 @@ export default function EditeurDePlan({
         >
           + Porte d&apos;entrée
         </button>
-        {repereSelectionne !== null && (
+      </div>
+
+      {repereSelectionneObjet && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3 text-sm">
+          <span className="font-medium mr-1">{LIBELLE_REPERE[repereSelectionneObjet.kind]}</span>
+          <span className="text-neutral-500">taille</span>
+          {TAILLES.map((t) => (
+            <button
+              key={t.valeur}
+              onClick={() => changerTailleRepere(t.valeur)}
+              className={`rounded-lg border px-3 py-1.5 ${
+                repereSelectionneObjet.size === t.valeur
+                  ? "border-[var(--harissa)] text-[var(--harissa)]"
+                  : "border-[var(--line)] text-neutral-600"
+              }`}
+              aria-pressed={repereSelectionneObjet.size === t.valeur}
+            >
+              {t.nom}
+            </button>
+          ))}
           <button
-            type="button"
-            onClick={() => retirerRepere(repereSelectionne)}
+            onClick={() => retirerRepere(repereSelectionneObjet.id)}
             className="text-neutral-500 underline ml-1"
           >
             Retirer ce repère
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {tableSelectionnee ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3 text-sm">

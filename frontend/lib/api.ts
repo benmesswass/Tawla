@@ -460,6 +460,7 @@ export type PlanTable = {
 };
 
 export type LandmarkKind = "bar" | "entrance";
+export type LandmarkSize = "small" | "medium" | "large";
 
 /** Un repère fixe du plan — pas une table, juste un point pour se repérer
  *  (« la 4 est près de l'entrée »), Phase 18 suite. */
@@ -468,6 +469,7 @@ export type PlanLandmark = {
   kind: LandmarkKind;
   pos_x: number;
   pos_y: number;
+  size: LandmarkSize;
 };
 
 export type TeamReport = {
@@ -790,15 +792,27 @@ export const api = {
     }),
   listLandmarks: (restaurantId: number) =>
     request<PlanLandmark[]>(`/api/v1/tables/plan/${restaurantId}/landmarks`),
-  createLandmark: (restaurantId: number, kind: LandmarkKind, pos_x: number, pos_y: number) =>
+  createLandmark: (
+    restaurantId: number,
+    kind: LandmarkKind,
+    pos_x: number,
+    pos_y: number,
+    size: LandmarkSize = "medium"
+  ) =>
     request<PlanLandmark>(`/api/v1/tables/plan/${restaurantId}/landmarks`, {
       method: "POST",
-      body: JSON.stringify({ kind, pos_x, pos_y }),
+      body: JSON.stringify({ kind, pos_x, pos_y, size }),
     }),
-  moveLandmark: (restaurantId: number, landmarkId: number, pos_x: number, pos_y: number) =>
+  moveLandmark: (
+    restaurantId: number,
+    landmarkId: number,
+    pos_x: number,
+    pos_y: number,
+    size: LandmarkSize
+  ) =>
     request<PlanLandmark>(`/api/v1/tables/plan/${restaurantId}/landmarks/${landmarkId}`, {
       method: "PUT",
-      body: JSON.stringify({ pos_x, pos_y }),
+      body: JSON.stringify({ pos_x, pos_y, size }),
     }),
   deleteLandmark: (restaurantId: number, landmarkId: number) =>
     request<void>(`/api/v1/tables/plan/${restaurantId}/landmarks/${landmarkId}`, { method: "DELETE" }),

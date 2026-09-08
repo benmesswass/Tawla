@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.tables.models import LandmarkKind, TableShape
+from app.modules.tables.models import LandmarkKind, LandmarkSize, TableShape
 
 
 class TableCreate(BaseModel):
@@ -82,6 +82,7 @@ class LandmarkCreate(BaseModel):
     kind: LandmarkKind
     pos_x: float = Field(ge=0, le=100)
     pos_y: float = Field(ge=0, le=100)
+    size: LandmarkSize = LandmarkSize.MEDIUM
 
 
 class LandmarkOut(BaseModel):
@@ -91,8 +92,14 @@ class LandmarkOut(BaseModel):
     kind: LandmarkKind
     pos_x: float
     pos_y: float
+    size: LandmarkSize
 
 
 class LandmarkMove(BaseModel):
+    """Position ET taille : tout ce qu'un repère a de modifiable après sa
+    création, comme TablePlacement pour une table (position + forme +
+    couverts) — une seule écriture, jamais une route par attribut."""
+
     pos_x: float = Field(ge=0, le=100)
     pos_y: float = Field(ge=0, le=100)
+    size: LandmarkSize = LandmarkSize.MEDIUM
