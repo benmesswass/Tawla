@@ -38,27 +38,27 @@ def test_a_manager_adds_a_landmark(client, salle):
     assert (body["pos_x"], body["pos_y"]) == (50.0, 12.0)
 
 
-def test_a_landmark_defaults_to_medium_size(client, salle):
+def test_a_landmark_has_default_dimensions(client, salle):
     manager = create_staff(salle.id, StaffRole.MANAGER)
 
     body = _poser(client, salle.id, manager).json()
 
-    assert body["size"] == "medium"
+    assert (body["width"], body["height"]) == (12.0, 7.0)
 
 
-def test_a_landmark_can_be_created_with_a_chosen_size(client, salle):
+def test_a_landmark_can_be_created_with_chosen_dimensions(client, salle):
     """Un bar peut être un coin comptoir ou occuper tout un mur — le manager
-    choisit la taille dès la pose, pas seulement après coup."""
+    choisit sa forme dès la pose, pas seulement après coup."""
     manager = create_staff(salle.id, StaffRole.MANAGER)
 
     response = client.post(
         f"/api/v1/tables/plan/{salle.id}/landmarks",
-        json={"kind": "bar", "pos_x": 50.0, "pos_y": 12.0, "size": "large"},
+        json={"kind": "bar", "pos_x": 50.0, "pos_y": 12.0, "width": 40.0, "height": 5.0},
         headers=auth_headers(manager),
     )
 
     assert response.status_code == 201, response.text
-    assert response.json()["size"] == "large"
+    assert (response.json()["width"], response.json()["height"]) == (40.0, 5.0)
 
 
 def test_a_landmark_is_placed_immediately_no_reserve(client, db_session, salle):
@@ -128,7 +128,7 @@ def test_moving_a_landmark_replaces_its_position(client, db_session, salle):
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 80.0, "pos_y": 20.0},
+        json={"pos_x": 80.0, "pos_y": 20.0, "width": 12.0, "height": 7.0},
         headers=auth_headers(manager),
     )
 
@@ -138,33 +138,35 @@ def test_moving_a_landmark_replaces_its_position(client, db_session, salle):
     assert (stored.pos_x, stored.pos_y) == (80.0, 20.0)
 
 
-def test_resizing_a_landmark_replaces_its_size(client, db_session, salle):
+def test_resizing_a_landmark_replaces_its_dimensions(client, db_session, salle):
+    """Étirer le repère au coin : une seule écriture, position et forme
+    ensemble, jamais l'une sans l'autre."""
     manager = create_staff(salle.id, StaffRole.MANAGER)
     landmark = _poser(client, salle.id, manager).json()
-    assert landmark["size"] == "medium"
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 80.0, "pos_y": 20.0, "size": "small"},
+        json={"pos_x": 80.0, "pos_y": 20.0, "width": 25.0, "height": 15.0},
         headers=auth_headers(manager),
     )
 
     assert response.status_code == 200
-    assert response.json()["size"] == "small"
+    assert (response.json()["width"], response.json()["height"]) == (25.0, 15.0)
     db_session.expire_all()
-    assert db_session.get(PlanLandmark, landmark["id"]).size.value == "small"
+    stored = db_session.get(PlanLandmark, landmark["id"])
+    assert (stored.width, stored.height) == (25.0, 15.0)
 
 
-def test_an_unknown_size_is_refused(client, salle):
+def test_dimensions_outside_bounds_are_refused(client, salle):
     manager = create_staff(salle.id, StaffRole.MANAGER)
 
-    response = client.post(
-        f"/api/v1/tables/plan/{salle.id}/landmarks",
-        json={"kind": "bar", "pos_x": 50.0, "pos_y": 12.0, "size": "enorme"},
-        headers=auth_headers(manager),
-    )
-
-    assert response.status_code == 422
+    for width in (0.5, 95.0):
+        response = client.post(
+            f"/api/v1/tables/plan/{salle.id}/landmarks",
+            json={"kind": "bar", "pos_x": 50.0, "pos_y": 12.0, "width": width, "height": 7.0},
+            headers=auth_headers(manager),
+        )
+        assert response.status_code == 422, width
 
 
 def test_a_waiter_cannot_move_a_landmark(client, salle):
@@ -174,7 +176,7 @@ def test_a_waiter_cannot_move_a_landmark(client, salle):
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 10.0, "pos_y": 10.0},
+        json={"pos_x": 10.0, "pos_y": 10.0, "width": 12.0, "height": 7.0},
         headers=auth_headers(waiter),
     )
 
@@ -190,7 +192,7 @@ def test_a_manager_cannot_move_another_restaurants_landmark(client, salle):
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 10.0, "pos_y": 10.0},
+        json={"pos_x": 10.0, "pos_y": 10.0, "width": 12.0, "height": 7.0},
         headers=auth_headers(manager_autre),
     )
 

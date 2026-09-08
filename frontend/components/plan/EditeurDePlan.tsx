@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, LandmarkKind, LandmarkSize, PlanLandmark, PlanTable, TableShape } from "@/lib/api";
+import { api, LandmarkKind, PlanLandmark, PlanTable, TableShape } from "@/lib/api";
 import PlanDeSalle from "./PlanDeSalle";
 import { LIBELLE_REPERE } from "./types";
 
@@ -31,14 +31,23 @@ const FORMES: { valeur: TableShape; nom: string }[] = [
   { valeur: "rect", nom: "Longue" },
 ];
 
-const TAILLES: { valeur: LandmarkSize; nom: string }[] = [
-  { valeur: "small", nom: "Petit" },
-  { valeur: "medium", nom: "Moyen" },
-  { valeur: "large", nom: "Grand" },
-];
-
 /** Temps de calme après le dernier geste avant d'écrire. */
 const DELAI_ENREGISTREMENT = 1000;
+
+/** Rectangle de départ d'un repère fraîchement posé — un petit comptoir,
+ *  pas encore le mur qu'il pourra devenir une fois étiré. */
+const LARGEUR_REPERE_DEFAUT = 12;
+const HAUTEUR_REPERE_DEFAUT = 7;
+
+/** Bornes du rectangle, en % de la surface — mêmes valeurs que côté serveur
+ *  (schemas.py) : large pour courir tout un mur, jamais assez pour avaler la
+ *  salle entière ni disparaître en un point. */
+const TAILLE_REPERE_MIN = 2;
+const TAILLE_REPERE_MAX = 90;
+
+function borneTailleRepere(valeur: number): number {
+  return Math.min(TAILLE_REPERE_MAX, Math.max(TAILLE_REPERE_MIN, valeur));
+}
 
 export type Placement = {
   table_id: number;
@@ -92,7 +101,14 @@ export default function EditeurDePlan({
       const repere = landmarks.find((r) => r.id === derniereRepereDeplaceeRef.current);
       if (!repere) return;
       try {
-        await api.moveLandmark(restaurantId, repere.id, repere.pos_x, repere.pos_y, repere.size);
+        await api.moveLandmark(
+          restaurantId,
+          repere.id,
+          repere.pos_x,
+          repere.pos_y,
+          repere.width,
+          repere.height
+        );
       } catch (e) {
         onErreurRef.current?.(e);
       }
@@ -106,10 +122,14 @@ export default function EditeurDePlan({
     setRepereModifie(true);
   }
 
-  function changerTailleRepere(taille: LandmarkSize) {
-    if (repereSelectionne === null) return;
-    derniereRepereDeplaceeRef.current = repereSelectionne;
-    setLandmarks((prev) => prev.map((r) => (r.id === repereSelectionne ? { ...r, size: taille } : r)));
+  /** Glisser la poignée du coin : le coin haut-gauche ne bouge pas, seules la
+   *  largeur/hauteur suivent le pointeur — recalculées à chaque mouvement,
+   *  jamais un delta cumulé (même politique que positionDepuisEvenement). */
+  function redimensionnerRepere(id: number, largeur: number, hauteur: number) {
+    derniereRepereDeplaceeRef.current = id;
+    const l = borneTailleRepere(largeur);
+    const h = borneTailleRepere(hauteur);
+    setLandmarks((prev) => prev.map((r) => (r.id === id ? { ...r, width: l, height: h } : r)));
     setRepereModifie(true);
   }
 
@@ -123,7 +143,9 @@ export default function EditeurDePlan({
         restaurantId,
         kind,
         40 + ((rang * 12) % 24),
-        14 + ((rang * 10) % 8)
+        14 + ((rang * 10) % 8),
+        LARGEUR_REPERE_DEFAUT,
+        HAUTEUR_REPERE_DEFAUT
       );
       setLandmarks((prev) => [...prev, repere]);
       setRepereSelectionne(repere.id);
@@ -261,6 +283,7 @@ export default function EditeurDePlan({
         }}
         tableSelectionnee={selectionnee}
         onDeplacerRepere={deplacerRepere}
+        onRedimensionnerRepere={redimensionnerRepere}
         onRepereActive={(r) => {
           setRepereSelectionne((actuel) => (actuel === r.id ? null : r.id));
           setSelectionnee(null);
@@ -289,21 +312,9 @@ export default function EditeurDePlan({
       {repereSelectionneObjet && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3 text-sm">
           <span className="font-medium mr-1">{LIBELLE_REPERE[repereSelectionneObjet.kind]}</span>
-          <span className="text-neutral-500">taille</span>
-          {TAILLES.map((t) => (
-            <button
-              key={t.valeur}
-              onClick={() => changerTailleRepere(t.valeur)}
-              className={`rounded-lg border px-3 py-1.5 ${
-                repereSelectionneObjet.size === t.valeur
-                  ? "border-[var(--harissa)] text-[var(--harissa)]"
-                  : "border-[var(--line)] text-neutral-600"
-              }`}
-              aria-pressed={repereSelectionneObjet.size === t.valeur}
-            >
-              {t.nom}
-            </button>
-          ))}
+          <span className="text-neutral-500">
+            Faites glisser le point en bas à droite pour l&apos;étirer.
+          </span>
           <button
             onClick={() => retirerRepere(repereSelectionneObjet.id)}
             className="text-neutral-500 underline ml-1"

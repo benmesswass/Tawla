@@ -21,32 +21,27 @@ export type PlanTable = {
  * à commander, rien à servir, juste de quoi se repérer dans la salle d'un
  * coup d'œil (« la 4 est près de l'entrée »). Toujours posé — contrairement
  * à une table, il n'a pas de réserve où attendre : il naît déjà à sa place.
+ *
+ * `pos_x`/`pos_y` sont son coin haut-gauche (pas son centre, contrairement à
+ * une table) et `width`/`height` ses dimensions, tout en % de la surface —
+ * un rectangle étirable à la souris/au doigt, pas un préréglage : la forme
+ * EST l'information (un bar peut être un coin comptoir ou courir tout un
+ * mur).
  */
 export type LandmarkKind = "bar" | "entrance";
-
-/** Taille dessinée du repère — un coin comptoir ou tout un mur de bar, une
- *  porte simple ou une double entrée. */
-export type LandmarkSize = "small" | "medium" | "large";
 
 export type PlanLandmark = {
   id: number;
   kind: LandmarkKind;
   pos_x: number;
   pos_y: number;
-  size: LandmarkSize;
+  width: number;
+  height: number;
 };
 
 export const LIBELLE_REPERE: Record<LandmarkKind, string> = {
   bar: "Bar",
   entrance: "Entrée",
-};
-
-/** Diamètre en pixels de l'icône — même logique que TAILLE dans PieceTable :
- *  un réglage, pas un calcul. */
-export const DIAMETRE_REPERE: Record<LandmarkSize, number> = {
-  small: 30,
-  medium: 44,
-  large: 60,
 };
 
 /**

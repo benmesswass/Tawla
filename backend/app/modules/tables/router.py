@@ -262,7 +262,8 @@ def create_landmark(
         kind=payload.kind,
         pos_x=payload.pos_x,
         pos_y=payload.pos_y,
-        size=payload.size,
+        width=payload.width,
+        height=payload.height,
     )
     db.add(landmark)
     db.commit()
@@ -288,7 +289,8 @@ def move_landmark(
         )
     landmark.pos_x = payload.pos_x
     landmark.pos_y = payload.pos_y
-    landmark.size = payload.size
+    landmark.width = payload.width
+    landmark.height = payload.height
     db.commit()
     db.refresh(landmark)
     return landmark

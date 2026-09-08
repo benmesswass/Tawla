@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.tables.models import LandmarkKind, LandmarkSize, TableShape
+from app.modules.tables.models import LandmarkKind, TableShape
 
 
 class TableCreate(BaseModel):
@@ -76,13 +76,20 @@ class PlanUpdate(BaseModel):
 
 
 class LandmarkCreate(BaseModel):
-    """Poser un repère : il naît déjà placé, pas de réserve pour un point qui
-    n'a rien d'autre à régler qu'une position."""
+    """
+    Poser un repère : il naît déjà placé, pas de réserve pour un point qui
+    n'a rien d'autre à régler qu'une position.
+
+    `pos_x`/`pos_y` sont son coin haut-gauche (pas son centre, contrairement
+    à une table) — `width`/`height` sont bornées large : un bar peut courir
+    tout un mur, jamais avaler la salle entière ni disparaître en un point.
+    """
 
     kind: LandmarkKind
     pos_x: float = Field(ge=0, le=100)
     pos_y: float = Field(ge=0, le=100)
-    size: LandmarkSize = LandmarkSize.MEDIUM
+    width: float = Field(default=12, ge=2, le=90)
+    height: float = Field(default=7, ge=2, le=90)
 
 
 class LandmarkOut(BaseModel):
@@ -92,14 +99,16 @@ class LandmarkOut(BaseModel):
     kind: LandmarkKind
     pos_x: float
     pos_y: float
-    size: LandmarkSize
+    width: float
+    height: float
 
 
 class LandmarkMove(BaseModel):
-    """Position ET taille : tout ce qu'un repère a de modifiable après sa
+    """Position ET dimensions : tout ce qu'un repère a de modifiable après sa
     création, comme TablePlacement pour une table (position + forme +
     couverts) — une seule écriture, jamais une route par attribut."""
 
     pos_x: float = Field(ge=0, le=100)
     pos_y: float = Field(ge=0, le=100)
-    size: LandmarkSize = LandmarkSize.MEDIUM
+    width: float = Field(ge=2, le=90)
+    height: float = Field(ge=2, le=90)
