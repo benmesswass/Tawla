@@ -112,6 +112,32 @@ def test_konnect_card_payment_stays_pending_and_uses_the_restaurants_own_wallet(
     assert db_order.payment_ref == "ref-123"
 
 
+def test_konnect_card_payment_init_broadcasts_to_the_order_channel_for_other_devices(client, monkeypatch):
+    """
+    Panier de table partagé : un autre appareil qui suit la même commande
+    doit apprendre qu'un paiement carte est en cours — sans ça,
+    `_get_payable_order` ne l'empêche pas de démarrer un second paiement
+    concurrent (cash, terminal, ou une deuxième session Konnect) pendant que
+    celui-ci attend la redirection du premier convive.
+    """
+    monkeypatch.setenv("PAYMENT_MODE", "konnect")
+    restaurant = create_restaurant(slug="card-konnect-broadcast")
+    _connect_konnect(restaurant, api_key="resto-key", wallet_id="resto-wallet")
+    order = _setup_order(client, restaurant)
+    monkeypatch.setattr(konnect, "init_konnect_payment", lambda **kwargs: ("https://pay.konnect.example/x", "ref-123"))
+
+    with client.websocket_connect(
+        f"/ws/order/{restaurant.id}/{order['id']}?token={order['public_token']}"
+    ) as ws:
+        res = client.post(f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order))
+        assert res.status_code == 200
+        assert res.json()["payment_status"] == "pending"
+
+        msg = ws.receive_json()
+        assert msg["event"] == "order.payment_requested"
+        assert msg["order_id"] == order["id"]
+
+
 def test_konnect_card_payment_init_failure_returns_502(client, monkeypatch):
     monkeypatch.setenv("PAYMENT_MODE", "konnect")
     restaurant = create_restaurant(slug="card-konnect-init-fails")
