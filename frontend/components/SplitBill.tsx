@@ -94,9 +94,9 @@ export default function SplitBill({
           id="split-people-count"
           type="number"
           min={2}
-          max={12}
+          max={20}
           value={peopleCount}
-          onChange={(e) => setPeopleCount(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
+          onChange={(e) => setPeopleCount(Math.max(2, Math.min(20, Number(e.target.value) || 2)))}
           className="w-16 bg-white border border-[var(--line)] rounded-[10px] px-2 py-1"
         />
       </div>

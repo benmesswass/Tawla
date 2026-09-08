@@ -37,6 +37,12 @@ export const fr = {
   sending: "Envoi...",
   validateOrder: "Valider la commande",
   cartItemsCount: (n: number) => `${n} article${n > 1 ? "s" : ""}`,
+  // Écran de récapitulatif ouvert avant validation (façon « panier » d'appli
+  // de livraison) : le bouton du bandeau bas ouvre ce récapitulatif au lieu
+  // de valider directement, pour que le client revoie tout avant de confirmer.
+  viewCartButton: "Voir mon panier",
+  cartSummaryTitle: "Votre panier",
+  backToMenuButton: "← Retour à la carte",
 
   orderCancelledTitle: "Commande annulée",
   orderSentTitle: "Commande envoyée 🎉",

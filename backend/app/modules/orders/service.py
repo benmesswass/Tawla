@@ -366,7 +366,9 @@ async def _finalize_order(
     return order
 
 
-async def create_order_from_table_cart(db: Session, table: Table) -> Order:
+async def create_order_from_table_cart(
+    db: Session, table: Table, client_order_id: str | None = None
+) -> Order:
     """
     Valide le panier partagé d'une table (voir `table_cart.py`) : n'importe
     quel appareil connecté au canal de la table peut déclencher cet appel,
@@ -378,6 +380,33 @@ async def create_order_from_table_cart(db: Session, table: Table) -> Order:
     appareils qui valident au même instant ne peuvent jamais transformer
     deux fois le même panier en deux commandes distinctes.
     """
+    # Rejeu du même appareil : même garde-fou que `create_order` (ligne plus
+    # bas) — une coupure entre le `pop_all` ci-dessous et le "cart.validated"
+    # qui devait revenir au client laisse ce dernier réessayer en pensant
+    # n'avoir jamais validé. Vérifié AVANT `pop_all` : si la commande existe
+    # déjà, on la rend telle quelle, sans toucher au panier (qui peut déjà
+    # porter les articles ajoutés par un autre convive depuis).
+    if client_order_id:
+        replayed = (
+            db.query(Order)
+            .filter(Order.table_id == table.id, Order.client_order_id == client_order_id)
+            .first()
+        )
+        if replayed:
+            log_event(
+                logger, "order.create_replayed",
+                restaurant_id=replayed.restaurant_id, order_id=replayed.id, table_id=replayed.table_id,
+            )
+            # Sans ce broadcast, l'appareil qui réessaie n'a AUCUN retour : le
+            # chemin normal (plus bas) prévient le canal via "cart.validated",
+            # jamais la valeur de retour de cette fonction (`_pump_table` l'ignore) —
+            # sans le rejouer ici, il resterait bloqué sur "Valider..." indéfiniment.
+            await manager.broadcast(
+                replayed.restaurant_id, channel=table_channel(table.id),
+                message={"event": "cart.validated", "order_id": replayed.id, "public_token": replayed.public_token},
+            )
+            return replayed
+
     # Import différé : `table_cart` importe `resolve_selected_options` depuis
     # `menu_item_resolution`, jamais depuis ce module, pour éviter le cycle
     # (`table_cart` a besoin de créer des commandes, ce module a besoin du
@@ -407,7 +436,7 @@ async def create_order_from_table_cart(db: Session, table: Table) -> Order:
         )
         raise
 
-    order = await _finalize_order(db, table, order_items)
+    order = await _finalize_order(db, table, order_items, client_order_id=client_order_id)
 
     await manager.broadcast(
         table.restaurant_id, channel=table_channel(table.id),

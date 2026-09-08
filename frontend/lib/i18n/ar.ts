@@ -33,6 +33,9 @@ export const ar = {
   sending: "قاعد يتبعث...",
   validateOrder: "أكد الطلبية",
   cartItemsCount: (n) => `${n} حاجة`,
+  viewCartButton: "شوف القفة متاعي",
+  cartSummaryTitle: "القفة متاعك",
+  backToMenuButton: "← ارجع للمينيو",
 
   orderCancelledTitle: "الطلبية تلغات",
   orderSentTitle: "الطلبية تبعثت 🎉",
