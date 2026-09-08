@@ -43,6 +43,9 @@ type Props = {
   onRepereActive?: (repere: PlanLandmark) => void;
   repereSelectionne?: number | null;
   onDeplacerRepere?: (repereId: number, x: number, y: number) => void;
+  /** Glisser la poignée du coin : recalculée à chaque mouvement depuis la
+   *  position du pointeur, jamais un delta cumulé. */
+  onRedimensionnerRepere?: (repereId: number, largeur: number, hauteur: number) => void;
   /**
    * Panneau d'action pour la table sélectionnée. Rendu **sous** la salle et
    * non par-dessus : posé en surimpression, il recouvrait justement la table
@@ -83,13 +86,17 @@ export default function PlanDeSalle({
   onRepereActive,
   repereSelectionne = null,
   onDeplacerRepere,
+  onRedimensionnerRepere,
   action,
 }: Props) {
   const surface = useRef<HTMLDivElement>(null);
   // Une table et un repère peuvent partager le même id (deux séquences
   // distinctes côté serveur) : sans le type dans la clé, attraper la table 1
-  // ferait aussi bouger le repère 1.
-  const [attrapee, setAttrapee] = useState<{ type: "table" | "repere"; id: number } | null>(null);
+  // ferait aussi bouger le repère 1. "redimension" est un troisième geste
+  // possible sur un repère, distinct du déplacement de son corps.
+  const [attrapee, setAttrapee] = useState<
+    { type: "table" | "repere" | "redimension"; id: number } | null
+  >(null);
 
   // Les compteurs avancent tout seuls : sans ce battement, une table qui attend
   // depuis huit minutes en afficherait toujours deux. À la seconde, puisque
@@ -202,21 +209,42 @@ export default function PlanDeSalle({
         {landmarks.map((repere) => (
           <div
             key={`repere-${repere.id}`}
-            className="plan-emplacement"
-            style={{ left: `${repere.pos_x}%`, top: `${repere.pos_y}%` }}
+            className="plan-emplacement-repere"
+            style={{
+              left: `${repere.pos_x}%`,
+              top: `${repere.pos_y}%`,
+              width: `${repere.width}%`,
+              height: `${repere.height}%`,
+            }}
             onPointerDown={
               editable
                 ? (e) => {
+                    // La poignée est un élément à part (voir PieceRepere) : la
+                    // repérer par cet attribut évite de faire remonter son geste
+                    // jusqu'ici via des props dédiées pour un seul booléen.
+                    const surPoignee = (e.target as HTMLElement).hasAttribute(
+                      "data-poignee-redimension"
+                    );
                     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-                    setAttrapee({ type: "repere", id: repere.id });
+                    setAttrapee({ type: surPoignee ? "redimension" : "repere", id: repere.id });
                   }
                 : undefined
             }
             onPointerMove={
-              editable && attrapee?.type === "repere" && attrapee.id === repere.id
+              editable &&
+              attrapee?.id === repere.id &&
+              (attrapee.type === "repere" || attrapee.type === "redimension")
                 ? (e) => {
                     const p = positionDepuisEvenement(e);
-                    if (p) onDeplacerRepere?.(repere.id, p.x, p.y);
+                    if (!p) return;
+                    if (attrapee.type === "redimension") {
+                      // Le coin haut-gauche (pos_x/pos_y) ne bouge pas : seule la
+                      // largeur/hauteur suit le pointeur, comme étirer un coin
+                      // dans n'importe quel outil de dessin.
+                      onRedimensionnerRepere?.(repere.id, p.x - repere.pos_x, p.y - repere.pos_y);
+                    } else {
+                      onDeplacerRepere?.(repere.id, p.x, p.y);
+                    }
                   }
                 : undefined
             }
@@ -227,6 +255,7 @@ export default function PlanDeSalle({
               repere={repere}
               selectionnee={repere.id === repereSelectionne}
               enDeplacement={attrapee?.type === "repere" && attrapee.id === repere.id}
+              editable={editable}
               onActiver={() => onRepereActive?.(repere)}
             />
           </div>

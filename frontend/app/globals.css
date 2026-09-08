@@ -392,38 +392,60 @@
 }
 
 /* --- Un repère (bar, entrée) ---------------------------------------------
-   Volontairement neutre : jamais la couleur d'une table qui attend, sinon un
-   repère fixe se lirait comme une urgence. */
-.repere {
+   Un rectangle étirable, pas une icône à taille fixe : sa forme EST
+   l'information (l'emplacement réel du bar). Volontairement neutre — jamais
+   la couleur d'une table qui attend, sinon un repère fixe se lirait comme
+   une urgence. */
+.plan-emplacement-repere {
+  position: absolute;
+  /* Pas de translate(-50%,-50%) contrairement à .plan-emplacement : left/top
+     sont ici le coin haut-gauche du rectangle, pas son centre — ce qui rend
+     le glisser du coin bas-droit trivial (largeur = pointeur - pos_x). */
+  touch-action: none;
+}
+
+.repere-cadre {
   position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.repere-boite {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  transition: transform .14s ease;
-}
-.repere:hover { transform: scale(1.05); }
-.repere:focus-visible { outline: 2px solid var(--harissa); outline-offset: 4px; border-radius: 10px; }
-.plan-surface[data-editable] .repere { cursor: grab; }
-.repere[data-deplacement] { transform: scale(1.08); cursor: grabbing; }
-
-.repere-icone {
-  /* Largeur/hauteur posées en style inline (DIAMETRE_REPERE) — variables
-     selon la taille choisie, pas figées ici. */
-  border-radius: 50%;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
   background: rgba(246, 239, 221, .22);
   border: 1.5px solid rgba(246, 239, 221, .5);
+  cursor: pointer;
+  overflow: hidden;
+  transition: background-color .14s ease;
+}
+.repere-boite:hover { background: rgba(246, 239, 221, .3); }
+.repere-boite:focus-visible { outline: 2px solid var(--harissa); outline-offset: 2px; }
+.plan-surface[data-editable] .repere-boite { cursor: grab; }
+.repere-cadre[data-deplacement] .repere-boite { cursor: grabbing; }
+.repere-boite[data-selectionnee] {
+  border-color: var(--harissa);
+  background: rgba(214, 64, 30, .18);
+}
+
+.repere-icone {
+  flex: none;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: rgba(246, 239, 221, .85);
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.repere[data-selectionnee] .repere-icone { border-color: var(--harissa); stroke: var(--harissa); }
+.repere-boite[data-selectionnee] .repere-icone { stroke: var(--harissa); }
 
 .repere-etiquette {
   font-size: 10px;
@@ -431,6 +453,25 @@
   letter-spacing: .02em;
   color: rgba(246, 239, 221, .72);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.repere-boite[data-selectionnee] .repere-etiquette { color: #fff; }
+
+/* La poignée : coin bas-droit, à moitié hors du rectangle pour rester
+   attrapable même sur un tout petit repère. */
+.repere-poignee {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--harissa);
+  border: 2px solid rgba(246, 239, 221, .9);
+  cursor: nwse-resize;
+  touch-action: none;
 }
 
 /* --- Agir depuis la table ------------------------------------------------ */

@@ -30,18 +30,6 @@ class LandmarkKind(str, enum.Enum):
     ENTRANCE = "entrance"
 
 
-class LandmarkSize(str, enum.Enum):
-    """
-    Taille dessinée du repère — un bar peut être un coin comptoir ou occuper
-    tout un mur, une porte peut être simple ou une double entrée. Trois
-    préréglages, comme les couverts d'une table : un réglage qu'un manager
-    choisit d'un coup d'œil, pas une dimension en pixels à calculer.
-    """
-    SMALL = "small"
-    MEDIUM = "medium"
-    LARGE = "large"
-
-
 def generate_table_token() -> str:
     """
     Token opaque et non-devinable pour le QR code de la table.
@@ -84,10 +72,17 @@ class PlanLandmark(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
     kind: Mapped[LandmarkKind] = mapped_column(Enum(LandmarkKind), nullable=False)
-    size: Mapped[LandmarkSize] = mapped_column(Enum(LandmarkSize), default=LandmarkSize.MEDIUM)
 
-    # Toujours posé, contrairement à une table : un repère n'a rien d'autre à
-    # régler qu'une position, donc pas de réserve où attendre — il naît déjà
-    # sur le plan (voir POST .../landmarks).
+    # Coin haut-gauche du rectangle (pas son centre, contrairement à une
+    # table) — c'est ce qui rend le glisser du coin bas-droit trivial :
+    # largeur = position du pointeur - pos_x. En pourcentage de la surface,
+    # comme pos_x/pos_y d'une table : le plan se regarde sur un téléphone de
+    # 360 px comme sur l'écran du bureau, jamais en pixels.
     pos_x: Mapped[float] = mapped_column(Float, nullable=False)
     pos_y: Mapped[float] = mapped_column(Float, nullable=False)
+    # Dimensions du rectangle, mêmes unités. Étirable à la souris/au doigt
+    # (voir PUT .../landmarks/{id}) — un bar peut être un coin comptoir ou
+    # occuper tout un mur, une entrée simple ou une double porte : la forme
+    # EST l'information, pas un préréglage à choisir dans une liste.
+    width: Mapped[float] = mapped_column(Float, nullable=False)
+    height: Mapped[float] = mapped_column(Float, nullable=False)
