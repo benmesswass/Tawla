@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAmount, formatMoney } from "./currency";
+import { formatAmount, formatMoney, parseAmountInput } from "./currency";
 import { getMarket } from "./market";
 
 const TUNISIA = getMarket("tn");
@@ -30,5 +30,20 @@ describe("formatMoney", () => {
 
   it("defaults to the current market", () => {
     expect(formatMoney(22)).toBe(formatMoney(22, TUNISIA));
+  });
+});
+
+describe("parseAmountInput", () => {
+  it("accepts a period", () => {
+    expect(parseAmountInput("6.500")).toBe(6.5);
+  });
+
+  it("accepts a comma", () => {
+    expect(parseAmountInput("6,50")).toBe(6.5);
+  });
+
+  it("treats empty or invalid text as 0", () => {
+    expect(parseAmountInput("")).toBe(0);
+    expect(parseAmountInput("abc")).toBe(0);
   });
 });
