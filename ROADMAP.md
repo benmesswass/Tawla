@@ -410,6 +410,17 @@ resterait un chantier bien plus large, explicitement refusé pour l'instant
 - [ ] Traduction arabe non relue par un locuteur natif — à vérifier avant un
       vrai pilote (même règle que le reste du parcours client bilingue)
 
+**Extension du 2026-09-08, même override, sans nouveau déclencheur** : le
+client peut désormais modifier une déclaration de convives déjà faite (pas
+seulement la faire une fois) — bouton « Modifier » sur le résumé, qui rouvre
+`PartyPrompt` pré-rempli (taille + prénoms) et renvoie `party.set`, déjà
+idempotent côté backend (`tables/party.py`) — aucun nouvel endpoint. Ne change
+pas le diagnostic « premier candidat à la coupe » de `AUDIT_FINAL.md`.
+
+- [ ] Bouton « Modifier » sur le résumé convives (visible dès `party.size >
+      1`), rouvre `PartyPrompt` pré-rempli avec la taille et les prénoms
+      actuels
+
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même
