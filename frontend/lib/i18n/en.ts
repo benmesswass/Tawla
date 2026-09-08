@@ -121,6 +121,8 @@ export const en = {
   partyNamesHint: "First names (optional)",
   partyContinue: "Continue",
   partySummary: (n: number) => `There are ${n} of you at the table`,
+  partyEdit: "Edit",
+  partyEditCancel: "Cancel",
 
   offlineQueuedTitle: "Connection lost",
   offlineQueuedMessage:
