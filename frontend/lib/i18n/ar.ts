@@ -116,6 +116,8 @@ export const ar = {
   partyNamesHint: "الأسامي (مش إجباري)",
   partyContinue: "كمّل",
   partySummary: (n: number) => `انتوما ${n} فالطاولة`,
+  partyEdit: "بدّل",
+  partyEditCancel: "إلغاء",
 
   offlineQueuedTitle: "ما فماش نات",
   offlineQueuedMessage: "الطلبية تسجلت في تليفونك وباش تتبعث وحدها كي ترجع النات.",

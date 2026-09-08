@@ -12,11 +12,20 @@ import { fr, type Dictionary } from "@/lib/i18n/fr";
  */
 export default function PartyPrompt({
   suggestedSize,
+  initialNames,
+  skipLabel,
   onSubmit,
   onSkip,
   t = fr,
 }: {
   suggestedSize: number;
+  // Pré-remplissage pour la réédition d'une déclaration existante (bouton
+  // "Modifier" sur le résumé) — absent lors de la toute première déclaration.
+  initialNames?: (string | null)[];
+  // Reste "Passer" (abandon de toute déclaration) à la première saisie, mais
+  // devient "Annuler" côté appelant quand ce prompt rouvre une déclaration
+  // déjà faite — même bouton, texte adapté au contexte.
+  skipLabel?: string;
   onSubmit: (size: number, names: (string | null)[]) => void;
   onSkip: () => void;
   t?: Dictionary;
@@ -29,7 +38,7 @@ export default function PartyPrompt({
   // de pouvoir saisir la nouvelle valeur. Le clamp ne s'applique qu'à la
   // valeur exploitée (`size`), jamais au texte affiché pendant la frappe.
   const [sizeText, setSizeText] = useState(() => String(Math.max(1, Math.min(20, suggestedSize || 2))));
-  const [names, setNames] = useState<string[]>([]);
+  const [names, setNames] = useState<string[]>(() => (initialNames ?? []).map((n) => n ?? ""));
   const size = clampSize(sizeText);
 
   function goToNames() {
@@ -70,7 +79,7 @@ export default function PartyPrompt({
         </div>
         <div className="flex items-center justify-between pt-1">
           <button type="button" onClick={onSkip} className="text-sm underline text-[var(--ink-soft)]">
-            {t.partyPromptSkip}
+            {skipLabel ?? t.partyPromptSkip}
           </button>
           <button
             type="button"
@@ -104,7 +113,7 @@ export default function PartyPrompt({
       </div>
       <div className="flex items-center justify-between pt-1">
         <button type="button" onClick={onSkip} className="text-sm underline text-[var(--ink-soft)]">
-          {t.partyPromptSkip}
+          {skipLabel ?? t.partyPromptSkip}
         </button>
         <div className="flex gap-2">
           <button

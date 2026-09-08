@@ -336,6 +336,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [party, setParty] = useState<{ size: number; names: (string | null)[] } | null>(null);
   const [partyKnown, setPartyKnown] = useState(false);
   const [partyPromptDismissed, setPartyPromptDismissed] = useState(false);
+  // Rouvre PartyPrompt pré-rempli sur une déclaration déjà faite (bouton
+  // "Modifier" du résumé) — réutilise `party.set`, déjà idempotent côté
+  // backend (ROADMAP.md §Override, extension du 2026-09-08).
+  const [partyEditing, setPartyEditing] = useState(false);
   // Dès que la table a déclaré son effectif (PartyPrompt / `party.updated`),
   // il prime sur la valeur par défaut de `convives` : sinon le sélecteur
   // "Partagé entre" d'un plat reste bloqué à 2 pastilles anonymes même pour
@@ -2691,13 +2695,34 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   onSkip={() => setPartyPromptDismissed(true)}
                 />
               )
+            ) : partyEditing ? (
+              <PartyPrompt
+                suggestedSize={party.size}
+                initialNames={party.names}
+                skipLabel={t.partyEditCancel}
+                t={t}
+                onSubmit={(size, names) => {
+                  sendTableAction({ action: "party.set", size, names });
+                  setPartyEditing(false);
+                }}
+                onSkip={() => setPartyEditing(false)}
+              />
             ) : (
               party.size > 1 && (
-                <p className="text-sm text-[var(--ink-soft)]">
-                  {t.partySummary(party.size)}
-                  {party.names.some(Boolean) &&
-                    ` — ${party.names.map((n, i) => n || t.personLabel(i + 1)).join(", ")}`}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-[var(--ink-soft)]">
+                    {t.partySummary(party.size)}
+                    {party.names.some(Boolean) &&
+                      ` — ${party.names.map((n, i) => n || t.personLabel(i + 1)).join(", ")}`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPartyEditing(true)}
+                    className="text-sm underline text-[var(--ink-soft)] shrink-0"
+                  >
+                    {t.partyEdit}
+                  </button>
+                </div>
               )
             )}
           </div>

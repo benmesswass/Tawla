@@ -128,6 +128,8 @@ export const fr = {
   partyNamesHint: "Prénoms (facultatif)",
   partyContinue: "Continuer",
   partySummary: (n: number) => `Vous êtes ${n} à table`,
+  partyEdit: "Modifier",
+  partyEditCancel: "Annuler",
 
   offlineQueuedTitle: "Connexion perdue",
   offlineQueuedMessage: "Votre commande est enregistrée sur ce téléphone. Elle partira dès le retour du réseau — n'actualisez pas la page.",

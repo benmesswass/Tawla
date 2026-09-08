@@ -410,23 +410,36 @@ resterait un chantier bien plus large, explicitement refusé pour l'instant
 - [ ] Traduction arabe non relue par un locuteur natif — à vérifier avant un
       vrai pilote (même règle que le reste du parcours client bilingue)
 
-**Extension du 2026-09-08, même override, sans nouveau déclencheur** :
-l'assignation à un ou plusieurs convives (`shared_with`) se fait désormais
-indépendamment de la case "à partager" (`is_shared`) — disponible, facultative,
-sur n'importe quelle ligne du panier, pas seulement les plats cochés comme
-partagés (`frontend/app/menu/[qrToken]/page.tsx`, fonctions
-`setShared`/`toggleConvive`/`cartLineToWireItem`). Objectif inchangé : préremplir
-`SplitBill` plus tôt, au moment où le client compose sa commande et sait encore
-qui prend quoi — jamais générer de paiement réellement séparé, la table règle
-toujours l'addition en une fois (`Order.payment_status`, un seul statut). Aucun
-changement de modèle ni de migration : `OrderItem.is_shared` et
-`OrderItem.shared_with` étaient déjà deux colonnes indépendantes, seul le panier
-client (`cartLineToWireItem`) les couplait artificiellement en écrasant
+**Extension du 2026-09-08, même override, sans nouveau déclencheur** : deux
+ajouts indépendants sur ce même override, arrivés en parallèle.
+
+D'abord, le client peut désormais modifier une déclaration de convives déjà
+faite (pas seulement la faire une fois) — bouton « Modifier » sur le résumé,
+qui rouvre `PartyPrompt` pré-rempli (taille + prénoms) et renvoie `party.set`,
+déjà idempotent côté backend (`tables/party.py`) — aucun nouvel endpoint. Ne
+change pas le diagnostic « premier candidat à la coupe » de `AUDIT_FINAL.md`.
+
+- [ ] Bouton « Modifier » sur le résumé convives (visible dès `party.size >
+      1`), rouvre `PartyPrompt` pré-rempli avec la taille et les prénoms
+      actuels
+
+Ensuite, l'assignation à un ou plusieurs convives (`shared_with`) se fait
+désormais indépendamment de la case "à partager" (`is_shared`) — disponible,
+facultative, sur n'importe quelle ligne du panier, pas seulement les plats
+cochés comme partagés (`frontend/app/menu/[qrToken]/page.tsx`, fonctions
+`setShared`/`toggleConvive`/`cartLineToWireItem`). Objectif inchangé :
+préremplir `SplitBill` plus tôt, au moment où le client compose sa commande et
+sait encore qui prend quoi — jamais générer de paiement réellement séparé, la
+table règle toujours l'addition en une fois (`Order.payment_status`, un seul
+statut). Aucun changement de modèle ni de migration : `OrderItem.is_shared` et
+`OrderItem.shared_with` étaient déjà deux colonnes indépendantes, seul le
+panier client (`cartLineToWireItem`) les couplait artificiellement en écrasant
 `shared_with` à vide dès que `is_shared` était décoché. Traductions ajustées en
 conséquence (`sharedCheckboxLabel`, `sharedWithLabel`, `sharedWithEveryone` —
-`fr.ts`/`en.ts`/`ar.ts`) : l'ancien libellé "partagé pour toute la table" était de
-toute façon inexact tant que `convives` reste bloqué à sa valeur par défaut de 2
-(cf. `PartyPrompt`, tant que la taille réelle de la table n'est pas résolue).
+`fr.ts`/`en.ts`/`ar.ts`) : l'ancien libellé "partagé pour toute la table" était
+de toute façon inexact tant que `convives` reste bloqué à sa valeur par défaut
+de 2 (cf. `PartyPrompt`, tant que la taille réelle de la table n'est pas
+résolue).
 
 ## Hors périmètre, définitivement
 
