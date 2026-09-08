@@ -57,6 +57,29 @@ def test_pay_by_card_defaults_to_no_tip(client):
     assert res.json()["tip_amount"] == 0
 
 
+def test_pay_by_card_broadcasts_to_the_order_channel_for_other_devices(client):
+    """
+    Panier de table partagé : un autre appareil qui suit la même commande
+    doit voir le paiement sans rafraîchir. `pay/card` retombe en mode simulé
+    tant qu'aucun restaurant n'a ses clés Konnect (seul chemin actif
+    aujourd'hui, voir docstring de `pay_by_card_simulated`) — jusqu'ici ce
+    chemin ne diffusait RIEN, ni au serveur ni au client.
+    """
+    restaurant, _headers, order = _setup_order(client)
+
+    with client.websocket_connect(
+        f"/ws/order/{restaurant.id}/{order['id']}?token={order['public_token']}"
+    ) as ws:
+        res = client.post(
+            f"/api/v1/orders/{order['id']}/pay/card", json={"tip_amount": 0}, headers=order_headers(order)
+        )
+        assert res.status_code == 200
+
+        msg = ws.receive_json()
+        assert msg["event"] == "order.payment_confirmed"
+        assert msg["order_id"] == order["id"]
+
+
 def test_pay_by_card_rejects_negative_tip(client):
     _restaurant, _headers, order = _setup_order(client)
 
@@ -92,6 +115,26 @@ def test_request_cash_payment_notifies_staff_and_is_confirmable(client):
         f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-cash-payments", headers=manager_headers
     )
     assert pending_after.json() == []
+
+
+def test_request_cash_payment_broadcasts_to_the_order_channel_for_other_devices(client):
+    """
+    Même risque que le paiement carte : sans ce broadcast, un autre appareil
+    de la table pouvait demander un paiement concurrent par un autre moyen
+    (`_get_payable_order` ne s'y oppose pas), écrasant silencieusement
+    `payment_method`.
+    """
+    restaurant, _manager_headers, order = _setup_order(client)
+
+    with client.websocket_connect(
+        f"/ws/order/{restaurant.id}/{order['id']}?token={order['public_token']}"
+    ) as ws:
+        res = client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
+        assert res.status_code == 200
+
+        msg = ws.receive_json()
+        assert msg["event"] == "order.payment_requested"
+        assert msg["order_id"] == order["id"]
 
 
 def test_pending_cash_payments_excludes_orders_before_service_day(client):
@@ -309,6 +352,22 @@ def test_request_card_terminal_payment_notifies_staff_and_is_confirmable(client)
         f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-card-terminal-payments", headers=manager_headers
     )
     assert pending_after.json() == []
+
+
+def test_request_card_terminal_payment_broadcasts_to_the_order_channel_for_other_devices(client):
+    """Même garde-fou que `test_request_cash_payment_broadcasts_...`, moyen
+    de paiement distinct."""
+    restaurant, _manager_headers, order = _setup_order(client)
+
+    with client.websocket_connect(
+        f"/ws/order/{restaurant.id}/{order['id']}?token={order['public_token']}"
+    ) as ws:
+        res = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal", headers=order_headers(order))
+        assert res.status_code == 200
+
+        msg = ws.receive_json()
+        assert msg["event"] == "order.payment_requested"
+        assert msg["order_id"] == order["id"]
 
 
 def test_card_terminal_requests_are_isolated_from_cash_requests(client):

@@ -524,6 +524,19 @@ async def update_order_items(db: Session, order: Order, payload: schemas.OrderIt
             "items_updated_at": order.items_updated_at.isoformat(),
         },
     )
+    # Et les AUTRES appareils qui suivent cette même commande (panier de
+    # table partagé, `table_cart.py` : plusieurs convives valident ensemble
+    # puis suivent tous le même `order_id`) — sans ce second broadcast sur le
+    # canal de la commande, un convive qui n'a pas fait la modification ne la
+    # voit jamais tant qu'il ne rafraîchit pas sa page à la main.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={
+            "event": "order.items_updated",
+            "order_id": order.id,
+            "items_updated_at": order.items_updated_at.isoformat(),
+        },
+    )
     return order
 
 
@@ -637,6 +650,16 @@ async def create_modification_request(
                 for line in lines
             ],
         },
+    )
+    # Et les AUTRES appareils qui suivent cette même commande (panier de
+    # table partagé) : sans ce broadcast, l'écran de suivi d'un convive qui
+    # n'a pas fait la demande ne désactive jamais son propre bouton
+    # "modifier" (`OrderOut.pending_modification_request`, lu par le
+    # frontend) — il peut tenter une seconde demande concurrente et tomber
+    # sur MODIFICATION_REQUEST_ALREADY_PENDING sans comprendre pourquoi.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.modification_requested", "order_id": order.id},
     )
     return request
 
@@ -1066,6 +1089,17 @@ async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float, c
         restaurant_id=order.restaurant_id, order_id=order.id,
         amount=order.total_amount, tip_amount=tip_amount,
     )
+    # Le client qui a payé peut ne pas être le seul appareil à suivre cette
+    # commande (panier de table partagé) — même événement que le paiement
+    # carte réel (`settle_card_payment`) et les paiements cash/terminal,
+    # jamais diffusé jusqu'ici sur ce chemin simulé alors que c'est le SEUL
+    # chemin carte actif tant qu'aucun pilote n'a ses clés Konnect (voir
+    # docstring de cette fonction) : sans lui, aucun des autres convives ne
+    # voyait jamais la commande passer payée sans rafraîchir.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.payment_confirmed", "order_id": order.id},
+    )
     return order
 
 
@@ -1131,6 +1165,14 @@ async def start_card_payment(
     log_event(
         logger, "order.card_payment_initiated",
         restaurant_id=order.restaurant_id, order_id=order.id, payment_ref=result.payment_ref, amount=amount,
+    )
+    # Les AUTRES appareils qui suivent cette commande doivent voir qu'un
+    # paiement est en cours — sans ça, `_get_payable_order` ne les empêche
+    # pas de démarrer un second paiement concurrent pendant que celui-ci est
+    # en attente sur le navigateur du premier convive.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.payment_requested", "order_id": order.id},
     )
     return order, result.pay_url
 
@@ -1277,6 +1319,16 @@ async def request_cash_payment(
             "loyalty_phone": order.loyalty_phone,
         },
     )
+    # Les AUTRES appareils qui suivent cette commande doivent voir la demande
+    # de paiement — l'écran de suivi sait déjà afficher `payment_status ===
+    # "pending"` (attente d'encaissement) ; sans ce broadcast, un convive qui
+    # n'a pas demandé le paiement pouvait en redemander un autre en même
+    # temps, écrasant silencieusement `payment_method` (`_get_payable_order`
+    # ne s'y oppose pas).
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.payment_requested", "order_id": order.id},
+    )
     return order
 
 
@@ -1351,6 +1403,12 @@ async def request_card_terminal_payment(
             "taken_by_staff_id": order.taken_by_staff_id,
             "loyalty_phone": order.loyalty_phone,
         },
+    )
+    # Même raison que `request_cash_payment` : les autres appareils de la
+    # table doivent voir la demande sans rafraîchir.
+    await manager.broadcast(
+        order.restaurant_id, channel=_order_channel(order.id),
+        message={"event": "order.payment_requested", "order_id": order.id},
     )
     return order
 

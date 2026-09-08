@@ -68,6 +68,38 @@ def test_cannot_request_modification_before_confirmation(client):
     assert res.json()["detail"]["code"] == "MODIFICATION_REQUEST_NOT_ALLOWED"
 
 
+def test_modification_request_broadcasts_to_the_order_channel_for_other_devices(client):
+    """
+    Panier de table partagé : les autres appareils qui suivent la même
+    commande (même `order_id`, via `/ws/order/...`) doivent voir qu'une
+    demande est en attente sans rafraîchir — l'écran de suivi désactive son
+    bouton "modifier" sur ce champ (`OrderOut.pending_modification_request`).
+    Le seul broadcast vers l'écran serveur (pool partagé) ne les couvre pas.
+    """
+    restaurant, table, headers, couscous, the, baklawa = _setup(client)
+    order = _confirmed_order(client, table, headers, couscous, the)
+
+    with client.websocket_connect(
+        f"/ws/order/{restaurant.id}/{order['id']}?token={order['public_token']}"
+    ) as ws:
+        res = client.post(
+            f"/api/v1/orders/{order['id']}/modification-requests",
+            json={
+                "items": [
+                    {"menu_item_id": couscous["id"], "quantity": 2},
+                    {"menu_item_id": the["id"], "quantity": 2},
+                    {"menu_item_id": baklawa["id"], "quantity": 1},
+                ]
+            },
+            headers=order_headers(order),
+        )
+        assert res.status_code == 201
+
+        msg = ws.receive_json()
+        assert msg["event"] == "order.modification_requested"
+        assert msg["order_id"] == order["id"]
+
+
 def test_create_request_builds_one_line_per_changed_item(client):
     """Scénario du mockup : Thé réduit de 3 à 2, Baklawa ajouté à 1. Couscous
     inchangé ne doit produire aucune ligne."""

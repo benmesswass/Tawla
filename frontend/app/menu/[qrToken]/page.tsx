@@ -695,11 +695,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         localStorage.removeItem(lastOrderStorageKey(qrToken));
       }
     }
-    // Le serveur vient d'encaisser un paiement en espèces demandé depuis
-    // cette même page — inutile de faire deviner au client s'il doit
-    // rafraîchir pour le voir.
-    if (msg.event === "order.payment_confirmed" && trackedOrder && msg.order_id === trackedOrder.id) {
-      setTrackedOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
+    // Le paiement vient d'être confirmé (carte, cash ou terminal, encaissé
+    // depuis CET appareil ou un autre appareil suivant la même commande) —
+    // on relit la commande plutôt qu'un simple changement de statut local :
+    // `payment_method`/`tip_amount` peuvent n'avoir jamais été connus de CET
+    // appareil (paiement carte demandé et réglé ailleurs en une seule étape,
+    // sans "order.payment_requested" intermédiaire).
+    if (msg.event === "order.payment_confirmed" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
+      api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
+    }
+    // Un autre appareil vient de demander à payer (cash, terminal, ou carte
+    // en ligne) — l'écran de suivi sait déjà afficher `payment_status ===
+    // "pending"`, encore faut-il que CET appareil apprenne le changement
+    // sans rafraîchir, sinon rien n'empêche un deuxième convive de demander
+    // un paiement concurrent par un autre moyen.
+    if (msg.event === "order.payment_requested" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
+      api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
     }
     // Dès qu'un serveur est affecté (prise en charge ou confirmation), le
     // client sait qui s'occupe de sa table sans avoir à demander.
@@ -713,6 +724,22 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // depuis le nouveau contenu seul.
     if (msg.event === "order.modification_resolved" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
       setLastResolution(msg.lines);
+      api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
+    }
+    // Un autre appareil suivant la même commande (panier de table partagé —
+    // plusieurs convives valident ensemble puis suivent tous ce même
+    // `order_id`) vient de la modifier — on relit ses items/total, sinon ce
+    // deuxième appareil reste sur l'ancien contenu jusqu'à un rafraîchissement
+    // manuel de la page.
+    if (msg.event === "order.items_updated" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
+      api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
+    }
+    // Un autre appareil vient de soumettre une demande de modification
+    // (fenêtre 2) — on relit la commande pour que `pending_modification_request`
+    // désactive ici aussi le bouton "modifier", sinon ce deuxième appareil
+    // peut soumettre une demande concurrente et tomber sur
+    // MODIFICATION_REQUEST_ALREADY_PENDING sans jamais comprendre pourquoi.
+    if (msg.event === "order.modification_requested" && trackedOrder && msg.order_id === trackedOrder.id && orderToken) {
       api.getOrder(trackedOrder.id, orderToken).then(setTrackedOrder).catch(() => {});
     }
   });
