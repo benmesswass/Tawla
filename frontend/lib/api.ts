@@ -462,19 +462,30 @@ export type PlanTable = {
 export type LandmarkKind = "bar" | "entrance";
 
 /**
- * Un repère fixe du plan — pas une table, juste un point pour se repérer
- * (« la 4 est près de l'entrée »), Phase 18 suite. `pos_x`/`pos_y` sont son
- * coin haut-gauche (pas son centre, contrairement à une table) et
- * `width`/`height` ses dimensions, tout en % de la surface — un rectangle
- * étirable à la souris/au doigt, pas un préréglage.
+ * Un tronçon de repère — un rectangle. `pos_x`/`pos_y` sont son coin
+ * haut-gauche (pas son centre, contrairement à une table), tout en % de la
+ * surface : le plan se regarde sur un téléphone de 360 px comme sur l'écran
+ * du bureau, jamais en pixels.
  */
-export type PlanLandmark = {
-  id: number;
-  kind: LandmarkKind;
+export type LandmarkPart = {
   pos_x: number;
   pos_y: number;
   width: number;
   height: number;
+};
+
+/**
+ * Un repère fixe du plan — pas une table, juste un point pour se repérer
+ * (« la 4 est près de l'entrée »), Phase 18 suite.
+ *
+ * C'est l'**union** de ses tronçons : un seul dessine un comptoir droit, deux
+ * en équerre un L, trois un U. Étirable et coudable à la souris/au doigt,
+ * jamais un préréglage à choisir dans une liste.
+ */
+export type PlanLandmark = {
+  id: number;
+  kind: LandmarkKind;
+  parts: LandmarkPart[];
 };
 
 export type TeamReport = {
@@ -809,17 +820,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ kind, pos_x, pos_y, width, height }),
     }),
-  moveLandmark: (
-    restaurantId: number,
-    landmarkId: number,
-    pos_x: number,
-    pos_y: number,
-    width: number,
-    height: number
-  ) =>
+  /** Déplacer, étirer et couder un repère sont le même geste vu du manager :
+   *  une seule écriture, la forme entière — jamais un tronçon à la fois. */
+  shapeLandmark: (restaurantId: number, landmarkId: number, parts: LandmarkPart[]) =>
     request<PlanLandmark>(`/api/v1/tables/plan/${restaurantId}/landmarks/${landmarkId}`, {
       method: "PUT",
-      body: JSON.stringify({ pos_x, pos_y, width, height }),
+      body: JSON.stringify({ parts }),
     }),
   deleteLandmark: (restaurantId: number, landmarkId: number) =>
     request<void>(`/api/v1/tables/plan/${restaurantId}/landmarks/${landmarkId}`, { method: "DELETE" }),

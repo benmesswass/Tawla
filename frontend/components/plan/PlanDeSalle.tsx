@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { boiteEnglobante } from "@/lib/formeRepere";
 import PieceTable from "./PieceTable";
 import PieceRepere from "./PieceRepere";
 import {
@@ -39,13 +40,21 @@ type Props = {
   /** Mode éditeur : les tables se déplacent à la souris ou au doigt. */
   editable?: boolean;
   onDeplacer?: (tableId: number, x: number, y: number) => void;
-  /** Repère sélectionné (éditeur uniquement — pour lui proposer un retrait). */
-  onRepereActive?: (repere: PlanLandmark) => void;
+  /** Repère sélectionné (éditeur uniquement — pour lui proposer un retrait).
+   *  Le tronçon visé vient avec : c'est lui que la poignée étirera, et lui que
+   *  « Prolonger » coudera. */
+  onRepereActive?: (repere: PlanLandmark, troncon: number) => void;
   repereSelectionne?: number | null;
-  onDeplacerRepere?: (repereId: number, x: number, y: number) => void;
+  tronconSelectionne?: number | null;
+  onDeplacerRepere?: (repereId: number, troncon: number, x: number, y: number) => void;
   /** Glisser la poignée du coin : recalculée à chaque mouvement depuis la
    *  position du pointeur, jamais un delta cumulé. */
-  onRedimensionnerRepere?: (repereId: number, largeur: number, hauteur: number) => void;
+  onRedimensionnerRepere?: (
+    repereId: number,
+    troncon: number,
+    largeur: number,
+    hauteur: number
+  ) => void;
   /**
    * Panneau d'action pour la table sélectionnée. Rendu **sous** la salle et
    * non par-dessus : posé en surimpression, il recouvrait justement la table
@@ -85,6 +94,7 @@ export default function PlanDeSalle({
   onDeplacer,
   onRepereActive,
   repereSelectionne = null,
+  tronconSelectionne = null,
   onDeplacerRepere,
   onRedimensionnerRepere,
   action,
@@ -93,9 +103,10 @@ export default function PlanDeSalle({
   // Une table et un repère peuvent partager le même id (deux séquences
   // distinctes côté serveur) : sans le type dans la clé, attraper la table 1
   // ferait aussi bouger le repère 1. "redimension" est un troisième geste
-  // possible sur un repère, distinct du déplacement de son corps.
+  // possible sur un repère, distinct du déplacement de son corps — et sur un
+  // repère coudé, les deux visent un tronçon précis, pas la forme entière.
   const [attrapee, setAttrapee] = useState<
-    { type: "table" | "repere" | "redimension"; id: number } | null
+    { type: "table" | "repere" | "redimension"; id: number; troncon: number } | null
   >(null);
 
   // Les compteurs avancent tout seuls : sans ce battement, une table qui attend
@@ -111,6 +122,10 @@ export default function PlanDeSalle({
     () => tables.filter((t) => t.pos_x !== null && t.pos_y !== null),
     [tables]
   );
+  // Un repère sans tronçon n'a pas de boîte englobante — impossible via
+  // l'API, mais un cadre positionné sur NaN passerait inaperçu à l'écriture
+  // et sauterait aux yeux à l'écran.
+  const dessinables = useMemo(() => landmarks.filter((r) => r.parts.length > 0), [landmarks]);
   const zones = useMemo(() => zonesDessinees(posees), [posees]);
 
   // L'ordre d'arrivée des commandes en attente de validation : c'est lui qui
@@ -178,7 +193,7 @@ export default function PlanDeSalle({
               editable
                 ? (e) => {
                     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-                    setAttrapee({ type: "table", id: table.id });
+                    setAttrapee({ type: "table", id: table.id, troncon: 0 });
                   }
                 : undefined
             }
@@ -206,62 +221,79 @@ export default function PlanDeSalle({
           </div>
         ))}
 
-        {landmarks.map((repere) => (
-          <div
-            key={`repere-${repere.id}`}
-            className="plan-emplacement-repere"
-            style={{
-              left: `${repere.pos_x}%`,
-              top: `${repere.pos_y}%`,
-              width: `${repere.width}%`,
-              height: `${repere.height}%`,
-            }}
-            onPointerDown={
-              editable
-                ? (e) => {
-                    // La poignée est un élément à part (voir PieceRepere) : la
-                    // repérer par cet attribut évite de faire remonter son geste
-                    // jusqu'ici via des props dédiées pour un seul booléen.
-                    const surPoignee = (e.target as HTMLElement).hasAttribute(
-                      "data-poignee-redimension"
-                    );
-                    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-                    setAttrapee({ type: surPoignee ? "redimension" : "repere", id: repere.id });
-                  }
-                : undefined
-            }
-            onPointerMove={
-              editable &&
-              attrapee?.id === repere.id &&
-              (attrapee.type === "repere" || attrapee.type === "redimension")
-                ? (e) => {
-                    const p = positionDepuisEvenement(e);
-                    if (!p) return;
-                    if (attrapee.type === "redimension") {
-                      // Le coin haut-gauche (pos_x/pos_y) ne bouge pas : seule la
-                      // largeur/hauteur suit le pointeur, comme étirer un coin
-                      // dans n'importe quel outil de dessin.
-                      onRedimensionnerRepere?.(repere.id, p.x - repere.pos_x, p.y - repere.pos_y);
-                    } else {
-                      onDeplacerRepere?.(repere.id, p.x, p.y);
+        {dessinables.map((repere) => {
+          // Le cadre est la boîte englobante des tronçons, pas un rectangle
+          // stocké : un repère coudé n'a plus de « son » rectangle, et le
+          // creux d'un U ne doit rien capter (voir .plan-emplacement-repere).
+          const boite = boiteEnglobante(repere.parts);
+          return (
+            <div
+              key={`repere-${repere.id}`}
+              className="plan-emplacement-repere"
+              style={{
+                left: `${boite.left}%`,
+                top: `${boite.top}%`,
+                width: `${boite.width}%`,
+                height: `${boite.height}%`,
+              }}
+              onPointerDown={
+                editable
+                  ? (e) => {
+                      const cible = e.target as HTMLElement;
+                      // La poignée et les tronçons sont des éléments à part
+                      // (voir PieceRepere) : les repérer par leurs attributs
+                      // évite de faire remonter le geste jusqu'ici via des
+                      // props dédiées pour un booléen et un index.
+                      const surPoignee = cible.hasAttribute("data-poignee-redimension");
+                      cible.setPointerCapture?.(e.pointerId);
+                      setAttrapee({
+                        type: surPoignee ? "redimension" : "repere",
+                        id: repere.id,
+                        troncon: Number(cible.getAttribute("data-troncon") ?? 0),
+                      });
                     }
-                  }
-                : undefined
-            }
-            onPointerUp={editable ? () => setAttrapee(null) : undefined}
-            onPointerCancel={editable ? () => setAttrapee(null) : undefined}
-          >
-            <PieceRepere
-              repere={repere}
-              selectionnee={repere.id === repereSelectionne}
-              enDeplacement={attrapee?.type === "repere" && attrapee.id === repere.id}
-              editable={editable}
-              onActiver={() => onRepereActive?.(repere)}
-            />
-          </div>
-        ))}
+                  : undefined
+              }
+              onPointerMove={
+                editable &&
+                attrapee?.id === repere.id &&
+                (attrapee.type === "repere" || attrapee.type === "redimension")
+                  ? (e) => {
+                      const p = positionDepuisEvenement(e);
+                      const troncon = repere.parts[attrapee.troncon];
+                      if (!p || !troncon) return;
+                      if (attrapee.type === "redimension") {
+                        // Le coin haut-gauche (pos_x/pos_y) ne bouge pas : seule la
+                        // largeur/hauteur suit le pointeur, comme étirer un coin
+                        // dans n'importe quel outil de dessin.
+                        onRedimensionnerRepere?.(
+                          repere.id,
+                          attrapee.troncon,
+                          p.x - troncon.pos_x,
+                          p.y - troncon.pos_y
+                        );
+                      } else {
+                        onDeplacerRepere?.(repere.id, attrapee.troncon, p.x, p.y);
+                      }
+                    }
+                  : undefined
+              }
+              onPointerUp={editable ? () => setAttrapee(null) : undefined}
+              onPointerCancel={editable ? () => setAttrapee(null) : undefined}
+            >
+              <PieceRepere
+                repere={repere}
+                selectionnee={repere.id === repereSelectionne}
+                tronconActif={repere.id === repereSelectionne ? tronconSelectionne : null}
+                enDeplacement={attrapee?.type === "repere" && attrapee.id === repere.id}
+                editable={editable}
+                onActiver={(troncon) => onRepereActive?.(repere, troncon)}
+              />
+            </div>
+          );
+        })}
 
-        {posees.length === 0 && landmarks.length === 0 && (
+        {posees.length === 0 && dessinables.length === 0 && (
           <p className="plan-vide">
             {editable
               ? "Faites glisser vos tables depuis la liste ci-dessous pour dessiner votre salle."

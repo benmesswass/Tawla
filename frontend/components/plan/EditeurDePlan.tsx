@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, LandmarkKind, PlanLandmark, PlanTable, TableShape } from "@/lib/api";
+import { api, LandmarkKind, LandmarkPart, PlanLandmark, PlanTable, TableShape } from "@/lib/api";
+import { tronconSuivant, tronconVise } from "@/lib/formeRepere";
 import PlanDeSalle from "./PlanDeSalle";
 import { LIBELLE_REPERE } from "./types";
 
@@ -39,11 +40,21 @@ const DELAI_ENREGISTREMENT = 1000;
 const LARGEUR_REPERE_DEFAUT = 12;
 const HAUTEUR_REPERE_DEFAUT = 7;
 
+/** Longueur du bras que « Prolonger en angle » fait naître — assez visible
+ *  pour être attrapé tout de suite, assez court pour ne pas traverser la
+ *  salle avant que le manager ne l'ait étiré. */
+const LONGUEUR_TRONCON_DEFAUT = 16;
+
 /** Bornes du rectangle, en % de la surface — mêmes valeurs que côté serveur
  *  (schemas.py) : large pour courir tout un mur, jamais assez pour avaler la
  *  salle entière ni disparaître en un point. */
 const TAILLE_REPERE_MIN = 2;
 const TAILLE_REPERE_MAX = 90;
+
+/** Un tronçon droit, un L, un U, un comptoir qui suit trois murs — même borne
+ *  que côté serveur. Au-delà on dessine un logiciel d'architecture, pas un
+ *  outil de service. */
+const TRONCONS_MAX = 4;
 
 function borneTailleRepere(valeur: number): number {
   return Math.min(TAILLE_REPERE_MAX, Math.max(TAILLE_REPERE_MIN, valeur));
@@ -80,6 +91,10 @@ export default function EditeurDePlan({
 
   const [landmarks, setLandmarks] = useState<PlanLandmark[]>([]);
   const [repereSelectionne, setRepereSelectionne] = useState<number | null>(null);
+  // Quel tronçon du repère le dernier appui a visé : celui que la poignée
+  // étire, celui que « Prolonger en angle » coude. Un repère droit n'en a
+  // qu'un, et le manager n'a alors rien de plus à comprendre qu'avant.
+  const [tronconSelectionne, setTronconSelectionne] = useState<number | null>(null);
   const [repereModifie, setRepereModifie] = useState(false);
   const derniereRepereDeplaceeRef = useRef<number | null>(null);
 
@@ -101,14 +116,7 @@ export default function EditeurDePlan({
       const repere = landmarks.find((r) => r.id === derniereRepereDeplaceeRef.current);
       if (!repere) return;
       try {
-        await api.moveLandmark(
-          restaurantId,
-          repere.id,
-          repere.pos_x,
-          repere.pos_y,
-          repere.width,
-          repere.height
-        );
+        await api.shapeLandmark(restaurantId, repere.id, repere.parts);
       } catch (e) {
         onErreurRef.current?.(e);
       }
@@ -116,20 +124,64 @@ export default function EditeurDePlan({
     return () => clearTimeout(t);
   }, [repereModifie, landmarks, restaurantId]);
 
-  function deplacerRepere(id: number, x: number, y: number) {
+  /** Retoucher un seul tronçon du repère, en laissant les autres tels quels —
+   *  l'écriture, elle, part toujours avec la forme entière (shapeLandmark). */
+  function retoucherTroncon(id: number, troncon: number, retouche: (t: LandmarkPart) => LandmarkPart) {
     derniereRepereDeplaceeRef.current = id;
-    setLandmarks((prev) => prev.map((r) => (r.id === id ? { ...r, pos_x: x, pos_y: y } : r)));
+    setLandmarks((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, parts: r.parts.map((t, i) => (i === troncon ? retouche(t) : t)) } : r
+      )
+    );
     setRepereModifie(true);
+  }
+
+  function deplacerRepere(id: number, troncon: number, x: number, y: number) {
+    retoucherTroncon(id, troncon, (t) => ({ ...t, pos_x: x, pos_y: y }));
   }
 
   /** Glisser la poignée du coin : le coin haut-gauche ne bouge pas, seules la
    *  largeur/hauteur suivent le pointeur — recalculées à chaque mouvement,
    *  jamais un delta cumulé (même politique que positionDepuisEvenement). */
-  function redimensionnerRepere(id: number, largeur: number, hauteur: number) {
+  function redimensionnerRepere(id: number, troncon: number, largeur: number, hauteur: number) {
+    retoucherTroncon(id, troncon, (t) => ({
+      ...t,
+      width: borneTailleRepere(largeur),
+      height: borneTailleRepere(hauteur),
+    }));
+  }
+
+  /** Couder le comptoir : un bras perpendiculaire naît au bout libre du
+   *  tronçon actif et se replie vers le reste (voir `tronconSuivant`). Un clic
+   *  donne un L, deux donnent un U — le manager le glisse et l'étire ensuite,
+   *  il n'a jamais à choisir une orientation dans une liste. */
+  function prolongerRepere(id: number, troncon: number) {
+    const repere = landmarks.find((r) => r.id === id);
+    if (!repere || repere.parts.length >= TRONCONS_MAX) return;
+    const bras = tronconSuivant(repere.parts, troncon, {
+      longueur: LONGUEUR_TRONCON_DEFAUT,
+      min: TAILLE_REPERE_MIN,
+      max: TAILLE_REPERE_MAX,
+    });
     derniereRepereDeplaceeRef.current = id;
-    const l = borneTailleRepere(largeur);
-    const h = borneTailleRepere(hauteur);
-    setLandmarks((prev) => prev.map((r) => (r.id === id ? { ...r, width: l, height: h } : r)));
+    setLandmarks((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, parts: [...r.parts, bras] } : r))
+    );
+    setTronconSelectionne(repere.parts.length);
+    setRepereModifie(true);
+  }
+
+  /** Retirer un tronçon, pas le repère : défaire un coude de trop ne doit pas
+   *  obliger à reposer le bar. Le dernier tronçon ne part pas — un repère sans
+   *  forme n'est pas un repère, c'est « Retirer ce repère ». */
+  function retirerTroncon(id: number, troncon: number) {
+    const repere = landmarks.find((r) => r.id === id);
+    if (!repere || repere.parts.length <= 1) return;
+    derniereRepereDeplaceeRef.current = id;
+    setLandmarks((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, parts: r.parts.filter((_, i) => i !== troncon) } : r))
+    );
+    setTronconSelectionne(null);
     setRepereModifie(true);
   }
 
@@ -149,6 +201,7 @@ export default function EditeurDePlan({
       );
       setLandmarks((prev) => [...prev, repere]);
       setRepereSelectionne(repere.id);
+      setTronconSelectionne(0);
       setSelectionnee(null);
     } catch (e) {
       onErreurRef.current?.(e);
@@ -159,6 +212,7 @@ export default function EditeurDePlan({
     if (!restaurantId) return;
     setLandmarks((prev) => prev.filter((r) => r.id !== id));
     setRepereSelectionne(null);
+    setTronconSelectionne(null);
     try {
       await api.deleteLandmark(restaurantId, id);
     } catch (e) {
@@ -182,6 +236,11 @@ export default function EditeurDePlan({
   const enReserve = useMemo(() => brouillon.filter((t) => t.pos_x === null), [brouillon]);
   const tableSelectionnee = brouillon.find((t) => t.id === selectionnee) ?? null;
   const repereSelectionneObjet = landmarks.find((r) => r.id === repereSelectionne) ?? null;
+  // Même résolution que la poignée dans PieceRepere : les boutons ci-dessous
+  // doivent couder et retirer le tronçon que le manager voit sélectionné.
+  const tronconActif = repereSelectionneObjet
+    ? tronconVise(repereSelectionneObjet.parts, tronconSelectionne)
+    : 0;
 
   // Enregistrement automatique. La référence évite de relancer le compte à
   // rebours quand seule l'identité de la fonction parente change.
@@ -284,11 +343,17 @@ export default function EditeurDePlan({
         tableSelectionnee={selectionnee}
         onDeplacerRepere={deplacerRepere}
         onRedimensionnerRepere={redimensionnerRepere}
-        onRepereActive={(r) => {
-          setRepereSelectionne((actuel) => (actuel === r.id ? null : r.id));
+        onRepereActive={(r, troncon) => {
+          // Toucher un autre tronçon du même repère change de tronçon actif ;
+          // c'est le second appui sur le *même* qui désélectionne, sinon
+          // façonner un U demanderait de re-sélectionner à chaque coude.
+          const memeTroncon = repereSelectionne === r.id && tronconSelectionne === troncon;
+          setRepereSelectionne(memeTroncon ? null : r.id);
+          setTronconSelectionne(memeTroncon ? null : troncon);
           setSelectionnee(null);
         }}
         repereSelectionne={repereSelectionne}
+        tronconSelectionne={tronconSelectionne}
       />
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -313,8 +378,23 @@ export default function EditeurDePlan({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3 text-sm">
           <span className="font-medium mr-1">{LIBELLE_REPERE[repereSelectionneObjet.kind]}</span>
           <span className="text-neutral-500">
-            Faites glisser le point en bas à droite pour l&apos;étirer.
+            Faites glisser le point en bas à droite pour étirer ce tronçon.
           </span>
+          <button
+            onClick={() => prolongerRepere(repereSelectionneObjet.id, tronconActif)}
+            disabled={repereSelectionneObjet.parts.length >= TRONCONS_MAX}
+            className="rounded-lg border border-dashed border-[var(--line)] px-3 py-1.5 disabled:opacity-40"
+          >
+            Prolonger en angle
+          </button>
+          {repereSelectionneObjet.parts.length > 1 && (
+            <button
+              onClick={() => retirerTroncon(repereSelectionneObjet.id, tronconActif)}
+              className="text-neutral-500 underline ml-1"
+            >
+              Retirer ce tronçon
+            </button>
+          )}
           <button
             onClick={() => retirerRepere(repereSelectionneObjet.id)}
             className="text-neutral-500 underline ml-1"

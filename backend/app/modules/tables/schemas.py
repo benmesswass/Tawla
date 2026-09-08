@@ -75,14 +75,29 @@ class PlanUpdate(BaseModel):
     placements: list[TablePlacement]
 
 
+class LandmarkPart(BaseModel):
+    """
+    Un tronçon du repère — un rectangle. `pos_x`/`pos_y` sont son coin
+    haut-gauche (pas son centre, contrairement à une table) ; `width`/`height`
+    sont bornées large : un comptoir peut courir tout un mur, jamais avaler la
+    salle entière ni disparaître en un point.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    pos_x: float = Field(ge=0, le=100)
+    pos_y: float = Field(ge=0, le=100)
+    width: float = Field(ge=2, le=90)
+    height: float = Field(ge=2, le=90)
+
+
 class LandmarkCreate(BaseModel):
     """
     Poser un repère : il naît déjà placé, pas de réserve pour un point qui
     n'a rien d'autre à régler qu'une position.
 
-    `pos_x`/`pos_y` sont son coin haut-gauche (pas son centre, contrairement
-    à une table) — `width`/`height` sont bornées large : un bar peut courir
-    tout un mur, jamais avaler la salle entière ni disparaître en un point.
+    Un seul rectangle à la pose — c'est le geste réel : on pose un comptoir
+    droit, on le coude ensuite (PUT, `LandmarkShape`) si la salle le demande.
     """
 
     kind: LandmarkKind
@@ -97,18 +112,19 @@ class LandmarkOut(BaseModel):
 
     id: int
     kind: LandmarkKind
-    pos_x: float
-    pos_y: float
-    width: float
-    height: float
+    parts: list[LandmarkPart]
 
 
-class LandmarkMove(BaseModel):
-    """Position ET dimensions : tout ce qu'un repère a de modifiable après sa
-    création, comme TablePlacement pour une table (position + forme +
-    couverts) — une seule écriture, jamais une route par attribut."""
+class LandmarkShape(BaseModel):
+    """
+    Toute la forme du repère en une requête : la liste de ses tronçons,
+    positions et dimensions comprises. Tout ce qu'un repère a de modifiable
+    après sa création, comme `PlanUpdate` pour les tables — une seule
+    écriture, jamais une route par attribut ni un tronçon à la fois.
 
-    pos_x: float = Field(ge=0, le=100)
-    pos_y: float = Field(ge=0, le=100)
-    width: float = Field(ge=2, le=90)
-    height: float = Field(ge=2, le=90)
+    Bornée à quatre tronçons : un droit, un L, un U, un comptoir qui suit
+    trois murs. Au-delà on dessine un logiciel d'architecture, pas un outil de
+    service.
+    """
+
+    parts: list[LandmarkPart] = Field(min_length=1, max_length=4)

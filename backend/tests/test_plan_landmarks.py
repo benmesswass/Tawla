@@ -10,7 +10,7 @@ import pytest
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 from app.modules.staff.models import StaffRole
-from app.modules.tables.models import PlanLandmark
+from app.modules.tables.models import PlanLandmark, PlanLandmarkPart
 from app.modules.tenants.models import SubscriptionTier
 
 
@@ -35,15 +35,18 @@ def test_a_manager_adds_a_landmark(client, salle):
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["kind"] == "bar"
-    assert (body["pos_x"], body["pos_y"]) == (50.0, 12.0)
+    assert (body["parts"][0]["pos_x"], body["parts"][0]["pos_y"]) == (50.0, 12.0)
 
 
-def test_a_landmark_has_default_dimensions(client, salle):
+def test_a_new_landmark_is_a_single_straight_run(client, salle):
+    """On pose un comptoir droit, on le coude ensuite si la salle le demande —
+    c'est le geste réel, donc un seul tronçon à la pose."""
     manager = create_staff(salle.id, StaffRole.MANAGER)
 
     body = _poser(client, salle.id, manager).json()
 
-    assert (body["width"], body["height"]) == (12.0, 7.0)
+    assert len(body["parts"]) == 1
+    assert (body["parts"][0]["width"], body["parts"][0]["height"]) == (12.0, 7.0)
 
 
 def test_a_landmark_can_be_created_with_chosen_dimensions(client, salle):
@@ -58,7 +61,8 @@ def test_a_landmark_can_be_created_with_chosen_dimensions(client, salle):
     )
 
     assert response.status_code == 201, response.text
-    assert (response.json()["width"], response.json()["height"]) == (40.0, 5.0)
+    part = response.json()["parts"][0]
+    assert (part["width"], part["height"]) == (40.0, 5.0)
 
 
 def test_a_landmark_is_placed_immediately_no_reserve(client, db_session, salle):
@@ -69,7 +73,7 @@ def test_a_landmark_is_placed_immediately_no_reserve(client, db_session, salle):
     body = _poser(client, salle.id, manager, kind="entrance", pos_x=4.0, pos_y=50.0).json()
 
     stored = db_session.get(PlanLandmark, body["id"])
-    assert (stored.pos_x, stored.pos_y) == (4.0, 50.0)
+    assert (stored.parts[0].pos_x, stored.parts[0].pos_y) == (4.0, 50.0)
 
 
 def test_a_waiter_reads_the_landmarks(client, salle):
@@ -122,39 +126,105 @@ def test_a_position_outside_the_plan_is_refused(client, salle):
     assert response.status_code == 422
 
 
-def test_moving_a_landmark_replaces_its_position(client, db_session, salle):
+def test_reshaping_a_landmark_replaces_its_runs(client, db_session, salle):
+    """Déplacer, étirer, couder : un seul geste vu du manager, donc une seule
+    écriture — la liste des tronçons remplace l'ancienne en bloc."""
     manager = create_staff(salle.id, StaffRole.MANAGER)
     landmark = _poser(client, salle.id, manager).json()
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 80.0, "pos_y": 20.0, "width": 12.0, "height": 7.0},
+        json={"parts": [{"pos_x": 80.0, "pos_y": 20.0, "width": 25.0, "height": 15.0}]},
         headers=auth_headers(manager),
     )
 
     assert response.status_code == 200
+    part = response.json()["parts"][0]
+    assert (part["pos_x"], part["pos_y"], part["width"], part["height"]) == (80.0, 20.0, 25.0, 15.0)
     db_session.expire_all()
     stored = db_session.get(PlanLandmark, landmark["id"])
-    assert (stored.pos_x, stored.pos_y) == (80.0, 20.0)
+    assert len(stored.parts) == 1
+    assert (stored.parts[0].pos_x, stored.parts[0].width) == (80.0, 25.0)
 
 
-def test_resizing_a_landmark_replaces_its_dimensions(client, db_session, salle):
-    """Étirer le repère au coin : une seule écriture, position et forme
-    ensemble, jamais l'une sans l'autre."""
+def test_a_bar_can_be_shaped_as_an_l(client, salle):
+    """Retour de Wassim (2026-09-08) : un rectangle ne dit pas un bar en L.
+    Deux tronçons en équerre, et le plan dessine leur union."""
     manager = create_staff(salle.id, StaffRole.MANAGER)
     landmark = _poser(client, salle.id, manager).json()
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 80.0, "pos_y": 20.0, "width": 25.0, "height": 15.0},
+        json={
+            "parts": [
+                {"pos_x": 8.0, "pos_y": 8.0, "width": 36.0, "height": 6.0},
+                {"pos_x": 38.0, "pos_y": 8.0, "width": 6.0, "height": 28.0},
+            ]
+        },
         headers=auth_headers(manager),
     )
 
-    assert response.status_code == 200
-    assert (response.json()["width"], response.json()["height"]) == (25.0, 15.0)
+    assert response.status_code == 200, response.text
+    assert len(response.json()["parts"]) == 2
+
+
+def test_a_bar_can_be_shaped_as_a_u_and_keeps_the_order_of_the_run(client, db_session, salle):
+    """Trois tronçons pour un U — et ils reviennent dans l'ordre du parcours
+    du comptoir, celui dans lequel le manager les a prolongés."""
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+    landmark = _poser(client, salle.id, manager).json()
+
+    response = client.put(
+        f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
+        json={
+            "parts": [
+                {"pos_x": 8.0, "pos_y": 8.0, "width": 36.0, "height": 6.0},
+                {"pos_x": 38.0, "pos_y": 8.0, "width": 6.0, "height": 28.0},
+                {"pos_x": 8.0, "pos_y": 30.0, "width": 36.0, "height": 6.0},
+            ]
+        },
+        headers=auth_headers(manager),
+    )
+
+    assert response.status_code == 200, response.text
+    assert [p["pos_y"] for p in response.json()["parts"]] == [8.0, 8.0, 30.0]
     db_session.expire_all()
     stored = db_session.get(PlanLandmark, landmark["id"])
-    assert (stored.width, stored.height) == (25.0, 15.0)
+    assert [p.ordre for p in stored.parts] == [0, 1, 2]
+
+
+def test_a_shape_without_any_run_is_refused(client, salle):
+    """Un repère sans tronçon n'est pas un repère invisible : c'est un état
+    impossible, et le retirer est une autre route."""
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+    landmark = _poser(client, salle.id, manager).json()
+
+    response = client.put(
+        f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
+        json={"parts": []},
+        headers=auth_headers(manager),
+    )
+
+    assert response.status_code == 422
+
+
+def test_too_many_runs_are_refused(client, salle):
+    """Au-delà de quatre tronçons on dessine un logiciel d'architecture, pas
+    un outil de service."""
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+    landmark = _poser(client, salle.id, manager).json()
+
+    response = client.put(
+        f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
+        json={
+            "parts": [
+                {"pos_x": 8.0 + i * 8, "pos_y": 8.0, "width": 6.0, "height": 6.0} for i in range(5)
+            ]
+        },
+        headers=auth_headers(manager),
+    )
+
+    assert response.status_code == 422
 
 
 def test_dimensions_outside_bounds_are_refused(client, salle):
@@ -169,21 +239,41 @@ def test_dimensions_outside_bounds_are_refused(client, salle):
         assert response.status_code == 422, width
 
 
-def test_a_waiter_cannot_move_a_landmark(client, salle):
+def test_a_run_outside_bounds_is_refused(client, salle):
+    """Les bornes valent tronçon par tronçon, pas seulement à la pose : sans
+    ça un coude pouvait rattraper un bras hors du plan."""
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+    landmark = _poser(client, salle.id, manager).json()
+
+    response = client.put(
+        f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
+        json={
+            "parts": [
+                {"pos_x": 8.0, "pos_y": 8.0, "width": 36.0, "height": 6.0},
+                {"pos_x": 140.0, "pos_y": 8.0, "width": 6.0, "height": 28.0},
+            ]
+        },
+        headers=auth_headers(manager),
+    )
+
+    assert response.status_code == 422
+
+
+def test_a_waiter_cannot_reshape_a_landmark(client, salle):
     manager = create_staff(salle.id, StaffRole.MANAGER)
     waiter = create_staff(salle.id, StaffRole.WAITER)
     landmark = _poser(client, salle.id, manager).json()
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 10.0, "pos_y": 10.0, "width": 12.0, "height": 7.0},
+        json={"parts": [{"pos_x": 10.0, "pos_y": 10.0, "width": 12.0, "height": 7.0}]},
         headers=auth_headers(waiter),
     )
 
     assert response.status_code == 403
 
 
-def test_a_manager_cannot_move_another_restaurants_landmark(client, salle):
+def test_a_manager_cannot_reshape_another_restaurants_landmark(client, salle):
     manager = create_staff(salle.id, StaffRole.MANAGER)
     landmark = _poser(client, salle.id, manager).json()
 
@@ -192,7 +282,7 @@ def test_a_manager_cannot_move_another_restaurants_landmark(client, salle):
 
     response = client.put(
         f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
-        json={"pos_x": 10.0, "pos_y": 10.0, "width": 12.0, "height": 7.0},
+        json={"parts": [{"pos_x": 10.0, "pos_y": 10.0, "width": 12.0, "height": 7.0}]},
         headers=auth_headers(manager_autre),
     )
 
@@ -210,6 +300,31 @@ def test_deleting_a_landmark_removes_it_from_the_plan(client, salle):
     assert response.status_code == 204
     listing = client.get(f"/api/v1/tables/plan/{salle.id}/landmarks", headers=auth_headers(manager)).json()
     assert listing == []
+
+
+def test_deleting_a_landmark_takes_its_runs_with_it(client, db_session, salle):
+    """Retirer le bar retire tout le comptoir, pas seulement l'étiquette : des
+    tronçons orphelins reviendraient au prochain repère créé sur cet id."""
+    manager = create_staff(salle.id, StaffRole.MANAGER)
+    landmark = _poser(client, salle.id, manager).json()
+    client.put(
+        f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}",
+        json={
+            "parts": [
+                {"pos_x": 8.0, "pos_y": 8.0, "width": 36.0, "height": 6.0},
+                {"pos_x": 38.0, "pos_y": 8.0, "width": 6.0, "height": 28.0},
+            ]
+        },
+        headers=auth_headers(manager),
+    )
+
+    client.delete(
+        f"/api/v1/tables/plan/{salle.id}/landmarks/{landmark['id']}", headers=auth_headers(manager)
+    )
+
+    db_session.expire_all()
+    restants = db_session.query(PlanLandmarkPart).filter_by(landmark_id=landmark["id"]).count()
+    assert restants == 0
 
 
 def test_a_waiter_cannot_delete_a_landmark(client, salle):

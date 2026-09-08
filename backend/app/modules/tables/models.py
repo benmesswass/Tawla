@@ -3,7 +3,7 @@ import secrets
 import enum
 
 from sqlalchemy import Enum, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -73,6 +73,39 @@ class PlanLandmark(Base):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
     kind: Mapped[LandmarkKind] = mapped_column(Enum(LandmarkKind), nullable=False)
 
+    # La géométrie ne vit pas sur cette ligne mais dans ses tronçons : un
+    # comptoir qui suit deux murs n'est pas un rectangle. L'aplatir en un
+    # seul (pos_x/pos_y/width/height ici, PR #174) obligeait le manager à
+    # poser trois « bars » distincts pour dessiner un U — trois étiquettes,
+    # trois suppressions, alors qu'il n'y a qu'un bar dans la salle.
+    parts: Mapped[list["PlanLandmarkPart"]] = relationship(
+        back_populates="landmark",
+        cascade="all, delete-orphan",
+        order_by="PlanLandmarkPart.ordre",
+        lazy="selectin",
+    )
+
+
+class PlanLandmarkPart(Base):
+    """
+    Un tronçon du repère — un rectangle, et rien de plus. Le repère est
+    l'**union** de ses tronçons : un seul dessine un comptoir droit, deux en
+    équerre un L, trois un U. La forme naît donc du geste (glisser, étirer,
+    prolonger), jamais d'un préréglage à choisir dans une liste — même parti
+    pris qu'à la PR #174, poussé jusqu'aux formes que le rectangle seul ne
+    savait pas dire.
+    """
+
+    __tablename__ = "plan_landmark_parts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    landmark_id: Mapped[int] = mapped_column(
+        ForeignKey("plan_landmarks.id"), nullable=False, index=True
+    )
+    # L'ordre du parcours du comptoir, pas un détail d'affichage : prolonger
+    # accroche le nouveau tronçon au bout du dernier posé.
+    ordre: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     # Coin haut-gauche du rectangle (pas son centre, contrairement à une
     # table) — c'est ce qui rend le glisser du coin bas-droit trivial :
     # largeur = position du pointeur - pos_x. En pourcentage de la surface,
@@ -80,9 +113,7 @@ class PlanLandmark(Base):
     # 360 px comme sur l'écran du bureau, jamais en pixels.
     pos_x: Mapped[float] = mapped_column(Float, nullable=False)
     pos_y: Mapped[float] = mapped_column(Float, nullable=False)
-    # Dimensions du rectangle, mêmes unités. Étirable à la souris/au doigt
-    # (voir PUT .../landmarks/{id}) — un bar peut être un coin comptoir ou
-    # occuper tout un mur, une entrée simple ou une double porte : la forme
-    # EST l'information, pas un préréglage à choisir dans une liste.
     width: Mapped[float] = mapped_column(Float, nullable=False)
     height: Mapped[float] = mapped_column(Float, nullable=False)
+
+    landmark: Mapped["PlanLandmark"] = relationship(back_populates="parts")
