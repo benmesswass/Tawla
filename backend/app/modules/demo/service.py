@@ -32,7 +32,7 @@ from app.modules.orders.models import Order, OrderItem
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import hash_password
 from app.modules.stats.models import DashboardView
-from app.modules.tables.models import Table
+from app.modules.tables.models import PlanLandmark, PlanLandmarkPart, Table
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 from app.modules.waiter_calls.models import WaiterCall
 
@@ -149,6 +149,13 @@ def supprimer_demo(db: Session, restaurant: Restaurant) -> None:
     db.query(MenuRegime).filter(MenuRegime.restaurant_id == rid).delete(synchronize_session=False)
     db.query(LoyaltyMember).filter(LoyaltyMember.restaurant_id == rid).delete(synchronize_session=False)
     db.query(DashboardView).filter(DashboardView.restaurant_id == rid).delete(synchronize_session=False)
+    # cascade="all, delete-orphan" sur PlanLandmark.parts (tables/models.py) ne
+    # joue que pour un db.delete(instance) ORM — un .delete() en masse comme
+    # ici l'ignore, donc les tronçons doivent être effacés à la main avant
+    # leurs repères, sous peine de ForeignKeyViolation.
+    reperes = select(PlanLandmark.id).where(PlanLandmark.restaurant_id == rid)
+    db.query(PlanLandmarkPart).filter(PlanLandmarkPart.landmark_id.in_(reperes)).delete(synchronize_session=False)
+    db.query(PlanLandmark).filter(PlanLandmark.restaurant_id == rid).delete(synchronize_session=False)
     db.query(Table).filter(Table.restaurant_id == rid).delete(synchronize_session=False)
     db.query(Staff).filter(Staff.restaurant_id == rid).delete(synchronize_session=False)
     db.query(Restaurant).filter(Restaurant.id == rid).delete(synchronize_session=False)

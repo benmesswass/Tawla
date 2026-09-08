@@ -14,7 +14,7 @@ from app.modules.demo import service
 from app.modules.menu.models import MenuItem, MenuRegime
 from app.modules.orders.models import Order, OrderItem
 from app.modules.staff.models import Staff
-from app.modules.tables.models import Table
+from app.modules.tables.models import PlanLandmark, PlanLandmarkPart, Table
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 
@@ -148,6 +148,40 @@ def test_une_demo_expiree_avec_un_regime_personnalise_est_purgeable(client, db_s
     assert service.purger_demos_expirees(db_session) == 1
     assert db_session.get(Restaurant, rid) is None
     assert db_session.query(MenuRegime).filter(MenuRegime.restaurant_id == rid).count() == 0
+
+
+def test_une_demo_expiree_avec_un_repere_de_plan_est_purgeable(client, db_session):
+    """
+    Régression : un repère posé pendant la démo (bar, entrée — fonctionnalité
+    Pro normale) a cassé la purge en production (2026-09-08) — `PlanLandmark`
+    a un cascade ORM vers ses tronçons (`parts`), mais `supprimer_demo` efface
+    en masse (`.delete()` bulk), qui ignore les cascades ORM. Conséquence :
+    `restaurants` refusait la suppression (`plan_landmarks_restaurant_id_fkey`),
+    et la démo suivante échouait aussi, `purger_demos_expirees` tournant avant
+    toute création (voir `creer_demo`) — exactement le scénario déjà vu avec
+    `MenuRegime` ci-dessus.
+
+    Assertion sur le comptage plutôt que sur une levée d'exception : SQLite ne
+    contraint pas les clés étrangères par défaut, contrairement à Postgres en
+    production (même remarque que le test du régime personnalisé).
+    """
+    demo = ouvrir_demo(client)
+    rid = demo["restaurant_id"]
+    reponse = client.post(
+        f"/api/v1/tables/plan/{rid}/landmarks",
+        json={"kind": "bar", "pos_x": 10, "pos_y": 10, "width": 12, "height": 7},
+        headers={"Authorization": f"Bearer {demo['access_token']}"},
+    )
+    assert reponse.status_code == 201, reponse.text
+
+    restaurant = db_session.get(Restaurant, rid)
+    restaurant.demo_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert service.purger_demos_expirees(db_session) == 1
+    assert db_session.get(Restaurant, rid) is None
+    assert db_session.query(PlanLandmark).filter(PlanLandmark.restaurant_id == rid).count() == 0
+    assert db_session.query(PlanLandmarkPart).count() == 0
 
 
 def test_une_demo_vivante_survit_a_la_purge(client, db_session):
