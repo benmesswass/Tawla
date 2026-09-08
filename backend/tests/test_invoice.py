@@ -181,16 +181,28 @@ def test_generate_invoice_pdf_ventilates_multiple_vat_rates_in_the_same_order(mo
     db_session.refresh(restaurant)
 
     table = Table(restaurant_id=restaurant.id, label="Table 4")
-    db_session.add(table)
+    plat = MenuItem(restaurant_id=restaurant.id, name="Couscous royal", price=18.0, category="Plats")
+    vin = MenuItem(restaurant_id=restaurant.id, name="Bouteille de vin", price=25.0, category="Vins")
+    db_session.add_all([table, plat, vin])
     db_session.commit()
     db_session.refresh(table)
+    db_session.refresh(plat)
+    db_session.refresh(vin)
 
     order = Order(restaurant_id=restaurant.id, table_id=table.id)
     order.items.append(
-        OrderItem(menu_item_id=1, menu_item_name="Couscous royal", unit_price=18.0, quantity=2, vat_category=None)
+        OrderItem(
+            menu_item_id=plat.id, menu_item_name="Couscous royal", unit_price=18.0, quantity=2, vat_category=None
+        )
     )
     order.items.append(
-        OrderItem(menu_item_id=2, menu_item_name="Bouteille de vin", unit_price=25.0, quantity=1, vat_category="alcool")
+        OrderItem(
+            menu_item_id=vin.id,
+            menu_item_name="Bouteille de vin",
+            unit_price=25.0,
+            quantity=1,
+            vat_category="alcool",
+        )
     )
     db_session.add(order)
     db_session.commit()

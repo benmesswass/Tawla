@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -21,6 +21,21 @@ _engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
+# SQLite n'applique pas les contraintes de clé étrangère sans qu'on le lui
+# demande, contrairement à Postgres en production. Deux fois (MenuRegime, puis
+# les repères de plan et les compteurs de facture le 2026-09-08) la purge des
+# démos a laissé des lignes orphelines : la suite restait verte, Postgres
+# refusait la suppression du restaurant, et *toute* création de démo échouait
+# derrière — `purger_demos_expirees` tourne avant chaque `creer_demo`. Les
+# tests ne servent à rien s'ils ne contraignent pas ce que la production
+# contraint.
+@event.listens_for(_engine, "connect")
+def _appliquer_les_cles_etrangeres(dbapi_connection, _record):
+    curseur = dbapi_connection.cursor()
+    curseur.execute("PRAGMA foreign_keys=ON")
+    curseur.close()
 _TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
 

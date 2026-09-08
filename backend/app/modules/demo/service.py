@@ -27,8 +27,21 @@ from app.core.dates import as_utc
 from app.core.logging import log_event
 from app.core.markets import Market, current_market
 from app.modules.loyalty.models import LoyaltyMember
-from app.modules.menu.models import MenuItem, MenuRegime, MenuSuggestion
-from app.modules.orders.models import Order, OrderItem
+from app.modules.menu.models import (
+    MenuItem,
+    MenuItemOption,
+    MenuItemOptionGroup,
+    MenuRegime,
+    MenuSuggestion,
+)
+from app.modules.orders.models import (
+    InvoiceCounter,
+    Order,
+    OrderItem,
+    OrderItemOption,
+    OrderModificationLine,
+    OrderModificationRequest,
+)
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import hash_password
 from app.modules.stats.models import DashboardView
@@ -134,11 +147,36 @@ def supprimer_demo(db: Session, restaurant: Restaurant) -> None:
         raise ValueError(f"restaurant {restaurant.id} n'est pas une démo — suppression refusée")
 
     rid = restaurant.id
+
+    # Demandes de modification (fenêtre 2, après envoi en cuisine) : leurs
+    # lignes d'abord — même piège que plus bas pour les repères de plan,
+    # cascade="all, delete-orphan" côté ORM (OrderModificationRequest.lines)
+    # ne joue que pour un db.delete(instance), pas pour un .delete() en masse.
+    demandes = select(OrderModificationRequest.id).where(OrderModificationRequest.restaurant_id == rid)
+    db.query(OrderModificationLine).filter(OrderModificationLine.request_id.in_(demandes)).delete(
+        synchronize_session=False
+    )
+    db.query(OrderModificationRequest).filter(OrderModificationRequest.restaurant_id == rid).delete(
+        synchronize_session=False
+    )
+
     commandes = select(Order.id).where(Order.restaurant_id == rid)
+    # Choix figés sur une ligne de commande (« Cuisson : à point », France
+    # F5/A2) : même piège, à effacer avant leur OrderItem.
+    articles = select(OrderItem.id).where(OrderItem.order_id.in_(commandes))
+    db.query(OrderItemOption).filter(OrderItemOption.order_item_id.in_(articles)).delete(synchronize_session=False)
     db.query(OrderItem).filter(OrderItem.order_id.in_(commandes)).delete(synchronize_session=False)
     db.query(Order).filter(Order.restaurant_id == rid).delete(synchronize_session=False)
     db.query(WaiterCall).filter(WaiterCall.restaurant_id == rid).delete(synchronize_session=False)
     db.query(MenuSuggestion).filter(MenuSuggestion.restaurant_id == rid).delete(synchronize_session=False)
+    # Groupes d'options d'un article (« Cuisson », « Sauce »...) : encore le
+    # même piège, à effacer — options d'abord — avant le MenuItem qu'ils
+    # référencent.
+    groupes = select(MenuItemOptionGroup.id).where(MenuItemOptionGroup.restaurant_id == rid)
+    db.query(MenuItemOption).filter(MenuItemOption.group_id.in_(groupes)).delete(synchronize_session=False)
+    db.query(MenuItemOptionGroup).filter(MenuItemOptionGroup.restaurant_id == rid).delete(
+        synchronize_session=False
+    )
     db.query(MenuItem).filter(MenuItem.restaurant_id == rid).delete(synchronize_session=False)
     # menu_item_regimes (la liaison) est en ondelete=CASCADE des deux côtés,
     # mais MenuRegime.restaurant_id ne l'est pas (menu/models.py) : sans cette
@@ -158,6 +196,10 @@ def supprimer_demo(db: Session, restaurant: Restaurant) -> None:
     db.query(PlanLandmark).filter(PlanLandmark.restaurant_id == rid).delete(synchronize_session=False)
     db.query(Table).filter(Table.restaurant_id == rid).delete(synchronize_session=False)
     db.query(Staff).filter(Staff.restaurant_id == rid).delete(synchronize_session=False)
+    # Séquence de numérotation des factures : une démo au palier Pro peut
+    # encaisser un paiement, donc émettre une facture, donc ouvrir un
+    # compteur.
+    db.query(InvoiceCounter).filter(InvoiceCounter.restaurant_id == rid).delete(synchronize_session=False)
     db.query(Restaurant).filter(Restaurant.id == rid).delete(synchronize_session=False)
     db.commit()
     log_event(logger, "demo.supprimee", restaurant_id=rid)
