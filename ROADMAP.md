@@ -410,6 +410,24 @@ resterait un chantier bien plus large, explicitement refusé pour l'instant
 - [ ] Traduction arabe non relue par un locuteur natif — à vérifier avant un
       vrai pilote (même règle que le reste du parcours client bilingue)
 
+**Extension du 2026-09-08, même override, sans nouveau déclencheur** :
+l'assignation à un ou plusieurs convives (`shared_with`) se fait désormais
+indépendamment de la case "à partager" (`is_shared`) — disponible, facultative,
+sur n'importe quelle ligne du panier, pas seulement les plats cochés comme
+partagés (`frontend/app/menu/[qrToken]/page.tsx`, fonctions
+`setShared`/`toggleConvive`/`cartLineToWireItem`). Objectif inchangé : préremplir
+`SplitBill` plus tôt, au moment où le client compose sa commande et sait encore
+qui prend quoi — jamais générer de paiement réellement séparé, la table règle
+toujours l'addition en une fois (`Order.payment_status`, un seul statut). Aucun
+changement de modèle ni de migration : `OrderItem.is_shared` et
+`OrderItem.shared_with` étaient déjà deux colonnes indépendantes, seul le panier
+client (`cartLineToWireItem`) les couplait artificiellement en écrasant
+`shared_with` à vide dès que `is_shared` était décoché. Traductions ajustées en
+conséquence (`sharedCheckboxLabel`, `sharedWithLabel`, `sharedWithEveryone` —
+`fr.ts`/`en.ts`/`ar.ts`) : l'ancien libellé "partagé pour toute la table" était de
+toute façon inexact tant que `convives` reste bloqué à sa valeur par défaut de 2
+(cf. `PartyPrompt`, tant que la taille réelle de la table n'est pas résolue).
+
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même
