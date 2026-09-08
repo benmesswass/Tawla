@@ -59,6 +59,21 @@ def _fresh_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
+def _immediate_table_cart_purge(monkeypatch):
+    """
+    Le panier partagé d'une table (chantier « panier synchronisé
+    multi-appareils ») n'est purgé qu'après un délai de grâce en production
+    (30s, voir `notifications/router.py`) — remis à 0 ici pour retomber sur
+    l'ancienne purge synchrone : sinon un test qui rouvre un canal de table
+    juste après un autre héritait du panier laissé par CE test précédent,
+    `table_cart_store` étant un dict de module partagé par toute la suite,
+    comme `_rate_limit_hits` ci-dessous.
+    """
+    monkeypatch.setattr("app.modules.notifications.router.TABLE_CART_PURGE_GRACE_SECONDS", 0)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_real_analytics(monkeypatch):
     """
     Empêche tout envoi réel à PostHog pendant les tests, même si

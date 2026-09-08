@@ -5,6 +5,11 @@ panier tenu en mémoire côté serveur (`orders/table_cart.py`) et valident une
 seule commande pour la table entière.
 """
 
+import asyncio
+
+from app.modules.notifications import router as notifications_router
+from app.modules.orders import table_cart
+from app.modules.orders.schemas import OrderItemCreate
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 
@@ -208,6 +213,86 @@ def test_paniers_isoles_entre_deux_tables(client):
         assert error == {
             "event": "cart.error", "code": "EMPTY_ORDER", "message": "order must contain at least one item",
         }
+
+
+def test_rejouer_la_validation_avec_le_meme_client_order_id_ne_double_pas_la_commande(client):
+    """
+    Une coupure entre le `pop_all` serveur et le "cart.validated" qui devait
+    revenir laissait le client réessayer en pensant n'avoir jamais validé —
+    sans identifiant de rejeu, ce deuxième "cart.validate" créait une seconde
+    commande identique (le panier partagé n'avait aucune protection
+    équivalente au `client_order_id` du repli REST, `create_order`).
+    """
+    restaurant, table, item, headers = _setup_restaurant_with_item(client)
+
+    with _connect(client, restaurant, table) as ws:
+        ws.receive_json()
+        _skip_party_snapshot(ws)
+        ws.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
+        ws.receive_json()
+        ws.send_json({"action": "cart.validate", "client_order_id": "retry-abc"})
+        first = ws.receive_json()
+
+    with _connect(client, restaurant, table) as ws_retry:
+        ws_retry.receive_json()  # panier déjà vide, validé plus haut
+        _skip_party_snapshot(ws_retry)
+        # Sans le garde-fou, ceci échouerait en EMPTY_ORDER plutôt que de
+        # rejouer la même commande.
+        ws_retry.send_json({"action": "cart.validate", "client_order_id": "retry-abc"})
+        second = ws_retry.receive_json()
+
+    assert first == second
+    assert first["event"] == "cart.validated"
+
+    active = client.get(f"/api/v1/orders/by-restaurant/{restaurant.id}/active", headers=headers).json()
+    assert len([o for o in active if o["table_id"] == table["id"]]) == 1
+
+
+def test_purge_programmee_est_annulee_par_une_reconnexion(monkeypatch):
+    """
+    Une coupure réseau de quelques secondes reconnecte toute seule
+    (`useReconnectingSocket.ts`, backoff jusqu'à 15s) — purger le panier dès
+    que le dernier appareil part viderait celui d'un client SEUL à sa table
+    pour un simple trou wifi, aucun deuxième appareil requis (audit QA, PR
+    #160). Test sur les fonctions du routeur directement, en dehors du
+    `TestClient` : sa session WebSocket ferme et détruit sa propre boucle
+    asyncio dès la sortie du `with`, ce qui tue toute tâche différée créée
+    pendant la connexion avant qu'elle n'ait pu s'exécuter — un faux négatif
+    qui n'a rien à voir avec le comportement réel (vérifié manuellement
+    contre un vrai serveur uvicorn, où la boucle est partagée et persiste).
+    """
+    monkeypatch.setattr(notifications_router, "TABLE_CART_PURGE_GRACE_SECONDS", 0.2)
+    table_id = 999_001
+
+    async def scenario():
+        table_cart.table_cart_store.set_line(table_id, OrderItemCreate(menu_item_id=1))
+        notifications_router._schedule_table_cart_purge(1, table_id, "table-999001")
+        notifications_router._cancel_pending_table_cart_purge(table_id)
+        # Largement après le délai de grâce : si l'annulation n'avait pas
+        # fonctionné, la purge aurait eu largement le temps de s'exécuter.
+        await asyncio.sleep(0.3)
+        return table_cart.table_cart_store.snapshot(table_id)
+
+    try:
+        assert asyncio.run(scenario()) != []
+    finally:
+        table_cart.table_cart_store.pop_all(table_id)
+
+
+def test_purge_programmee_sexecute_si_jamais_annulee(monkeypatch):
+    """La purge n'est pas supprimée, seulement différée : une table qui reste
+    vraiment vide au-delà du délai de grâce perd bien son panier — la fuite
+    que ce mécanisme corrigeait à l'origine n'est pas réintroduite."""
+    monkeypatch.setattr(notifications_router, "TABLE_CART_PURGE_GRACE_SECONDS", 0.1)
+    table_id = 999_002
+
+    async def scenario():
+        table_cart.table_cart_store.set_line(table_id, OrderItemCreate(menu_item_id=1))
+        notifications_router._schedule_table_cart_purge(1, table_id, "table-999002")
+        await asyncio.sleep(0.3)  # largement après la fin du délai de grâce
+        return table_cart.table_cart_store.snapshot(table_id)
+
+    assert asyncio.run(scenario()) == []
 
 
 def test_paniers_isoles_entre_deux_restaurants(client):
