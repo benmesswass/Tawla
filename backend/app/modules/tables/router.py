@@ -8,7 +8,7 @@ from app.core.subscription import effective_tier, require_tier, tier_includes
 from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import schemas, service
-from app.modules.tables.models import PlanLandmark, Table
+from app.modules.tables.models import PlanLandmark, PlanLandmarkPart, Table
 from app.modules.tables.poster import generate_table_poster_pdf
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
@@ -260,10 +260,15 @@ def create_landmark(
     landmark = PlanLandmark(
         restaurant_id=restaurant_id,
         kind=payload.kind,
-        pos_x=payload.pos_x,
-        pos_y=payload.pos_y,
-        width=payload.width,
-        height=payload.height,
+        parts=[
+            PlanLandmarkPart(
+                ordre=0,
+                pos_x=payload.pos_x,
+                pos_y=payload.pos_y,
+                width=payload.width,
+                height=payload.height,
+            )
+        ],
     )
     db.add(landmark)
     db.commit()
@@ -272,14 +277,18 @@ def create_landmark(
 
 
 @router.put("/plan/{restaurant_id}/landmarks/{landmark_id}", response_model=schemas.LandmarkOut)
-def move_landmark(
+def shape_landmark(
     restaurant_id: int,
     landmark_id: int,
-    payload: schemas.LandmarkMove,
+    payload: schemas.LandmarkShape,
     db: Session = Depends(get_db),
     staff: Staff = Depends(_MANAGER),
     _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
+    """Redessiner le repère : la liste de ses tronçons remplace l'ancienne en
+    bloc. Déplacer un comptoir, l'étirer et le couder sont le même geste vu du
+    manager — donc une seule écriture, et rien qui puisse être enregistré à
+    moitié (un tronçon déplacé sans son voisin)."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     landmark = db.get(PlanLandmark, landmark_id)
@@ -287,10 +296,16 @@ def move_landmark(
         raise HTTPException(
             status_code=404, detail={"code": "LANDMARK_NOT_FOUND", "message": "landmark not found"}
         )
-    landmark.pos_x = payload.pos_x
-    landmark.pos_y = payload.pos_y
-    landmark.width = payload.width
-    landmark.height = payload.height
+    landmark.parts = [
+        PlanLandmarkPart(
+            ordre=rang,
+            pos_x=part.pos_x,
+            pos_y=part.pos_y,
+            width=part.width,
+            height=part.height,
+        )
+        for rang, part in enumerate(payload.parts)
+    ]
     db.commit()
     db.refresh(landmark)
     return landmark

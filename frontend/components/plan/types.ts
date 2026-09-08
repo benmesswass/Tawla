@@ -3,6 +3,7 @@
  */
 
 import { duree } from "@/lib/duree";
+import { Troncon } from "@/lib/formeRepere";
 
 export type TableShape = "round" | "square" | "rect";
 
@@ -22,21 +23,20 @@ export type PlanTable = {
  * coup d'œil (« la 4 est près de l'entrée »). Toujours posé — contrairement
  * à une table, il n'a pas de réserve où attendre : il naît déjà à sa place.
  *
- * `pos_x`/`pos_y` sont son coin haut-gauche (pas son centre, contrairement à
- * une table) et `width`/`height` ses dimensions, tout en % de la surface —
- * un rectangle étirable à la souris/au doigt, pas un préréglage : la forme
- * EST l'information (un bar peut être un coin comptoir ou courir tout un
- * mur).
+ * C'est l'**union** de ses tronçons (`Troncon`, un rectangle chacun) : un
+ * seul dessine un comptoir droit, deux en équerre un L, trois un U. La forme
+ * EST l'information, et elle naît du geste — glisser, étirer, prolonger —
+ * jamais d'un préréglage à choisir dans une liste. Un bar peut être un coin
+ * comptoir, courir tout un mur, ou tourner autour de la salle.
  */
 export type LandmarkKind = "bar" | "entrance";
+
+export type LandmarkPart = Troncon;
 
 export type PlanLandmark = {
   id: number;
   kind: LandmarkKind;
-  pos_x: number;
-  pos_y: number;
-  width: number;
-  height: number;
+  parts: LandmarkPart[];
 };
 
 export const LIBELLE_REPERE: Record<LandmarkKind, string> = {
