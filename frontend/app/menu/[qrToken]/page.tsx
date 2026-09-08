@@ -261,6 +261,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, CartLine>>({});
   const [cartOrderId, setCartOrderId] = useState<string | null>(null);
+  // Récapitulatif façon panier d'appli de livraison, ouvert AVANT de valider
+  // : le bandeau bas n'ouvre plus que ça, la validation elle-même se joue
+  // depuis cet écran (bouton "Retour à la carte" pour continuer à composer).
+  const [showCartReview, setShowCartReview] = useState(false);
   // Article en cours de configuration dans le sélecteur d'options (France,
   // MARCHE_FRANCE.md phase F5/A2) — un seul à la fois, comme suggestFor.
   const [optionChooserFor, setOptionChooserFor] = useState<MenuItem | null>(null);
@@ -784,6 +788,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           setOrderToken(publicToken);
           setCartOrderId(null);
           setPreOrderForIftar(false);
+          setShowCartReview(false);
           setShowCelebration(true);
           setSending(false);
         })
@@ -1298,7 +1303,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // qui arrive à cet appareil comme à tous les autres de la table.
     if (tableSocketStatus === "connected") {
       pendingSocketValidateRef.current = true;
-      sendTableAction({ action: "cart.validate" });
+      // Même `client_order_id` que le repli REST ci-dessous : sans lui, une
+      // coupure entre la création serveur de la commande et le retour de
+      // "cart.validated" (voir le filet de sécurité plus haut) laissait un
+      // second clic sur "Valider" recréer une commande identique — le panier
+      // partagé n'avait aucune protection contre la relecture, contrairement
+      // au panier local (Phase 19.2, cf. `genererIdPanier`).
+      sendTableAction({ action: "cart.validate", client_order_id: cartOrderId });
       return;
     }
 
@@ -1318,6 +1329,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       setCart({});
       setCartOrderId(null);
       setPreOrderForIftar(false);
+      setShowCartReview(false);
       setShowCelebration(true);
     } catch (e) {
       // Échec réseau (pas une réponse de l'API, ex: connexion mobile coupée
@@ -1332,6 +1344,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         setCart({});
         setCartOrderId(null);
         setPreOrderForIftar(false);
+        setShowCartReview(false);
         setSending(false);
         return;
       }
@@ -2731,37 +2744,142 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           ))
         )}
 
-        {cartLines.length > 0 && (
+        {cartLines.length > 0 && !showCartReview && (
           <div className="fixed bottom-0 left-0 right-0 bg-[var(--espresso)] pt-[14px] px-4 pb-[18px]">
             <div className="max-w-md mx-auto">
-              {/* Posé seulement quand un plat est à partager : sinon c'est une
-                  question de plus entre le client et sa commande. */}
-              {cartLines.some((l) => l.shared) && (
-                <label className="flex items-center justify-between gap-2 text-sm text-[rgba(246,239,221,.85)] mb-3">
-                  {t.dinersLabel}
-                  <input
-                    type="number"
-                    min={2}
-                    max={12}
-                    value={convives}
-                    onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
-                    className="w-12 bg-transparent border border-[rgba(246,239,221,.28)] rounded-lg px-[10px] py-[3px] text-center tabular-nums text-[rgba(246,239,221,.9)]"
-                  />
-                </label>
-              )}
-              {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
-                <label className="flex items-center gap-2 text-sm text-[rgba(246,239,221,.85)] mb-3">
-                  <input
-                    type="checkbox"
-                    checked={preOrderForIftar}
-                    onChange={(e) => setPreOrderForIftar(e.target.checked)}
-                    className="accent-[var(--laiton)]"
-                  />
-                  <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
-                  {t.preorderCheckboxLabel(formatTime(restaurant.iftar_time))}
-                </label>
-              )}
               <div className="flex justify-between items-center gap-3" data-visite="client-panier">
+                <div>
+                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.6)]">
+                    {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}
+                  </p>
+                  <p className={`${lalezar.className} text-[26px] leading-none tabular-nums text-[var(--semoule)] mt-0.5`}>
+                    {formatAmount(total)} {t.currency}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCartReview(true)}
+                  className="shrink-0 bg-[var(--harissa)] text-[var(--semoule)] rounded-full px-[22px] py-[14px] text-[14.5px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px]"
+                >
+                  {t.viewCartButton}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Récapitulatif façon panier d'appli de livraison, ouvert avant de
+            valider : tout ce qui compose la commande (articles, quantités,
+            notes, options, réglages de partage/pré-commande) en un seul
+            endroit, plus le total — la validation elle-même se joue d'ici,
+            jamais depuis le bandeau du dessus. */}
+        {showCartReview && cartLines.length > 0 && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-[var(--semoule)]">
+            <div className="shrink-0 flex items-center gap-3 border-b border-[var(--line)] bg-[var(--semoule-raised)] px-4 py-3">
+              <button
+                onClick={() => setShowCartReview(false)}
+                className="text-sm font-semibold text-[var(--encre)]"
+              >
+                {t.backToMenuButton}
+              </button>
+              <p className="flex-1 text-center text-[15px] font-bold text-[var(--encre)] pe-[88px]">
+                {t.cartSummaryTitle}
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className="max-w-md mx-auto space-y-2">
+                {/* Dupliqué de la bannière d'erreur de la carte (plus bas dans
+                    le DOM) : cet écran plein cadre la recouvre entièrement,
+                    sans ça un échec de validation (article devenu indisponible,
+                    connexion perdue...) resterait invisible derrière lui. */}
+                {orderError && (
+                  <div className="text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3 flex justify-between items-start gap-2">
+                    <span>{orderError}</span>
+                    <button
+                      onClick={() => setOrderError(null)}
+                      aria-label={t.closeErrorAria}
+                      className="text-[var(--harissa)]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+                {cartLines.map((line) => (
+                  <div
+                    key={line.item.id}
+                    className="rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14.5px] font-semibold text-[var(--encre)]">{line.item.name}</p>
+                        {line.selectedOptions.length > 0 && (
+                          <p className="text-xs text-[var(--ink-soft)] mt-0.5">
+                            {line.selectedOptions.map((o) => o.optionName).join(" · ")}
+                          </p>
+                        )}
+                        {line.note && <p className="text-xs text-[var(--ink-soft)] mt-0.5">{line.note}</p>}
+                        {line.shared && (
+                          <span className="text-xs text-[var(--laiton)] inline-flex items-center gap-1 mt-1">
+                            <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
+                          </span>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
+                        {formatAmount(lineUnitPrice(line) * line.quantity)} {t.currency}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => removeFromCart(line.item.id)}
+                        aria-label={t.removeFromCartAria(line.item.name)}
+                        className="w-[30px] h-[30px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                      >
+                        −
+                      </button>
+                      <span className="inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums">
+                        {line.quantity}
+                      </span>
+                      <button
+                        onClick={() => addToCart(line.item)}
+                        aria-label={t.addToCartAria(line.item.name)}
+                        className="w-[30px] h-[30px] rounded-full bg-[var(--harissa)] text-[var(--semoule)] text-[17px] leading-none shadow-sm transition-transform active:scale-90"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {cartLines.some((l) => l.shared) && (
+                  <label className="flex items-center justify-between gap-2 text-sm text-[var(--encre)] pt-2">
+                    {t.dinersLabel}
+                    <input
+                      type="number"
+                      min={2}
+                      max={12}
+                      value={convives}
+                      onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
+                      className="w-16 bg-white border border-[var(--line)] rounded-lg px-2 py-1 text-center tabular-nums"
+                    />
+                  </label>
+                )}
+                {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
+                  <label className="flex items-center gap-2 text-sm text-[var(--encre)] pt-2">
+                    <input
+                      type="checkbox"
+                      checked={preOrderForIftar}
+                      onChange={(e) => setPreOrderForIftar(e.target.checked)}
+                      className="accent-[var(--laiton)]"
+                    />
+                    <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
+                    {t.preorderCheckboxLabel(formatTime(restaurant.iftar_time))}
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 bg-[var(--espresso)] pt-[14px] px-4 pb-[18px]">
+              <div className="max-w-md mx-auto flex justify-between items-center gap-3">
                 <div>
                   <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.6)]">
                     {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}

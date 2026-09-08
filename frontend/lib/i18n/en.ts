@@ -33,6 +33,9 @@ export const en = {
   sending: "Sending...",
   validateOrder: "Place order",
   cartItemsCount: (n) => `${n} item${n > 1 ? "s" : ""}`,
+  viewCartButton: "View my cart",
+  cartSummaryTitle: "Your cart",
+  backToMenuButton: "← Back to menu",
 
   orderCancelledTitle: "Order cancelled",
   orderSentTitle: "Order sent 🎉",
