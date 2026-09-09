@@ -1,12 +1,9 @@
-from datetime import datetime, timedelta, timezone
-
 import bcrypt
 import jwt
 
 from app.core.config import settings
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRES_MINUTES = 60 * 12  # 12h : couvre un service complet
 
 # Claim discriminant entre les deux principaux qui partagent `settings.jwt_secret`
 # (staff et `platform_admin`, voir `platform_admin/security.py`) — vérifié
@@ -26,12 +23,18 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(staff_id: int, restaurant_id: int, role: str) -> str:
+    """
+    Pas de claim `exp` (demande de Wassim, 2026-09-09) : la seule
+    déconnexion voulue pour le staff/la cuisine/le manager est le bouton
+    « Se déconnecter » (`clearToken()` côté frontend), jamais une expiration
+    temporelle qui les éjecterait en plein service. Le jeton reste donc
+    valide jusqu'à suppression locale par ce bouton.
+    """
     payload = {
         "sub": str(staff_id),
         "restaurant_id": restaurant_id,
         "role": role,
         "type": TOKEN_TYPE,
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRES_MINUTES),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=JWT_ALGORITHM)
 
