@@ -113,7 +113,7 @@ Disqualifier durement à la porte, sans exception :
   installer, même s'il insiste. Le produit fonctionnera mal, et c'est ta faute
   qu'on retiendra, pas celle de son réseau ;
 - **service à faible volume, sans vraie pression de salle** → douleur trop
-  faible pour 120 DT, et du support pour rien.
+  faible pour 89 DT, et du support pour rien.
 
 **Accord écrit d'une page par pilote**, quatre lignes :
 

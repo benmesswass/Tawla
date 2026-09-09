@@ -64,7 +64,7 @@ chiffres relevés dans un vrai établissement, et les deux audits successifs ont
 montré qu'en visant la note directement on finit par se noter sur ses intentions.
 
 L'objectif ci-dessus, lui, n'est pas interprétable : soit deux patrons ont viré
-120 DT, soit non.
+leur abonnement, soit non.
 
 ## La règle qui structure toute cette roadmap
 
@@ -228,7 +228,7 @@ Le matériel existe depuis la Phase 13 et n'a jamais servi : au 2026-08-18,
 - [ ] Remplir `terrain/ENTRETIENS.md` sur place ou juste après 🧑 — une ligne par établissement, et les verbatims mot pour mot, surtout les refus
 - [ ] Poser la question de prix franchement, après avoir décrit le bénéfice et jamais la fonctionnalité 🧑
 - [ ] Repérer les trois profils de pilote au passage 🧑 : café de quartier, restaurant de centre-ville, zone touristique. Chercher celui dont les autres patrons parlent, pas le plus accueillant
-- [ ] Écrire la synthèse 🧑 : les trois douleurs les plus citées, le prix médian accepté, l'écart entre le prix spontané et la réaction à 120 DT
+- [ ] Écrire la synthèse 🧑 : les trois douleurs les plus citées, le prix médian accepté, l'écart entre le prix spontané et la réaction à 89 DT (palier Pro, celui de cette cible)
 
 **21.1 — La coupe** (ce qui rend cette phase utile au produit, et pas seulement
 au commercial)
@@ -247,7 +247,7 @@ pas au maintien « au cas où ».
 
 **Le prix unique envisagé ici (120 DT/mois, `PRICE_MONTHLY_DT`) a été
 abandonné le 2026-08-18, avant d'être codé.** Décision retenue à la place :
-**trois paliers (Essentiel 50 DT / Pro 100 DT / Business 150 DT), gating réel
+**trois paliers (Essentiel 49 DT / Pro 89 DT / Business 149 DT — les prix réellement codés, `lib/market.ts::tierPrices`), gating réel
 par fonctionnalité, et paiement en ligne du passage à un palier supérieur —
 livrés en PR #63** (`app/core/subscription.py`, `app/core/konnect.py`,
 `subscription_payments.py`, `frontend/lib/offer.ts`). `PRICE_MONTHLY_DT`
@@ -286,7 +286,7 @@ Au 2026-08-18, `terrain/PILOTES.md` ne contient qu'un modèle à copier.
 
 **23.1 — Avant d'installer quoi que ce soit** 🧑
 
-- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Service à faible volume, sans vraie pression de salle → la douleur est trop faible pour 120 DT. Une terrasse est le signal positif le plus fort
+- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Service à faible volume, sans vraie pression de salle → la douleur est trop faible pour 89 DT. Une terrasse est le signal positif le plus fort
 - [ ] Accord écrit d'une page par pilote 🧑 : quatre semaines d'usage **effectif en service**, droit de citer le nom, droit de publier les chiffres mesurés, et en échange installation, formation, chevalets et support pendant le service. Un pilote qui refuse le droit de citation est un client gratuit, pas un pilote
 - [ ] **Relever la semaine de référence à la main, avant activation** 🧑 : délai moyen entre l'installation d'une table et la prise de sa commande, et panier moyen — les deux seules valeurs que le produit saura remesurer seul après installation (le compteur de « commandes perdues » a été retiré le 2026-09-09, PR à venir). Comptés sur place pendant quatre soirs. Sans cet « avant », la preuve d'après ne vaut rien — et c'est le seul travail de cette roadmap qui devient impossible à rattraper une fois l'outil installé
 - [ ] Arriver avec **sa** carte déjà chargée 🧑 (`setup_restaurant.py` + import CSV) et lui faire scanner son propre QR. « Voilà votre carte, elle tourne » ne se rattrape par aucun argument
