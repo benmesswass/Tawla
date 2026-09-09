@@ -139,8 +139,27 @@ Aucune des deux ne démarre seule : un restaurateur qui arrive sur le site n'a
 jamais rien à fermer.
 
 **Établissement de démonstration jetable** — « Voir la démo » ouvre d'abord
-`POST /api/v1/demo/sessions` : un restaurant complet (équipe, tables, carte),
-palier Pro, actif, `is_demo=true`, effacé **en entier** deux heures plus tard.
+`POST /api/v1/demo/sessions` : un restaurant complet (équipe de quatre dont
+**deux serveurs**, tables, carte), palier Pro, actif, `is_demo=true`, effacé
+**en entier** deux heures plus tard.
+
+Il s'ouvre avec **deux semaines de service déjà passées**
+(`backend/app/modules/demo/historique.py`) : sept jours affichés sur
+`/dashboard/preuve` plus les sept de comparaison, et quatre commandes encore
+en cours (une par étape du flux). Sans elles, tous les écrans chiffrés du
+manager — ventes du jour, temps par étape, commandes par serveur, plats les
+plus vendus, heures de pointe, page de preuve, rapport d'équipe — s'ouvrent à
+zéro, et le restaurateur ne voit aucune de ces fonctionnalités. Deux serveurs
+et non un, parce que ces écrans sont des écrans de comparaison. Trois
+garde-fous, à ne jamais lever : l'historique **refuse** de s'écrire sur un
+restaurant qui n'est pas `is_demo` (un chiffre inventé chez un vrai client est
+ce que `ROADMAP.md` §23.2 interdit) ; les démos sont exclues des agrégats de
+l'opérateur (`platform_admin/service.py`, sinon le GMV de `/admin` devient
+celui de visiteurs de passage) ; et le bandeau de démo l'annonce à l'écran
+(« chiffres d'exemple »). Généré **sans aléa** : l'écart entre les deux
+semaines est structurel, jamais un tirage qui pourrait sortir une semaine
+« après » moins bonne devant le restaurateur.
+
 **Un par visiteur, jamais un compte partagé** : les canaux temps réel sont
 groupés par `(restaurant_id, channel)` (`notifications/manager.py`), donc deux
 démos sur le même établissement se verraient l'une l'autre. La purge se

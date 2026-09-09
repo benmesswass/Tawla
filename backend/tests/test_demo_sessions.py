@@ -66,6 +66,7 @@ def test_deux_demos_simultanees_sont_etanches(client):
         },
     )
     assert creation.status_code == 201, creation.text
+    commande_a = creation.json()["id"]
 
     actives_a = client.get(
         f"/api/v1/orders/by-restaurant/{a['restaurant_id']}/active",
@@ -75,9 +76,13 @@ def test_deux_demos_simultanees_sont_etanches(client):
         f"/api/v1/orders/by-restaurant/{b['restaurant_id']}/active",
         headers={"Authorization": f"Bearer {b['access_token']}"},
     ).json()
-    assert len(actives_a) == 1
-    assert actives_a[0]["table_id"] == table_a["id"]
-    assert actives_b == []
+    # Chaque démo s'ouvre avec ses propres commandes en cours (demo/
+    # historique.py) : on ne compte donc pas les commandes, on vérifie que
+    # celle de A n'apparaît nulle part chez B — ni par son identifiant, ni par
+    # sa table.
+    assert commande_a in [o["id"] for o in actives_a]
+    assert commande_a not in [o["id"] for o in actives_b]
+    assert table_a["id"] not in [o["table_id"] for o in actives_b]
 
 
 def test_le_manager_dune_demo_ne_voit_pas_lautre(client):
