@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import EnteteManager from "@/components/EnteteManager";
 import { useRouter } from "next/navigation";
-import { api, PeriodProof, ProofStats, SubscriptionTier } from "@/lib/api";
+import { api, ProofStats, SubscriptionTier } from "@/lib/api";
 import { requiredTierFromError, toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
 import { currentMarket } from "@/lib/market";
@@ -18,9 +18,17 @@ import UpgradeModal from "@/components/UpgradeModal";
 /**
  * La page que Wassim montre à un patron à la fin d'un pilote, et au jury.
  *
- * Trois chiffres, pas quatre. Chacun comparé à la période précédente de même
- * longueur : sans « avant », un chiffre ne prouve rien. Volontairement dépouillée
- * — c'est un document de décision, pas un tableau de bord.
+ * Deux chiffres, tous les deux mesurés par le système sans qu'un serveur ait
+ * quoi que ce soit à enregistrer. Chacun comparé à la période précédente de
+ * même longueur : sans « avant », un chiffre ne prouve rien. Volontairement
+ * dépouillée — c'est un document de décision, pas un tableau de bord.
+ *
+ * Un compteur de « commandes perdues » a occupé la première tuile jusqu'au
+ * 2026-09-09. Il ne comptait que les annulations qu'un serveur avait pris la
+ * peine d'enregistrer : une équipe qui ne clique pas le laissait à zéro, et il
+ * ne voyait jamais le client qui se lasse et s'en va. Retiré du produit et de
+ * tout l'argumentaire — on ne vend pas une mesure qui dépend du bon vouloir de
+ * la salle.
  */
 
 function todayIso(): string {
@@ -127,7 +135,7 @@ function proofToCsv(proof: ProofStats): string {
   const row = (...cells: (string | number)[]) => lines.push(cells.map(csvEscape).join(","));
   const cell = (value: number | null) => (value === null ? "" : value);
 
-  row("Preuve Tawla — trois métriques");
+  row("Preuve Tawla");
   lines.push("");
   row("Indicateur", "Période mesurée", "Période précédente");
   row(
@@ -136,7 +144,6 @@ function proofToCsv(proof: ProofStats): string {
     `${proof.previous.start} au ${proof.previous.end}`
   );
   row("Commandes", proof.current.orders_count, proof.previous.orders_count);
-  row("Commandes annulées", proof.current.cancelled_orders_count, proof.previous.cancelled_orders_count);
   row(
     "Délai commande vers cuisine (secondes)",
     cell(proof.current.avg_order_to_kitchen_seconds),
@@ -159,11 +166,6 @@ function downloadCsv(filename: string, content: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
-}
-
-function cancelledRate(period: PeriodProof): string {
-  if (period.orders_count === 0) return "—";
-  return `${((period.cancelled_orders_count / period.orders_count) * 100).toFixed(0)} % des commandes`;
 }
 
 export default function ProofPage() {
@@ -218,7 +220,7 @@ export default function ProofPage() {
       )}
       <EnteteManager
         titre="Preuve du pilote"
-        sousTitre="Les trois seuls chiffres qui comptent pour décider si Tawla vous fait gagner de l'argent, comparés à la période précédente de même longueur."
+        sousTitre="Les chiffres qui comptent pour décider si Tawla vous fait gagner de l'argent, mesurés automatiquement et comparés à la période précédente de même longueur."
       />
 
       <div className="flex items-end gap-2 mb-6 flex-wrap">
@@ -266,23 +268,13 @@ export default function ProofPage() {
       )}
 
       {!proof ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Skeleton className="h-40 w-full" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Skeleton className="h-40 w-full" />
           <Skeleton className="h-40 w-full" />
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <MetricCard
-              label="Commandes annulées"
-              value={String(proof.current.cancelled_orders_count)}
-              detail={cancelledRate(proof.current)}
-              current={proof.current.cancelled_orders_count}
-              previous={proof.previous.cancelled_orders_count}
-              direction="lower-is-better"
-              previousLabel={String(proof.previous.cancelled_orders_count)}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <MetricCard
               label="Délai commande → cuisine"
               value={formatDuration(proof.current.avg_order_to_kitchen_seconds)}
@@ -353,10 +345,9 @@ export default function ProofPage() {
               {formatDate(proof.previous.end)}.
             </p>
             <p className="mt-2">
-              Une commande est comptée perdue quand elle a été <strong className="text-[var(--encre)]">annulée</strong> —
-              rien d&apos;autre. Une commande simplement lente à être prise en charge n&apos;est pas une vente
-              ratée : elle reste dans le circuit, et son délai se lit dans « Délai commande → cuisine »
-              ci-dessus, pas ici.
+              Ces chiffres sont <strong className="text-[var(--encre)]">mesurés par le système</strong>, sans
+              qu&apos;un serveur ait quoi que ce soit à enregistrer : ils ne dépendent d&apos;aucun geste de la
+              salle, donc personne ne peut les gonfler ni les oublier.
             </p>
           </Card>
         </>

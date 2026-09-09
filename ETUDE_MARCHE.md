@@ -444,8 +444,8 @@ Business côté Tawla.
 > commande par QR code livré avec un accompagnement humain sur place** —
 > carte saisie pour vous, QR imprimés et livrés, équipe formée sur place,
 > joignable pendant le service — **qui élimine les commandes oubliées et
-> transforme chaque service en chiffres** (commandes perdues, délai
-> commande → cuisine, panier moyen, performance par serveur). Contrairement à
+> transforme chaque service en chiffres** (délai commande → cuisine, panier
+> moyen, temps d'attente, performance par serveur). Contrairement à
 > **Digital Menu, Scanny et Menu-QR** — trois outils en libre-service où le
 > restaurateur saisit sa carte, imprime ses QR et se débrouille seul —
 > **Tawla ne vend pas un logiciel, elle vend quelqu'un qui vient**, forme

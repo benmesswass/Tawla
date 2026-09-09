@@ -161,7 +161,7 @@ export const INCLUDED = [
  *   ci-dessus).
  * - manager : mêmes deux chiffres de tête que RecetteDuJour.tsx, la charge
  *   par serveur de `StaffActiveLoad` (stats/schemas.py — décision de Wassim
- *   du 2026-08-28, remplace "commandes perdues" en tête), et
+ *   du 2026-08-28, qui a remplacé le compteur d'annulations en tête), et
  *   `TeamReport`/`StaffPeriodReport` pour le rapport de prime.
  * - serveur : le pool partagé (`claim_order`) et le halo rouge des lignes en
  *   retard (`app/staff/page.tsx`, variable `tardive`), l'alerte "prête"

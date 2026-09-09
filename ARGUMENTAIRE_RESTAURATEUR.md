@@ -37,12 +37,19 @@ café-une-salle, il sous-vend ce qu'ils vont réellement utiliser.
 - **89 DT/mois ≈ 3 DT par jour.**
 - Panier moyen ~25 DT *(hypothèse à remplacer par le chiffre réel du premier
   pilote dès qu'il existe — ne jamais la citer comme un fait)*.
-- **Une commande perdue par semaine paie déjà l'abonnement.**
+- **Une table servie en plus par semaine paie déjà l'abonnement.**
 - **Une par jour le paie plus de huit fois.**
 
-Solide parce que ça ne demande pas de le croire : le produit **mesure** les
-commandes perdues, il ne les devine pas. On promet un chiffre, puis on le
-montre sur `/dashboard/preuve`.
+Ce que le produit prouve ensuite, chiffres à l'appui sur `/dashboard/preuve` :
+le **délai entre la commande du client et son arrivée en cuisine**, et le
+**panier moyen** — avec et sans suggestion acceptée. Les deux se mesurent
+seuls, sans qu'un serveur ait quoi que ce soit à enregistrer.
+
+⚠️ **Ne jamais promettre que Tawla compte les ventes ratées** (retiré du
+produit le 2026-09-09). Le compteur qui prétendait le faire ne comptait que
+les annulations qu'un serveur avait pris la peine d'enregistrer : une équipe
+qui ne clique pas le laissait à zéro, et il ne voyait jamais le client qui se
+lasse et s'en va. On vend ce qui se mesure tout seul, rien d'autre.
 
 **Retourner l'arithmétique en perte, pas en gain** — ça pèse presque deux
 fois plus lourd dans sa tête : *« Ce n'est pas 89 dinars que ça coûte. C'est
@@ -97,7 +104,7 @@ Disqualifier durement, même si le patron insiste :
 
 - **Wifi/réseau fiable à toutes les tables ?** Non → ne pas installer.
 - **Une terrasse ?** Signal positif le plus fort — tables loin du comptoir,
-  commandes perdues au maximum, QR naturellement accepté dehors.
+  allers-retours au maximum, QR naturellement accepté dehors.
 
 ## 6. Recruter un pilote : la rareté, pas le volume
 

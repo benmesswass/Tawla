@@ -23,11 +23,10 @@ import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 
-// Seuil propre à cet écran (2026-08-28, ex-partagé avec la définition de
-// « commande perdue » — voir CONTEXT.md) : une table qui attend depuis plus de
-// dix minutes mérite d'être signalée au serveur, même si elle ne compte plus
-// comme perdue dans les chiffres du patron. Dix minutes reste une proposition
-// à confronter au premier pilote, comme `SERVICE_DAY_START_HOUR`.
+// Seuil propre à cet écran : une table qui attend depuis plus de dix minutes
+// mérite d'être signalée au serveur. Purement visuel — il n'alimente aucun
+// chiffre montré au patron. Dix minutes reste une proposition à confronter au
+// premier pilote, comme `SERVICE_DAY_START_HOUR`.
 const ATTENTE_ALERTE_MINUTES = 10;
 import Skeleton from "@/components/ui/Skeleton";
 import TawlaMark from "@/components/brand/TawlaMark";

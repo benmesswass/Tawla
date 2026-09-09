@@ -37,9 +37,7 @@ def service_day_start(now: datetime | None = None, market: "Market | None" = Non
 
     Sert à cesser d'**afficher** les commandes de la veille sur les écrans de
     service — jamais à changer leur statut : une commande annulée hier reste
-    annulée aujourd'hui, et continue de compter dans `stats/service.py::
-    cancelled_orders`, le chiffre qui porte l'argument de vente. On arrête de
-    les montrer, on ne les efface pas.
+    annulée aujourd'hui. On arrête de les montrer, on ne les efface pas.
     """
     resolved_market = _resolve_market(market)
     local = (now or datetime.now(timezone.utc)).astimezone(resolved_market.timezone)
@@ -85,7 +83,7 @@ def _marquer_utc(value: object) -> object:
 # que JavaScript interprète comme une heure *locale* : sur un Mac réglé à
 # UTC+1, une commande passée à l'instant s'affichait « en attente depuis
 # 1 h 00 ». L'écart valait exactement le décalage horaire, et il aurait fait
-# passer pour perdue chaque commande d'un vrai service.
+# passer pour en souffrance chaque commande d'un vrai service.
 UtcDatetime = Annotated[datetime, BeforeValidator(_marquer_utc)]
 
 

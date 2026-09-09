@@ -238,8 +238,8 @@ def main() -> None:
         "- Imprimer les chevalets (4 par page A4) et les poser sur les tables.",
         "- Vérifier un scan réel avec deux téléphones différents, dont un ancien.",
         "- Ouvrir l'écran cuisine sur son appareil et le laisser branché.",
-        "- Relever la semaine de référence : commandes perdues et panier moyen,",
-        "  avant d'activer la commande par QR (voir /dashboard/preuve).",
+        "- Relever la semaine de référence : délai avant prise de commande et",
+        "  panier moyen, avant d'activer la commande par QR (voir /dashboard/preuve).",
         "",
     ]
 

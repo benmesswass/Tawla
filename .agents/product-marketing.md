@@ -16,7 +16,7 @@ valide. La commande arrive sur un écran partagé consulté par tous les
 serveurs ; un serveur la prend en charge, la confirme à table, puis elle part
 en temps réel sur l'écran cuisine. Le manager suit l'activité de la journée
 (ventes du jour, temps d'attente moyen, charge par serveur) et les preuves de
-service (commandes perdues, panier moyen) sur `/dashboard/preuve`.
+service (délai commande → cuisine, panier moyen) sur `/dashboard/preuve`.
 
 **Catégorie (le rayon où on nous cherche) :** logiciel de commande à table
 par QR code pour la restauration — même rayon que Digital Menu, Scanny,
@@ -46,7 +46,7 @@ Essentiel existe au catalogue (pour un petit café, une seule salle) mais n'est
 **pas** la cible commerciale activement démarchée.
 
 Signal positif le plus fort : **une terrasse**. Tables loin du comptoir =
-serveur qui marche le plus = commandes perdues au maximum, et le QR y est
+serveur qui marche le plus = attente la plus longue à table, et le QR y est
 naturellement accepté.
 
 **Décideur :** le patron/gérant — structure assez petite pour qu'il soit à la
@@ -88,7 +88,7 @@ se passe en salle ni sur ce qu'il a encaissé dans la journée.
 - Digital Menu / Scanny / Menu-QR : logiciels **en libre-service** à 19-49 DT — le restaurateur saisit sa carte lui-même, imprime ses QR lui-même, se débrouille seul. Personne à appeler un vendredi soir si ça bloque.
 - Embaucher plus de personnel : coûteux, ne corrige pas l'oubli lui-même.
 
-**Ce que ça coûte :** une commande perdue est une vente ratée et un client qui
+**Ce que ça coûte :** une table qu'on laisse attendre est une vente ratée et un client qui
 ne revient pas — et qui le raconte aux autres patrons du quartier. Sans
 visibilité sur le chiffre du jour, le tableau de bord (s'il existe) reste une
 curiosité qu'on n'ouvre jamais, et un outil qu'on n'ouvre pas est un
@@ -155,7 +155,7 @@ réel ne l'a pas demandé, cf. `ROADMAP.md` § Sous condition).
 
 ## Switching Dynamics (JTBD, quatre forces)
 
-**Push (ce qui pousse à partir du carnet) :** commandes perdues pendant le
+**Push (ce qui pousse à partir du carnet) :** tables qui attendent pendant le
 rush, aucune visibilité sur le chiffre du jour, allers-retours en cuisine,
 carnet illisible en pleine soirée.
 
@@ -197,7 +197,7 @@ la copie : « utilisateur », « plateforme SaaS », jargon technique.
 |---|---|
 | Commande | Ce qu'un client compose et valide depuis son téléphone. Jamais « ticket ». |
 | Prise en charge (Claim) | Un serveur retire une commande du pool partagé pour se l'attribuer. |
-| Commande perdue | Une commande **annulée** — définition unique depuis le 2026-08-28. N'inclut plus une commande simplement lente à être prise en charge. |
+| Commande annulée | Une commande au statut `CANCELLED`. Sert de **filtre** (l'exclure de la recette, du panier moyen, des primes), jamais de chiffre vendu : le compteur de « commandes perdues » a été retiré du produit le 2026-09-09, il ne comptait que ce qu'un serveur enregistrait. |
 | Temps d'attente | Délai moyen commande → prise en charge par un serveur. Chiffre de tête secondaire du tableau de bord depuis le 2026-08-28. |
 | Ventes du jour | Chiffre de tête **principal** du tableau de bord depuis le 2026-08-28 — commandes réellement réglées aujourd'hui. |
 | Charge active | Nombre de tables qu'un serveur a actuellement sur les bras, à l'instant présent. |
@@ -229,9 +229,11 @@ tentant.
 **Témoignages :** aucun à ce jour.
 
 **Ce qui est démontrable aujourd'hui, faute de chiffres clients :** le
-mécanisme lui-même — le produit **mesure** la commande perdue et le temps
-d'attente au lieu de les deviner, et le mode Ramadan + pré-commande iftar
-existent et fonctionnent déjà, avant même le premier pilote.
+mécanisme lui-même — le produit **mesure** le temps d'attente, le délai
+commande → cuisine et le panier moyen sans qu'un serveur ait à enregistrer
+quoi que ce soit, et le mode Ramadan + pré-commande iftar existent et
+fonctionnent déjà, avant même le premier pilote. Ne jamais présenter un
+comptage des ventes ratées : il n'existe pas (retiré le 2026-09-09).
 
 ## Goals
 
