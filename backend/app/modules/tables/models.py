@@ -1,8 +1,9 @@
 import secrets
 
 import enum
+from datetime import datetime
 
-from sqlalchemy import Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -64,6 +65,16 @@ class Table(Base):
     # pense « une table de 4 », pas « un carré ». La forme reste un détail
     # secondaire, et le nombre de chaises dessinées en découle.
     seats: Mapped[int] = mapped_column(Integer, default=4)
+
+    # Occupation de la table — état explicite, pas dérivé (2026-09-09).
+    # Posé dès le scan du QR (`service.py::get_table_by_qr_token`), quelle
+    # que soit la durée passée à composer la commande ensuite : aucun
+    # mécanisme technique (déconnexion, délai) ne doit le remettre à zéro
+    # pendant que les clients sont encore à table. Seul un geste humain du
+    # serveur ou du manager (`release_table`) le remet à `None` — jamais
+    # dérivé des commandes en cours, contrairement au reste du plan de
+    # salle (voir `orders/service.py::ACTIVE_STATUSES`).
+    occupied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PlanLandmark(Base):

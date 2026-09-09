@@ -15,6 +15,7 @@ from app.modules.tenants.models import Restaurant, SubscriptionTier
 router = APIRouter(prefix="/api/v1/tables", tags=["tables"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
+_WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 
 
 def _allow_plan(db: Session, restaurant_id: int) -> bool:
@@ -135,6 +136,23 @@ def get_table_by_token(qr_token: str, db: Session = Depends(get_db)):
     Le token est opaque : impossible de deviner une autre table.
     """
     return service.get_table_by_qr_token(db, qr_token)
+
+
+@router.post("/{table_id}/release", response_model=schemas.TableOut)
+async def release_table(
+    table_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+):
+    """
+    Le serveur ou le manager confirment que les clients sont partis — seule
+    façon de remettre la table à « libre » (2026-09-09). Aucune expiration
+    technique ne le fait à leur place : voir `service.py::release_table`.
+    """
+    table = db.get(Table, table_id)
+    if not table or table.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "TABLE_NOT_FOUND", "message": "table not found"})
+
+    table = await service.release_table(db, table, staff)
+    return _hide_plan_fields(schemas.TableOut.model_validate(table), _allow_plan(db, table.restaurant_id))
 
 
 @router.post("/{table_id}/assign-staff", response_model=schemas.TableOut)

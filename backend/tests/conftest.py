@@ -10,8 +10,10 @@ from app.core import model_registry  # noqa: F401 — enregistre tous les modèl
 from app.core.database import Base, get_db
 from app.core.rate_limit import _hits as _rate_limit_hits
 from app.main import app
+from app.modules.orders import table_cart
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import create_access_token, hash_password
+from app.modules.tables import party as table_party
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 # Base SQLite en mémoire dédiée aux tests. StaticPool = une seule connexion
@@ -74,18 +76,21 @@ def _fresh_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
-def _immediate_table_cart_purge(monkeypatch):
+def _reset_shared_table_stores():
     """
-    Le panier partagé d'une table (chantier « panier synchronisé
-    multi-appareils ») n'est purgé qu'après un délai de grâce en production
-    (30s, voir `notifications/router.py`) — remis à 0 ici pour retomber sur
-    l'ancienne purge synchrone : sinon un test qui rouvre un canal de table
-    juste après un autre héritait du panier laissé par CE test précédent,
-    `table_cart_store` étant un dict de module partagé par toute la suite,
-    comme `_rate_limit_hits` ci-dessous.
+    Le panier partagé et les convives d'une table (chantier « panier
+    synchronisé multi-appareils ») ne sont plus jamais purgés sur simple
+    déconnexion (2026-09-09, seul `release_table` le fait désormais) — sans
+    cette remise à zéro entre tests, un test qui rouvre un canal de table
+    hériterait du panier laissé par un test précédent, `table_cart_store`/
+    `table_party_store` étant des dicts de module partagés par toute la
+    suite, comme `_rate_limit_hits` ci-dessous.
     """
-    monkeypatch.setattr("app.modules.notifications.router.TABLE_CART_PURGE_GRACE_SECONDS", 0)
+    table_cart.table_cart_store._carts.clear()
+    table_party.table_party_store._parties.clear()
     yield
+    table_cart.table_cart_store._carts.clear()
+    table_party.table_party_store._parties.clear()
 
 
 @pytest.fixture(autouse=True)

@@ -322,6 +322,16 @@ export default function StaffPage() {
     }
   }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan, loadReperes]);
 
+  // Une table occupée (scan du QR) n'a pas d'événement WebSocket dédié —
+  // contrairement à sa libération, qui en diffuse un (voir plus bas) — donc
+  // ce plan la rattrape par un sondage léger plutôt que de rester périmé
+  // jusqu'au prochain rechargement complet de l'écran.
+  useEffect(() => {
+    if (!restaurantId) return;
+    const tick = setInterval(loadPlan, 20_000);
+    return () => clearInterval(tick);
+  }, [restaurantId, loadPlan]);
+
   const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
       setPending((prev) =>
@@ -429,6 +439,11 @@ export default function StaffPage() {
     if (msg.event === "waiter_call.resolved") {
       setWaiterCalls((prev) => prev.filter((c) => c.call_id !== msg.call_id));
     }
+    // Un collègue vient de libérer une table (ou nous-même, depuis un autre
+    // appareil) : elle doit repasser « libre » ici aussi, tout de suite.
+    if (msg.event === "table.released") {
+      setPlan((prev) => prev.map((t) => (t.id === msg.table_id ? { ...t, occupied_at: null } : t)));
+    }
   });
 
   // Canal refusé (session expirée, compte désactivé par le manager) : le hook
@@ -455,9 +470,15 @@ export default function StaffPage() {
     }
   }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift]);
 
+  const tablesOccupees = useMemo(
+    () => new Set(plan.filter((t) => t.occupied_at !== null).map((t) => t.id)),
+    [plan]
+  );
+
   const etatsDesTables = useMemo(
     () =>
       construireEtats({
+        tablesOccupees,
         aPrendre: pending.map((o) => ({
           table_id: o.table_id,
           depuis: o.created_at,
@@ -475,7 +496,7 @@ export default function StaffPage() {
         appels: waiterCalls.map((c) => ({ table_id: c.table_id, depuis: c.created_at })),
         enCuisine,
       }),
-    [pending, readyToServe, cashRequests, cardTerminalRequests, waiterCalls, enCuisine, staff?.id]
+    [tablesOccupees, pending, readyToServe, cashRequests, cardTerminalRequests, waiterCalls, enCuisine, staff?.id]
   );
 
   const salleDessinee = plan.some((t) => t.pos_x !== null && t.pos_y !== null);
@@ -507,7 +528,18 @@ export default function StaffPage() {
         : additionCarte
           ? () => confirmCardTerminal(additionCarte.order_id)
           : undefined,
+      libererTable: tablesOccupees.has(tableId) ? () => releaseTable(tableId) : undefined,
     };
+  }
+
+  async function releaseTable(tableId: number) {
+    setError(null);
+    try {
+      const updated = await api.releaseTable(tableId);
+      setPlan((prev) => prev.map((t) => (t.id === tableId ? { ...t, occupied_at: updated.occupied_at } : t)));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
   }
 
   async function claim(orderId: number) {

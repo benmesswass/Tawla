@@ -75,6 +75,7 @@ export type Table = {
   pos_y: number | null;
   shape: "round" | "square" | "rect";
   seats: number;
+  occupied_at: string | null;
 };
 
 /**
@@ -460,6 +461,7 @@ export type PlanTable = {
   pos_y: number | null;
   shape: TableShape;
   seats: number;
+  occupied_at: string | null;
 };
 
 export type LandmarkKind = "bar" | "entrance";
@@ -801,6 +803,9 @@ export const api = {
   markServed: (orderId: number) => request<Order>(`/api/v1/orders/${orderId}/mark-served`, { method: "POST" }),
   getMyShift: () => request<MyShift>("/api/v1/stats/ma-soiree"),
   getPlan: (restaurantId: number) => request<PlanTable[]>(`/api/v1/tables/plan/${restaurantId}`),
+  // Le serveur ou le manager confirment que les clients sont partis — seule
+  // façon de remettre une table à « libre » (2026-09-09).
+  releaseTable: (tableId: number) => request<Table>(`/api/v1/tables/${tableId}/release`, { method: "POST" }),
   savePlan: (
     restaurantId: number,
     placements: { table_id: number; pos_x: number; pos_y: number; shape: TableShape; seats: number }[]

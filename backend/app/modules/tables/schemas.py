@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.tables.models import LandmarkKind, TableShape
@@ -22,6 +24,7 @@ class TableOut(BaseModel):
     pos_y: float | None
     shape: TableShape
     seats: int
+    occupied_at: datetime | None
 
 
 class TableAssignStaff(BaseModel):
@@ -50,6 +53,7 @@ class TablePlanOut(BaseModel):
     pos_y: float | None
     shape: TableShape
     seats: int
+    occupied_at: datetime | None
 
 
 class TablePlacement(BaseModel):
