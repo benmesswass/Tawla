@@ -86,7 +86,7 @@ pas, le construire serait deviner.
 
 C'est le calcul central, et il est vérifiable devant lui :
 
-- **120 DT/mois ≈ 4 DT par jour.**
+- **89 DT/mois ≈ 3 DT par jour** (palier Pro, celui de cette cible).
 - Panier moyen autour de 25 DT.
 - **Une table servie en plus par semaine paie l'abonnement.**
 - **Une par jour le paie six fois.**
@@ -102,7 +102,7 @@ premier établissement dès qu'il existe. Ne jamais le citer comme un fait.
 
 ### Le vrai obstacle n'est pas le prix
 
-Le marché tunisien affiche 19 à 49 DT (cf. la revue). À 120 DT, Tawla est 2,5 à
+Le marché tunisien affiche 19 à 49 DT (cf. la revue). À 89 DT, Tawla est 2 à
 6 fois plus cher. Un restaurateur qui compare deux lignes de tarif dira non, et
 il aura raison — parce qu'il compare deux logiciels.
 
@@ -266,7 +266,7 @@ Deux questions avant toute démonstration :
    Si non, n'installe pas. Même s'il insiste. Le produit fonctionnera mal, et
    c'est ta faute qu'on retiendra, pas celle de son réseau.
 2. **Combien de tables ?** En dessous de six, la douleur est trop faible pour
-   justifier 120 DT, et tu vas passer ton temps en support pour rien.
+   justifier 89 DT, et tu vas passer ton temps en support pour rien.
 
 Un troisième signal, positif : **une terrasse**. Terrasse = tables loin du
 comptoir = serveur qui marche le plus = attente la plus longue à table. Et le QR

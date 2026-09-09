@@ -59,7 +59,7 @@ douce.
 | Fait | Conséquence |
 |---|---|
 | Panier moyen 3 à 5 fois supérieur | Une table ratée coûte 25-40 €, pas 25 DT. L'arithmétique de vente — « une table servie en plus par semaine paie l'abonnement » — devient **beaucoup** plus facile à gagner |
-| Prix d'abonnement acceptable 3 à 6 fois supérieur | 45 clients à 120 DT ≈ 65 k DT/an. 45 clients à 89 € ≈ 48 k€/an, soit ~160 k DT |
+| Prix d'abonnement acceptable 3 à 6 fois supérieur | 45 clients à 89 DT ≈ 48 k DT/an. 45 clients à 89 € ≈ 48 k€/an, soit ~160 k DT |
 | Wassim y est déjà (Darna vise « la diaspora France ») | Les déplacements d'installation, le compte bancaire, la structure, l'expert-comptable : le coût d'entrée logistique est déjà partiellement payé |
 | Marché prouvé et éduqué | Sunday revendique ~1 500 restaurants en France et a levé 21 M$ en novembre 2025 pour doubler d'ici l'été 2026. Personne n'a plus à expliquer ce qu'est une commande par QR |
 | Un segment que personne ne sert bien | Les restaurants à clientèle maghrébine (couscous, grillades, salons de thé) : bilingue **fr/ar déjà codé**, mode Ramadan et pré-commande iftar **déjà codés**, et aucun acteur français ne les a construits. C'est la seule chose que Tawla a et que Sunday n'a pas |
