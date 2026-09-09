@@ -318,16 +318,6 @@ class OrderModificationRequest(Base):
     def table_label(self) -> str:
         return self.order.table_label
 
-    @property
-    def order_items(self) -> list["OrderItem"]:
-        """
-        Commande complète au moment de la demande (pas seulement les lignes
-        qui changent) — sert à l'écran serveur pour afficher le changement en
-        contexte plutôt qu'une ligne isolée ambiguë ("−1× Bavette" ne dit pas
-        si c'est un retrait complet ou une quantité qui baisse de 2 à 1).
-        """
-        return self.order.items
-
 
 class OrderModificationLine(Base):
     """

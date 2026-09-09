@@ -107,54 +107,47 @@ function FileVide({ message }: { message: string }) {
 
 type LigneDiff = {
   key: string;
-  nature: "inchange" | "modifie" | "retire" | "ajoute";
+  nature: "modifie" | "retire" | "ajoute";
   nom: string;
   quantitePrecedente: number | null;
   quantite: number;
-  ligneId: number | null;
+  ligneId: number;
 };
 
-// Fusionne la commande complète (`order_items`) avec les lignes qui changent
-// (`lines`) pour que le serveur voie le changement en contexte — "−1×
-// Bavette" ne dit pas si c'est un retrait complet ou une quantité qui baisse
-// de 2 à 1, la commande entière si.
+// "−1× Bavette" ne dit pas si c'est un retrait complet ou une quantité qui
+// baisse de 2 à 1 : chaque ligne affiche donc son propre avant/après plutôt
+// qu'un delta signé.
 function construireLignesDiff(request: ModificationRequest): LigneDiff[] {
-  const ligneParArticle = new Map(request.lines.map((ligne) => [ligne.menu_item_id, ligne]));
-
-  const lignesExistantes: LigneDiff[] = request.order_items.map((item) => {
-    const ligne = ligneParArticle.get(item.menu_item_id);
-    if (!ligne) {
+  return request.lines.map((ligne) => {
+    if (ligne.requested_quantity === 0) {
       return {
-        key: `item-${item.id}`,
-        nature: "inchange",
-        nom: item.menu_item_name,
+        key: `ligne-${ligne.id}`,
+        nature: "retire",
+        nom: ligne.menu_item_name,
         quantitePrecedente: null,
-        quantite: item.quantity,
-        ligneId: null,
+        quantite: ligne.previous_quantity,
+        ligneId: ligne.id,
+      };
+    }
+    if (ligne.previous_quantity === 0) {
+      return {
+        key: `ligne-${ligne.id}`,
+        nature: "ajoute",
+        nom: ligne.menu_item_name,
+        quantitePrecedente: null,
+        quantite: ligne.requested_quantity,
+        ligneId: ligne.id,
       };
     }
     return {
       key: `ligne-${ligne.id}`,
-      nature: ligne.requested_quantity === 0 ? "retire" : "modifie",
+      nature: "modifie",
       nom: ligne.menu_item_name,
       quantitePrecedente: ligne.previous_quantity,
-      quantite: ligne.requested_quantity === 0 ? ligne.previous_quantity : ligne.requested_quantity,
+      quantite: ligne.requested_quantity,
       ligneId: ligne.id,
     };
   });
-
-  const lignesAjoutees: LigneDiff[] = request.lines
-    .filter((ligne) => ligne.previous_quantity === 0)
-    .map((ligne) => ({
-      key: `ligne-${ligne.id}`,
-      nature: "ajoute" as const,
-      nom: ligne.menu_item_name,
-      quantitePrecedente: null,
-      quantite: ligne.requested_quantity,
-      ligneId: ligne.id,
-    }));
-
-  return [...lignesExistantes, ...lignesAjoutees];
 }
 
 export default function StaffPage() {
@@ -977,7 +970,7 @@ export default function StaffPage() {
                         </div>
                       </div>
                       <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
-                        Répondez ligne par ligne, après vérification avec la cuisine — voici la commande complète.
+                        Répondez ligne par ligne, après vérification avec la cuisine.
                       </p>
                       <div className="flex items-center gap-[14px] mt-[9px] flex-wrap">
                         <span className="inline-flex items-center gap-[5px] text-[10.5px] font-bold text-[var(--ink-soft)]">
@@ -996,7 +989,7 @@ export default function StaffPage() {
                     </div>
                     <div>
                       {lignesDiff.map((ligneDiff) => {
-                        const decision = ligneDiff.ligneId !== null ? lineDecisions[ligneDiff.ligneId] : undefined;
+                        const decision = lineDecisions[ligneDiff.ligneId];
                         return (
                           <div
                             key={ligneDiff.key}
@@ -1007,16 +1000,9 @@ export default function StaffPage() {
                                   ? "rgba(31,107,79,.07)"
                                   : ligneDiff.nature === "retire"
                                     ? "rgba(214,64,30,.06)"
-                                    : ligneDiff.nature === "modifie"
-                                      ? "rgba(184,134,46,.06)"
-                                      : "transparent",
+                                    : "rgba(184,134,46,.06)",
                             }}
                           >
-                            {ligneDiff.nature === "inchange" && (
-                              <span className="text-[13px] font-semibold text-[var(--ink-soft)]">
-                                {ligneDiff.quantite}× {ligneDiff.nom}
-                              </span>
-                            )}
                             {ligneDiff.nature === "retire" && (
                               <span className="text-[13px] font-semibold text-[var(--harissa-dark)] line-through">
                                 {ligneDiff.quantite}× {ligneDiff.nom}
@@ -1035,32 +1021,30 @@ export default function StaffPage() {
                                 {ligneDiff.nom}
                               </span>
                             )}
-                            {ligneDiff.ligneId !== null && (
-                              <div className="flex gap-1.5 shrink-0">
-                                <button
-                                  onClick={() => setLineDecision(ligneDiff.ligneId as number, false)}
-                                  className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
-                                  style={
-                                    decision === false
-                                      ? { background: "var(--ink-soft)", color: "var(--semoule)" }
-                                      : { background: "#fff", color: "var(--ink-faint)", border: "1px solid var(--line)" }
-                                  }
-                                >
-                                  {decision === false ? "✗ Refuser" : "Refuser"}
-                                </button>
-                                <button
-                                  onClick={() => setLineDecision(ligneDiff.ligneId as number, true)}
-                                  className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
-                                  style={
-                                    decision === true
-                                      ? { background: "var(--menthe)", color: "var(--semoule)" }
-                                      : { background: "#fff", color: "var(--ink-faint)", border: "1px solid var(--line)" }
-                                  }
-                                >
-                                  {decision === true ? "✓ Accepter" : "Accepter"}
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex gap-1.5 shrink-0">
+                              <button
+                                onClick={() => setLineDecision(ligneDiff.ligneId, false)}
+                                className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
+                                style={
+                                  decision === false
+                                    ? { background: "var(--ink-soft)", color: "var(--semoule)" }
+                                    : { background: "#fff", color: "var(--ink-faint)", border: "1px solid var(--line)" }
+                                }
+                              >
+                                {decision === false ? "✗ Refuser" : "Refuser"}
+                              </button>
+                              <button
+                                onClick={() => setLineDecision(ligneDiff.ligneId, true)}
+                                className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
+                                style={
+                                  decision === true
+                                    ? { background: "var(--menthe)", color: "var(--semoule)" }
+                                    : { background: "#fff", color: "var(--ink-faint)", border: "1px solid var(--line)" }
+                                }
+                              >
+                                {decision === true ? "✓ Accepter" : "Accepter"}
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
