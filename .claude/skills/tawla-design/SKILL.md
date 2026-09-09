@@ -29,25 +29,40 @@ l'étape « invente une palette et un couple de polices ».
 zone de décision*. Un prix de plat n'est pas une action ; il passe en espresso,
 le bouton garde le rouge.
 
-## Les axes qui manquent — les compléter, pas improviser
+## Les axes du système — utiliser les jetons, jamais une valeur en dur
 
-Relevé au 2026-09-09 : 25 tailles de texte distinctes en dur (de 9 à 28 px, par
-pas de 0,5) sur 198 occurrences, 9 rayons dont 6 arbitraires, 7 traitements
-d'ombre mêlant défauts Tailwind et valeurs à la main. Une nouvelle valeur en dur
-aggrave le problème.
+Relevé au 2026-09-09, avant les jetons : 25 tailles de texte distinctes en dur
+(de 9 à 28 px, par pas de 0,5) sur 198 occurrences, 9 rayons dont 6
+arbitraires, 7 traitements d'ombre mêlant défauts Tailwind et valeurs à la
+main. Les jetons ci-dessous existent depuis le 2026-09-10 : **une valeur en dur
+est désormais un bug**, exactement comme une couleur en dur.
 
-- **Typographie** — 8 rôles : `display-xl` (Lalezar 34/1.05), `display-l`
-  (Lalezar 28/1.05), `title` (700 · 19/1.25), `body-strong` (600 · 15/1.5),
-  `body` (400 · 15/1.5), `label` (600 · 13/1.35), `caption` (500 · 12/1.4),
-  `overline` (600 · 11 · .14em majuscules). Les paliers à 0,5 px d'écart ne se
-  distinguent pas à l'œil, seulement dans le diff.
-- **Espacement** — base 4 : 4 / 8 / 12 / 16 / 24 / 32 / 48.
-- **Rayons** — 6 (champ), 10 (bouton), 14 (carte), 20 (feuille, coins hauts),
-  `999px` (pilule).
-- **Élévation** — 4 niveaux qui disent la distance à la page : posé
-  (séparateur), carte (plat, ticket), collé (barre de panier), couche (feuille,
-  modale). Une carte de plat ne porte jamais l'ombre d'une modale — c'est ce
+Les usages antérieurs ne sont pas réécrits d'un coup — ils migrent quand la
+page qui les porte est reprise. Du code neuf, lui, n'a aucune raison d'y
+échapper.
+
+- **Typographie** (`fontSize` de `tailwind.config.js`) — `text-affiche-xl`
+  (34/1.05), `text-affiche` (28/1.05), `text-titre` (19/1.25), `text-corps`
+  (15/1.5), `text-etiquette` (13/1.35), `text-legende` (12/1.4),
+  `text-surtitre` (11 · .14em, majuscules). Sept tailles : ce qui sépare le
+  texte courant du texte appuyé est la **graisse**, pas la taille.
+- **Espacement** — aucun jeton nouveau, et c'est volontaire : l'échelle par
+  défaut de Tailwind est déjà en base 4 (`gap-1` = 4 px … `gap-12` = 48 px).
+  Le travail n'est pas d'ajouter une échelle, c'est de **retirer** les
+  `gap-[7px]` / `pt-[10px]` / `py-[11px]` qui la contournent.
+- **Rayons** (`borderRadius`) — `rounded-champ` (6), `rounded-controle` (10),
+  `rounded-carte` (14), `rounded-feuille` (20), `rounded-full` (pilule).
+  Nommés par rôle et non par taille : « une carte de plat est-elle en `md` ou
+  en `lg` ? » est une question sans réponse, et c'est de là que vient la
+  dérive.
+- **Élévation** (`boxShadow`) — `shadow-pose` (séparateur), `shadow-carte`
+  (plat, ticket), `shadow-barre` (barre de panier — elle porte vers le **haut**),
+  `shadow-couche` (feuille, modale). Chaque niveau dit une distance à la page.
+  Une carte de plat ne porte jamais l'ombre d'une modale : c'est exactement ce
   que produisent les `shadow-lg`/`shadow-xl` posés au cas par cas.
+- **Mouvement** (`transitionDuration` / `transitionTimingFunction`) —
+  `duration-micro|rapide|normal|lent|sortie` et
+  `ease-entree|sortie|deplacement`. Côté JS, `lib/mouvement.ts`.
 
 ## Mouvement
 
@@ -99,20 +114,37 @@ Le reste du plancher : un `:focus-visible` visible sur chaque cible cliquable
 dire **l'état final immédiatement**, jamais « pas d'état final » — une modale
 sans animation d'entrée s'ouvre quand même.
 
-## Ne pas ajouter de dépendance d'UI
+## Dépendances d'UI
 
 - **Pas de shadcn/ui, ni aucune librairie de composants.** Le frontend est du
   Tailwind nu sur variables CSS, avec `components/ui/*` écrits à la main. Une
   librairie apporterait sa propre charte à recouvrir et son propre système de
   jetons à concilier — pour remplacer 5 composants de 8 à 50 lignes.
-- **Pas de Motion / framer-motion par défaut** (~35 ko compressés sur la page
-  qu'un client charge sur le réseau du restaurant, avec le téléphone qu'il a).
-  Les sept principes de `MOTION_DESIGN.md` sont tous faisables en CSS. Motion ne
-  se justifierait que pour l'animation de sortie d'un élément retiré d'une liste
-  ou une transition d'élément partagé — deux besoins que le menu n'a pas.
+- **Motion est installé** (paquet `motion`, v13). Décision de Wassim le
+  2026-09-10, qui revient sur le « pas de librairie d'animation par défaut »
+  écrit ici la veille. Le coût était réel, il est traité plutôt qu'accepté :
+  `components/ui/Mouvement.tsx` charge le moteur **en différé**
+  (`LazyMotion features={() => import(…)}`) et refuse le paquet complet
+  (`strict`), de sorte que le HTML de la carte arrive sans lui.
+  - Importer les éléments depuis **`motion/react-m`** (`import * as m from
+    "motion/react-m"` — en v13 ce sous-chemin exporte `div`, `button`… et non
+    un objet `m`), jamais `motion.*` : `strict` fait échouer le rendu, exprès.
+  - `LazyMotion`, `AnimatePresence`, `MotionConfig`, `useReducedMotion`
+    viennent de `motion/react`.
+  - Le socle charge `domAnimation` (animation, survol/pression,
+    `AnimatePresence`). Le glisser et les animations de layout sont dans
+    `domMax` : à charger localement là où ils servent (plan de salle,
+    carrousel), pas pour tout le monde.
+  - Durées, courbes et ressorts viennent de **`lib/mouvement.ts`**, jamais
+    d'un littéral. Le fichier est le miroir JS des variables CSS : modifier
+    l'un sans l'autre désaccorde une animation CSS et une animation Motion sur
+    le même geste.
+  - Ce qu'un `:hover`/`:active` CSS fait déjà, il continue de le faire. Motion
+    sert à ce que CSS ne sait pas faire : sortie d'un élément démonté,
+    animation de layout, transition d'élément partagé, geste.
 
-Si l'un de ces deux points doit être rouvert, c'est une décision de Wassim, pas
-un choix d'implémentation.
+Rouvrir le premier point est une décision de Wassim, pas un choix
+d'implémentation.
 
 ## Gouvernance
 
