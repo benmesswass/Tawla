@@ -279,6 +279,9 @@ export type ModificationRequest = {
   created_at: string;
   resolved_at: string | null;
   lines: ModificationLine[];
+  /** Commande complète au moment de la demande (pas seulement les lignes qui
+   *  changent) — sert à afficher le changement en contexte côté serveur. */
+  order_items: Order["items"];
 };
 
 export type Order = {

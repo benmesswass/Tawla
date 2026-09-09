@@ -684,6 +684,9 @@ async def list_pending_modification_requests(db: Session, restaurant_id: int) ->
         .options(
             selectinload(OrderModificationRequest.lines),
             selectinload(OrderModificationRequest.order).selectinload(Order.table),
+            selectinload(OrderModificationRequest.order)
+            .selectinload(Order.items)
+            .selectinload(OrderItem.options),
         )
         .filter(
             OrderModificationRequest.restaurant_id == restaurant_id,

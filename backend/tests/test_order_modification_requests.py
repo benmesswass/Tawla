@@ -359,3 +359,39 @@ def test_list_pending_modification_requests(client):
     assert len(body) == 1
     assert body[0]["table_label"] == "Table 5"
     assert body[0]["order_id"] == order["id"]
+    # Couscous n'a produit aucune ligne (quantité inchangée) mais doit rester
+    # visible dans `order_items` : l'écran serveur affiche la commande
+    # complète, pas seulement ce qui change.
+    order_items = {i["menu_item_name"]: i["quantity"] for i in body[0]["order_items"]}
+    assert order_items == {"Couscous royal": 2, "Thé à la menthe": 3}
+
+
+def test_pending_request_exposes_full_order_for_context(client):
+    """Le panneau serveur doit pouvoir afficher la commande complète plutôt
+    qu'une ligne isolée du type "−1× Bavette", qui ne dit pas si c'est un
+    retrait complet ou une quantité qui baisse. `order_items` porte donc
+    l'état actuel de CHAQUE article — modifié, retiré, ajouté ou non — au
+    moment de la demande, distinct de `lines` qui ne porte que le diff."""
+    restaurant, table, headers, couscous, the, baklawa = _setup(client)
+    order = _confirmed_order(client, table, headers, couscous, the)
+    client.post(
+        f"/api/v1/orders/{order['id']}/modification-requests",
+        json={
+            "items": [
+                {"menu_item_id": couscous["id"], "quantity": 3},  # modifié : 2 -> 3
+                {"menu_item_id": the["id"], "quantity": 3},  # inchangé
+                {"menu_item_id": baklawa["id"], "quantity": 1},  # ajouté
+            ]
+        },
+        headers=order_headers(order),
+    )
+
+    res = client.get(f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-modification-requests", headers=headers)
+    body = res.json()[0]
+
+    # `order_items` reflète la commande AVANT la demande — Baklawa n'y est pas
+    # encore, seule `lines` sait qu'il est demandé.
+    order_items = {i["menu_item_name"]: i["quantity"] for i in body["order_items"]}
+    assert order_items == {"Couscous royal": 2, "Thé à la menthe": 3}
+    lines = {l["menu_item_name"]: (l["previous_quantity"], l["requested_quantity"]) for l in body["lines"]}
+    assert lines == {"Couscous royal": (2, 3), "Baklawa": (0, 1)}

@@ -72,6 +72,32 @@ class ModificationRequestCreate(BaseModel):
     items: list[OrderItemCreate]
 
 
+class OrderItemOptionOut(BaseModel):
+    """Choix figé au moment de la commande (« Cuisson : à point ») — le
+    supplément est indicatif, il est déjà compté dans `unit_price`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    group_name: str
+    option_name: str
+    price_delta: float
+
+
+class OrderItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    menu_item_id: int
+    menu_item_name: str
+    unit_price: float
+    quantity: int
+    notes: str | None
+    is_shared: bool
+    shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
+    from_suggestion: bool
+    options: list[OrderItemOptionOut] = Field(default_factory=list)
+
+
 class ModificationLineOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,6 +123,10 @@ class ModificationRequestOut(BaseModel):
     created_at: UtcDatetime
     resolved_at: UtcDatetime | None
     lines: list[ModificationLineOut]
+    # Commande complète au moment de la demande (pas seulement les lignes qui
+    # changent) — l'écran serveur en a besoin pour afficher le changement en
+    # contexte plutôt qu'une ligne isolée ambiguë.
+    order_items: list[OrderItemOut]
 
 
 class ModificationLineDecision(BaseModel):
@@ -134,32 +164,6 @@ class OrderCreate(BaseModel):
     # donne pour lui-même. La route de consultation, elle, n'écrit plus rien —
     # sinon elle permettait d'attacher une date au numéro de n'importe qui.
     loyalty_birth_date: date | None = None
-
-
-class OrderItemOptionOut(BaseModel):
-    """Choix figé au moment de la commande (« Cuisson : à point ») — le
-    supplément est indicatif, il est déjà compté dans `unit_price`."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    group_name: str
-    option_name: str
-    price_delta: float
-
-
-class OrderItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    menu_item_id: int
-    menu_item_name: str
-    unit_price: float
-    quantity: int
-    notes: str | None
-    is_shared: bool
-    shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
-    from_suggestion: bool
-    options: list[OrderItemOptionOut] = Field(default_factory=list)
 
 
 class PayCardRequest(BaseModel):
