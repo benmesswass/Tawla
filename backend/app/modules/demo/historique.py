@@ -13,6 +13,13 @@ Ce module pose donc, à la création de la démo, deux semaines de service :
 sept jours affichés par défaut sur `/dashboard/preuve` et les sept jours de
 comparaison juste avant.
 
+**Que du passé, jamais de service en cours** (demande de Wassim, 2026-09-09) :
+toutes les commandes écrites ici sont terminées — servies et payées, ou
+annulées. L'écran serveur et l'écran cuisine s'ouvrent donc vides, et la
+première commande qui y tombe est celle que le visiteur passe lui-même depuis
+son téléphone. C'est le geste que la démonstration doit rendre lisible ; des
+commandes déjà en attente le noieraient.
+
 **Deux garde-fous, à ne jamais lever :**
 
 1. Ces chiffres ne sont écrits que sur un établissement `is_demo` (garde en
@@ -79,10 +86,9 @@ MINIMUM_AUJOURDHUI = 6
 # Temps qu'une commande met à traverser tout le cycle, de la validation du
 # panier à l'encaissement (majorant des étapes ci-dessous, profil APRES).
 # La journée en cours s'arrête là : une commande passée il y a cinq minutes et
-# déjà « servie et payée » porterait un `paid_at` dans le futur — invraisemblable
-# sur l'écran serveur, et faux dans « Ventes du jour ». Les dernières minutes
-# sont représentées par les commandes encore en cours (`_commandes_en_cours`),
-# qui sont justement là pour ça.
+# déjà « servie et payée » porterait un `paid_at` dans le futur — faux dans
+# « Ventes du jour », et incohérent avec un service qui, lui, est à l'arrêt
+# (voir l'en-tête du module : aucune commande en cours à l'ouverture).
 DUREE_CYCLE = timedelta(minutes=45)
 
 
@@ -395,12 +401,6 @@ def poser_historique(
             commandes.append(commande)
             paniers.append((commande, panier))
 
-    for commande, panier in _commandes_en_cours(
-        restaurant, tables, serveurs, articles, par_categorie, maintenant
-    ):
-        commandes.append(commande)
-        paniers.append((commande, panier))
-
     db.add_all(commandes)
     db.flush()
 
@@ -420,66 +420,6 @@ def poser_historique(
         ]
     )
     return len(commandes)
-
-
-def _commandes_en_cours(
-    restaurant: Restaurant,
-    tables: list[Table],
-    serveurs: list[Staff],
-    articles: list[MenuItem],
-    par_categorie: dict[str, list[MenuItem]],
-    maintenant: datetime,
-) -> list[tuple[Order, list[tuple[MenuItem, int, bool]]]]:
-    """
-    Quatre commandes encore en vie à l'instant où la démo s'ouvre : une qui
-    attend un serveur, une qui vient de partir en cuisine, une en préparation,
-    une prête à servir — une étape du flux par commande.
-
-    Sans elles, « Commandes en cours » et « Tables en charge en ce moment »
-    restent à zéro sur le tableau de bord, l'écran serveur et l'écran cuisine
-    s'ouvrent vides, et le visiteur doit d'abord passer une commande lui-même
-    pour voir à quoi ressemble un service. Quatre suffisent : la démonstration
-    consiste à en ajouter une cinquième depuis son téléphone, elle doit rester
-    visible au milieu des autres.
-    """
-    en_cours: list[tuple[Order, list[tuple[MenuItem, int, bool]]]] = []
-    scenarios = (
-        (OrderStatus.PENDING_CONFIRMATION, 4, None),
-        # Celle-ci alimente l'onglet « À préparer » de l'écran cuisine, celui
-        # qui s'ouvre par défaut : sans elle, la cuisine accueille le
-        # restaurateur sur « Rien en attente ».
-        (OrderStatus.SENT_TO_KITCHEN, 8, serveurs[0]),
-        (OrderStatus.IN_PREPARATION, 13, serveurs[-1]),
-        (OrderStatus.READY, 21, serveurs[-1]),
-    )
-
-    for rang, (statut, minutes, serveur) in enumerate(scenarios):
-        passee_a = maintenant - timedelta(minutes=minutes)
-        commande = Order(
-            restaurant_id=restaurant.id,
-            table_id=tables[rang % len(tables)].id,
-            created_at=passee_a,
-            status=statut,
-        )
-        if serveur is not None:
-            commande.taken_by_staff_id = serveur.id
-            commande.taken_at = passee_a + timedelta(seconds=_entre(rang, APRES.prise_en_charge))
-            commande.confirmed_at = commande.taken_at + timedelta(seconds=_entre(rang, APRES.confirmation))
-            commande.sent_to_kitchen_at = commande.confirmed_at + timedelta(
-                seconds=_entre(rang, APRES.envoi_cuisine)
-            )
-            if statut != OrderStatus.SENT_TO_KITCHEN:
-                commande.preparation_started_at = commande.sent_to_kitchen_at + timedelta(seconds=90)
-            if statut == OrderStatus.READY:
-                commande.ready_at = commande.preparation_started_at + timedelta(seconds=480)
-
-        panier = [
-            (_article(par_categorie, articles, categorie, decalage), quantite, False)
-            for categorie, decalage, quantite in PANIERS[rang % len(PANIERS)]
-        ]
-        en_cours.append((commande, panier))
-
-    return en_cours
 
 
 def poser_suggestions(db: Session, restaurant: Restaurant, articles: list[MenuItem]) -> None:
