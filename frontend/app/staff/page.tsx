@@ -109,6 +109,51 @@ function FileVide({ message }: { message: string }) {
   return <p className="py-5 px-[14px] text-center text-[12.5px] text-[var(--ink-faint)]">{message}</p>;
 }
 
+type LigneDiff = {
+  key: string;
+  nature: "modifie" | "retire" | "ajoute";
+  nom: string;
+  quantitePrecedente: number | null;
+  quantite: number;
+  ligneId: number;
+};
+
+// "−1× Bavette" ne dit pas si c'est un retrait complet ou une quantité qui
+// baisse de 2 à 1 : chaque ligne affiche donc son propre avant/après plutôt
+// qu'un delta signé.
+function construireLignesDiff(request: ModificationRequest): LigneDiff[] {
+  return request.lines.map((ligne) => {
+    if (ligne.requested_quantity === 0) {
+      return {
+        key: `ligne-${ligne.id}`,
+        nature: "retire",
+        nom: ligne.menu_item_name,
+        quantitePrecedente: null,
+        quantite: ligne.previous_quantity,
+        ligneId: ligne.id,
+      };
+    }
+    if (ligne.previous_quantity === 0) {
+      return {
+        key: `ligne-${ligne.id}`,
+        nature: "ajoute",
+        nom: ligne.menu_item_name,
+        quantitePrecedente: null,
+        quantite: ligne.requested_quantity,
+        ligneId: ligne.id,
+      };
+    }
+    return {
+      key: `ligne-${ligne.id}`,
+      nature: "modifie",
+      nom: ligne.menu_item_name,
+      quantitePrecedente: ligne.previous_quantity,
+      quantite: ligne.requested_quantity,
+      ligneId: ligne.id,
+    };
+  });
+}
+
 export default function StaffPage() {
   // Doit être appelé avant useCurrentStaff — voir lib/demoLien.ts.
   useAccesDemoParLien();
@@ -969,33 +1014,73 @@ export default function StaffPage() {
               {modificationRequests.map((request) => {
                 const decidedCount = request.lines.filter((l) => lineDecisions[l.id] !== undefined).length;
                 const allDecided = decidedCount === request.lines.length;
+                const lignesDiff = construireLignesDiff(request);
                 return (
-                  <div key={request.id} className="px-[14px] py-[11px] border-b border-[#efe6d2] last:border-b-0">
-                    <div className="flex items-center gap-[14px]">
-                      <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
-                        {request.table_label}
-                      </span>
-                      <div className="min-w-0 flex-1 text-[13.5px] font-semibold text-[var(--encre)]">
-                        Commande #{request.order_id}
+                  <div key={request.id} className="border-b border-[#efe6d2] last:border-b-0">
+                    <div className="px-[14px] pt-[11px] pb-[11px] border-b border-[var(--line)]">
+                      <div className="flex items-center gap-[14px]">
+                        <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                          {request.table_label}
+                        </span>
+                        <div className="min-w-0 flex-1 text-[13.5px] font-semibold text-[var(--encre)]">
+                          Commande #{request.order_id}
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
+                        Répondez ligne par ligne, après vérification avec la cuisine.
+                      </p>
+                      <div className="flex items-center gap-[14px] mt-[9px] flex-wrap">
+                        <span className="inline-flex items-center gap-[5px] text-[10.5px] font-bold text-[var(--ink-soft)]">
+                          <span className="w-[7px] h-[7px] rounded-full bg-[var(--menthe)] inline-block" />
+                          Ajouté
+                        </span>
+                        <span className="inline-flex items-center gap-[5px] text-[10.5px] font-bold text-[var(--ink-soft)]">
+                          <span className="w-[7px] h-[7px] rounded-full bg-[var(--harissa)] inline-block" />
+                          Retiré
+                        </span>
+                        <span className="inline-flex items-center gap-[5px] text-[10.5px] font-bold text-[var(--ink-soft)]">
+                          <span className="w-[7px] h-[7px] rounded-full bg-[var(--laiton)] inline-block" />
+                          Modifié
+                        </span>
                       </div>
                     </div>
-                    <p className="mt-2 mb-1.5 text-[11px] text-[var(--ink-faint)]">
-                      Répondez ligne par ligne, après vérification avec la cuisine.
-                    </p>
-                    <div className="divide-y divide-[var(--line)]">
-                      {request.lines.map((line) => {
-                        const decision = lineDecisions[line.id];
-                        const sign = line.requested_quantity > line.previous_quantity ? "+" : "−";
-                        const delta = Math.abs(line.requested_quantity - line.previous_quantity);
+                    <div>
+                      {lignesDiff.map((ligneDiff) => {
+                        const decision = lineDecisions[ligneDiff.ligneId];
                         return (
-                          <div key={line.id} className="flex items-center justify-between gap-2 py-[9px]">
-                            <span className="text-[13px] font-semibold text-[var(--encre)]">
-                              {sign}
-                              {delta}× {line.menu_item_name}
-                            </span>
+                          <div
+                            key={ligneDiff.key}
+                            className="flex items-center justify-between gap-2 px-[14px] py-[10px] border-b border-[#efe6d2] last:border-b-0"
+                            style={{
+                              backgroundColor:
+                                ligneDiff.nature === "ajoute"
+                                  ? "rgba(31,107,79,.07)"
+                                  : ligneDiff.nature === "retire"
+                                    ? "rgba(214,64,30,.06)"
+                                    : "rgba(184,134,46,.06)",
+                            }}
+                          >
+                            {ligneDiff.nature === "retire" && (
+                              <span className="text-[13px] font-semibold text-[var(--harissa-dark)] line-through">
+                                {ligneDiff.quantite}× {ligneDiff.nom}
+                              </span>
+                            )}
+                            {ligneDiff.nature === "ajoute" && (
+                              <span className="text-[13px] font-bold text-[var(--menthe)]">
+                                +{ligneDiff.quantite}× {ligneDiff.nom}
+                              </span>
+                            )}
+                            {ligneDiff.nature === "modifie" && (
+                              <span className="text-[13px] font-semibold text-[var(--encre)]">
+                                <span className="text-[var(--ink-faint)] line-through me-1">{ligneDiff.quantitePrecedente}</span>
+                                <span className="text-[var(--laiton)] font-bold me-1">{ligneDiff.quantite}</span>
+                                <span className="me-1">×</span>
+                                {ligneDiff.nom}
+                              </span>
+                            )}
                             <div className="flex gap-1.5 shrink-0">
                               <button
-                                onClick={() => setLineDecision(line.id, false)}
+                                onClick={() => setLineDecision(ligneDiff.ligneId, false)}
                                 className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
                                 style={
                                   decision === false
@@ -1006,7 +1091,7 @@ export default function StaffPage() {
                                 {decision === false ? "✗ Refuser" : "Refuser"}
                               </button>
                               <button
-                                onClick={() => setLineDecision(line.id, true)}
+                                onClick={() => setLineDecision(ligneDiff.ligneId, true)}
                                 className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
                                 style={
                                   decision === true
@@ -1021,13 +1106,15 @@ export default function StaffPage() {
                         );
                       })}
                     </div>
-                    <button
-                      onClick={() => resolveModificationRequest(request)}
-                      disabled={!allDecided || resolvingRequestId === request.id}
-                      className="w-full mt-[10px] rounded-[10px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)] disabled:opacity-50"
-                    >
-                      Envoyer la réponse au client
-                    </button>
+                    <div className="px-[14px] pt-[10px] pb-[11px]">
+                      <button
+                        onClick={() => resolveModificationRequest(request)}
+                        disabled={!allDecided || resolvingRequestId === request.id}
+                        className="w-full rounded-[10px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)] disabled:opacity-50"
+                      >
+                        Envoyer la réponse au client
+                      </button>
+                    </div>
                   </div>
                 );
               })}
