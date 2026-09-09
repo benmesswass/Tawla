@@ -20,3 +20,5 @@ export { default as WhatsAppIcon } from "./WhatsAppIcon";
 export { default as PencilIcon } from "./PencilIcon";
 export { default as ChevronLeftIcon } from "./ChevronLeftIcon";
 export { default as ClockIcon } from "./ClockIcon";
+export { default as SpinnerIcon } from "./SpinnerIcon";
+export { default as CheckIcon } from "./CheckIcon";

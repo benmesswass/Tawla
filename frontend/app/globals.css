@@ -16,7 +16,18 @@
   --line: #e3d7bd;
   --line-strong: #c4b79c;
   --ink-soft: #6b5947;
-  --ink-faint: #8a7660;
+  /* Assombri de #8a7660 le 2026-09-09 : l'ancienne valeur donnait 3,78:1 sur
+     semoule et 4,34:1 sur blanc, sous le seuil AA de 4,5:1, pour 30 usages à
+     des tailles de 10,5 à 13 px (notes de plat, options, mentions du suivi).
+     Celle-ci donne 5,00:1 sur semoule et 5,74:1 sur blanc. Voir la section
+     Accessibilité de MOTION_DESIGN.md. */
+  --ink-faint: #786250;
+
+  /* Texte posé sur un aplat harissa. --semoule y donnait 3,97:1, sous AA :
+     le libellé de chaque bouton primaire et la ligne de table sous le nom du
+     restaurant étaient concernés. Le blanc pur donne 4,55:1 sans toucher à la
+     couleur de fond, donc sans retoucher la charte. */
+  --on-harissa: #ffffff;
 
   /* Tuiles de la vignette générique par catégorie (VignetteCategorie, Phase
      D1 de ROADMAP_DESIGN.md) — fond/bord teintés à faible opacité, le trait
@@ -45,6 +56,33 @@
   --harissa-on-espresso-bg: rgba(214, 64, 30, .24);
   --harissa-on-espresso-border: var(--harissa);
   --note-cuisine: #e7b54a;
+
+  /* ======================================================================
+     Mouvement — les quatre durées et trois courbes de MOTION_DESIGN.md.
+     Une valeur de transition en dur dans un composant est désormais un bug,
+     exactement comme une couleur en dur. Les ressorts n'ont pas d'équivalent
+     CSS : ils vivent dans lib/mouvement.ts, à l'usage de Motion.
+     ====================================================================== */
+  --motion-micro: 120ms;  /* retour au doigt : pression, survol, couleur */
+  --motion-fast: 180ms;   /* petit déplacement : indicateur, bascule, valeur */
+  --motion-normal: 280ms; /* arrivée d'une couche : feuille, modale, reflux */
+  --motion-slow: 400ms;   /* couverture du menu, une fois par visite */
+  --motion-exit: 200ms;   /* toute sortie est plus courte que son entrée */
+
+  --ease-enter: cubic-bezier(.32, .72, 0, 1);
+  --ease-exit: cubic-bezier(.4, 0, 1, 1);
+  --ease-move: cubic-bezier(.4, 0, .2, 1);
+
+  /* ======================================================================
+     Élévation — quatre niveaux, chacun une distance à la page, pas un effet.
+     Teintées espresso et non noires : une ombre neutre sur semoule grise le
+     fond au lieu de le creuser. `barre` porte vers le haut, parce que la
+     seule surface concernée est la barre de panier collée en bas.
+     ====================================================================== */
+  --elev-pose: 0 1px 2px rgba(36, 24, 17, .06);
+  --elev-carte: 0 2px 8px rgba(36, 24, 17, .08);
+  --elev-barre: 0 -8px 20px rgba(36, 24, 17, .10);
+  --elev-couche: 0 18px 44px rgba(36, 24, 17, .18);
 }
 
 @keyframes celebration-pop {

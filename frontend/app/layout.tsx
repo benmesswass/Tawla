@@ -5,6 +5,7 @@ import DemoGuide from "@/components/DemoGuide";
 import VisiteGuidee from "@/components/visite/VisiteGuidee";
 import BandeauDemo from "@/components/visite/BandeauDemo";
 import BandeauAutreMarche from "@/components/BandeauAutreMarche";
+import Mouvement from "@/components/ui/Mouvement";
 import { hankenGrotesk } from "@/lib/fonts";
 
 export const metadata = {
@@ -26,18 +27,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             contenu de la page — un `fixed` cachait le haut de chaque page
             (nav, boutons) derrière le bandeau, gênant en plein démo client
             (retour de Wassim, 2026-09-01). */}
-        <div className="sticky top-0 z-[72] flex flex-col items-center gap-2 px-3 pt-2 pointer-events-none">
-          {/* BandeauAutreMarche d'abord : sa position reste stable quand le
-              panneau de BandeauDemo s'ouvre et grandit, au lieu d'être
-              repoussé plus bas à chaque clic. */}
-          <BandeauAutreMarche />
-          <BandeauDemo />
-        </div>
-        {children}
-        <Analytics />
-        <ServiceWorkerRegister />
-        <DemoGuide />
-        <VisiteGuidee />
+        {/* Mouvement enveloppe tout : c'est lui qui charge le moteur
+            d'animation en différé et qui applique `prefers-reduced-motion`
+            une fois pour toutes. Un composant client qui ne fait que rendre
+            `{children}` ne fait pas basculer l'arbre côté client — les pages
+            en dessous restent rendues sur le serveur. */}
+        <Mouvement>
+          <div className="sticky top-0 z-[72] flex flex-col items-center gap-2 px-3 pt-2 pointer-events-none">
+            {/* BandeauAutreMarche d'abord : sa position reste stable quand le
+                panneau de BandeauDemo s'ouvre et grandit, au lieu d'être
+                repoussé plus bas à chaque clic. */}
+            <BandeauAutreMarche />
+            <BandeauDemo />
+          </div>
+          {children}
+          <Analytics />
+          <ServiceWorkerRegister />
+          <DemoGuide />
+          <VisiteGuidee />
+        </Mouvement>
       </body>
     </html>
   );

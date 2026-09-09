@@ -66,11 +66,43 @@ pour être utilisables en classes.
 --ease-move:  cubic-bezier(.4, 0, .2, 1);    /* ce qui se déplace sans arriver ni partir */
 ```
 
-Pas de ressort (`spring`) en CSS. Le rebond ne se justifie que là où le doigt
-tient physiquement l'élément — le glisser d'une table sur le plan de salle
-(`.piece[data-deplacement]`), le carrousel de la home
-(`components/home/EcranCarrousel.tsx`). Partout ailleurs il ajoute du délai
-sans ajouter d'information.
+Pas de ressort (`spring`) en CSS — CSS n'en a pas. Depuis l'adoption de Motion
+(décision de Wassim, 2026-09-10), les ressorts existent côté JS dans
+`frontend/lib/mouvement.ts`, et la restriction reste la même : le rebond ne se
+justifie que là où le doigt tient physiquement l'élément, ou là où un élément
+atterrit à une nouvelle place. Partout ailleurs il ajoute du délai sans ajouter
+d'information.
+
+Trois ressorts, nommés par rôle et non par adjectif — un ressort appelé
+« bouncy » finit posé partout :
+
+| Jeton | Rôle | Réglage |
+|---|---|---|
+| `RESSORT.prise` | ce que le doigt tient : glisser une table sur le plan, le carrousel | `visualDuration: .22`, `bounce: .18` |
+| `RESSORT.depot` | un élément qui atterrit ailleurs : animation de layout, réordonnancement | `visualDuration: .32`, `bounce: .12` |
+| `RESSORT.saillie` | une valeur qui s'impose : compteur du panier, pastille de quantité | `visualDuration: .26`, `bounce: .3` |
+
+`visualDuration` plutôt que `stiffness`/`damping` : c'est la durée réellement
+perçue jusqu'à la cible, donc la seule qu'on puisse accorder aux quatre durées
+ci-dessus.
+
+## Motion — ce qu'on lui confie, et ce qu'on laisse à CSS
+
+Motion (paquet `motion`, v13) est installé et branché par
+`frontend/components/ui/Mouvement.tsx`. Le partage des rôles n'est pas une
+préférence de style, c'est ce qui garde la page légère :
+
+- **CSS garde tout ce qu'il sait faire** : survol, état pressé, changement de
+  couleur, apparition d'un élément qui reste monté, transition de hauteur. Un
+  retour au doigt passé par JS arrive toujours plus tard qu'un `:active`.
+- **Motion prend ce que CSS ne sait pas faire** : la sortie d'un élément qu'on
+  démonte (`AnimatePresence`), l'animation de layout, la transition d'élément
+  partagé, le geste (glisser).
+
+Le moteur est chargé **en différé** (`LazyMotion features={() => import(…)}`)
+et le mode `strict` refuse `motion.*` au profit de `motion/react-m` : sans ce
+garde-fou, un seul `motion.div` oublié dans une page annule le découpage et
+ramène le paquet complet dans le premier chargement du menu client.
 
 ## Les sept principes
 
