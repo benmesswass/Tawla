@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Order } from "@/lib/api";
 import {
   EtatTable,
   LIBELLE_URGENCE,
@@ -34,6 +35,7 @@ export default function ActionTable({
   etat,
   rang = null,
   actions,
+  commandeItems,
   onFermer,
 }: {
   table: PlanTable;
@@ -41,6 +43,9 @@ export default function ActionTable({
   /** Rang d'arrivée parmi les tables qui attendent d'être prises en charge. */
   rang?: number | null;
   actions: ActionsTable;
+  /** Articles de la commande en attente de confirmation — affichés pour que
+   *  le serveur les relise avec la table avant de cliquer "Confirmé → cuisine". */
+  commandeItems?: Order["items"];
   onFermer: () => void;
 }) {
   // Le panneau tient son propre battement : il reste ouvert pendant que le
@@ -85,6 +90,10 @@ export default function ActionTable({
       : "";
   const ordre = rang ? ` · ${rang}${rang === 1 ? "re" : "e"} à avoir commandé` : "";
 
+  // La liste des articles n'a de sens que juste avant "Confirmé → cuisine" :
+  // c'est le seul moment où le serveur doit la relire avec la table.
+  const aRelire = principale?.texte === "Confirmé → cuisine" && commandeItems && commandeItems.length > 0;
+
   return (
     <div className="plan-action">
       <span className="quoi">
@@ -96,6 +105,23 @@ export default function ActionTable({
         {ordre}
         {etat.parQui && !etat.aMoi ? ` · pris par ${etat.parQui}` : ""}
       </span>
+      {aRelire && (
+        <div className="plan-action-commande">
+          {commandeItems.map((item) => (
+            <div key={item.id} className="plan-action-item">
+              <span>
+                {item.quantity}x {item.menu_item_name}
+              </span>
+              {(item.notes || item.options.length > 0) && (
+                <span className="plan-action-item-detail">
+                  {[item.notes, ...item.options.map((opt) => opt.option_name)].filter(Boolean).join(" · ")}
+                </span>
+              )}
+            </div>
+          ))}
+          <p className="plan-action-relire">Lisez la commande à voix haute avec la table avant de valider.</p>
+        </div>
+      )}
       <span className="boutons">
         {principale && (
           <button
