@@ -13,10 +13,11 @@ import { duree } from "@/lib/duree";
  * chercher sur `/dashboard/stats`, une page qu'il n'ouvrira jamais de
  * lui-même.
  *
- * « Commandes perdues » (annulées) reste mesuré et partagé avec la page de
- * preuve, mais n'est plus le chiffre de tête : Wassim a jugé qu'une commande
- * simplement lente à être prise en charge n'a rien d'une vente ratée, et
- * qu'un chiffre qui pénalise un service occupé décourage plus qu'il n'aide.
+ * Un compteur de « commandes perdues » a occupé cette place jusqu'au
+ * 2026-08-28, puis a survécu sur la page de preuve jusqu'au 2026-09-09. Il ne
+ * comptait que les annulations qu'un serveur avait pris la peine
+ * d'enregistrer : retiré du produit, on ne montre pas un chiffre qui dépend du
+ * bon vouloir de la salle.
  *
  * Zéro s'affiche comme zéro : une case vide se lit comme une panne.
  */

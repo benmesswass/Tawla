@@ -29,8 +29,8 @@ une gigue calculée à partir du rang de la commande. Une démo tirée au hasard
 peut sortir une semaine « après » moins bonne que la semaine « avant » — la
 pastille d'écart passe alors au rouge devant le restaurateur, et le test qui
 protège cette propriété devient instable. Ici l'écart est structurel : mêmes
-paniers de base des deux côtés, des délais qui ne se chevauchent pas, et un
-nombre d'annulations calculé, pas tiré.
+paniers de base des deux côtés, des délais qui ne se chevauchent pas, et des
+annulations comptées, pas tirées.
 """
 from dataclasses import dataclass
 from datetime import date as date_type
@@ -98,9 +98,13 @@ class Profil:
     """
 
     facteur_volume: float
-    # Une commande annulée toutes les N : un pas plutôt qu'une part, sinon
-    # l'arrondi d'une part faible sur une journée de quinze couverts donne
-    # zéro annulation toute la semaine — un chiffre que personne ne croit.
+    # Une commande annulée toutes les N. Plus aucun écran ne montre ce
+    # compteur au restaurateur (retiré du produit le 2026-09-09, voir
+    # `stats/service.py::cancelled_orders`), mais un service sans la moindre
+    # annulation n'existe pas : elles restent ici parce qu'elles sortent de la
+    # recette et du panier moyen, exactement comme en production. Un pas
+    # plutôt qu'une part : l'arrondi d'une part faible sur une journée de
+    # quinze couverts donnerait zéro annulation toute la semaine.
     annulee_toutes_les: int
     # Secondes, de la validation du panier à la prise en charge par un serveur.
     prise_en_charge: tuple[int, int]

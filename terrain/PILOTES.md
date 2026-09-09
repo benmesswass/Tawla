@@ -27,7 +27,6 @@ bloqué en salle, ce que l'équipe a contourné.
 
 | Métrique | Avant | Après | Écart |
 |---|---|---|---|
-| Commandes perdues | | | |
 | Délai commande → cuisine | | | |
 | Panier moyen | | | |
 

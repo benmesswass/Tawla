@@ -288,14 +288,14 @@ Au 2026-08-18, `terrain/PILOTES.md` ne contient qu'un modèle à copier.
 
 - [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Service à faible volume, sans vraie pression de salle → la douleur est trop faible pour 120 DT. Une terrasse est le signal positif le plus fort
 - [ ] Accord écrit d'une page par pilote 🧑 : quatre semaines d'usage **effectif en service**, droit de citer le nom, droit de publier les chiffres mesurés, et en échange installation, formation, chevalets et support pendant le service. Un pilote qui refuse le droit de citation est un client gratuit, pas un pilote
-- [ ] **Relever la semaine de référence à la main, avant activation** 🧑 : commandes perdues par service et panier moyen, comptés sur place pendant quatre soirs. Sans cet « avant », la preuve d'après ne vaut rien — et c'est le seul travail de cette roadmap qui devient impossible à rattraper une fois l'outil installé
+- [ ] **Relever la semaine de référence à la main, avant activation** 🧑 : délai moyen entre l'installation d'une table et la prise de sa commande, et panier moyen — les deux seules valeurs que le produit saura remesurer seul après installation (le compteur de « commandes perdues » a été retiré le 2026-09-09, PR à venir). Comptés sur place pendant quatre soirs. Sans cet « avant », la preuve d'après ne vaut rien — et c'est le seul travail de cette roadmap qui devient impossible à rattraper une fois l'outil installé
 - [ ] Arriver avec **sa** carte déjà chargée 🧑 (`setup_restaurant.py` + import CSV) et lui faire scanner son propre QR. « Voilà votre carte, elle tourne » ne se rattrape par aucun argument
 
 **23.2 — L'audit d'avant devient un écran** (à coder **quand le premier relevé
 existe**, pas avant : un écran qui n'a rien à afficher n'est pas une
 préparation)
 
-- [ ] `Restaurant.baseline_cancelled_orders_per_day`, `baseline_avg_basket`, `baseline_measured_on` + migration + `model_registry.py`
+- [ ] `Restaurant.baseline_seconds_to_order`, `baseline_avg_basket`, `baseline_measured_on` + migration + `model_registry.py`
 - [ ] Saisie depuis le dashboard manager, avec la date du relevé — rien d'affiché tant que ce n'est pas saisi
 - [ ] `/dashboard/preuve` affiche « avant Tawla » en face de « mesuré » quand le relevé existe. C'est **la** capture d'écran qui vend le passage au payant
 - [ ] Ne jamais inventer ni pré-remplir ces valeurs : un chiffre « avant » inventé rend toute la démonstration mensongère, et la mesure est la seule chose que Tawla a à vendre
@@ -471,6 +471,7 @@ dans les PR citées.
 | **19 (suite)** | Recette limitée aux commandes réglées, résolution d'appel serveur poussée au client, commandes ouvertes multiples, durées par étape, cuisine en deux colonnes, note partageable, plats partagés par convive, rupture barrée | #52 |
 | **Audit** | Audit de pré-lancement : 299 tests, parcours rejoués, attaques mesurées, 20 constats, grille recalculée | #54 |
 | — | Ad-hoc (demande directe de Wassim, hors phase) : redéfinition de « commande perdue » (annulée seule — une commande lente n'est plus comptée perdue), tableau de bord manager remanié (temps d'attente moyen et charge active par serveur à la place), `/dashboard/preuve` et l'agrégat `/admin` mis à jour en cohérence | #103 |
+| — | Ad-hoc (décision de Wassim, 2026-09-09) : **« commande perdue » retirée du produit et de tout l'argumentaire**. Le compteur ne comptait que les annulations qu'un serveur enregistrait — zéro dans une équipe qui ne clique pas, aveugle au client qui repart — donc il ne prouvait pas ce qu'on lui faisait dire. Page de preuve à deux chiffres mesurés sans geste de la salle, nouvelle promesse d'accueil « Mieux servi. Mieux reçu. » | (cette PR) |
 | — | Ad-hoc (demande directe de Wassim, hors phase) : la démo s'ouvre avec deux semaines de service (`demo/historique.py`) — sans elles, tous les écrans chiffrés du manager (ventes du jour, temps par étape, commandes par serveur, plats les plus vendus, heures de pointe, page de preuve, rapport d'équipe) s'affichaient à zéro devant le restaurateur. Deux serveurs dans l'équipe de démo (ces écrans comparent), quatre commandes en cours (écran serveur et cuisine non vides), génération sans aléa pour que l'écart entre les deux semaines soit structurel et jamais rouge par malchance. Trois garde-fous : refus d'écrire sur un restaurant qui n'est pas `is_demo` (§23.2), démos exclues des agrégats de `/admin`, mention « chiffres d'exemple » dans le bandeau | #180 |
 
 Ce qui restait ouvert de ces phases a été repris ci-dessus, sans perte : la

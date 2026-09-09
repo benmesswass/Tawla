@@ -77,13 +77,11 @@ def test_la_page_de_preuve_montre_une_progression(client):
     assert courante["orders_count"] > 0
     assert precedente["orders_count"] > 0
 
-    # Les trois écarts que la page met en avant, dans le bon sens. Ils sont
+    # Les deux écarts que la page met en avant, dans le bon sens. Ils sont
     # structurels (voir historique.py) — un tirage aléatoire aurait pu les
     # inverser devant un restaurateur.
     assert courante["avg_order_to_kitchen_seconds"] < precedente["avg_order_to_kitchen_seconds"]
     assert courante["avg_basket_amount"] > precedente["avg_basket_amount"]
-    taux = lambda p: p["cancelled_orders_count"] / p["orders_count"]  # noqa: E731
-    assert taux(courante) < taux(precedente)
 
     # Le couple de chiffres qui produit l'argument « +X % de panier moyen ».
     assert courante["orders_with_suggestion_count"] > 0
