@@ -6,6 +6,15 @@ modèle économique et le marché repris à zéro.
 
 Périmètre : branche `main` au commit `2b4cb40`, après la Phase 18.
 
+> **Erratum du 2026-09-09 — ne pas réécrire ce document, il est daté.** Tout ce
+> qu'il dit de la métrique « commande perdue » (et de l'argument « le produit la
+> mesure, il ne la devine pas ») ne vaut plus : ce compteur a été retiré du
+> produit et de l'argumentaire. Il ne comptait que les annulations qu'un serveur
+> avait pris la peine d'enregistrer — zéro dans une équipe qui ne clique pas, et
+> aveugle au client qui se lasse et s'en va. La page de preuve repose désormais
+> sur le délai commande → cuisine et le panier moyen, mesurés sans aucun geste
+> de la salle. Voir `CONTEXT.md` et le journal de livraison de `ROADMAP.md`.
+
 **Note pondérée : 5,6/10** — contre 6,5 affichés par `ROADMAP.md`. L'écart n'est
 pas une divergence d'appréciation sur le code : c'est que deux lignes de la
 grille de pilotage notent aujourd'hui **l'intention** au lieu de l'état.

@@ -887,8 +887,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // Filet de sécurité : si la connexion tombe pendant qu'une validation est
   // en vol (message envoyé, mais ni "cart.validated" ni "cart.error" jamais
   // revenu), le bouton « Valider » ne doit pas rester bloqué indéfiniment —
-  // une commande perdue par un blocage d'écran est aussi grave qu'une
-  // commande perdue par une vraie erreur.
+  // une commande qui n'arrive jamais à cause d'un blocage d'écran est aussi
+  // grave qu'une commande refusée par une vraie erreur.
   useEffect(() => {
     if (pendingSocketValidateRef.current && tableSocketStatus !== "connected") {
       pendingSocketValidateRef.current = false;

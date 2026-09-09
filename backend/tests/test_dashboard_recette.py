@@ -8,11 +8,11 @@ lui le tableau de bord est une curiosité qu'on ouvre quand on y pense ; avec
 lui c'est une habitude quotidienne, et c'est cette habitude qui empêche une
 résiliation au troisième mois.
 
-Le temps d'attente moyen est posé juste à côté (2026-08-28, ex-« commandes
-perdues » — voir CONTEXT.md) : c'est ainsi que le patron voit **en passant**,
-pendant qu'il regarde sa recette, si le service tourne rond aujourd'hui. Les
-commandes annulées, elles, restent mesurées et partagées avec la page de
-preuve, mais ne sont plus le chiffre de tête.
+Le temps d'attente moyen est posé juste à côté (2026-08-28) : c'est ainsi que
+le patron voit **en passant**, pendant qu'il regarde sa recette, si le service
+tourne rond aujourd'hui. Il se mesure seul, sans qu'un serveur ait à
+enregistrer quoi que ce soit — contrairement au compteur d'annulations qui a
+occupé cette place, retiré du produit le 2026-09-09.
 """
 from datetime import date, datetime, timedelta, timezone
 
@@ -126,21 +126,7 @@ def test_le_cash_confirme_par_le_serveur_entre_dans_la_recette(client, db_sessio
     assert _dashboard(client, restaurant, manager)["revenue_today"] == pytest.approx(33.0)
 
 
-def test_the_dashboard_shows_todays_cancelled_orders(client, db_session, resto):
-    """Seule une annulation compte — une commande encore en attente, même
-    ancienne, peut toujours être prise en charge (décision du 2026-08-28)."""
-    restaurant, table, item = resto
-    manager = create_staff(restaurant.id, StaffRole.MANAGER)
-    _order(db_session, restaurant, table, item, 30.0, OrderStatus.CANCELLED)
-    # Ancienne ou récente, une commande en attente n'est pas perdue : elle
-    # attend encore son serveur.
-    _order(db_session, restaurant, table, item, 25.0, OrderStatus.PENDING_CONFIRMATION, minutes_ago=45)
-    _order(db_session, restaurant, table, item, 18.0, OrderStatus.PENDING_CONFIRMATION, minutes_ago=1)
-
-    assert _dashboard(client, restaurant, manager)["cancelled_orders_today"] == 1
-
-
-def test_takings_and_cancelled_orders_match_the_proof_page(client, db_session, resto):
+def test_takings_match_the_proof_page(client, db_session, resto):
     """
     Les deux écrans doivent dire la même chose du même jour. S'ils divergent,
     le patron ne croit plus ni l'un ni l'autre — et c'est sur ces chiffres que
@@ -168,7 +154,6 @@ def test_takings_and_cancelled_orders_match_the_proof_page(client, db_session, r
         headers=auth_headers(manager),
     ).json()["current"]
 
-    assert dashboard["cancelled_orders_today"] == proof["cancelled_orders_count"]
     # La recette est la somme des paniers réglés, dont la page de preuve tire
     # sa moyenne : les deux écrans partagent la même définition.
     regles = (
@@ -187,7 +172,6 @@ def test_a_quiet_day_shows_zero_and_not_an_empty_screen(client, db_session, rest
     body = _dashboard(client, restaurant, manager)
 
     assert body["revenue_today"] == 0
-    assert body["cancelled_orders_today"] == 0
 
 
 def test_the_takings_of_another_restaurant_are_never_visible(client, db_session, resto):

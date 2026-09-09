@@ -48,8 +48,9 @@ Il voit aussi les **demandes de paiement en espèces** (en ambre) et les
 - **Tables & zones** : créer une table, la rattacher à une zone.
 - **Équipe** : créer les comptes serveur et cuisine, régénérer un mot de passe,
   désactiver l'accès de quelqu'un qui part.
-- **Preuve du pilote** : les trois chiffres qui disent si Tawla fait gagner de
-  l'argent — commandes perdues, délai commande → cuisine, panier moyen.
+- **Preuve du pilote** : les chiffres qui disent si Tawla fait gagner de
+  l'argent — délai commande → cuisine et panier moyen, mesurés sans qu'un
+  serveur ait à enregistrer quoi que ce soit.
 
 ---
 

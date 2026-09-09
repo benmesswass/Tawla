@@ -235,7 +235,7 @@ un seul onglet. Compter vingt minutes.
 | 10 | Encaisser depuis le téléphone A | Le téléphone B voit le paiement confirmé |
 | 11 | Couper le Wi-Fi du téléphone B, valider une commande, rallumer | La commande part toute seule au retour du réseau, **et une seule fois** |
 | 12 | Rafraîchir `/staff` en pleine commande | Rien ne disparaît : l'écran se recharge depuis le serveur |
-| 13 | Ouvrir `/dashboard` | Recette du jour et commandes perdues en tête |
+| 13 | Ouvrir `/dashboard` | Recette du jour et temps d'attente moyen en tête |
 
 **Le point 11 est le test de la Phase 19.2.** S'il produit deux commandes, ne pas
 mettre en service : c'est exactement le défaut qui fait préparer deux fois le

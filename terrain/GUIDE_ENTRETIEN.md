@@ -24,7 +24,7 @@ Ouvrir une carte et lister **quarante** établissements — il en faudra deux fo
 plus que d'entretiens obtenus. Critères, dans l'ordre :
 
 1. **une terrasse** — c'est le signal le plus fort : tables loin du comptoir,
-   serveur qui marche le plus, commandes perdues au maximum ;
+   serveur qui marche le plus, attente la plus longue à table ;
 2. **ouvert depuis plusieurs années** — un patron installé est plus dur à
    convaincre et infiniment plus utile : les autres l'écoutent ;
 3. répartis entre quartier, centre-ville et zone touristique.
@@ -151,10 +151,9 @@ motif de churn du marché.
 
 Décrire le **bénéfice**, jamais la fonctionnalité :
 
-> « Si un outil vous garantissait qu'aucune commande n'est perdue ou oubliée
-> pendant un service, et vous montrait chaque semaine combien de temps s'écoule
-> entre la commande d'un client et son arrivée en cuisine — vous mettriez combien
-> par mois ? »
+> « Si un outil faisait qu'aucune commande ne soit oubliée pendant un service,
+> et vous montrait chaque semaine combien de temps s'écoule entre la commande
+> d'un client et son arrivée en cuisine — vous mettriez combien par mois ? »
 
 Puis, quel que soit le chiffre : *« Et à 89 dinars par mois, avec
 l'installation, la carte saisie pour vous, les QR imprimés livrés et la formation

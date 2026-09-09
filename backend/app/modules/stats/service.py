@@ -30,20 +30,20 @@ TUNISIA_UTC_OFFSET_HOURS = 1
 
 def cancelled_orders(orders: list[Order]) -> list[Order]:
     """
-    Définition unique de « commande perdue » : une commande annulée.
+    Les commandes au statut `CANCELLED` — un filtre, jamais une promesse.
 
-    Une commande encore en attente de confirmation, même depuis longtemps,
-    n'est **pas** comptée ici — elle peut toujours être prise en charge, et la
-    pénaliser comme si elle était perdue confondait une commande lente avec
-    une vente qui n'aura jamais lieu (décision de Wassim, 2026-08-28). Ce que
-    ce délai révèle vit dans `TimingStats.avg_wait_confirmation_seconds` et
-    `StaffActiveLoad`, pas ici.
+    Sert à EXCLURE une commande annulée de ce qu'elle fausserait : la recette
+    du jour, le panier moyen, l'uplift des suggestions, la prime d'un serveur.
+    Sert aussi au taux d'annulation tous restaurants confondus du dashboard
+    plateforme (`platform_admin/service.py`), qui est un signal d'exploitation
+    pour Wassim, pas un chiffre montré à un restaurateur.
 
-    Partagée par le tableau de bord et la page de preuve d'un restaurant, et
-    par le dashboard plateforme (`platform_admin/service.py`) pour son taux de
-    commandes annulées tous restaurants confondus — jamais une redéfinition :
-    un restaurant qui verrait un taux différent chez lui et sur l'agrégat de
-    Wassim cesserait de croire l'un des deux.
+    Ce que cette fonction n'est PLUS (2026-09-09) : la mesure des « commandes
+    perdues » vendue au patron. Elle ne comptait que les annulations qu'un
+    serveur avait explicitement enregistrées — une équipe qui ne clique pas la
+    laissait à zéro — et ne voyait jamais le client qui se lasse et s'en va.
+    Promettre qu'elle mesurait des ventes ratées était faux, donc retiré de la
+    page de preuve, du tableau de bord et de tout l'argumentaire.
     """
     return [o for o in orders if o.status == OrderStatus.CANCELLED]
 
@@ -207,16 +207,14 @@ async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -
                     schemas.StaffActiveLoad(staff_id=s.id, staff_name=s.name, role=s.role, tables_count=count)
                 )
 
-    # Les deux chiffres que le patron vient chercher (Phase 17.1). Calculés
-    # avec les mêmes règles que la page de preuve : les deux écrans parlent du
-    # même jour au même homme, ils doivent dire la même chose.
+    # Le chiffre que le patron vient chercher (Phase 17.1). Calculé avec les
+    # mêmes règles que la page de preuve : les deux écrans parlent du même
+    # jour au même homme, ils doivent dire la même chose.
     revenue_today = sum(o.total_amount for o in paid_orders(orders_today))
-    cancelled_orders_today = len(cancelled_orders(orders_today))
 
     return schemas.DashboardStats(
         date=day,
         revenue_today=revenue_today,
-        cancelled_orders_today=cancelled_orders_today,
         active_orders_count=active_orders_count,
         timing=timing,
         staff_performance=staff_performance,
@@ -247,8 +245,6 @@ def _period_proof(db: Session, restaurant_id: int, start: date_type, end: date_t
         .all()
     )
 
-    cancelled = cancelled_orders(orders)
-
     order_to_kitchen = [
         (o.sent_to_kitchen_at - o.created_at).total_seconds() for o in orders if o.sent_to_kitchen_at
     ]
@@ -267,7 +263,6 @@ def _period_proof(db: Session, restaurant_id: int, start: date_type, end: date_t
         start=start,
         end=end,
         orders_count=len(orders),
-        cancelled_orders_count=len(cancelled),
         avg_order_to_kitchen_seconds=_average(order_to_kitchen),
         avg_basket_amount=_average(baskets),
         orders_with_suggestion_count=len(with_suggestion),

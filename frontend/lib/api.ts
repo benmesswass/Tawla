@@ -392,7 +392,6 @@ export type DashboardStats = {
    *  le patron vient chercher chaque soir, et le temps d'attente moyen posé
    *  juste à côté — un signal opérationnel du jour même. */
   revenue_today: number;
-  cancelled_orders_today: number;
   active_orders_count: number;
   timing: TimingStats;
   staff_performance: StaffPerformance[];
@@ -404,15 +403,19 @@ export type DashboardStats = {
 export type KitchenTodayCount = { date: string; count: number };
 
 /**
- * Les trois chiffres de preuve d'un pilote (Phase 13.3) : commandes annulées,
- * délai commande → cuisine, panier moyen. `null` sur les moyennes veut dire
- * « aucune donnée », pas zéro — la distinction compte devant un patron.
+ * Les chiffres de preuve d'un pilote (Phase 13.3) : délai commande → cuisine
+ * et panier moyen, tous deux mesurés sans qu'un serveur ait quoi que ce soit
+ * à enregistrer. `null` sur les moyennes veut dire « aucune donnée », pas
+ * zéro — la distinction compte devant un patron.
+ *
+ * `cancelled_orders_count` a disparu le 2026-09-09 : il ne comptait que les
+ * annulations explicitement enregistrées par la salle, donc il ne prouvait
+ * rien (voir `backend/app/modules/stats/service.py::cancelled_orders`).
  */
 export type PeriodProof = {
   start: string;
   end: string;
   orders_count: number;
-  cancelled_orders_count: number;
   avg_order_to_kitchen_seconds: number | null;
   avg_basket_amount: number | null;
   orders_with_suggestion_count: number;

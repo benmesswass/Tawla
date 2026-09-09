@@ -57,9 +57,11 @@ async def proof(
     _tier: Staff = Depends(require_tier(SubscriptionTier.PRO)),
 ):
     """
-    Les trois chiffres à montrer au patron à la fin d'un pilote : commandes
-    perdues, délai commande → cuisine, panier moyen — et les mêmes sur la
-    période précédente de même longueur, pour avoir un « avant ».
+    Les chiffres à montrer au patron à la fin d'un pilote : délai commande →
+    cuisine et panier moyen — et les mêmes sur la période précédente de même
+    longueur, pour avoir un « avant ». Tous mesurés sans qu'un serveur ait
+    quoi que ce soit à enregistrer, contrairement au compteur d'annulations
+    retiré le 2026-09-09 (`stats/service.py::cancelled_orders`).
 
     Par défaut les 7 derniers jours, aujourd'hui inclus.
 
