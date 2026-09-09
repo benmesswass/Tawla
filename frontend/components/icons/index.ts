@@ -21,3 +21,5 @@ export { default as PencilIcon } from "./PencilIcon";
 export { default as ChevronLeftIcon } from "./ChevronLeftIcon";
 export { default as ClockIcon } from "./ClockIcon";
 export { default as LockIcon } from "./LockIcon";
+export { default as SpinnerIcon } from "./SpinnerIcon";
+export { default as CheckIcon } from "./CheckIcon";
