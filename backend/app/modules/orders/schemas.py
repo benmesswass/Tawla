@@ -8,6 +8,7 @@ from app.modules.orders.models import (
     ModificationLineStatus,
     ModificationRequestStatus,
     Order,
+    OrderPaymentStatus,
     OrderStatus,
     PaymentMethod,
     PaymentStatus,
@@ -49,6 +50,16 @@ class OrderItemCreate(BaseModel):
     # depuis MenuItemOption, vérifie qu'ils appartiennent bien à cet article et
     # respectent min/max par groupe, puis fige le tout (voir orders/service.py).
     selected_option_ids: list[int] = Field(default_factory=list)
+    # Clé d'appareil (panier partagé de table, ROADMAP.md §Override —
+    # identité de table) : identifie QUI a ajouté cette ligne, pour permettre
+    # de n'en retirer que les siennes depuis le panier partagé. Purement
+    # déclaratif comme le reste de ce modèle — jamais lu pour une règle
+    # métier, jamais vérifié contre l'appareil qui envoie le message.
+    added_by_key: str | None = None
+    # Prénom affiché sous le plat dans le panier partagé, et figé sur la
+    # commande une fois validée (voir `OrderItemOut`) — pour que l'addition
+    # garde "Karim" plutôt que de redevenir "Personne 2" après coup.
+    added_by_name: str | None = None
 
 
 class OrderItemsUpdate(BaseModel):
@@ -159,41 +170,96 @@ class OrderItemOut(BaseModel):
     is_shared: bool
     shared_with: Annotated[list[int], BeforeValidator(_convives)] = Field(default_factory=list)
     from_suggestion: bool
+    added_by_name: str | None = None
     options: list[OrderItemOptionOut] = Field(default_factory=list)
 
 
-class PayCardRequest(BaseModel):
+class PayShareRequest(BaseModel):
+    """
+    Base commune aux trois moyens de paiement — chaque appareil paie SA
+    PART, jamais l'addition entière (identité de table, ROADMAP.md §Override,
+    extension paiement par personne). `payer_key`/`payer_name` identifient qui
+    paie : le montant réellement facturé n'est JAMAIS lu ici, il est
+    recalculé côté serveur à partir du roster de la table et des plats de la
+    commande (voir orders/split.py) — un client ne peut donc jamais se
+    facturer moins que sa part réelle.
+
+    Facultatifs (chaîne vide par défaut) : sans identité déclarée (table qui
+    n'a pas activé le scan-identité, ou appel d'un client plus ancien), le
+    calcul de part retombe sur "ce qu'il reste à payer" — c'est-à-dire
+    l'addition entière tant que personne n'a encore payé sa part, exactement
+    le comportement d'avant ce chantier. Dégradation gracieuse, même principe
+    que `NullProvider`.
+    """
+
+    payer_key: str = Field(default="", max_length=80)
+    payer_name: str = Field(default="", max_length=40)
     tip_amount: float = Field(default=0, ge=0)
     # Facultatif : sert uniquement à envoyer la confirmation + facture PDF une
-    # fois payée. Jamais requis, un client qui ne le laisse pas paie pareil.
+    # fois la commande entièrement payée. Jamais requis, un client qui ne le
+    # laisse pas paie pareil.
     customer_email: EmailStr | None = None
 
 
-class PayCashRequest(BaseModel):
+class PayCardRequest(PayShareRequest):
+    pass
+
+
+class PayCashRequest(PayShareRequest):
     """
     Le pourboire vaut aussi pour les espèces. Il était purement perdu : le
     client le saisissait, le serveur venait encaisser le total sans lui, et
     personne ne s'apercevait de l'écart avant de compter la caisse.
     """
 
-    tip_amount: float = Field(default=0, ge=0)
-    customer_email: EmailStr | None = None
 
-
-class PayCardTerminalRequest(BaseModel):
+class PayCardTerminalRequest(PayShareRequest):
     """
     Carte physique : le client demande, un serveur apporte le terminal —
     même mécanique que PayCashRequest, moyen de paiement distinct (voir
     PaymentMethod.CARD_TERMINAL).
     """
 
-    tip_amount: float = Field(default=0, ge=0)
-    customer_email: EmailStr | None = None
+
+class OrderPaymentOut(BaseModel):
+    """Une part réglée (ou en cours de règlement) — voir `OrderPayment`.
+    `payer_key` est exposé pour qu'UN appareil reconnaisse SA PROPRE ligne
+    parmi celles des autres convives (comparé à son identité locale), jamais
+    pour authentifier quoi que ce soit — même statut déclaratif que
+    `OrderItem.added_by_name`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    payer_key: str
+    payer_name: str
+    amount: float
+    tip_amount: float
+    method: PaymentMethod
+    status: OrderPaymentStatus
+    paid_at: UtcDatetime | None
 
 
 class PushSubscriptionIn(BaseModel):
     endpoint: str
     keys: dict[str, str]
+
+
+class PendingSharePaymentOut(BaseModel):
+    """Une part en attente d'encaissement en salle (espèces ou terminal),
+    vue **staff** — une ligne par PERSONNE qui a demandé à régler (identité
+    de table, ROADMAP.md §Override, extension paiement par personne), pas par
+    commande : une même commande peut porter plusieurs demandes à la fois."""
+
+    payment_id: int
+    order_id: int
+    table_id: int
+    table_label: str
+    payer_name: str
+    amount: float
+    tip_amount: float
+    taken_by_staff_id: int | None
+    loyalty_phone: str | None
 
 
 class OrderOut(BaseModel):
@@ -232,6 +298,13 @@ class OrderOut(BaseModel):
     paid_at: UtcDatetime | None
     tip_amount: float
     total_amount: float
+    # Paiement par personne (identité de table, ROADMAP.md §Override,
+    # extension) — `payments` porte toutes les parts (payées ou en attente),
+    # `amount_paid`/`amount_remaining` sont les agrégats qu'affiche l'écran de
+    # paiement pour savoir qui a déjà réglé et ce qu'il reste à couvrir.
+    payments: list[OrderPaymentOut] = Field(default_factory=list)
+    amount_paid: float = 0
+    amount_remaining: float = 0
     items: list[OrderItemOut]
     # Non-null tant qu'au moins une ligne de la dernière demande de
     # modification (fenêtre 2) attend une réponse — c'est ce qui permet à

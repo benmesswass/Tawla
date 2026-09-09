@@ -20,7 +20,7 @@ import PlanDeSalle from "@/components/plan/PlanDeSalle";
 import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
 import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
-import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon } from "@/components/icons";
+import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon, ChevronLeftIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 
 // Seuil propre à cet écran (2026-08-28, ex-partagé avec la définition de
@@ -44,12 +44,20 @@ type PendingOrder = {
   // commande" tant qu'elle attend confirmation) — jamais par une transition
   // de statut. Alimente le badge "Modifiée" ci-dessous.
   items_updated_at: string | null;
+  // Le détail (nom, quantité, notes, options) que le serveur doit relire avec
+  // la table avant de confirmer — voir le panneau "Commandes à confirmer".
+  items: Order["items"];
 };
 type ReadyOrder = { order_id: number; table_id: number; table_label: string; ready_at: string | null };
+// Identité de table (ROADMAP.md §Override, extension paiement par personne) :
+// une ligne par PERSONNE qui a demandé à régler, pas par commande — une même
+// table peut porter plusieurs demandes en attente à la fois.
 type CashRequest = {
+  payment_id: number;
   order_id: number;
   table_id: number;
   table_label: string;
+  payer_name: string;
   amount: number;
   taken_by_staff_id: number | null;
   loyalty_phone: string | null;
@@ -72,6 +80,7 @@ function fromApi(o: Order): PendingOrder {
     created_at: o.created_at ?? null,
     scheduled_for: o.scheduled_for,
     items_updated_at: o.items_updated_at,
+    items: o.items,
   };
 }
 
@@ -135,6 +144,9 @@ export default function StaffPage() {
   const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Commandes dont le détail (articles à relire avec la table) est déplié
+  // dans le panneau "Commandes à confirmer".
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<number>>(new Set());
   const [pushState, setPushState] = useState<
     "idle" | "subscribing" | "subscribed" | "unsupported" | "denied" | "error"
   >("idle");
@@ -215,21 +227,21 @@ export default function StaffPage() {
   const loadCashRequests = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const orders = await api.listPendingCashPayments(restaurantId);
+      const payments = await api.listPendingCashPayments(restaurantId);
       setCashRequests(
-        orders.map((o) => ({
-          order_id: o.id,
-          table_id: o.table_id,
-          table_label: o.table_label,
-          amount: o.total_amount,
-          taken_by_staff_id: o.taken_by_staff_id,
-          // Optionnel sur `Order` depuis la Phase 12.2 (absent des réponses
-          // client), mais toujours servi sur cette route protégée par JWT.
-          loyalty_phone: o.loyalty_phone ?? null,
+        payments.map((p) => ({
+          payment_id: p.payment_id,
+          order_id: p.order_id,
+          table_id: p.table_id,
+          table_label: p.table_label,
+          payer_name: p.payer_name,
+          amount: p.amount + p.tip_amount,
+          taken_by_staff_id: p.taken_by_staff_id,
+          loyalty_phone: p.loyalty_phone ?? null,
         }))
       );
-      for (const o of orders) {
-        if (o.loyalty_phone) fetchLoyaltyForPhone(restaurantId, o.loyalty_phone);
+      for (const p of payments) {
+        if (p.loyalty_phone) fetchLoyaltyForPhone(restaurantId, p.loyalty_phone);
       }
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -239,19 +251,21 @@ export default function StaffPage() {
   const loadCardTerminalRequests = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      const orders = await api.listPendingCardTerminalPayments(restaurantId);
+      const payments = await api.listPendingCardTerminalPayments(restaurantId);
       setCardTerminalRequests(
-        orders.map((o) => ({
-          order_id: o.id,
-          table_id: o.table_id,
-          table_label: o.table_label,
-          amount: o.total_amount,
-          taken_by_staff_id: o.taken_by_staff_id,
-          loyalty_phone: o.loyalty_phone ?? null,
+        payments.map((p) => ({
+          payment_id: p.payment_id,
+          order_id: p.order_id,
+          table_id: p.table_id,
+          table_label: p.table_label,
+          payer_name: p.payer_name,
+          amount: p.amount + p.tip_amount,
+          taken_by_staff_id: p.taken_by_staff_id,
+          loyalty_phone: p.loyalty_phone ?? null,
         }))
       );
-      for (const o of orders) {
-        if (o.loyalty_phone) fetchLoyaltyForPhone(restaurantId, o.loyalty_phone);
+      for (const p of payments) {
+        if (p.loyalty_phone) fetchLoyaltyForPhone(restaurantId, p.loyalty_phone);
       }
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -325,23 +339,11 @@ export default function StaffPage() {
 
   const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
-      setPending((prev) =>
-        prev.some((o) => o.order_id === msg.order_id)
-          ? prev
-          : [
-              ...prev,
-              {
-                order_id: msg.order_id,
-                table_id: msg.table_id,
-                table_label: msg.table_label,
-                taken_by_staff_id: null,
-                taken_by_staff_name: null,
-                created_at: msg.created_at ?? null,
-                scheduled_for: msg.scheduled_for ?? null,
-                items_updated_at: null,
-              },
-            ]
-      );
+      // Le message temps réel ne porte pas les articles (pensé léger, comme
+      // les autres événements de ce canal) — la commande n'a rien à afficher
+      // tant que le serveur ne l'a pas relue, donc un aller-retour REST pour
+      // récupérer la liste complète (voir fromApi) ne coûte rien à cet instant.
+      loadActiveOrders();
     }
     if (msg.event === "order.sent_to_kitchen") {
       setEnCuisine((prev) =>
@@ -388,14 +390,16 @@ export default function StaffPage() {
     }
     if (msg.event === "order.cash_requested") {
       setCashRequests((prev) =>
-        prev.some((o) => o.order_id === msg.order_id)
+        prev.some((o) => o.payment_id === msg.payment_id)
           ? prev
           : [
               ...prev,
               {
+                payment_id: msg.payment_id,
                 order_id: msg.order_id,
                 table_id: msg.table_id,
                 table_label: msg.table_label,
+                payer_name: msg.payer_name,
                 amount: msg.amount,
                 taken_by_staff_id: msg.taken_by_staff_id,
                 loyalty_phone: msg.loyalty_phone ?? null,
@@ -406,14 +410,16 @@ export default function StaffPage() {
     }
     if (msg.event === "order.card_terminal_requested") {
       setCardTerminalRequests((prev) =>
-        prev.some((o) => o.order_id === msg.order_id)
+        prev.some((o) => o.payment_id === msg.payment_id)
           ? prev
           : [
               ...prev,
               {
+                payment_id: msg.payment_id,
                 order_id: msg.order_id,
                 table_id: msg.table_id,
                 table_label: msg.table_label,
+                payer_name: msg.payer_name,
                 amount: msg.amount,
                 taken_by_staff_id: msg.taken_by_staff_id,
                 loyalty_phone: msg.loyalty_phone ?? null,
@@ -504,9 +510,9 @@ export default function StaffPage() {
       envoyerEnCuisine: aPrendre ? () => confirmAndSend(aPrendre.order_id) : undefined,
       servir: aServir ? () => markServed(aServir.order_id) : undefined,
       encaisser: additionCash
-        ? () => confirmCash(additionCash.order_id)
+        ? () => confirmCash(additionCash.order_id, additionCash.payment_id)
         : additionCarte
-          ? () => confirmCardTerminal(additionCarte.order_id)
+          ? () => confirmCardTerminal(additionCarte.order_id, additionCarte.payment_id)
           : undefined,
     };
   }
@@ -530,6 +536,15 @@ export default function StaffPage() {
       setError(toFrenchMessage(e));
       loadActiveOrders();
     }
+  }
+
+  function toggleOrderDetail(orderId: number) {
+    setExpandedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
   }
 
   async function confirmAndSend(orderId: number) {
@@ -586,21 +601,21 @@ export default function StaffPage() {
     }
   }
 
-  async function confirmCash(orderId: number) {
+  async function confirmCash(orderId: number, paymentId: number) {
     setError(null);
     try {
-      await api.confirmCashPayment(orderId);
-      setCashRequests((prev) => prev.filter((o) => o.order_id !== orderId));
+      await api.confirmCashPayment(orderId, paymentId);
+      setCashRequests((prev) => prev.filter((o) => o.payment_id !== paymentId));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
   }
 
-  async function confirmCardTerminal(orderId: number) {
+  async function confirmCardTerminal(orderId: number, paymentId: number) {
     setError(null);
     try {
-      await api.confirmCardTerminalPayment(orderId);
-      setCardTerminalRequests((prev) => prev.filter((o) => o.order_id !== orderId));
+      await api.confirmCardTerminalPayment(orderId, paymentId);
+      setCardTerminalRequests((prev) => prev.filter((o) => o.payment_id !== paymentId));
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -665,7 +680,8 @@ export default function StaffPage() {
       .join("");
     const cash = cashRequests
       .map(
-        (c) => `<div>${escapeHtml(c.table_label)} — addition ${formatMoney(c.amount)} (espèces)</div>`
+        (c) =>
+          `<div>${escapeHtml(c.table_label)}${c.payer_name ? ` — ${escapeHtml(c.payer_name)}` : ""} — ${formatMoney(c.amount)} (espèces)</div>`
       )
       .join("");
     win.document.write(
@@ -699,9 +715,13 @@ export default function StaffPage() {
       ? cardTerminalRequests
       : cardTerminalRequests.filter((o) => o.taken_by_staff_id === staff.id);
   const encaissementRequests = [
-    ...myCashRequests.map((o) => ({ ...o, methode: "espèces" as const, confirmer: () => confirmCash(o.order_id) })),
-    ...myCardTerminalRequests.map((o) => ({ ...o, methode: "carte" as const, confirmer: () => confirmCardTerminal(o.order_id) })),
-  ].sort((a, b) => a.order_id - b.order_id);
+    ...myCashRequests.map((o) => ({
+      ...o, methode: "espèces" as const, confirmer: () => confirmCash(o.order_id, o.payment_id),
+    })),
+    ...myCardTerminalRequests.map((o) => ({
+      ...o, methode: "carte" as const, confirmer: () => confirmCardTerminal(o.order_id, o.payment_id),
+    })),
+  ].sort((a, b) => a.payment_id - b.payment_id);
 
   // Tables où ce serveur a au moins une action en cours (commande ou
   // encaissement pris en charge) — le "prêt à servir" n'a pas de propriétaire
@@ -814,6 +834,7 @@ export default function StaffPage() {
                             etat={etatsDesTables[tableActive.id] ?? ETAT_LIBRE}
                             rang={rangs[tableActive.id] ?? null}
                             actions={actionsPourTable(tableActive.id)}
+                            commandeItems={pending.find((o) => o.table_id === tableActive.id)?.items}
                             onFermer={() => setTableOuverte(null)}
                           />
                         )
@@ -854,53 +875,105 @@ export default function StaffPage() {
                 const takenByOther = o.taken_by_staff_id !== null && !takenByMe;
                 const secondes = elapsedSeconds(o.created_at, maintenant);
                 const tardive = secondes !== null && secondes >= ATTENTE_ALERTE_MINUTES * 60;
+                const detailOuvert = expandedOrderIds.has(o.order_id);
                 return (
                   <div
                     key={o.order_id}
-                    className="flex items-center gap-[14px] px-[14px] py-[11px] border-b border-[#efe6d2] last:border-b-0"
+                    className="border-b border-[#efe6d2] last:border-b-0"
                     style={{ backgroundColor: tardive ? "rgba(214,64,30,.06)" : "transparent" }}
                   >
-                    <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
-                      {o.table_label}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[13.5px] font-semibold text-[var(--encre)]">Commande #{o.order_id}</div>
-                      {o.items_updated_at && (
-                        <div className="mt-0.5 flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[var(--harissa-dark)] bg-[rgba(214,64,30,.12)] border border-[rgba(214,64,30,.4)] rounded-full pl-[6px] pr-[7px] py-[2px]">
-                            <PencilIcon className="w-[9px] h-[9px] shrink-0" />
-                            Modifiée
-                          </span>
-                          <span className="text-[11px] text-[var(--ink-soft)]">
-                            il y a {duree(elapsedSeconds(o.items_updated_at, maintenant) ?? 0)}
-                          </span>
-                        </div>
-                      )}
-                      {o.scheduled_for && (
-                        <div className="text-xs text-[var(--laiton)] mt-0.5 flex items-center gap-1">
-                          <MoonIcon className="w-3.5 h-3.5 shrink-0" />
-                          Iftar {formatTime(o.scheduled_for)}
-                        </div>
-                      )}
-                      {takenByOther && (
-                        <p className="text-xs text-[var(--ink-soft)] mt-0.5">Pris en charge par {o.taken_by_staff_name}</p>
-                      )}
-                    </div>
-                    {secondes !== null && (
-                      <span
-                        className="text-[12.5px] font-semibold tabular-nums min-w-[60px] text-end shrink-0"
-                        style={{ color: tardive ? "var(--harissa)" : "var(--ink-soft)" }}
-                      >
-                        {duree(secondes)}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={detailOuvert}
+                      onClick={() => toggleOrderDetail(o.order_id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleOrderDetail(o.order_id);
+                        }
+                      }}
+                      className="flex items-center gap-[14px] px-[14px] py-[11px] cursor-pointer"
+                    >
+                      <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                        {o.table_label}
                       </span>
-                    )}
-                    {!takenByOther && (
-                      <button
-                        onClick={() => (takenByMe ? confirmAndSend(o.order_id) : claim(o.order_id))}
-                        className="shrink-0 whitespace-nowrap rounded-[10px] px-[15px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)]"
-                      >
-                        {takenByMe ? "Confirmer" : "Prendre en charge"}
-                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13.5px] font-semibold text-[var(--encre)]">Commande #{o.order_id}</div>
+                        {o.items_updated_at && (
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[var(--harissa-dark)] bg-[rgba(214,64,30,.12)] border border-[rgba(214,64,30,.4)] rounded-full pl-[6px] pr-[7px] py-[2px]">
+                              <PencilIcon className="w-[9px] h-[9px] shrink-0" />
+                              Modifiée
+                            </span>
+                            <span className="text-[11px] text-[var(--ink-soft)]">
+                              il y a {duree(elapsedSeconds(o.items_updated_at, maintenant) ?? 0)}
+                            </span>
+                          </div>
+                        )}
+                        {o.scheduled_for && (
+                          <div className="text-xs text-[var(--laiton)] mt-0.5 flex items-center gap-1">
+                            <MoonIcon className="w-3.5 h-3.5 shrink-0" />
+                            Iftar {formatTime(o.scheduled_for)}
+                          </div>
+                        )}
+                        {takenByOther && (
+                          <p className="text-xs text-[var(--ink-soft)] mt-0.5">Pris en charge par {o.taken_by_staff_name}</p>
+                        )}
+                      </div>
+                      {secondes !== null && (
+                        <span
+                          className="text-[12.5px] font-semibold tabular-nums min-w-[60px] text-end shrink-0"
+                          style={{ color: tardive ? "var(--harissa)" : "var(--ink-soft)" }}
+                        >
+                          {duree(secondes)}
+                        </span>
+                      )}
+                      {!takenByOther && !takenByMe && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            claim(o.order_id);
+                          }}
+                          className="shrink-0 whitespace-nowrap rounded-[10px] px-[15px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)]"
+                        >
+                          Prendre en charge
+                        </button>
+                      )}
+                      <ChevronLeftIcon
+                        className={`w-4 h-4 shrink-0 text-[var(--laiton)] transition-transform duration-150 ${detailOuvert ? "rotate-90" : "-rotate-90"}`}
+                      />
+                    </div>
+                    {detailOuvert && (
+                      <div className="px-[14px] pb-[14px]">
+                        <div className="border-t border-[#efe6d2] pt-[10px] flex flex-col gap-[6px]">
+                          {o.items.map((item) => (
+                            <div key={item.id} className="flex justify-between gap-3 text-[13px] text-[var(--encre)]">
+                              <span>
+                                {item.quantity}x {item.menu_item_name}
+                              </span>
+                              {(item.notes || item.options.length > 0) && (
+                                <span className="text-[12px] text-[var(--ink-soft)] text-end">
+                                  {[item.notes, ...item.options.map((opt) => opt.option_name)].filter(Boolean).join(" · ")}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {takenByMe && (
+                          <>
+                            <p className="text-[12px] text-[var(--laiton)] mt-[10px]">
+                              Lisez la commande à voix haute avec la table avant de valider.
+                            </p>
+                            <button
+                              onClick={() => confirmAndSend(o.order_id)}
+                              className="w-full mt-[10px] rounded-[10px] px-[15px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)]"
+                            >
+                              Confirmer → cuisine
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -1033,14 +1106,15 @@ export default function StaffPage() {
               {encaissementRequests.map((o) => {
                 const loyaltyMember = o.loyalty_phone ? loyaltyByPhone[o.loyalty_phone] : undefined;
                 return (
-                  <div key={`${o.methode}-${o.order_id}`} className="border-b border-[#efe6d2] last:border-b-0">
+                  <div key={o.payment_id} className="border-b border-[#efe6d2] last:border-b-0">
                     <div className="flex items-center gap-[14px] px-[14px] py-[11px]">
                       <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
                         {o.table_label}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="text-[13.5px] font-semibold text-[var(--encre)]">
-                          Commande #{o.order_id} — {formatMoney(o.amount)}
+                          Commande #{o.order_id}
+                          {o.payer_name ? ` — ${o.payer_name}` : ""} — {formatMoney(o.amount)}
                         </div>
                         <div className="text-xs text-[var(--ink-soft)] mt-0.5">{o.methode === "espèces" ? "Espèces" : "Carte (terminal)"}</div>
                       </div>

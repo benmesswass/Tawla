@@ -230,8 +230,13 @@ def test_confirming_a_cash_payment_assigns_the_invoice_number(client, db_session
     order = _order_ready_to_pay(client, restaurant)
     from tests.conftest import order_headers
 
-    client.post(f"/api/v1/orders/{order['id']}/pay/cash", json={"tip_amount": 0}, headers=order_headers(order))
-    res = client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=_manager_headers(restaurant.id))
+    requested = client.post(
+        f"/api/v1/orders/{order['id']}/pay/cash", json={"tip_amount": 0}, headers=order_headers(order)
+    )
+    payment_id = requested.json()["payments"][0]["id"]
+    res = client.post(
+        f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=_manager_headers(restaurant.id)
+    )
 
     assert res.status_code == 200
     db_order = db_session.get(Order, order["id"])
@@ -246,8 +251,13 @@ def test_the_tunisian_payment_path_still_assigns_no_number(client, db_session):
     order = _order_ready_to_pay(client, restaurant)
     from tests.conftest import order_headers
 
-    client.post(f"/api/v1/orders/{order['id']}/pay/cash", json={"tip_amount": 0}, headers=order_headers(order))
-    res = client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=_manager_headers(restaurant.id))
+    requested = client.post(
+        f"/api/v1/orders/{order['id']}/pay/cash", json={"tip_amount": 0}, headers=order_headers(order)
+    )
+    payment_id = requested.json()["payments"][0]["id"]
+    res = client.post(
+        f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=_manager_headers(restaurant.id)
+    )
 
     assert res.status_code == 200
     db_order = db_session.get(Order, order["id"])

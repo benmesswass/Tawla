@@ -50,7 +50,7 @@ def test_null_provider_raises_a_generic_error_if_called_anyway():
     provider = NullProvider()
     with pytest.raises(PaymentProviderError):
         provider.init_payment(
-            amount=10, order_id="1", description="x", success_url="https://x", fail_url="https://x",
+            amount=10, order_id="1", payment_id="1", description="x", success_url="https://x", fail_url="https://x",
             lifespan_minutes=30,
         )
     with pytest.raises(PaymentProviderError):
@@ -84,7 +84,7 @@ def test_konnect_provider_wraps_init_errors_as_payment_provider_error(monkeypatc
 
     with pytest.raises(PaymentProviderError):
         provider.init_payment(
-            amount=10, order_id="1", description="x", success_url="https://x", fail_url="https://x",
+            amount=10, order_id="1", payment_id="1", description="x", success_url="https://x", fail_url="https://x",
             lifespan_minutes=30,
         )
 
@@ -131,7 +131,7 @@ def test_stripe_provider_wraps_init_errors_as_payment_provider_error(monkeypatch
 
     with pytest.raises(PaymentProviderError):
         provider.init_payment(
-            amount=10, order_id="1", description="x", success_url="https://x", fail_url="https://x",
+            amount=10, order_id="1", payment_id="1", description="x", success_url="https://x", fail_url="https://x",
             lifespan_minutes=30,
         )
 

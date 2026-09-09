@@ -137,16 +137,31 @@ async def get_order(order: Order = Depends(get_order_by_token)):
     return order
 
 
+def _serialize_pending_share(payment) -> schemas.PendingSharePaymentOut:
+    return schemas.PendingSharePaymentOut(
+        payment_id=payment.id,
+        order_id=payment.order_id,
+        table_id=payment.order.table_id,
+        table_label=payment.order.table_label,
+        payer_name=payment.payer_name,
+        amount=float(payment.amount),
+        tip_amount=float(payment.tip_amount),
+        taken_by_staff_id=payment.order.taken_by_staff_id,
+        loyalty_phone=payment.order.loyalty_phone,
+    )
+
+
 @router.get(
-    "/by-restaurant/{restaurant_id}/pending-cash-payments", response_model=list[schemas.OrderOutStaff]
+    "/by-restaurant/{restaurant_id}/pending-cash-payments", response_model=list[schemas.PendingSharePaymentOut]
 )
 async def list_pending_cash_payments(
     restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
 ):
-    """Tables ayant demandé à payer en espèces, pas encore encaissées."""
+    """Convives ayant demandé à payer leur part en espèces, pas encore encaissés."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return await service.list_pending_cash_payments(db, restaurant_id)
+    payments = await service.list_pending_cash_payments(db, restaurant_id)
+    return [_serialize_pending_share(p) for p in payments]
 
 
 @router.post("/{order_id}/push-subscription", status_code=204)
@@ -170,19 +185,24 @@ async def pay_by_card(
     db: Session = Depends(get_db),
 ):
     """
-    Paiement carte par le client. Lié au token : sans ça, n'importe qui
-    pouvait marquer n'importe quelle commande « payée » sans régler un dinar
-    (constat 2 de la revue). Réglé chez le restaurant s'il a connecté son
-    propre Konnect (modèle direct, 2026-08-19), sinon mode démo — voir
+    Paiement carte par le client — de SA PART, pas forcément toute l'addition
+    (identité de table, ROADMAP.md §Override, extension paiement par
+    personne). Lié au token : sans ça, n'importe qui pouvait marquer
+    n'importe quelle commande « payée » sans régler un dinar (constat 2 de la
+    revue). Réglé chez le restaurant s'il a connecté son propre
+    Konnect/Stripe (modèle direct, 2026-08-19), sinon mode démo — voir
     `service.start_card_payment`. `pay_url` non-null = rediriger le client.
     """
-    order, pay_url = await service.start_card_payment(db, order.id, payload.tip_amount, payload.customer_email)
+    order, pay_url = await service.start_card_payment(
+        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
+    )
     return schemas.serialize_order(order, pay_url)
 
 
 @router.get("/{order_id}/pay/card/webhook")
 async def order_card_payment_webhook(
     order_id: int,
+    payment_id: int,
     sig: str,
     db: Session = Depends(get_db),
     _rate: None = Depends(rate_limit()),
@@ -190,19 +210,22 @@ async def order_card_payment_webhook(
     """
     Appelée en GET par Konnect (`?payment_ref=…` ajouté, non utilisé ici : le
     règlement relit toujours le paiement depuis l'API Konnect). `sig` signe
-    `order_id` (voir sign_konnect_order_webhook) — sans elle, un id connu ne
-    suffit pas à forger un règlement.
+    `(order_id, payment_id)` (voir sign_konnect_order_webhook) — sans elle, un
+    id connu ne suffit pas à forger un règlement. `payment_id` (identité de
+    table, ROADMAP.md §Override, extension paiement par personne) distingue
+    QUELLE part de la commande vient d'être réglée — une commande peut en
+    porter plusieurs en vol à la fois, une par convive.
 
     En dev local, Konnect ne peut pas joindre localhost : le filet de
     sécurité est `POST /pay/card/check`, appelé par la page de retour.
     """
     if not is_konnect_enabled():
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "not found"})
-    if not verify_konnect_order_webhook(order_id, sig):
-        log_event(logger, "order.card_payment_webhook_bad_signature", order_id=order_id)
+    if not verify_konnect_order_webhook(order_id, payment_id, sig):
+        log_event(logger, "order.card_payment_webhook_bad_signature", order_id=order_id, payment_id=payment_id)
         raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"})
 
-    result = await service.settle_card_payment(db, order_id)
+    result = await service.settle_card_payment(db, order_id, payment_id)
     return {"received": True, "result": result}
 
 
@@ -268,36 +291,44 @@ async def order_card_payment_stripe_webhook(request: Request, db: Session = Depe
     if obj.get("mode") != "payment":
         return {"received": True, "result": "ignored"}
 
-    order_id_raw = (obj.get("metadata") or {}).get("order_id")
-    if not order_id_raw:
+    metadata = obj.get("metadata") or {}
+    order_id_raw = metadata.get("order_id")
+    payment_id_raw = metadata.get("payment_id")
+    if not order_id_raw or not payment_id_raw:
         log_event(logger, "stripe.card_webhook_missing_order_id", session_id=obj.get("id"))
         return {"received": True, "result": "ignored"}
 
-    # `order_id` est censé être l'entier posé par nous-mêmes à l'initiation
-    # (create_checkout_session) — jamais garanti côté Stripe, qui ne connaît
-    # que la chaîne qu'on lui a confiée. Une valeur illisible ne doit jamais
-    # faire 500 : Stripe rejouerait indéfiniment un évènement impossible à
-    # traiter (poison webhook) plutôt que de l'abandonner.
+    # `order_id`/`payment_id` sont censés être les entiers posés par
+    # nous-mêmes à l'initiation (create_checkout_session) — jamais garantis
+    # côté Stripe, qui ne connaît que les chaînes qu'on lui a confiées. Une
+    # valeur illisible ne doit jamais faire 500 : Stripe rejouerait
+    # indéfiniment un évènement impossible à traiter (poison webhook) plutôt
+    # que de l'abandonner.
     try:
         order_id = int(order_id_raw)
+        payment_id = int(payment_id_raw)
     except (TypeError, ValueError):
         log_event(logger, "stripe.card_webhook_invalid_order_id", order_id_raw=order_id_raw)
         return {"received": True, "result": "ignored"}
 
-    result = await service.settle_card_payment(db, order_id)
+    result = await service.settle_card_payment(db, order_id, payment_id)
     log_event(logger, "stripe.card_webhook", event_type=event["type"], order_id=order_id, result=result)
     return {"received": True, "result": result}
 
 
 @router.post("/{order_id}/pay/card/check", response_model=schemas.OrderOut)
-async def check_card_payment(order: Order = Depends(get_order_by_token), db: Session = Depends(get_db)):
+async def check_card_payment(
+    payment_id: int, order: Order = Depends(get_order_by_token), db: Session = Depends(get_db)
+):
     """
-    Filet de sécurité appelé par la page de retour (`?konnect=success`) — en
-    dev local le webhook ci-dessus ne peut jamais être atteint. Sans effet si
-    rien n'est en attente (idempotent, voir settle_card_payment), donc sans
-    risque à appeler même quand Konnect est désactivé.
+    Filet de sécurité appelé par la page de retour (`?konnect=success` /
+    Stripe, avec `payment_id` dans l'URL de retour — voir
+    `service.start_card_payment`) — en dev local le webhook ci-dessus ne peut
+    jamais être atteint. Sans effet si rien n'est en attente (idempotent,
+    voir settle_card_payment), donc sans risque à appeler même quand aucun
+    fournisseur réel n'est activé.
     """
-    await service.settle_card_payment(db, order.id)
+    await service.settle_card_payment(db, order.id, payment_id)
     db.refresh(order)
     return schemas.serialize_order(order)
 
@@ -308,14 +339,19 @@ async def request_cash_payment(
     order: Order = Depends(get_order_by_token),
     db: Session = Depends(get_db),
 ):
-    """Le client demande à payer en espèces — prévient le serveur en temps réel."""
-    return await service.request_cash_payment(db, order.id, payload.tip_amount, payload.customer_email)
+    """Le client demande à payer sa part en espèces — prévient le serveur en
+    temps réel."""
+    return await service.request_cash_payment(
+        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
+    )
 
 
-@router.post("/{order_id}/pay/cash/confirm", response_model=schemas.OrderOutStaff)
-async def confirm_cash_payment(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
-    """Le serveur confirme avoir encaissé le cash à table."""
-    return await service.confirm_cash_payment(db, order_id, staff)
+@router.post("/{order_id}/pay/cash/confirm/{payment_id}", response_model=schemas.OrderOutStaff)
+async def confirm_cash_payment(
+    order_id: int, payment_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+):
+    """Le serveur confirme avoir encaissé la part en espèces de ce convive."""
+    return await service.confirm_cash_payment(db, payment_id, staff)
 
 
 @router.post("/{order_id}/pay/card-terminal", response_model=schemas.OrderOut)
@@ -325,31 +361,36 @@ async def request_card_terminal_payment(
     db: Session = Depends(get_db),
 ):
     """
-    Carte physique : le client demande, un serveur apporte le terminal —
-    même mécanique que le paiement en espèces (carte physique / en ligne /
-    espèces, 2026-08-19).
+    Carte physique : le client demande à payer sa part, un serveur apporte le
+    terminal — même mécanique que le paiement en espèces (carte physique /
+    en ligne / espèces, 2026-08-19).
     """
-    return await service.request_card_terminal_payment(db, order.id, payload.tip_amount, payload.customer_email)
+    return await service.request_card_terminal_payment(
+        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
+    )
 
 
-@router.post("/{order_id}/pay/card-terminal/confirm", response_model=schemas.OrderOutStaff)
+@router.post("/{order_id}/pay/card-terminal/confirm/{payment_id}", response_model=schemas.OrderOutStaff)
 async def confirm_card_terminal_payment(
-    order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+    order_id: int, payment_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
 ):
-    """Le serveur confirme avoir encaissé la carte physique à table."""
-    return await service.confirm_card_terminal_payment(db, order_id, staff)
+    """Le serveur confirme avoir encaissé la carte physique de ce convive."""
+    return await service.confirm_card_terminal_payment(db, payment_id, staff)
 
 
 @router.get(
-    "/by-restaurant/{restaurant_id}/pending-card-terminal-payments", response_model=list[schemas.OrderOutStaff]
+    "/by-restaurant/{restaurant_id}/pending-card-terminal-payments",
+    response_model=list[schemas.PendingSharePaymentOut],
 )
 async def list_pending_card_terminal_payments(
     restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
 ):
-    """Tables ayant demandé à payer par carte physique, pas encore encaissées."""
+    """Convives ayant demandé à payer leur part par carte physique, pas
+    encore encaissés."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return await service.list_pending_card_terminal_payments(db, restaurant_id)
+    payments = await service.list_pending_card_terminal_payments(db, restaurant_id)
+    return [_serialize_pending_share(p) for p in payments]
 
 
 @router.get("/{order_id}/invoice")

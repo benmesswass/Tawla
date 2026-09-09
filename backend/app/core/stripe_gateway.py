@@ -85,6 +85,7 @@ def create_checkout_session(
     *,
     amount_eur: float,
     order_id: str,
+    payment_id: str,
     description: str,
     success_url: str,
     fail_url: str,
@@ -96,6 +97,13 @@ def create_checkout_session(
     connecté `account_id` s'il est fourni, sinon charge plateforme directe
     (voir docstring du module). Renvoie `(pay_url, payment_ref=session.id)` —
     rediriger vers `pay_url`, stocker `payment_ref` pour le règlement.
+
+    `payment_id` (identité de table, ROADMAP.md §Override, extension paiement
+    par personne) : une commande peut porter plusieurs règlements en vol à la
+    fois, une part par convive (voir `orders/models.py::OrderPayment`) — posé
+    en métadonnées à côté de `order_id` pour que le webhook Connect
+    (`stripe_gateway.construct_connect_webhook_event`) sache LAQUELLE de ces
+    parts vient d'être réglée.
     """
     lifespan = max(_MIN_LIFESPAN_MINUTES, min(_MAX_LIFESPAN_MINUTES, lifespan_minutes))
     try:
@@ -115,7 +123,7 @@ def create_checkout_session(
             ],
             success_url=success_url,
             cancel_url=fail_url,
-            metadata={"order_id": order_id},
+            metadata={"order_id": order_id, "payment_id": payment_id},
             expires_at=int(time.time()) + lifespan * 60,
         )
     except stripe.StripeError as err:

@@ -540,6 +540,17 @@
   font-weight: 500;
 }
 .plan-action button:focus-visible { outline: 2px solid var(--harissa); outline-offset: 2px; }
+.plan-action-commande {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-on-espresso-strong);
+}
+.plan-action-item { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+.plan-action-item-detail { color: var(--ink-on-espresso); font-size: 11.5px; text-align: right; }
+.plan-action-relire { margin: 2px 0 0; font-size: 11.5px; color: var(--laiton-on-espresso-text); }
 
 @media (prefers-reduced-motion: reduce) {
   .piece[data-urgente] { animation: none; }

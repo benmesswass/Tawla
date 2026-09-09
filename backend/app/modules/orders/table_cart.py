@@ -16,14 +16,19 @@ class TableCartStore:
     mémoire suffit en mono-instance, remplacé par un pub/sub le jour où ça ne
     suffit plus, sans toucher aux appelants.
 
-    Une ligne par `menu_item_id`, jamais deux — même limitation déjà assumée
-    par le panier local d'un seul appareil (v1, `CartLine` côté frontend) :
-    ce chantier ne l'étend pas à plusieurs lignes du même article avec des
-    options différentes.
+    Une ligne par (`menu_item_id`, `added_by_key`), jamais deux pour la même
+    paire — même limitation déjà assumée par le panier local d'un seul
+    appareil (v1, `CartLine` côté frontend) : ce chantier ne l'étend pas à
+    plusieurs lignes du même article avec des options différentes pour une
+    même personne. En revanche deux personnes différentes qui commandent le
+    même plat obtiennent bien deux lignes distinctes (identité de table,
+    ROADMAP.md §Override) — `added_by_key` fait partie de la clé pour ça,
+    `None`/vide regroupé sous une seule clé de repli (appareil sans identité
+    déclarée).
     """
 
     def __init__(self) -> None:
-        self._carts: dict[int, dict[int, schemas.OrderItemCreate]] = defaultdict(dict)
+        self._carts: dict[int, dict[tuple[int, str], schemas.OrderItemCreate]] = defaultdict(dict)
 
     def snapshot(self, table_id: int) -> list[schemas.OrderItemCreate]:
         return list(self._carts.get(table_id, {}).values())
@@ -31,10 +36,11 @@ class TableCartStore:
     def set_line(self, table_id: int, item: schemas.OrderItemCreate) -> None:
         """Quantité à 0 retire la ligne — même convention qu'un panier local
         où décrémenter sous 1 fait disparaître l'article."""
+        key = (item.menu_item_id, item.added_by_key or "")
         if item.quantity <= 0:
-            self._carts[table_id].pop(item.menu_item_id, None)
+            self._carts[table_id].pop(key, None)
         else:
-            self._carts[table_id][item.menu_item_id] = item
+            self._carts[table_id][key] = item
 
     def pop_all(self, table_id: int) -> list[schemas.OrderItemCreate]:
         """Lit et vide le panier en une seule opération synchrone (aucun

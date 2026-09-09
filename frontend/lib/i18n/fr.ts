@@ -40,8 +40,8 @@ export const fr = {
   // Écran de récapitulatif ouvert avant validation (façon « panier » d'appli
   // de livraison) : le bouton du bandeau bas ouvre ce récapitulatif au lieu
   // de valider directement, pour que le client revoie tout avant de confirmer.
-  viewCartButton: "Voir mon panier",
-  cartSummaryTitle: "Votre panier",
+  viewCartButton: "Panier de table",
+  cartSummaryTitle: "Panier de la table",
   backToMenuButton: "← Retour à la carte",
 
   orderCancelledTitle: "Commande annulée",
@@ -106,6 +106,11 @@ export const fr = {
   payByCardTerminal: "Carte à table (terminal serveur)",
   payByCash: "Espèces (le serveur passe encaisser)",
   paymentFailedRetry: "Le paiement n'a pas abouti. Vous pouvez réessayer.",
+  // Paiement par personne (identité de table, ROADMAP.md §Override, extension).
+  paidByPerson: (name: string) => `${name} a payé sa part`,
+  remainingAmountLabel: "Reste à payer :",
+  myShareTitle: "Votre part",
+  myShareAlreadyPaidMessage: "Vous avez réglé votre part — merci !",
   invoiceDownload: "Télécharger la facture (PDF)",
   invoiceQrCaption: "Scannez pour la retrouver sur un autre appareil",
   orderAgain: "Commander à nouveau",
@@ -122,12 +127,22 @@ export const fr = {
   unassignedSharedNote: "Les plats non attribués sont partagés équitablement.",
   splitBillDisclaimer: "Indicatif — le paiement se fait pour l'addition complète, une seule fois pour la table.",
 
-  partyPromptTitle: "Vous êtes combien à table ?",
-  partyPromptJustMe: "Juste moi",
-  partyPromptSkip: "Passer",
-  partyNamesHint: "Prénoms (facultatif)",
-  partyContinue: "Continuer",
-  partySummary: (n: number) => `Vous êtes ${n} à table`,
+  // Identité de table (ROADMAP.md §Override, extension) : modale affichée dès
+  // le scan, remplace l'ancien "vous êtes combien à table ?" posé une fois
+  // pour toute la tablée — chaque téléphone répond pour lui-même.
+  identityPromptTitle: "Votre prénom",
+  identityPromptSubtitle:
+    "Il suivra vos plats jusqu'au paiement — pratique pour partager l'addition à la fin.",
+  identityInputPlaceholder: "Perso1",
+  identityInputCaption: "Laissé vide, vous resterez « Perso1 ».",
+  identityContinue: "Continuer",
+  identityPromptSkip: "Passer",
+  rosterSectionTitle: "À table",
+  rosterYouTag: (name: string) => `Vous · ${name}`,
+  rosterAddGuestChip: "+ Ajouter",
+  rosterAddGuestPlaceholder: "Prénom (ex : Yassine)",
+  rosterAddGuestConfirm: "Ajouter",
+  rosterOwnItemsOnlyNote: "Vous ne pouvez retirer que vos propres plats.",
 
   offlineQueuedTitle: "Connexion perdue",
   offlineQueuedMessage: "Votre commande est enregistrée sur ce téléphone. Elle partira dès le retour du réseau — n'actualisez pas la page.",

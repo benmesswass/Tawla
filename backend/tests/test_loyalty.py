@@ -128,11 +128,12 @@ def test_order_count_increments_on_confirmed_cash_payment(client):
 
     order = _place_order(client, table, item, phone)
     client.post(f"/api/v1/orders/{order['id']}/confirm", headers=manager_headers)
-    client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
+    requested = client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
     # Une demande cash seule (pas encore encaissée) ne doit rien faire gagner.
     assert _lookup(client, table, phone).json()["order_count"] == 0
+    payment_id = requested.json()["payments"][0]["id"]
 
-    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=manager_headers)
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=manager_headers)
     assert _lookup(client, table, phone).json()["order_count"] == 1
 
 

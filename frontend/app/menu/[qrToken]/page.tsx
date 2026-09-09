@@ -29,7 +29,7 @@ import { localeSwitchLabel, useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 import SplitBill from "@/components/SplitBill";
-import PartyPrompt from "@/components/PartyPrompt";
+import IdentityPrompt from "@/components/IdentityPrompt";
 import TawlaMark from "@/components/brand/TawlaMark";
 import VignetteCategorie from "@/components/VignetteCategorie";
 import ReseauxSociaux from "@/components/ReseauxSociaux";
@@ -46,6 +46,7 @@ import {
   PencilIcon,
   ChevronLeftIcon,
   ClockIcon,
+  LockIcon,
 } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
@@ -71,6 +72,12 @@ type CartLine = {
   // F5/A2) — un seul jeu de choix par article au panier (v1) : rouvrir le
   // sélecteur remplace la sélection plutôt que d'ajouter une seconde ligne.
   selectedOptions: SelectedOption[];
+  // Clé d'appareil de qui a ajouté cette ligne, et son prénom au moment de
+  // l'ajout (identité de table, ROADMAP.md §Override) — c'est ce qui permet
+  // à deux personnes de commander le même plat sans que ça fasse une seule
+  // ligne partagée, et de n'afficher le retrait que sur ses propres plats.
+  addedByKey: string;
+  addedByName: string;
 };
 
 /**
@@ -195,12 +202,51 @@ function genererIdPanier(): string {
 
 type CreateOrderPayload = Parameters<typeof api.createOrder>[0];
 
+// --- Identité de table (ROADMAP.md §Override, extension) ------------------
+// Un prénom par téléphone, conservé tant que ce navigateur revoit ce QR — une
+// reconnexion ou un rafraîchissement de page reprend la même clé plutôt que
+// d'en réclamer une nouvelle place à la table (même principe que
+// `loyaltyPhoneStorageKey`, jamais purgé non plus).
+
+type StoredIdentity = { deviceKey: string; name: string };
+
+function identityStorageKey(qrToken: string): string {
+  return `resto-qr-menu:identity:${qrToken}`;
+}
+
+function readStoredIdentity(qrToken: string): StoredIdentity | null {
+  const raw = localStorage.getItem(identityStorageKey(qrToken));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.deviceKey === "string" && typeof parsed?.name === "string") return parsed;
+  } catch {
+    // Contenu illisible : traité comme "pas encore d'identité", la modale
+    // la redemandera plutôt que de planter sur un JSON invalide.
+  }
+  return null;
+}
+
+function storeIdentity(qrToken: string, identity: StoredIdentity): void {
+  localStorage.setItem(identityStorageKey(qrToken), JSON.stringify(identity));
+}
+
 // --- Panier de table partagé (ROADMAP.md §Override — panier synchronisé
-// multi-appareils) --------------------------------------------------------
+// multi-appareils, puis identité de table) ---------------------------------
 // Le serveur est la seule source de vérité (voir orders/table_cart.py côté
-// backend) : ces deux fonctions traduisent entre SA représentation par fil
-// (OrderItemPayload, indexée par menu_item_id) et celle du panier local
-// (CartLine, qui garde l'objet MenuItem complet pour l'affichage).
+// backend) : ces fonctions traduisent entre SA représentation par fil
+// (OrderItemPayload, une ligne par plat ET par personne) et celle du panier
+// local (CartLine, qui garde l'objet MenuItem complet pour l'affichage).
+//
+// La clé du panier local n'est plus le seul `menu_item_id` : deux personnes
+// qui commandent le même plat doivent obtenir deux lignes distinctes, une par
+// personne — `cartKey` compose donc l'id de l'article et la clé d'appareil de
+// qui l'a ajouté (chaîne vide = appareil sans identité déclarée, même repli
+// que côté serveur).
+
+function cartKey(menuItemId: number, addedByKey: string): string {
+  return `${menuItemId}:${addedByKey}`;
+}
 
 function cartLineToWireItem(itemId: number, line: CartLine): OrderItemPayload {
   return {
@@ -211,6 +257,8 @@ function cartLineToWireItem(itemId: number, line: CartLine): OrderItemPayload {
     shared_with: line.shared ? line.sharedWith : [],
     from_suggestion: line.fromSuggestion,
     selected_option_ids: line.selectedOptions.map((o) => o.optionId),
+    added_by_key: line.addedByKey || null,
+    added_by_name: line.addedByName || null,
   };
 }
 
@@ -237,19 +285,61 @@ function wireItemToCartLine(wireItem: OrderItemPayload, menu: MenuItem[]): CartL
     sharedWith: wireItem.shared_with ?? [],
     fromSuggestion: wireItem.from_suggestion ?? false,
     selectedOptions,
+    addedByKey: wireItem.added_by_key ?? "",
+    addedByName: wireItem.added_by_name ?? "",
   };
 }
 
-function cartToWireRecord(cart: Record<number, CartLine>): Record<number, OrderItemPayload> {
-  const wire: Record<number, OrderItemPayload> = {};
-  for (const [id, line] of Object.entries(cart)) {
-    wire[Number(id)] = cartLineToWireItem(Number(id), line);
+function cartToWireRecord(cart: Record<string, CartLine>): Record<string, OrderItemPayload> {
+  const wire: Record<string, OrderItemPayload> = {};
+  for (const [key, line] of Object.entries(cart)) {
+    wire[key] = cartLineToWireItem(line.item.id, line);
   }
   return wire;
 }
 
 function sameWireItem(a: OrderItemPayload, b: OrderItemPayload): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// --- Paiement par personne (identité de table, ROADMAP.md §Override,
+// extension) ----------------------------------------------------------------
+// Prévisualisation cliente de la part de chacun — même algorithme que
+// SplitBill.tsx (mode "par plat") et orders/split.py::compute_shares côté
+// serveur, qui reste seul à faire foi au moment de payer : ce calcul-ci ne
+// sert qu'à AFFICHER un montant avant de cliquer, jamais à le facturer.
+
+function computeSharesLocal(order: Order, names: string[]): number[] {
+  const n = names.length;
+  const totals = new Array(n).fill(0);
+  for (const item of order.items) {
+    const lineTotal = item.unit_price * item.quantity;
+    let targets: number[];
+    if (item.is_shared) {
+      const places = item.shared_with.filter((p) => p >= 1 && p <= n);
+      targets = places.length ? places : Array.from({ length: n }, (_, i) => i + 1);
+    } else if (item.added_by_name && names.includes(item.added_by_name)) {
+      targets = [names.indexOf(item.added_by_name) + 1];
+    } else {
+      targets = Array.from({ length: n }, (_, i) => i + 1);
+    }
+    const part = lineTotal / targets.length;
+    for (const p of targets) totals[p - 1] += part;
+  }
+  return totals;
+}
+
+// Le dernier convive encore non réglé absorbe l'arrondi — même règle que
+// côté serveur (orders/split.py::compute_payable_amount) : il paie
+// exactement ce qu'il reste, jamais sa part théorique.
+function myPayableAmount(order: Order, rosterNames: string[], myName: string): number {
+  const paidNames = new Set(order.payments.filter((p) => p.status === "paid").map((p) => p.payer_name));
+  const names = rosterNames.includes(myName) ? rosterNames : [...rosterNames, myName];
+  const remaining = names.filter((n) => !paidNames.has(n));
+  if (remaining.length <= 1) return order.amount_remaining;
+  const totals = computeSharesLocal(order, names);
+  const myIndex = names.indexOf(myName);
+  return myIndex >= 0 ? totals[myIndex] : order.amount_remaining;
 }
 
 export default function MenuPage({ params }: { params: { qrToken: string } }) {
@@ -259,7 +349,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [table, setTable] = useState<Table | null>(null);
   const [restaurant, setRestaurant] = useState<RestaurantPublic | null>(null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<Record<number, CartLine>>({});
+  const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [cartOrderId, setCartOrderId] = useState<string | null>(null);
   // Récapitulatif façon panier d'appli de livraison, ouvert AVANT de valider
   // : le bandeau bas n'ouvre plus que ça, la validation elle-même se joue
@@ -326,22 +416,33 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
   const [waiterCallState, setWaiterCallState] = useState<"idle" | "calling" | "called">("idle");
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
-  // Convives déclarés pour la table (ROADMAP.md §Override, extension) —
-  // `null` tant que rien n'est déclaré, `partyKnown` distingue ça de "pas
-  // encore reçu l'instantané du serveur" pour ne jamais afficher le prompt
-  // avant de savoir si quelqu'un d'autre à table a déjà répondu.
-  const [party, setParty] = useState<{ size: number; names: (string | null)[] } | null>(null);
-  const [partyKnown, setPartyKnown] = useState(false);
-  const [partyPromptDismissed, setPartyPromptDismissed] = useState(false);
-  // Dès que la table a déclaré son effectif (PartyPrompt / `party.updated`),
-  // il prime sur la valeur par défaut de `convives` : sinon le sélecteur
-  // "Partagé entre" d'un plat reste bloqué à 2 pastilles anonymes même pour
-  // une table de 4 qui a donné ses prénoms.
+  // Identité de table (ROADMAP.md §Override, extension) : qui commande sous
+  // quel prénom, un par appareil — remplace l'ancien "vous êtes combien à
+  // table ?" posé une fois pour toute la tablée. `roster` est dans l'ordre où
+  // chacun a rejoint (voir tables/roster.py côté backend), ce qui lui laisse
+  // jouer le même rôle que les anciennes places 1..N pour le sélecteur
+  // "Partagé entre" et le calculateur d'addition (SplitBill).
+  const [myIdentity, setMyIdentity] = useState<StoredIdentity | null>(null);
+  const [showIdentityPrompt, setShowIdentityPrompt] = useState(false);
+  // Une seule fois par visite : sans ça, une reconnexion du canal de la
+  // table (recharge, coupure réseau) qui retombe sur cet effet AVANT que le
+  // stockage n'ait rattrapé le "Passer"/prénom qu'on vient de soumettre
+  // rouvrait la modale à un client qui venait tout juste d'y répondre —
+  // reproduit en revenant sur "commander à nouveau" juste après validation
+  // (retour QA) : c'est censé rester le même convive, pas en redemander un.
+  const identityPromptedRef = useRef(false);
+  const [roster, setRoster] = useState<{ key: string; name: string }[]>([]);
+  const [addingGuest, setAddingGuest] = useState(false);
+  const [guestNameInput, setGuestNameInput] = useState("");
+  const myDeviceKey = myIdentity?.deviceKey ?? "";
+  // Dès que la table a un roster, il prime sur la valeur par défaut de
+  // `convives` : sinon le sélecteur "Partagé entre" d'un plat reste bloqué à
+  // 2 pastilles anonymes même pour une table de 4 qui a déjà scanné.
   useEffect(() => {
-    if (party) {
-      setConvives(Math.max(2, Math.min(12, party.size)));
+    if (roster.length > 0) {
+      setConvives(Math.max(2, Math.min(12, roster.length)));
     }
-  }, [party]);
+  }, [roster]);
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
   const [offlineRetryCountdown, setOfflineRetryCountdown] = useState(5);
@@ -491,16 +592,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     if (!konnectResult) return;
     const returnedOrderId = Number(params.get("order_id"));
     const returnedOrderToken = params.get("order_token");
+    const returnedPaymentId = Number(params.get("payment_id"));
     window.history.replaceState(null, "", window.location.pathname);
 
     if (konnectResult === "fail") {
       setPaymentError(t.paymentFailedRetry);
       return;
     }
-    if (konnectResult !== "success" || !returnedOrderId || !returnedOrderToken) return;
+    if (konnectResult !== "success" || !returnedOrderId || !returnedOrderToken || !returnedPaymentId) return;
 
     api
-      .checkCardPayment(returnedOrderId, returnedOrderToken)
+      .checkCardPayment(returnedOrderId, returnedPaymentId, returnedOrderToken)
       .then((updated) => {
         setOpenOrders((prev) =>
           prev.map((r) => (r.order.id === updated.id ? { order: updated, token: returnedOrderToken } : r))
@@ -778,7 +880,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // changé (voir l'effet de synchronisation plus bas) — `null` tant qu'aucun
   // instantané n'est arrivé, pour ne jamais rejouer un panier local sur un
   // serveur qui n'a pas encore parlé.
-  const lastSyncedWireRef = useRef<Record<number, OrderItemPayload> | null>(null);
+  const lastSyncedWireRef = useRef<Record<string, OrderItemPayload> | null>(null);
   // Vrai seulement entre l'envoi d'un "cart.validate" et sa réponse — sert
   // uniquement à limiter le filet de sécurité ci-dessous à CE cas précis,
   // sans réagir à une coupure du canal table pendant qu'une validation REST
@@ -787,18 +889,45 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const { status: tableSocketStatus, send: sendTableAction } = useReconnectingSocket(tableWsUrl, (msg) => {
     if (msg.event === "waiter_call.resolved") {
       setWaiterCallState("idle");
-    } else if (msg.event === "party.updated") {
-      setPartyKnown(true);
-      setParty(msg.size != null ? { size: msg.size, names: msg.names ?? [] } : null);
+    } else if (msg.event === "roster.updated") {
+      const people: { key: string; name: string }[] = msg.people ?? [];
+      setRoster(people);
+      // Le serveur vient peut-être de résoudre un prénom laissé vide en
+      // "PersoN" (voir tables/roster.py::set_name) — on le reprend en local
+      // pour qu'une reconnexion réannonce ce nom résolu, jamais une chaîne
+      // vide qui redemanderait un nouveau "PersoN" à chaque fois.
+      setMyIdentity((prev) => {
+        if (!prev) return prev;
+        const mine = people.find((p) => p.key === prev.deviceKey);
+        if (mine && mine.name !== prev.name) {
+          const updated: StoredIdentity = { deviceKey: prev.deviceKey, name: mine.name };
+          storeIdentity(qrToken, updated);
+          return updated;
+        }
+        return prev;
+      });
     } else if (msg.event === "cart.updated") {
       const lines: OrderItemPayload[] = msg.lines ?? [];
-      const rebuilt: Record<number, CartLine> = {};
-      const wire: Record<number, OrderItemPayload> = {};
+      const rebuilt: Record<string, CartLine> = {};
+      const wire: Record<string, OrderItemPayload> = {};
       for (const wireItem of lines) {
         const line = wireItemToCartLine(wireItem, menu);
         if (line) {
-          rebuilt[wireItem.menu_item_id] = line;
-          wire[wireItem.menu_item_id] = wireItem;
+          const key = cartKey(wireItem.menu_item_id, wireItem.added_by_key ?? "");
+          rebuilt[key] = line;
+          // Re-encodé via `cartLineToWireItem` plutôt que de garder le
+          // `wireItem` brut du serveur : ce dernier peut porter un champ en
+          // moins ou en plus (version du serveur en avance ou en retard sur
+          // ce build du client, ex. déploiement en cours) sans que la ligne
+          // elle-même diffère vraiment. En comparant plus tard deux objets
+          // construits par la MÊME fonction, `sameWireItem` ne peut plus voir
+          // un écart qui n'existe que dans la forme du JSON — sans ça, un
+          // champ qui ne fait l'aller-retour dans aucun sens (constaté avec
+          // un serveur qui ignorait encore `added_by_key`/`added_by_name`)
+          // faisait échouer la comparaison à chaque rendu, et l'effet de
+          // synchronisation sortant rejouait le même `cart.set` en boucle
+          // infinie (des milliers de messages/seconde, audit QA).
+          wire[key] = cartLineToWireItem(wireItem.menu_item_id, line);
         }
       }
       // Marqué comme déjà synchronisé AVANT `setCart` : sans ça, l'effet de
@@ -812,6 +941,17 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       // N'importe quel appareil de la table a pu valider — pas forcément
       // celui-ci : tous doivent basculer sur le suivi de la même commande.
       pendingSocketValidateRef.current = false;
+      // Le serveur a déjà vidé le panier partagé (`pop_all`) avant de
+      // diffuser cet événement — qu'on soit celui qui a validé ou un autre
+      // appareil de la table, notre copie locale est désormais périmée. Sans
+      // ça, revenir au menu via "commander à nouveau" réaffichait encore le
+      // total de la commande qu'on vient de valider au lieu de repartir de
+      // zéro (retour QA). Réf mise à jour AVANT `setCart`, même raison que
+      // pour "cart.updated" ci-dessus : sinon l'effet de synchronisation
+      // sortant croit que chaque ligne vient d'être retirée et le renvoie
+      // aussitôt au serveur.
+      lastSyncedWireRef.current = {};
+      setCart({});
       // `public_token` ne revient JAMAIS de `getOrder` (Phase 12.2 : il n'est
       // renvoyé qu'à la création, `OrderCreatedOut`) — c'est celui que porte
       // cet événement qui fait foi, pas un champ de la réponse HTTP.
@@ -835,9 +975,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       if (msg.code === "ITEM_UNAVAILABLE" || msg.code === "ITEM_NOT_FOUND") {
         const staleId = msg.menu_item_id as number | undefined;
         if (staleId) {
+          // Retire les lignes de CET article pour tout le monde à la table —
+          // il peut y en avoir plusieurs, une par personne qui l'a commandé.
           setCart((prev) => {
             const next = { ...prev };
-            delete next[staleId];
+            for (const key of Object.keys(next)) {
+              if (next[key].item.id === staleId) delete next[key];
+            }
             return next;
           });
         }
@@ -863,19 +1007,61 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
     const currentWire = cartToWireRecord(cart);
     const previousWire = lastSyncedWireRef.current ?? {};
-    const changedIds = new Set([...Object.keys(currentWire), ...Object.keys(previousWire)].map(Number));
-    for (const id of changedIds) {
-      const current = currentWire[id];
-      const previous = previousWire[id];
+    const changedKeys = new Set([...Object.keys(currentWire), ...Object.keys(previousWire)]);
+    for (const key of changedKeys) {
+      const current = currentWire[key];
+      const previous = previousWire[key];
       if (current && (!previous || !sameWireItem(current, previous))) {
         sendTableAction({ action: "cart.set", ...current });
       } else if (!current && previous) {
-        sendTableAction({ action: "cart.set", menu_item_id: id, quantity: 0 });
+        // Ligne retirée : le serveur la retrouve par (menu_item_id,
+        // added_by_key) — sans reprendre exactement la même clé, ce message
+        // viderait la ligne "anonyme" au lieu de la sienne (table_cart.py).
+        sendTableAction({
+          action: "cart.set",
+          menu_item_id: previous.menu_item_id,
+          added_by_key: previous.added_by_key ?? null,
+          quantity: 0,
+        });
       }
     }
     lastSyncedWireRef.current = currentWire;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, tableSocketStatus]);
+
+  // Dès que le canal de la table est connecté : soit ce téléphone a déjà une
+  // identité pour ce QR (rafraîchissement, reconnexion) et la réannonce sans
+  // rien demander, soit il n'en a pas et la modale la recueille. Lu
+  // directement dans le stockage plutôt que depuis l'état `myIdentity` (qui
+  // pourrait ne pas encore avoir fini de se charger au même rendu).
+  useEffect(() => {
+    if (tableSocketStatus !== "connected") return;
+    const stored = readStoredIdentity(qrToken);
+    if (stored) {
+      setMyIdentity(stored);
+      sendTableAction({ action: "identity.set", device_key: stored.deviceKey, name: stored.name });
+    } else if (!identityPromptedRef.current) {
+      identityPromptedRef.current = true;
+      setShowIdentityPrompt(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableSocketStatus]);
+
+  function confirmIdentity(name: string) {
+    const deviceKey = genererIdPanier();
+    const identity: StoredIdentity = { deviceKey, name: name.trim() };
+    storeIdentity(qrToken, identity);
+    setMyIdentity(identity);
+    setShowIdentityPrompt(false);
+    sendTableAction({ action: "identity.set", device_key: deviceKey, name: identity.name });
+  }
+
+  function addGuestToRoster() {
+    const name = guestNameInput.trim();
+    if (name) sendTableAction({ action: "identity.add_guest", name });
+    setGuestNameInput("");
+    setAddingGuest(false);
+  }
 
   // Filet de sécurité : si la connexion tombe pendant qu'une validation est
   // en vol (message envoyé, mais ni "cart.validated" ni "cart.error" jamais
@@ -972,6 +1158,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     });
   }, [activeCategoryAnchor]);
 
+  // Chacun paie SA PART, jamais l'addition entière (identité de table,
+  // ROADMAP.md §Override, extension paiement par personne) — `myDeviceKey`/
+  // `myIdentity.name` identifient qui paie, le montant réel est recalculé et
+  // figé côté serveur (orders/split.py), jamais celui affiché ici qui n'est
+  // qu'une prévisualisation (voir `myPayableAmount`).
   async function payByCard() {
     if (!trackedOrder) return;
     setPaying(true);
@@ -979,9 +1170,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     const tip = parseAmountInput(tipInput);
     try {
       if (!orderToken) return;
-      const updated = await api.payByCard(trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined);
-      // Restaurant ayant connecté son propre Konnect (modèle direct,
-      // 2026-08-19) : rediriger pour régler, la commande reste "pending"
+      const updated = await api.payByCard(
+        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined
+      );
+      // Restaurant ayant connecté son propre Konnect/Stripe (modèle direct,
+      // 2026-08-19) : rediriger pour régler, cette part reste "pending"
       // jusqu'au retour (`?konnect=success`, voir l'effet plus bas). Sans
       // `pay_url` : mode démo, déjà payée, rien de plus à faire.
       if (updated.pay_url) {
@@ -1005,7 +1198,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       // Le pourboire vaut aussi pour les espèces : il était saisi puis perdu,
       // et le serveur venait encaisser le total sans lui.
       const tip = parseAmountInput(tipInput);
-      const updated = await api.requestCashPayment(trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined);
+      const updated = await api.requestCashPayment(
+        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined
+      );
       setTrackedOrder(updated);
     } catch (e) {
       setPaymentError(toLocalizedMessage(e, locale));
@@ -1022,7 +1217,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       if (!orderToken) return;
       const tip = parseAmountInput(tipInput);
       const updated = await api.requestCardTerminalPayment(
-        trackedOrder.id, tip, orderToken, customerEmail.trim() || undefined
+        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined
       );
       setTrackedOrder(updated);
     } catch (e) {
@@ -1056,11 +1251,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // clic sur « Valider », ou une file hors ligne rejouée, retombe sur la
     // même commande au lieu d'en faire préparer deux (Phase 19.2).
     setCartOrderId((prev) => prev ?? genererIdPanier());
+    // Toujours SA PROPRE ligne (identité de table, ROADMAP.md §Override) :
+    // un appareil ne peut jamais incrémenter le plat d'un autre convive, même
+    // si l'article est le même — d'où la clé composée plutôt que `item.id`
+    // seul (voir `cartKey`).
+    const key = cartKey(item.id, myDeviceKey);
     setCart((prev) => {
-      const existing = prev[item.id];
+      const existing = prev[key];
       return {
         ...prev,
-        [item.id]: {
+        [key]: {
           item,
           quantity: (existing?.quantity ?? 0) + 1,
           note: existing?.note ?? "",
@@ -1073,6 +1273,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           // Choix du sélecteur d'options, gardés à l'identique tant qu'on ne
           // fait qu'incrémenter la quantité (voir openOptionChooser).
           selectedOptions: selectedOptions ?? existing?.selectedOptions ?? [],
+          addedByKey: myDeviceKey,
+          addedByName: myIdentity?.name ?? "",
         },
       };
     });
@@ -1084,7 +1286,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // d'un article lui-même issu d'une suggestion, pour ne pas enchaîner.
     if (!fromSuggestion) {
       const suggestedIds = suggestions[String(item.id)] ?? [];
-      const proposable = suggestedIds.filter((id) => !cart[id]);
+      const proposable = suggestedIds.filter((id) => !cart[cartKey(id, myDeviceKey)]);
       setSuggestFor(proposable.length ? item : null);
     }
   }
@@ -1139,20 +1341,24 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setOptionChooserFor(null);
   }
 
-  function removeFromCart(itemId: number) {
+  // Prend la clé composée du panier (voir `cartKey`), jamais le seul id du
+  // plat : appelée avec la clé de SA PROPRE ligne à chaque site d'appel — le
+  // panier de table (écran de révision) le garantit en ne montrant le retrait
+  // que sur les lignes dont `addedByKey === myDeviceKey`.
+  function removeFromCart(key: string) {
     setCart((prev) => {
       const next = { ...prev };
-      if (next[itemId] && next[itemId].quantity > 1) {
-        next[itemId] = { ...next[itemId], quantity: next[itemId].quantity - 1 };
+      if (next[key] && next[key].quantity > 1) {
+        next[key] = { ...next[key], quantity: next[key].quantity - 1 };
       } else {
-        delete next[itemId];
+        delete next[key];
       }
       return next;
     });
   }
 
-  function setNote(itemId: number, note: string) {
-    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], note } } : prev));
+  function setNote(key: string, note: string) {
+    setCart((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], note } } : prev));
   }
 
   // --- Révision de la commande envoyée (fenêtres 1 et 2) --------------------
@@ -1298,26 +1504,50 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     }
   }
 
-  function setShared(itemId: number, shared: boolean) {
+  function setShared(key: string, shared: boolean) {
+    // Cocher "à partager" pré-sélectionne sa propre place, quand elle est
+    // connue : on est forcément de la partie sur un plat qu'on est en train
+    // d'ajouter soi-même — sans ça, partager avec un voisin de table exigeait
+    // de se cocher SOI-même en plus, un tap qu'on oublie facilement.
+    const myPlace = roster.findIndex((p) => p.key === myDeviceKey) + 1;
     setCart((prev) =>
-      prev[itemId]
-        ? { ...prev, [itemId]: { ...prev[itemId], shared, sharedWith: shared ? prev[itemId].sharedWith : [] } }
+      prev[key]
+        ? {
+            ...prev,
+            [key]: {
+              ...prev[key],
+              shared,
+              sharedWith: shared
+                ? prev[key].sharedWith.length > 0
+                  ? prev[key].sharedWith
+                  : myPlace > 0
+                    ? [myPlace]
+                    : []
+                : [],
+            },
+          }
         : prev
     );
   }
 
-  function toggleConvive(itemId: number, place: number) {
+  function toggleConvive(key: string, place: number) {
     setCart((prev) => {
-      const ligne = prev[itemId];
+      const ligne = prev[key];
       if (!ligne) return prev;
       const sharedWith = ligne.sharedWith.includes(place)
         ? ligne.sharedWith.filter((p) => p !== place)
         : [...ligne.sharedWith, place].sort((a, b) => a - b);
-      return { ...prev, [itemId]: { ...ligne, sharedWith } };
+      return { ...prev, [key]: { ...ligne, sharedWith } };
     });
   }
 
+  // Panier de TOUTE la table — c'est lui qui valide, et lui que montre l'écran
+  // de révision (identité de table, ROADMAP.md §Override : "seule la page du
+  // panier... reste synchronisée et englobe toute la commande de tout le
+  // monde"). `myCartLines` n'est qu'une vue filtrée, pour le bandeau bas de la
+  // carte — qui ne doit refléter que ce que CE téléphone a lui-même ajouté.
   const cartLines = Object.values(cart);
+  const myCartLines = cartLines.filter((l) => l.addedByKey === myDeviceKey);
   // Prix de base + suppléments des options choisies (France, F5/A2) — jamais
   // relu ailleurs que dans le panier : le serveur refige tout à la création
   // de la commande (voir orders/service.py::create_order côté backend).
@@ -1325,6 +1555,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     return line.item.price + line.selectedOptions.reduce((sum, o) => sum + o.priceDelta, 0);
   }
   const total = cartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
+  const myTotal = myCartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
 
   async function validateOrder() {
     if (!table || cartLines.length === 0) return;
@@ -1440,7 +1671,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             (item): item is MenuItem =>
               !!item &&
               item.is_available &&
-              !cart[item.id] &&
+              !cart[cartKey(item.id, myDeviceKey)] &&
               !trackedOrder.items.some((line) => line.menu_item_id === item.id)
           )
           .slice(0, 3)
@@ -2123,6 +2354,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {t.paidMessage(trackedOrder.payment_method ?? "card", trackedOrder.tip_amount)}
                   </p>
                 </div>
+                {/* Qui a payé quoi (identité de table, ROADMAP.md §Override,
+                    extension paiement par personne) — reste visible une fois
+                    la commande entièrement réglée, comme un reçu. */}
+                {trackedOrder.payments.length > 1 && (
+                  <div className="mt-2 space-y-1">
+                    {trackedOrder.payments.map((p) => (
+                      <div key={p.id} className="flex justify-between text-[12.5px] text-[var(--ink-soft)]">
+                        <span>{p.payer_name || t.personLabel(1)}</span>
+                        <span className="tabular-nums">
+                          {formatAmount(p.amount + p.tip_amount)} {t.currency}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <p className="mt-2 text-[12.5px] text-[var(--ink-soft)] text-center">
                   {t.orderSubtitle(table.label, trackedOrder.id)}
                 </p>
@@ -2146,96 +2392,133 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </>
             )}
 
-            {trackedOrder.payment_status === "pending" && (
-              <p className="text-sm text-[#8a6420] bg-[rgba(184,134,46,.12)] border border-[rgba(184,134,46,.55)] rounded-xl p-3">
-                {trackedOrder.payment_method === "card_terminal"
-                  ? t.cardTerminalPendingMessage(trackedOrder.total_amount)
-                  : t.cashPendingMessage(trackedOrder.total_amount)}
-              </p>
-            )}
+            {trackedOrder.payment_status !== "paid" && (() => {
+              const rosterNames = roster.map((p) => p.name);
+              const myName = myIdentity?.name ?? "";
+              const paidPayments = trackedOrder.payments.filter((p) => p.status === "paid");
+              const paidNames = new Set(paidPayments.map((p) => p.payer_name));
+              const remainingNames = rosterNames.filter((n) => !paidNames.has(n));
+              const myPayment = trackedOrder.payments.find((p) => p.payer_key === myDeviceKey);
+              const myAmount = myPayableAmount(trackedOrder, rosterNames, myName);
+              return (
+                <div className="space-y-3">
+                  {paidPayments.length > 0 && (
+                    <div className="rounded-xl p-3 bg-[var(--semoule-raised)] border border-[var(--line)] space-y-1.5">
+                      {paidPayments.map((p) => (
+                        <p key={p.id} className="text-[12.5px] text-[var(--menthe)] font-semibold">
+                          ✓ {t.paidByPerson(p.payer_name || t.personLabel(1))} ({formatAmount(p.amount + p.tip_amount)}{" "}
+                          {t.currency})
+                        </p>
+                      ))}
+                      <p className="text-[12.5px] text-[var(--ink-soft)]">
+                        {t.remainingAmountLabel} {formatAmount(trackedOrder.amount_remaining)} {t.currency}
+                        {remainingNames.length > 0 && ` — ${remainingNames.join(", ")}`}
+                      </p>
+                    </div>
+                  )}
 
-            {trackedOrder.payment_status === "unpaid" && (
-              <div className="space-y-3">
-                {paymentError && (
-                  <div className="text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
-                    {paymentError}
-                  </div>
-                )}
-                <SplitBill order={trackedOrder} t={t} partySize={party?.size} partyNames={party?.names} />
-                <div>
-                  <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
-                  <div className="flex gap-2">
-                    {[0, 0.05, 0.1].map((pct) => {
-                      const amount = Number((trackedOrder.total_amount * pct).toFixed(currentMarket.currency.decimals));
-                      const selected = (tipInput === "" && pct === 0) || Number(tipInput) === amount;
-                      return (
-                        <button
-                          key={pct}
-                          type="button"
-                          onClick={() => setTipInput(pct === 0 ? "" : String(amount))}
-                          className={`flex-1 rounded-[10px] py-[9px] text-center ${
-                            selected
-                              ? "border border-[var(--harissa)] bg-[var(--creme)] text-[var(--harissa)] text-[12.5px] font-bold"
-                              : "border border-[var(--line)] bg-white text-[var(--encre)] text-[12.5px] font-semibold"
-                          }`}
-                        >
-                          {pct === 0 ? t.tipNone : `${Math.round(pct * 100)}%`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    aria-label={t.tipLabel}
-                    value={tipInput}
-                    onChange={(e) => setTipInput(e.target.value.replace(/[^0-9.,]/g, ""))}
-                    placeholder={t.tipPlaceholder}
-                    className="mt-2 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
+                  {paymentError && (
+                    <div className="text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
+                      {paymentError}
+                    </div>
+                  )}
+                  <SplitBill
+                    order={trackedOrder}
+                    t={t}
+                    partySize={roster.length || undefined}
+                    partyNames={rosterNames}
                   />
+
+                  {myPayment?.status === "paid" ? (
+                    <p className="text-sm font-semibold text-[var(--menthe)] bg-[rgba(31,107,79,.1)] border border-[rgba(31,107,79,.45)] rounded-xl p-3">
+                      ✓ {t.myShareAlreadyPaidMessage}
+                    </p>
+                  ) : myPayment ? (
+                    <p className="text-sm text-[#8a6420] bg-[rgba(184,134,46,.12)] border border-[rgba(184,134,46,.55)] rounded-xl p-3">
+                      {myPayment.method === "card_terminal"
+                        ? t.cardTerminalPendingMessage(myPayment.amount + myPayment.tip_amount)
+                        : t.cashPendingMessage(myPayment.amount + myPayment.tip_amount)}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-[var(--encre)]">{t.myShareTitle}</p>
+                      <div>
+                        <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
+                        <div className="flex gap-2">
+                          {[0, 0.05, 0.1].map((pct) => {
+                            const amount = Number((myAmount * pct).toFixed(currentMarket.currency.decimals));
+                            const selected = (tipInput === "" && pct === 0) || Number(tipInput) === amount;
+                            return (
+                              <button
+                                key={pct}
+                                type="button"
+                                onClick={() => setTipInput(pct === 0 ? "" : String(amount))}
+                                className={`flex-1 rounded-[10px] py-[9px] text-center ${
+                                  selected
+                                    ? "border border-[var(--harissa)] bg-[var(--creme)] text-[var(--harissa)] text-[12.5px] font-bold"
+                                    : "border border-[var(--line)] bg-white text-[var(--encre)] text-[12.5px] font-semibold"
+                                }`}
+                              >
+                                {pct === 0 ? t.tipNone : `${Math.round(pct * 100)}%`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={t.tipLabel}
+                          value={tipInput}
+                          onChange={(e) => setTipInput(e.target.value.replace(/[^0-9.,]/g, ""))}
+                          placeholder={t.tipPlaceholder}
+                          className="mt-2 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
+                        />
+                      </div>
+                      <div className="flex justify-between text-[15px] font-bold text-[var(--encre)] pt-2 border-t border-[var(--line)]">
+                        <span>{t.totalToPayLabel}</span>
+                        <span className="tabular-nums">
+                          {formatAmount(myAmount + parseAmountInput(tipInput))} {t.currency}
+                        </span>
+                      </div>
+                      <div>
+                        <label htmlFor="customer-email" className="text-sm text-[var(--ink-soft)]">
+                          {t.emailLabel}
+                        </label>
+                        <input
+                          id="customer-email"
+                          type="email"
+                          value={customerEmail}
+                          onChange={(e) => setCustomerEmail(e.target.value)}
+                          placeholder={t.emailPlaceholder}
+                          className="mt-1 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
+                        />
+                      </div>
+                      <button
+                        onClick={payByCard}
+                        disabled={paying}
+                        className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-[15px] text-[15px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
+                      >
+                        {t.payByCard}
+                      </button>
+                      <button
+                        onClick={payByCardTerminal}
+                        disabled={paying}
+                        className="w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-[13px] text-sm font-semibold disabled:opacity-50"
+                      >
+                        {t.payByCardTerminal}
+                      </button>
+                      <button
+                        onClick={payByCash}
+                        disabled={paying}
+                        className="w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-[13px] text-sm font-semibold disabled:opacity-50"
+                      >
+                        {t.payByCash}
+                      </button>
+                    </>
+                  )}
                 </div>
-                <div className="flex justify-between text-[15px] font-bold text-[var(--encre)] pt-2 border-t border-[var(--line)]">
-                  <span>{t.totalToPayLabel}</span>
-                  <span className="tabular-nums">
-                    {formatAmount(trackedOrder.total_amount + parseAmountInput(tipInput))} {t.currency}
-                  </span>
-                </div>
-                <div>
-                  <label htmlFor="customer-email" className="text-sm text-[var(--ink-soft)]">
-                    {t.emailLabel}
-                  </label>
-                  <input
-                    id="customer-email"
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    placeholder={t.emailPlaceholder}
-                    className="mt-1 w-full text-sm bg-white border border-[var(--line)] rounded-xl px-3 py-2"
-                  />
-                </div>
-                <button
-                  onClick={payByCard}
-                  disabled={paying}
-                  className="w-full bg-[var(--harissa)] text-[var(--semoule)] rounded-xl py-[15px] text-[15px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px] disabled:opacity-50"
-                >
-                  {t.payByCard}
-                </button>
-                <button
-                  onClick={payByCardTerminal}
-                  disabled={paying}
-                  className="w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-[13px] text-sm font-semibold disabled:opacity-50"
-                >
-                  {t.payByCardTerminal}
-                </button>
-                <button
-                  onClick={payByCash}
-                  disabled={paying}
-                  className="w-full border border-[var(--line)] bg-white text-[var(--encre)] rounded-xl py-[13px] text-sm font-semibold disabled:opacity-50"
-                >
-                  {t.payByCash}
-                </button>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -2297,9 +2580,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   // Prénom déclaré à la place de "Personne N", quand donné — même repli que
-  // SplitBill.tsx et le résumé de table ci-dessous.
+  // SplitBill.tsx. `roster` est dans l'ordre où chacun a rejoint la table,
+  // ce qui lui donne le même rôle que l'ancien `party.names` positionnel.
   function personLabel(place: number): string {
-    return party?.names[place - 1] || t.personLabel(place);
+    return roster[place - 1]?.name || t.personLabel(place);
   }
 
   function renderItem(item: MenuItem, index = 0) {
@@ -2309,7 +2593,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     // que l'escamoter (retour du premier service).
     const rupture = !item.is_available;
     const photo = mediaUrl(item.image_url);
-    const ligne = cart[item.id];
+    // Uniquement SA PROPRE ligne (identité de table) : la carte ne doit
+    // refléter que ce que CE téléphone a lui-même ajouté, jamais ce que les
+    // autres convives ont commandé depuis le leur.
+    const ligne = cart[cartKey(item.id, myDeviceKey)];
     const perPerson = ligne
       ? (lineUnitPrice(ligne) * ligne.quantity) / (ligne.sharedWith.length > 0 ? ligne.sharedWith.length : convives)
       : 0;
@@ -2419,7 +2706,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 {ligne && (
                   <>
                     <button
-                      onClick={() => removeFromCart(item.id)}
+                      onClick={() => removeFromCart(cartKey(item.id, myDeviceKey))}
                       aria-label={t.removeFromCartAria(item.name)}
                       className="w-[34px] h-[34px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
                     >
@@ -2460,7 +2747,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             <input
               type="text"
               value={ligne.note}
-              onChange={(e) => setNote(item.id, e.target.value)}
+              onChange={(e) => setNote(cartKey(item.id, myDeviceKey), e.target.value)}
               placeholder={t.notePlaceholder}
               className="w-full text-xs bg-white border border-[var(--line)] rounded-[10px] px-[10px] py-2 placeholder:text-[var(--ink-soft)]"
             />
@@ -2468,7 +2755,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <input
                 type="checkbox"
                 checked={ligne.shared}
-                onChange={(e) => setShared(item.id, e.target.checked)}
+                onChange={(e) => setShared(cartKey(item.id, myDeviceKey), e.target.checked)}
                 className="sr-only"
               />
               <span
@@ -2505,7 +2792,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       <button
                         key={place}
                         type="button"
-                        onClick={() => toggleConvive(item.id, place)}
+                        onClick={() => toggleConvive(cartKey(item.id, myDeviceKey), place)}
                         aria-pressed={choisi}
                         className={`rounded-full border px-[12px] py-[5px] text-sm transition-colors ${
                           choisi
@@ -2563,6 +2850,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
   return (
     <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pb-[132px] ${wrapperClassName ?? ""}`}>
+      {/* Identité de table (ROADMAP.md §Override, extension) : bloquante, dès
+          que le canal de la table est connecté et que ce téléphone n'a pas
+          déjà une identité pour ce QR (voir l'effet plus haut). */}
+      {showIdentityPrompt && (
+        <IdentityPrompt restaurantName={restaurant.name} tableLabel={table.label} onSubmit={confirmIdentity} t={t} />
+      )}
       {/* Bannière de couverture (Phase D1 de ROADMAP_DESIGN.md, point 2) :
           seulement si le patron a envoyé une photo du lieu — sinon l'aplat
           harissa d'aujourd'hui reste tel quel, jamais un entre-deux à moitié
@@ -2666,37 +2959,6 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       )}
 
       <div className="p-4 max-w-md mx-auto">
-        {/* Convives déclarés (ROADMAP.md §Override, extension) : le prompt une
-            seule fois par table — jamais si un autre convive y a déjà répondu
-            ou si le canal temps réel n'est pas là pour partager la réponse —
-            puis, une fois répondu, un rappel qui reste affiché pendant toute
-            la commande, pour cet appareil comme pour tout autre qui scanne le
-            même QR ensuite (état tenu par le serveur, voir `party.updated`). */}
-        {tableSocketStatus === "connected" && partyKnown && (
-          <div className="mb-4">
-            {party === null ? (
-              !partyPromptDismissed && (
-                <PartyPrompt
-                  suggestedSize={table?.seats ?? 2}
-                  t={t}
-                  onSubmit={(size, names) => {
-                    sendTableAction({ action: "party.set", size, names });
-                  }}
-                  onSkip={() => setPartyPromptDismissed(true)}
-                />
-              )
-            ) : (
-              party.size > 1 && (
-                <p className="text-sm text-[var(--ink-soft)]">
-                  {t.partySummary(party.size)}
-                  {party.names.some(Boolean) &&
-                    ` — ${party.names.map((n, i) => n || t.personLabel(i + 1)).join(", ")}`}
-                </p>
-              )
-            )}
-          </div>
-        )}
-
         {/* Commandes déjà passées et pas encore réglées : sans ce rappel, une
             première tournée s'oubliait dès qu'on retournait au menu, et le
             client repartait sans avoir payé. */}
@@ -2807,16 +3069,20 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           ))
         )}
 
-        {cartLines.length > 0 && !showCartReview && (
+        {/* Uniquement CE que ce téléphone a lui-même ajouté (identité de
+            table) : la carte ne doit pas réagir aux ajouts des autres
+            convives, seul le panier de table (ci-dessous) englobe tout le
+            monde. */}
+        {myCartLines.length > 0 && !showCartReview && (
           <div className="fixed bottom-0 left-0 right-0 bg-[var(--espresso)] pt-[14px] px-4 pb-[18px]">
             <div className="max-w-md mx-auto">
               <div className="flex justify-between items-center gap-3" data-visite="client-panier">
                 <div>
                   <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.6)]">
-                    {t.cartItemsCount(cartLines.reduce((s, l) => s + l.quantity, 0))}
+                    {t.cartItemsCount(myCartLines.reduce((s, l) => s + l.quantity, 0))}
                   </p>
                   <p className={`${lalezar.className} text-[26px] leading-none tabular-nums text-[var(--semoule)] mt-0.5`}>
-                    {formatAmount(total)} {t.currency}
+                    {formatAmount(myTotal)} {t.currency}
                   </p>
                 </div>
                 <button
@@ -2867,51 +3133,136 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     </button>
                   </div>
                 )}
-                {cartLines.map((line) => (
-                  <div
-                    key={line.item.id}
-                    className="rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[14.5px] font-semibold text-[var(--encre)]">{line.item.name}</p>
-                        {line.selectedOptions.length > 0 && (
-                          <p className="text-xs text-[var(--ink-soft)] mt-0.5">
-                            {line.selectedOptions.map((o) => o.optionName).join(" · ")}
-                          </p>
-                        )}
-                        {line.note && <p className="text-xs text-[var(--ink-soft)] mt-0.5">{line.note}</p>}
-                        {line.shared && (
-                          <span className="text-xs text-[var(--laiton)] inline-flex items-center gap-1 mt-1">
-                            <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
+                {/* À table (identité de table, ROADMAP.md §Override) : qui a
+                    déjà scanné, avec possibilité d'ajouter un convive qui ne
+                    scanne pas — sert au tag sous chaque plat ci-dessous et à
+                    la répartition de l'addition (SplitBill). */}
+                <div className="rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-3">
+                  <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+                    {t.rosterSectionTitle}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {roster.map((p) => (
+                      <span
+                        key={p.key}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                          p.key === myDeviceKey
+                            ? "bg-[var(--harissa)] border-[var(--harissa)] text-[var(--semoule)]"
+                            : "border-[var(--line)] bg-white text-[var(--encre)]"
+                        }`}
+                      >
+                        {p.key === myDeviceKey ? t.rosterYouTag(p.name) : p.name}
+                      </span>
+                    ))}
+                    {!addingGuest && (
+                      <button
+                        type="button"
+                        onClick={() => setAddingGuest(true)}
+                        className="rounded-full border border-dashed border-[var(--line-strong)] px-3 py-1 text-xs font-semibold text-[var(--ink-soft)]"
+                      >
+                        {t.rosterAddGuestChip}
+                      </button>
+                    )}
+                  </div>
+                  {addingGuest && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={guestNameInput}
+                        onChange={(e) => setGuestNameInput(e.target.value)}
+                        placeholder={t.rosterAddGuestPlaceholder}
+                        maxLength={30}
+                        autoFocus
+                        className="flex-1 bg-white border border-[var(--line)] rounded-[10px] px-3 py-1.5 text-sm text-[var(--encre)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={addGuestToRoster}
+                        className="rounded-[10px] px-3 py-1.5 text-xs font-bold bg-[var(--harissa)] text-[var(--semoule)] whitespace-nowrap"
+                      >
+                        {t.rosterAddGuestConfirm}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {cartLines.map((line) => {
+                  const key = cartKey(line.item.id, line.addedByKey);
+                  const mine = line.addedByKey === myDeviceKey;
+                  return (
+                    <div
+                      key={key}
+                      className="rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[14.5px] font-semibold text-[var(--encre)]">{line.item.name}</p>
+                          {line.selectedOptions.length > 0 && (
+                            <p className="text-xs text-[var(--ink-soft)] mt-0.5">
+                              {line.selectedOptions.map((o) => o.optionName).join(" · ")}
+                            </p>
+                          )}
+                          {line.note && <p className="text-xs text-[var(--ink-soft)] mt-0.5">{line.note}</p>}
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            {line.shared && (
+                              <span className="text-xs text-[var(--laiton)] inline-flex items-center gap-1">
+                                <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
+                              </span>
+                            )}
+                            {/* Prénom de qui a ajouté ce plat (identité de table) —
+                                le tag qui permet à l'addition de le retrouver plus
+                                tard, plutôt qu'une ligne anonyme. */}
+                            <span
+                              className={`text-[10.5px] font-semibold px-2 py-[2px] rounded-full ${
+                                mine
+                                  ? "bg-[rgba(214,64,30,.1)] text-[var(--harissa-dark)]"
+                                  : "bg-[rgba(107,89,71,.1)] text-[var(--ink-soft)]"
+                              }`}
+                            >
+                              {mine ? t.rosterYouTag(line.addedByName) : line.addedByName}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
+                          {formatAmount(lineUnitPrice(line) * line.quantity)} {t.currency}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-end gap-2">
+                        {mine ? (
+                          <>
+                            <button
+                              onClick={() => removeFromCart(key)}
+                              aria-label={t.removeFromCartAria(line.item.name)}
+                              className="w-[30px] h-[30px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                            >
+                              −
+                            </button>
+                            <span className="inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums">
+                              {line.quantity}
+                            </span>
+                            <button
+                              onClick={() => addToCart(line.item)}
+                              aria-label={t.addToCartAria(line.item.name)}
+                              className="w-[30px] h-[30px] rounded-full bg-[var(--harissa)] text-[var(--semoule)] text-[17px] leading-none shadow-sm transition-transform active:scale-90"
+                            >
+                              +
+                            </button>
+                          </>
+                        ) : (
+                          // Vu, jamais modifiable : seul l'appareil qui a ajouté
+                          // ce plat peut en changer la quantité ou le retirer.
+                          <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--ink-soft)]">
+                            <LockIcon className="w-3.5 h-3.5 shrink-0" />
+                            {line.quantity}×
                           </span>
                         )}
                       </div>
-                      <span className="shrink-0 text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
-                        {formatAmount(lineUnitPrice(line) * line.quantity)} {t.currency}
-                      </span>
                     </div>
-                    <div className="mt-2 flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => removeFromCart(line.item.id)}
-                        aria-label={t.removeFromCartAria(line.item.name)}
-                        className="w-[30px] h-[30px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
-                      >
-                        −
-                      </button>
-                      <span className="inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums">
-                        {line.quantity}
-                      </span>
-                      <button
-                        onClick={() => addToCart(line.item)}
-                        aria-label={t.addToCartAria(line.item.name)}
-                        className="w-[30px] h-[30px] rounded-full bg-[var(--harissa)] text-[var(--semoule)] text-[17px] leading-none shadow-sm transition-transform active:scale-90"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
+                {cartLines.some((l) => l.addedByKey !== myDeviceKey) && (
+                  <p className="text-[11px] text-[var(--ink-faint)]">{t.rosterOwnItemsOnlyNote}</p>
+                )}
 
                 {cartLines.some((l) => l.shared) && (
                   <label className="flex items-center justify-between gap-2 text-sm text-[var(--encre)] pt-2">
@@ -2986,7 +3337,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <ul className="mt-3 space-y-2">
                 {(suggestions[String(suggestFor.id)] ?? [])
                   .map((id) => menu.find((m) => m.id === id))
-                  .filter((item): item is MenuItem => !!item && item.is_available && !cart[item.id])
+                  .filter((item): item is MenuItem => !!item && item.is_available && !cart[cartKey(item.id, myDeviceKey)])
                   .map((item) => (
                     <li key={item.id} className="flex items-center gap-3">
                       <span className="flex-1 text-sm text-[var(--ink-soft)]">

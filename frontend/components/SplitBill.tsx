@@ -38,7 +38,7 @@ export default function SplitBill({
   const [mode, setMode] = useState<SplitMode>("items");
   const [peopleCount, setPeopleCount] = useState(() => partySize ?? convivesDeLaCommande(order));
   const [assignments, setAssignments] = useState<Record<number, number[]>>(() =>
-    Object.fromEntries(order.items.map((it) => [it.id, it.shared_with ?? []]))
+    Object.fromEntries(order.items.map((it) => [it.id, defaultAssignment(it, partyNames)]))
   );
   // Prénom déclaré à la place de "Personne N", quand donné — jamais que pour
   // l'affichage, voir le commentaire de tête sur ce composant.
@@ -169,6 +169,27 @@ export default function SplitBill({
       <p className="text-xs text-[var(--ink-soft)]">{t.splitBillDisclaimer}</p>
     </div>
   );
+}
+
+/**
+ * Sélection initiale des places pour un plat, avant toute retouche manuelle
+ * (identité de table, ROADMAP.md §Override) :
+ * - un plat explicitement « à partager » entre des places précises garde ce
+ *   choix tel quel (`shared_with`, déjà saisi au moment de composer) ;
+ * - un plat « à partager pour toute la table » sans place précisée reste sans
+ *   personne cochée — c'est le sens même de ce choix, pas un oubli à corriger ;
+ * - un plat NON partagé revient à une seule personne : celle qui l'a ajouté
+ *   depuis son propre téléphone. Sans ce repli, un plat personnel de Karim
+ *   apparaissait sans personne cochée, donc partagé par erreur entre toute la
+ *   table dans le calcul par défaut.
+ * Reste modifiable ensuite dans tous les cas — ceci ne fixe que l'état de
+ * départ.
+ */
+function defaultAssignment(item: Order["items"][number], partyNames?: (string | null)[]): number[] {
+  if (item.shared_with.length > 0) return item.shared_with;
+  if (item.is_shared || !item.added_by_name || !partyNames) return [];
+  const position = partyNames.findIndex((n) => n === item.added_by_name) + 1;
+  return position > 0 ? [position] : [];
 }
 
 /**

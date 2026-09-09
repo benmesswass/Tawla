@@ -93,21 +93,25 @@ def verify_konnect_webhook(restaurant_id: int, sig: str) -> bool:
     return hmac.compare_digest(sign_konnect_webhook(restaurant_id), sig)
 
 
-def sign_konnect_order_webhook(order_id: int) -> str:
+def sign_konnect_order_webhook(order_id: int, payment_id: int) -> str:
     """
     Même principe que `sign_konnect_webhook`, pour le webhook de paiement
-    carte d'une COMMANDE (modèle direct, connexion Konnect au paiement carte,
-    2026-08-19) — domaine séparé (préfixe `order:`) : une signature de
+    carte d'une PART de commande (modèle direct, connexion Konnect au
+    paiement carte, 2026-08-19 ; paiement par personne, ROADMAP.md §Override,
+    extension) — domaine séparé (préfixe `order:`) : une signature de
     commande ne doit jamais pouvoir être rejouée comme signature de
-    restaurant, ni réciproquement.
+    restaurant, ni réciproquement. `payment_id` fait partie de la valeur
+    signée : sans lui, la signature d'une part réglée par un convive
+    resterait valable pour régler celle d'un autre convive de la même
+    commande.
     """
-    return hmac.new(_webhook_key(), f"order:{order_id}".encode("utf-8"), sha256).hexdigest()
+    return hmac.new(_webhook_key(), f"order:{order_id}:payment:{payment_id}".encode("utf-8"), sha256).hexdigest()
 
 
-def verify_konnect_order_webhook(order_id: int, sig: str) -> bool:
+def verify_konnect_order_webhook(order_id: int, payment_id: int, sig: str) -> bool:
     if not sig:
         return False
-    return hmac.compare_digest(sign_konnect_order_webhook(order_id), sig)
+    return hmac.compare_digest(sign_konnect_order_webhook(order_id, payment_id), sig)
 
 
 class KonnectError(Exception):
