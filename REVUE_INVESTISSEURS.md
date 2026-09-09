@@ -5,6 +5,15 @@ code lu, suite de tests exécutée (121 tests verts, 61 s), surface publique de
 l'API attaquée par exécution réelle, marché tunisien recoupé sur sources
 publiques.
 
+> **Erratum du 2026-09-09 — ne pas réécrire ce document, il est daté.** Tout ce
+> qu'il dit de la métrique « commande perdue » (et de l'argument « le produit la
+> mesure, il ne la devine pas ») ne vaut plus : ce compteur a été retiré du
+> produit et de l'argumentaire. Il ne comptait que les annulations qu'un serveur
+> avait pris la peine d'enregistrer — zéro dans une équipe qui ne clique pas, et
+> aveugle au client qui se lasse et s'en va. La page de preuve repose désormais
+> sur le délai commande → cuisine et le panier moyen, mesurés sans aucun geste
+> de la salle. Voir `CONTEXT.md` et le journal de livraison de `ROADMAP.md`.
+
 **Note d'investissement : 3,9/10** — pass aujourd'hui, revoir à 90 jours.
 **Note d'artisanat technique : 7,5/10.** L'écart entre les deux _est_ le
 diagnostic : le produit est bien construit, il n'a simplement rencontré

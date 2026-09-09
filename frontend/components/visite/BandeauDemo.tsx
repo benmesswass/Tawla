@@ -79,7 +79,13 @@ export default function BandeauDemo() {
     // s'empilent au lieu de se superposer quand les deux sont visibles.
     <div className="pointer-events-auto flex flex-col items-center gap-2" role="status">
       <div className="flex items-center gap-1.5 rounded-full bg-[var(--espresso)] text-[var(--semoule)] text-xs pl-3.5 pr-1.5 py-1.5 shadow-lg">
-        <span>Démonstration — effacée dans {restant(session.expireLe)}</span>
+        {/* « chiffres d'exemple » n'est pas une précaution de style : la démo
+            s'ouvre avec deux semaines de service fabriquées
+            (backend/app/modules/demo/historique.py) pour que les écrans du
+            manager ne soient pas vides. Un restaurateur doit lire ces
+            chiffres pour ce qu'ils sont — la mesure est ce que Tawla vend,
+            elle ne se laisse pas confondre avec un décor. */}
+        <span>Démonstration — chiffres d&apos;exemple, effacée dans {restant(session.expireLe)}</span>
         {/* Bouton distinct de l'annonce du délai : la phrase seule ne se
             lisait pas comme cliquable (retour de Wassim après une démo
             client, 2026-08-27). */}

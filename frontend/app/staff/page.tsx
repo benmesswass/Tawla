@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lalezar } from "@/lib/fonts";
-import { api, staffWsUrl, LoyaltyMember, ModificationRequest, MyShift, Order, PlanLandmark, PlanTable } from "@/lib/api";
+import {
+  api,
+  staffWsUrl,
+  LoyaltyMember,
+  ModificationRequest,
+  MyShift,
+  Order,
+  OrderInProgressStatus,
+  PlanLandmark,
+  PlanTable,
+} from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
@@ -18,16 +28,16 @@ import EmptyState from "@/components/ui/EmptyState";
 import MaSoiree from "@/components/MaSoiree";
 import PlanDeSalle from "@/components/plan/PlanDeSalle";
 import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
+import ModaleLibererTable from "@/components/plan/ModaleLibererTable";
 import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon, ChevronLeftIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 
-// Seuil propre à cet écran (2026-08-28, ex-partagé avec la définition de
-// « commande perdue » — voir CONTEXT.md) : une table qui attend depuis plus de
-// dix minutes mérite d'être signalée au serveur, même si elle ne compte plus
-// comme perdue dans les chiffres du patron. Dix minutes reste une proposition
-// à confronter au premier pilote, comme `SERVICE_DAY_START_HOUR`.
+// Seuil propre à cet écran : une table qui attend depuis plus de dix minutes
+// mérite d'être signalée au serveur. Purement visuel — il n'alimente aucun
+// chiffre montré au patron. Dix minutes reste une proposition à confronter au
+// premier pilote, comme `SERVICE_DAY_START_HOUR`.
 const ATTENTE_ALERTE_MINUTES = 10;
 import Skeleton from "@/components/ui/Skeleton";
 import TawlaMark from "@/components/brand/TawlaMark";
@@ -67,8 +77,10 @@ type CashRequest = {
 type CardTerminalRequest = CashRequest;
 type WaiterCall = { call_id: number; table_id: number; table_label: string; created_at: string | null };
 /** Commandes parties en cuisine : rien à faire pour le serveur, mais la table
- *  n'est pas libre pour autant — le plan doit la montrer occupée. */
-type EnCuisine = { order_id: number; table_id: number };
+ *  n'est pas libre pour autant — le plan doit la montrer occupée. `status`
+ *  sert uniquement à ModaleLibererTable (étape affichée avant confirmation) —
+ *  la trace réelle, elle, est toujours recalculée côté backend. */
+type EnCuisine = { order_id: number; table_id: number; status: "confirmed" | "sent_to_kitchen" | "in_preparation" };
 
 function fromApi(o: Order): PendingOrder {
   return {
@@ -115,6 +127,51 @@ function FileVide({ message }: { message: string }) {
   return <p className="py-5 px-[14px] text-center text-[12.5px] text-[var(--ink-faint)]">{message}</p>;
 }
 
+type LigneDiff = {
+  key: string;
+  nature: "modifie" | "retire" | "ajoute";
+  nom: string;
+  quantitePrecedente: number | null;
+  quantite: number;
+  ligneId: number;
+};
+
+// "−1× Bavette" ne dit pas si c'est un retrait complet ou une quantité qui
+// baisse de 2 à 1 : chaque ligne affiche donc son propre avant/après plutôt
+// qu'un delta signé.
+function construireLignesDiff(request: ModificationRequest): LigneDiff[] {
+  return request.lines.map((ligne) => {
+    if (ligne.requested_quantity === 0) {
+      return {
+        key: `ligne-${ligne.id}`,
+        nature: "retire",
+        nom: ligne.menu_item_name,
+        quantitePrecedente: null,
+        quantite: ligne.previous_quantity,
+        ligneId: ligne.id,
+      };
+    }
+    if (ligne.previous_quantity === 0) {
+      return {
+        key: `ligne-${ligne.id}`,
+        nature: "ajoute",
+        nom: ligne.menu_item_name,
+        quantitePrecedente: null,
+        quantite: ligne.requested_quantity,
+        ligneId: ligne.id,
+      };
+    }
+    return {
+      key: `ligne-${ligne.id}`,
+      nature: "modifie",
+      nom: ligne.menu_item_name,
+      quantitePrecedente: ligne.previous_quantity,
+      quantite: ligne.requested_quantity,
+      ligneId: ligne.id,
+    };
+  });
+}
+
 export default function StaffPage() {
   // Doit être appelé avant useCurrentStaff — voir lib/demoLien.ts.
   useAccesDemoParLien();
@@ -139,6 +196,9 @@ export default function StaffPage() {
   const [enCuisine, setEnCuisine] = useState<EnCuisine[]>([]);
   const [vuePlan, setVuePlan] = useState(true);
   const [tableOuverte, setTableOuverte] = useState<number | null>(null);
+  const [modaleLiberation, setModaleLiberation] = useState<
+    { tableId: number; tableLabel: string; commandeEnCours: OrderInProgressStatus | null } | null
+  >(null);
   const [loyaltyByPhone, setLoyaltyByPhone] = useState<Record<string, LoyaltyMember>>({});
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
@@ -217,7 +277,11 @@ export default function StaffPage() {
       setEnCuisine(
         orders
           .filter((o) => ["confirmed", "sent_to_kitchen", "in_preparation"].includes(o.status))
-          .map((o) => ({ order_id: o.id, table_id: o.table_id }))
+          .map((o) => ({
+            order_id: o.id,
+            table_id: o.table_id,
+            status: o.status as "confirmed" | "sent_to_kitchen" | "in_preparation",
+          }))
       );
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -337,6 +401,16 @@ export default function StaffPage() {
     }
   }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan, loadReperes]);
 
+  // Une table occupée (scan du QR) n'a pas d'événement WebSocket dédié —
+  // contrairement à sa libération, qui en diffuse un (voir plus bas) — donc
+  // ce plan la rattrape par un sondage léger plutôt que de rester périmé
+  // jusqu'au prochain rechargement complet de l'écran.
+  useEffect(() => {
+    if (!restaurantId) return;
+    const tick = setInterval(loadPlan, 20_000);
+    return () => clearInterval(tick);
+  }, [restaurantId, loadPlan]);
+
   const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
       // Le message temps réel ne porte pas les articles (pensé léger, comme
@@ -349,7 +423,7 @@ export default function StaffPage() {
       setEnCuisine((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
           ? prev
-          : [...prev, { order_id: msg.order_id, table_id: msg.table_id }]
+          : [...prev, { order_id: msg.order_id, table_id: msg.table_id, status: "sent_to_kitchen" }]
       );
     }
     if (msg.event === "order.claimed") {
@@ -436,6 +510,11 @@ export default function StaffPage() {
     if (msg.event === "waiter_call.resolved") {
       setWaiterCalls((prev) => prev.filter((c) => c.call_id !== msg.call_id));
     }
+    // Un collègue vient de libérer une table (ou nous-même, depuis un autre
+    // appareil) : elle doit repasser « libre » ici aussi, tout de suite.
+    if (msg.event === "table.released") {
+      setPlan((prev) => prev.map((t) => (t.id === msg.table_id ? { ...t, occupied_at: null } : t)));
+    }
   });
 
   // Canal refusé (session expirée, compte désactivé par le manager) : le hook
@@ -462,9 +541,15 @@ export default function StaffPage() {
     }
   }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift]);
 
+  const tablesOccupees = useMemo(
+    () => new Set(plan.filter((t) => t.occupied_at !== null).map((t) => t.id)),
+    [plan]
+  );
+
   const etatsDesTables = useMemo(
     () =>
       construireEtats({
+        tablesOccupees,
         aPrendre: pending.map((o) => ({
           table_id: o.table_id,
           depuis: o.created_at,
@@ -482,7 +567,7 @@ export default function StaffPage() {
         appels: waiterCalls.map((c) => ({ table_id: c.table_id, depuis: c.created_at })),
         enCuisine,
       }),
-    [pending, readyToServe, cashRequests, cardTerminalRequests, waiterCalls, enCuisine, staff?.id]
+    [tablesOccupees, pending, readyToServe, cashRequests, cardTerminalRequests, waiterCalls, enCuisine, staff?.id]
   );
 
   const salleDessinee = plan.some((t) => t.pos_x !== null && t.pos_y !== null);
@@ -514,7 +599,46 @@ export default function StaffPage() {
         : additionCarte
           ? () => confirmCardTerminal(additionCarte.order_id, additionCarte.payment_id)
           : undefined,
+      libererTable: tablesOccupees.has(tableId) ? () => ouvrirModaleLiberation(tableId) : undefined,
     };
+  }
+
+  /**
+   * Ce que le client verra dans ModaleLibererTable avant de confirmer — un
+   * aperçu, jamais la source de vérité : le backend recalcule toujours
+   * lui-même l'état réel au moment de la libération (`service.py::
+   * _order_in_progress_status`), donc un léger décalage ici (ex: cuisine qui
+   * vient de commencer la préparation) ne fait jamais rater une note requise.
+   */
+  function commandeEnCoursPourTable(tableId: number): OrderInProgressStatus | null {
+    const aPrendre = pending.find((o) => o.table_id === tableId);
+    if (aPrendre) return "pending_confirmation";
+    const enCours = enCuisine.find((o) => o.table_id === tableId);
+    if (enCours) return enCours.status;
+    const aServir = readyToServe.find((o) => o.table_id === tableId);
+    if (aServir) return "ready";
+    const addition = cashRequests.find((o) => o.table_id === tableId) ?? cardTerminalRequests.find((o) => o.table_id === tableId);
+    if (addition) return "served_unpaid";
+    return null;
+  }
+
+  function ouvrirModaleLiberation(tableId: number) {
+    const table = plan.find((t) => t.id === tableId);
+    if (!table) return;
+    setModaleLiberation({ tableId, tableLabel: table.label, commandeEnCours: commandeEnCoursPourTable(tableId) });
+  }
+
+  async function confirmerLiberation(note?: string) {
+    if (!modaleLiberation) return;
+    const { tableId } = modaleLiberation;
+    setError(null);
+    try {
+      const updated = await api.releaseTable(tableId, note);
+      setPlan((prev) => prev.map((t) => (t.id === tableId ? { ...t, occupied_at: updated.occupied_at } : t)));
+      setModaleLiberation(null);
+    } catch (e) {
+      throw new Error(toFrenchMessage(e));
+    }
   }
 
   async function claim(orderId: number) {
@@ -742,6 +866,14 @@ export default function StaffPage() {
 
   return (
     <div className="min-h-screen bg-[var(--semoule)]">
+      {modaleLiberation && (
+        <ModaleLibererTable
+          tableLabel={modaleLiberation.tableLabel}
+          commandeEnCours={modaleLiberation.commandeEnCours}
+          onConfirm={confirmerLiberation}
+          onClose={() => setModaleLiberation(null)}
+        />
+      )}
       <header className="bg-[var(--espresso)] px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <TawlaMark size={30} variant="reserveSombre" />
@@ -986,33 +1118,73 @@ export default function StaffPage() {
               {modificationRequests.map((request) => {
                 const decidedCount = request.lines.filter((l) => lineDecisions[l.id] !== undefined).length;
                 const allDecided = decidedCount === request.lines.length;
+                const lignesDiff = construireLignesDiff(request);
                 return (
-                  <div key={request.id} className="px-[14px] py-[11px] border-b border-[#efe6d2] last:border-b-0">
-                    <div className="flex items-center gap-[14px]">
-                      <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
-                        {request.table_label}
-                      </span>
-                      <div className="min-w-0 flex-1 text-[13.5px] font-semibold text-[var(--encre)]">
-                        Commande #{request.order_id}
+                  <div key={request.id} className="border-b border-[#efe6d2] last:border-b-0">
+                    <div className="px-[14px] pt-[11px] pb-[11px] border-b border-[var(--line)]">
+                      <div className="flex items-center gap-[14px]">
+                        <span className={`${lalezar.className} text-[24px] leading-none min-w-[58px] text-[var(--encre)]`}>
+                          {request.table_label}
+                        </span>
+                        <div className="min-w-0 flex-1 text-[13.5px] font-semibold text-[var(--encre)]">
+                          Commande #{request.order_id}
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
+                        Répondez ligne par ligne, après vérification avec la cuisine.
+                      </p>
+                      <div className="flex items-center gap-[14px] mt-[9px] flex-wrap">
+                        <span className="inline-flex items-center gap-[5px] text-[10.5px] font-bold text-[var(--ink-soft)]">
+                          <span className="w-[7px] h-[7px] rounded-full bg-[var(--menthe)] inline-block" />
+                          Ajouté
+                        </span>
+                        <span className="inline-flex items-center gap-[5px] text-[10.5px] font-bold text-[var(--ink-soft)]">
+                          <span className="w-[7px] h-[7px] rounded-full bg-[var(--harissa)] inline-block" />
+                          Retiré
+                        </span>
+                        <span className="inline-flex items-center gap-[5px] text-[10.5px] font-bold text-[var(--ink-soft)]">
+                          <span className="w-[7px] h-[7px] rounded-full bg-[var(--laiton)] inline-block" />
+                          Modifié
+                        </span>
                       </div>
                     </div>
-                    <p className="mt-2 mb-1.5 text-[11px] text-[var(--ink-faint)]">
-                      Répondez ligne par ligne, après vérification avec la cuisine.
-                    </p>
-                    <div className="divide-y divide-[var(--line)]">
-                      {request.lines.map((line) => {
-                        const decision = lineDecisions[line.id];
-                        const sign = line.requested_quantity > line.previous_quantity ? "+" : "−";
-                        const delta = Math.abs(line.requested_quantity - line.previous_quantity);
+                    <div>
+                      {lignesDiff.map((ligneDiff) => {
+                        const decision = lineDecisions[ligneDiff.ligneId];
                         return (
-                          <div key={line.id} className="flex items-center justify-between gap-2 py-[9px]">
-                            <span className="text-[13px] font-semibold text-[var(--encre)]">
-                              {sign}
-                              {delta}× {line.menu_item_name}
-                            </span>
+                          <div
+                            key={ligneDiff.key}
+                            className="flex items-center justify-between gap-2 px-[14px] py-[10px] border-b border-[#efe6d2] last:border-b-0"
+                            style={{
+                              backgroundColor:
+                                ligneDiff.nature === "ajoute"
+                                  ? "rgba(31,107,79,.07)"
+                                  : ligneDiff.nature === "retire"
+                                    ? "rgba(214,64,30,.06)"
+                                    : "rgba(184,134,46,.06)",
+                            }}
+                          >
+                            {ligneDiff.nature === "retire" && (
+                              <span className="text-[13px] font-semibold text-[var(--harissa-dark)] line-through">
+                                {ligneDiff.quantite}× {ligneDiff.nom}
+                              </span>
+                            )}
+                            {ligneDiff.nature === "ajoute" && (
+                              <span className="text-[13px] font-bold text-[var(--menthe)]">
+                                +{ligneDiff.quantite}× {ligneDiff.nom}
+                              </span>
+                            )}
+                            {ligneDiff.nature === "modifie" && (
+                              <span className="text-[13px] font-semibold text-[var(--encre)]">
+                                <span className="text-[var(--ink-faint)] line-through me-1">{ligneDiff.quantitePrecedente}</span>
+                                <span className="text-[var(--laiton)] font-bold me-1">{ligneDiff.quantite}</span>
+                                <span className="me-1">×</span>
+                                {ligneDiff.nom}
+                              </span>
+                            )}
                             <div className="flex gap-1.5 shrink-0">
                               <button
-                                onClick={() => setLineDecision(line.id, false)}
+                                onClick={() => setLineDecision(ligneDiff.ligneId, false)}
                                 className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
                                 style={
                                   decision === false
@@ -1023,7 +1195,7 @@ export default function StaffPage() {
                                 {decision === false ? "✗ Refuser" : "Refuser"}
                               </button>
                               <button
-                                onClick={() => setLineDecision(line.id, true)}
+                                onClick={() => setLineDecision(ligneDiff.ligneId, true)}
                                 className="rounded-[8px] px-[11px] py-[7px] text-[11.5px] font-bold"
                                 style={
                                   decision === true
@@ -1038,13 +1210,15 @@ export default function StaffPage() {
                         );
                       })}
                     </div>
-                    <button
-                      onClick={() => resolveModificationRequest(request)}
-                      disabled={!allDecided || resolvingRequestId === request.id}
-                      className="w-full mt-[10px] rounded-[10px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)] disabled:opacity-50"
-                    >
-                      Envoyer la réponse au client
-                    </button>
+                    <div className="px-[14px] pt-[10px] pb-[11px]">
+                      <button
+                        onClick={() => resolveModificationRequest(request)}
+                        disabled={!allDecided || resolvingRequestId === request.id}
+                        className="w-full rounded-[10px] py-[10px] text-[13px] font-bold bg-[var(--harissa)] text-[var(--semoule)] disabled:opacity-50"
+                      >
+                        Envoyer la réponse au client
+                      </button>
+                    </div>
                   </div>
                 );
               })}

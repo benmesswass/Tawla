@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.tables.models import LandmarkKind, TableShape
@@ -22,10 +24,36 @@ class TableOut(BaseModel):
     pos_y: float | None
     shape: TableShape
     seats: int
+    occupied_at: datetime | None
 
 
 class TableAssignStaff(BaseModel):
     staff_id: int
+
+
+class TableReleaseIn(BaseModel):
+    """
+    Note facultative à l'appel — mais `release_table` (service.py) la rend
+    obligatoire dès qu'une commande est encore en cours, en 422 sinon. Bornée
+    comme `OrderItem.notes` : de quoi expliquer une décision, pas un roman.
+    """
+
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ForcedTableReleaseOut(BaseModel):
+    """Une ligne de l'écran manager « Libérations forcées »."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    table_id: int
+    table_label: str
+    released_by_staff_id: int
+    released_by_name: str
+    released_at: datetime
+    order_status_snapshot: str
+    note: str
 
 
 class TableUpdate(BaseModel):
@@ -50,6 +78,7 @@ class TablePlanOut(BaseModel):
     pos_y: float | None
     shape: TableShape
     seats: int
+    occupied_at: datetime | None
 
 
 class TablePlacement(BaseModel):

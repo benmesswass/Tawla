@@ -28,6 +28,11 @@ export type ActionsTable = {
   servir?: () => void;
   encaisser?: () => void;
   resoudreAppel?: () => void;
+  /** Présent uniquement si la table est occupée — jamais gêné par une
+   *  urgence en cours (voir CLAUDE.md, 2026-09-09) : libérer ne fait
+   *  disparaître ni la commande ni l'addition en attente, qui restent
+   *  visibles pour toute autre table tant qu'elles ne sont pas traitées. */
+  libererTable?: () => void;
 };
 
 export default function ActionTable({
@@ -80,7 +85,9 @@ export default function ActionTable({
     ? LIBELLE_URGENCE[etat.urgence]
     : etat.urgence === "en_cuisine"
       ? "en cuisine, rien à faire"
-      : "rien à faire";
+      : etat.urgence === "occupee"
+        ? "installés, rien à faire"
+        : "rien à faire";
 
   // « depuis 4 min » plutôt qu'une heure d'horloge : le serveur veut une durée,
   // pas à faire la soustraction lui-même.
@@ -138,6 +145,11 @@ export default function ActionTable({
             }}
           >
             {principale.texte}
+          </button>
+        )}
+        {actions.libererTable && (
+          <button type="button" className="secondaire" onClick={actions.libererTable}>
+            Libérer la table
           </button>
         )}
         <button type="button" className="secondaire" onClick={onFermer}>

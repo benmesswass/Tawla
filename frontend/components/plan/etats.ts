@@ -13,6 +13,9 @@ import { ETAT_LIBRE, EtatTable, URGENCES, Urgence } from "./types";
  */
 
 export type SourceEtats = {
+  /** Tables occupées (`occupied_at` non nul) — état de base, posé au scan du
+   *  QR et jamais dérivé des commandes en cours (voir types.ts). */
+  tablesOccupees: Set<number>;
   aPrendre: { table_id: number; depuis: string | null; parQui: string | null; aMoi: boolean }[];
   aServir: { table_id: number; depuis: string | null }[];
   additions: { table_id: number; aMoi: boolean }[];
@@ -26,6 +29,12 @@ function plusUrgent(a: Urgence, b: Urgence): boolean {
 
 export function construireEtats(source: SourceEtats): Record<number, EtatTable> {
   const etats: Record<number, EtatTable> = {};
+
+  // Base : occupée ou libre, avant toute urgence. Posée en premier, elle ne
+  // peut jamais être redescendue en dessous — `poser` ne fait que monter.
+  for (const tableId of source.tablesOccupees) {
+    etats[tableId] = { urgence: "occupee", depuis: null, parQui: null, aMoi: false };
+  }
 
   const poser = (tableId: number, etat: EtatTable) => {
     const actuel = etats[tableId] ?? ETAT_LIBRE;

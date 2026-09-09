@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -10,8 +10,10 @@ from app.core import model_registry  # noqa: F401 — enregistre tous les modèl
 from app.core.database import Base, get_db
 from app.core.rate_limit import _hits as _rate_limit_hits
 from app.main import app
+from app.modules.orders import table_cart
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import create_access_token, hash_password
+from app.modules.tables import roster as table_roster
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 # Base SQLite en mémoire dédiée aux tests. StaticPool = une seule connexion
@@ -21,6 +23,21 @@ _engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
+# SQLite n'applique pas les contraintes de clé étrangère sans qu'on le lui
+# demande, contrairement à Postgres en production. Deux fois (MenuRegime, puis
+# les repères de plan et les compteurs de facture le 2026-09-08) la purge des
+# démos a laissé des lignes orphelines : la suite restait verte, Postgres
+# refusait la suppression du restaurant, et *toute* création de démo échouait
+# derrière — `purger_demos_expirees` tourne avant chaque `creer_demo`. Les
+# tests ne servent à rien s'ils ne contraignent pas ce que la production
+# contraint.
+@event.listens_for(_engine, "connect")
+def _appliquer_les_cles_etrangeres(dbapi_connection, _record):
+    curseur = dbapi_connection.cursor()
+    curseur.execute("PRAGMA foreign_keys=ON")
+    curseur.close()
 _TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
 
@@ -59,18 +76,21 @@ def _fresh_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
-def _immediate_table_cart_purge(monkeypatch):
+def _reset_shared_table_stores():
     """
-    Le panier partagé d'une table (chantier « panier synchronisé
-    multi-appareils ») n'est purgé qu'après un délai de grâce en production
-    (30s, voir `notifications/router.py`) — remis à 0 ici pour retomber sur
-    l'ancienne purge synchrone : sinon un test qui rouvre un canal de table
-    juste après un autre héritait du panier laissé par CE test précédent,
-    `table_cart_store` étant un dict de module partagé par toute la suite,
-    comme `_rate_limit_hits` ci-dessous.
+    Le panier partagé et le roster d'une table (chantier « panier
+    synchronisé multi-appareils ») ne sont plus jamais purgés sur simple
+    déconnexion (2026-09-09, seul `release_table` le fait désormais) — sans
+    cette remise à zéro entre tests, un test qui rouvre un canal de table
+    hériterait du panier laissé par un test précédent, `table_cart_store`/
+    `table_roster_store` étant des dicts de module partagés par toute la
+    suite, comme `_rate_limit_hits` ci-dessous.
     """
-    monkeypatch.setattr("app.modules.notifications.router.TABLE_CART_PURGE_GRACE_SECONDS", 0)
+    table_cart.table_cart_store._carts.clear()
+    table_roster.table_roster_store._rosters.clear()
     yield
+    table_cart.table_cart_store._carts.clear()
+    table_roster.table_roster_store._rosters.clear()
 
 
 @pytest.fixture(autouse=True)

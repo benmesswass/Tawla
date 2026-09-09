@@ -9,12 +9,15 @@ commande de l'un serait tombée sur l'écran cuisine de l'autre.
 """
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func, select
+
+from app.core.database import Base
 from app.core.markets import FRANCE, TUNISIA
 from app.modules.demo import service
 from app.modules.menu.models import MenuItem, MenuRegime
-from app.modules.orders.models import Order, OrderItem
+from app.modules.orders.models import InvoiceCounter, Order, OrderItem
 from app.modules.staff.models import Staff
-from app.modules.tables.models import Table
+from app.modules.tables.models import PlanLandmark, PlanLandmarkPart, Table
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 
@@ -72,6 +75,9 @@ def test_deux_demos_simultanees_sont_etanches(client):
         f"/api/v1/orders/by-restaurant/{b['restaurant_id']}/active",
         headers={"Authorization": f"Bearer {b['access_token']}"},
     ).json()
+    # Une seule, et une seule : les deux démos s'ouvrent sur un service à
+    # l'arrêt (`demo/historique.py` n'écrit que des commandes terminées),
+    # donc la commande passée ici est la première des deux côtés.
     assert len(actives_a) == 1
     assert actives_a[0]["table_id"] == table_a["id"]
     assert actives_b == []
@@ -148,6 +154,96 @@ def test_une_demo_expiree_avec_un_regime_personnalise_est_purgeable(client, db_s
     assert service.purger_demos_expirees(db_session) == 1
     assert db_session.get(Restaurant, rid) is None
     assert db_session.query(MenuRegime).filter(MenuRegime.restaurant_id == rid).count() == 0
+
+
+def test_une_demo_expiree_avec_un_repere_de_plan_est_purgeable(client, db_session):
+    """
+    Régression : un repère posé pendant la démo (bar, entrée — fonctionnalité
+    Pro normale) a cassé la purge en production (2026-09-08) — `PlanLandmark`
+    a un cascade ORM vers ses tronçons (`parts`), mais `supprimer_demo` efface
+    en masse (`.delete()` bulk), qui ignore les cascades ORM. Conséquence :
+    `restaurants` refusait la suppression (`plan_landmarks_restaurant_id_fkey`),
+    et la démo suivante échouait aussi, `purger_demos_expirees` tournant avant
+    toute création (voir `creer_demo`) — exactement le scénario déjà vu avec
+    `MenuRegime` ci-dessus.
+
+    Assertion sur le comptage plutôt que sur une levée d'exception : SQLite ne
+    contraint pas les clés étrangères par défaut, contrairement à Postgres en
+    production (même remarque que le test du régime personnalisé).
+    """
+    demo = ouvrir_demo(client)
+    rid = demo["restaurant_id"]
+    reponse = client.post(
+        f"/api/v1/tables/plan/{rid}/landmarks",
+        json={"kind": "bar", "pos_x": 10, "pos_y": 10, "width": 12, "height": 7},
+        headers={"Authorization": f"Bearer {demo['access_token']}"},
+    )
+    assert reponse.status_code == 201, reponse.text
+
+    restaurant = db_session.get(Restaurant, rid)
+    restaurant.demo_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert service.purger_demos_expirees(db_session) == 1
+    assert db_session.get(Restaurant, rid) is None
+    assert db_session.query(PlanLandmark).filter(PlanLandmark.restaurant_id == rid).count() == 0
+    assert db_session.query(PlanLandmarkPart).count() == 0
+
+
+def test_une_demo_expiree_avec_un_compteur_de_facture_est_purgeable(client, db_session):
+    """
+    Régression : une démo est au palier Pro, donc elle peut encaisser un
+    paiement, donc émettre une facture — ce qui ouvre une ligne
+    `invoice_counters`. `supprimer_demo` ne la nettoyait pas, et la purge
+    échouait en production sur `invoice_counters_restaurant_id_fkey`
+    (2026-09-08, juste après le même incident avec les repères de plan).
+    """
+    demo = ouvrir_demo(client)
+    rid = demo["restaurant_id"]
+    db_session.add(InvoiceCounter(restaurant_id=rid, year=2026, last_number=3))
+    db_session.commit()
+
+    restaurant = db_session.get(Restaurant, rid)
+    restaurant.demo_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert service.purger_demos_expirees(db_session) == 1
+    assert db_session.get(Restaurant, rid) is None
+    assert db_session.query(InvoiceCounter).filter(InvoiceCounter.restaurant_id == rid).count() == 0
+
+
+def test_aucune_table_ne_reference_encore_une_demo_purgee(client, db_session):
+    """
+    Garde-fou générique, par-dessus les tests par fonctionnalité : après la
+    purge, *aucune* table portant un `restaurant_id` ne doit encore référencer
+    la démo. Ce même bug est réapparu trois fois de suite (MenuRegime, repères
+    de plan, compteurs de facture) parce que chaque nouvelle table liée à
+    `restaurants` doit être ajoutée à `supprimer_demo` à la main — celui-ci
+    échoue pour n'importe laquelle, y compris une table qui n'existe pas
+    encore aujourd'hui, sans qu'il faille penser à revenir écrire un test.
+    """
+    demo = ouvrir_demo(client)
+    rid = demo["restaurant_id"]
+    restaurant = db_session.get(Restaurant, rid)
+    restaurant.demo_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert service.purger_demos_expirees(db_session) == 1
+
+    cible = Restaurant.__table__.c.id
+    liees = [
+        table
+        for table in Base.metadata.sorted_tables
+        if any(cle.column is cible for colonne in table.columns for cle in colonne.foreign_keys)
+    ]
+    # Le jour où plus aucune table ne référence `restaurants`, ce test ne
+    # vérifie plus rien : il doit le dire, pas passer en silence.
+    assert liees, "aucune table liée à restaurants — introspection cassée ?"
+    for table in liees:
+        restant = db_session.execute(
+            select(func.count()).select_from(table).where(table.c.restaurant_id == rid)
+        ).scalar()
+        assert restant == 0, f"{table.name} référence encore la démo {rid}"
 
 
 def test_une_demo_vivante_survit_a_la_purge(client, db_session):

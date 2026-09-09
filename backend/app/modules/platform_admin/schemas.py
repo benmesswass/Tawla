@@ -138,9 +138,11 @@ class PlatformOverview(BaseModel):
     orders_last_7d: int
     gmv_last_7d_tnd: float
 
-    # 6. Qualité de service plateforme — même définition que chaque resto
-    # voit déjà chez lui (`stats/service.py::cancelled_orders`), jamais une
-    # redéfinition. `None` = aucune commande sur la période, pas 0%.
+    # 6. Qualité de service plateforme — signal d'exploitation pour Wassim,
+    # jamais un chiffre montré à un restaurateur ni vendu comme une preuve
+    # (voir `stats/service.py::cancelled_orders`) : il ne compte que les
+    # annulations qu'un serveur a pris la peine d'enregistrer. `None` =
+    # aucune commande sur la période, pas 0 %.
     cancelled_orders_rate_last_7d: float | None
 
     weekly_signups: list[WeeklyPoint]

@@ -1,5 +1,3 @@
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -20,55 +18,6 @@ from app.modules.tables import roster as table_roster
 from app.modules.tables.models import Table
 
 router = APIRouter(tags=["notifications"])
-
-# Délai avant de vraiment purger le panier/les convives d'une table qui n'a
-# plus aucun appareil connecté (voir `_schedule_table_cart_purge` ci-dessous)
-# — supérieur au backoff de reconnexion max côté client (15s,
-# `useReconnectingSocket.ts`) : sans lui, un simple trou wifi ou un
-# téléphone verrouillé quelques secondes vidait le panier d'un client seul à
-# sa table, aucun deuxième appareil requis (audit QA, PR #160).
-TABLE_CART_PURGE_GRACE_SECONDS = 30
-
-_pending_table_cart_purges: dict[int, asyncio.Task] = {}
-
-
-def _cancel_pending_table_cart_purge(table_id: int) -> None:
-    """Un appareil (re)vient de se connecter à cette table : toute purge
-    programmée pendant qu'elle semblait abandonnée n'a plus lieu d'être."""
-    task = _pending_table_cart_purges.pop(table_id, None)
-    if task and not task.done():
-        task.cancel()
-
-
-def _schedule_table_cart_purge(restaurant_id: int, table_id: int, channel: str) -> None:
-    """Le dernier appareil de la table vient de partir : on ne purge pas tout
-    de suite, seulement si personne ne s'est reconnecté avant la fin du délai
-    de grâce (`_cancel_pending_table_cart_purge` l'annule sinon). Le panier
-    d'une table réellement abandonnée reste purgé au bout du délai — la fuite
-    que ce mécanisme corrigeait à l'origine n'est pas réintroduite, juste
-    différée."""
-    if TABLE_CART_PURGE_GRACE_SECONDS <= 0:
-        # Utilisé par la suite de tests (voir conftest.py::_immediate_table_cart_purge) :
-        # reproduit l'ancienne purge synchrone, sans dépendre du scheduling
-        # asyncio d'une tâche différée pour observer l'état juste après.
-        table_cart.table_cart_store.pop_all(table_id)
-        table_roster.table_roster_store.clear(table_id)
-        return
-
-    if table_id in _pending_table_cart_purges:
-        return
-
-    async def _purge_after_grace() -> None:
-        try:
-            await asyncio.sleep(TABLE_CART_PURGE_GRACE_SECONDS)
-        finally:
-            _pending_table_cart_purges.pop(table_id, None)
-        if not manager.has_connections(restaurant_id, channel):
-            table_cart.table_cart_store.pop_all(table_id)
-            table_roster.table_roster_store.clear(table_id)
-
-    _pending_table_cart_purges[table_id] = asyncio.create_task(_purge_after_grace())
-
 
 @router.get("/api/v1/notifications/vapid-public-key")
 async def get_vapid_public_key():
@@ -151,9 +100,6 @@ async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: 
         return
     channel = table_channel(table.id)
     await manager.connect(websocket, restaurant_id, channel=channel)
-    # Un appareil se (re)connecte : toute purge programmée pendant que la
-    # table semblait abandonnée (voir `_pump_table`) n'a plus lieu d'être.
-    _cancel_pending_table_cart_purge(table.id)
     # Rattrapage : un appareil qui rejoint une table déjà en train de composer
     # son panier (ou déjà déclarée par un autre convive) doit voir tout de
     # suite ce que les autres ont déjà fait, sans attendre leur prochaine
@@ -218,17 +164,15 @@ async def _pump_table(websocket: WebSocket, restaurant_id: int, table: Table, db
                 )
     except WebSocketDisconnect:
         manager.disconnect(websocket, restaurant_id, channel)
-        # Dernier appareil de la table parti : le panier partagé n'a plus de
-        # raison d'exister — sans ça, l'entrée en mémoire de `table_cart_store`
-        # survivrait indéfiniment à tout convive qui referme l'onglet sans
-        # valider (fuite lente, jamais nettoyée par ailleurs : ce state n'est
-        # rattaché à aucune requête HTTP qui pourrait la purger à sa sortie).
-        # Pas immédiat : un simple trou réseau déconnecte puis reconnecte tout
-        # seul (`useReconnectingSocket.ts`) — purger tout de suite viderait le
-        # panier d'un client seul à sa table pour ça (audit QA, PR #160). Voir
-        # `_schedule_table_cart_purge`.
-        if not manager.has_connections(restaurant_id, channel):
-            _schedule_table_cart_purge(restaurant_id, table.id, channel)
+        # Plus aucune purge sur déconnexion (2026-09-09, demande de Wassim) :
+        # le panier/les convives d'une table survivent à toute coupure, aussi
+        # longue soit-elle — les clients doivent pouvoir prendre leur temps
+        # pour commander sans risquer de perdre leur panier en route. Seule
+        # `tables/service.py::release_table` (bouton dédié serveur/manager)
+        # les remet à zéro désormais. Le risque de fuite mémoire que l'ancien
+        # mécanisme corrigeait (PR #160) reste couvert : `release_table` vide
+        # ces stores dès que la table repart, dans le cas normal comme dans
+        # celui d'une table réellement abandonnée sans commande.
 
 
 @router.websocket("/ws/order/{restaurant_id}/{order_id}")

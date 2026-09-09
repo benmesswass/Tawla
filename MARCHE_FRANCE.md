@@ -58,8 +58,8 @@ douce.
 
 | Fait | Conséquence |
 |---|---|
-| Panier moyen 3 à 5 fois supérieur | Une commande perdue coûte 25-40 €, pas 25 DT. L'argument de vente du produit — « une commande perdue par semaine paie l'abonnement » — devient **beaucoup** plus facile à gagner |
-| Prix d'abonnement acceptable 3 à 6 fois supérieur | 45 clients à 120 DT ≈ 65 k DT/an. 45 clients à 89 € ≈ 48 k€/an, soit ~160 k DT |
+| Panier moyen 3 à 5 fois supérieur | Une table ratée coûte 25-40 €, pas 25 DT. L'arithmétique de vente — « une table servie en plus par semaine paie l'abonnement » — devient **beaucoup** plus facile à gagner |
+| Prix d'abonnement acceptable 3 à 6 fois supérieur | 45 clients à 89 DT ≈ 48 k DT/an. 45 clients à 89 € ≈ 48 k€/an, soit ~160 k DT |
 | Wassim y est déjà (Darna vise « la diaspora France ») | Les déplacements d'installation, le compte bancaire, la structure, l'expert-comptable : le coût d'entrée logistique est déjà partiellement payé |
 | Marché prouvé et éduqué | Sunday revendique ~1 500 restaurants en France et a levé 21 M$ en novembre 2025 pour doubler d'ici l'été 2026. Personne n'a plus à expliquer ce qu'est une commande par QR |
 | Un segment que personne ne sert bien | Les restaurants à clientèle maghrébine (couscous, grillades, salons de thé) : bilingue **fr/ar déjà codé**, mode Ramadan et pré-commande iftar **déjà codés**, et aucun acteur français ne les a construits. C'est la seule chose que Tawla a et que Sunday n'a pas |
@@ -109,7 +109,7 @@ produit est **agnostique du pays**.
 | Token QR opaque, `public_token` de commande, surface publique fermée | `tables/models.py`, `orders/models.py` |
 | Multi-tenant (`restaurant_id` partout), isolation testée | tout le backend, `tests/test_isolation.py` |
 | Plan de salle, zones, couverts, vue serveur en direct | `components/plan/`, `tables/` |
-| Page de preuve (commandes perdues, délai, panier moyen) | `stats/service.py`, `/dashboard/preuve` |
+| Page de preuve (délai commande → cuisine, panier moyen) | `stats/service.py`, `/dashboard/preuve` |
 | Vente incitative « avec ce plat » et sa mesure (`from_suggestion`) | `menu/suggestions.py`, `orders/models.py` |
 | Établissement de démonstration jetable + visite guidée | `demo/`, `components/visite/` |
 | Chevalets QR imprimables, kit d'installation, import CSV | `tables/poster.py`, `scripts/setup_restaurant.py`, `menu/csv_import.py` |
@@ -284,7 +284,7 @@ Verdict par fonctionnalité, sur l'état réel du code.
 | **Monnaie** | `toFixed(3)` + `"DT"` en dur dans ~20 fichiers (Annexe A), `tnd_to_millimes()`, `TIER_PRICES_TND`, `priceDT` | `12,50 €` : 2 décimales, virgule décimale, espace insécable avant le symbole. **Un seul formateur**, alimenté par la couche marché |
 | **Fuseau horaire** | `core/dates.py:9` : `TUNIS = timezone(timedelta(hours=1))`, avec le commentaire « la Tunisie n'applique plus l'heure d'été depuis 2009 » | **La France, si.** Un décalage fixe serait faux 7 mois par an : les journées de service, les stats et la page de preuve décaleraient d'une heure d'avril à octobre. Passage obligatoire à `zoneinfo` (`Europe/Paris`) |
 | **Journée de service** | `SERVICE_DAY_START_HOUR = 5` (`dates.py:19`) | Probablement encore valable, mais c'est une hypothèse tunisienne : à reconfronter au premier pilote français (un restaurant qui ferme à 23 h n'a pas le même besoin qu'un service de nuit) |
-| **Seuil d'alerte serveur** | `ATTENTE_ALERTE_MINUTES = 10 min` (`frontend/app/staff/page.tsx` — depuis le 2026-08-28, plus un seuil de « commande perdue » côté backend, seulement une alerte visuelle sur l'écran serveur) | Idem : une brasserie parisienne au service de midi n'a pas la même tolérance. À confronter, pas à recopier |
+| **Seuil d'alerte serveur** | `ATTENTE_ALERTE_MINUTES = 10 min` (`frontend/app/staff/page.tsx` — purement visuel, il n'alimente aucun chiffre montré au patron) | Idem : une brasserie parisienne au service de midi n'a pas la même tolérance. À confronter, pas à recopier |
 | **Mode Ramadan / iftar** | `Restaurant.ramadan_mode_enabled`, `iftar_time`, `Order.scheduled_for` | **Ne pas retirer.** À rendre optionnel par établissement, et à repositionner : c'est l'unique fonctionnalité que Tawla a et que Sunday n'a pas, sur un segment français réel (§6 F1). Le mécanisme `scheduled_for` sert aussi de commande programmée générique |
 | **Allergènes** | Texte libre (`menu/models.py:67`) | En France l'information allergènes est **obligatoire** (réglementation INCO, 14 allergènes). Passage à une **liste structurée** — d'obligation légale à argument de vente |
 | **Pourboire** | 0 / 5 % / 10 % (`menu/[qrToken]/page.tsx:1215`) | La suggestion en pourcentage est un usage nord-américain. En France : montants ronds (sans / 1 € / 2 € / autre). Et sujet à la stratégie S1 |
@@ -348,10 +348,13 @@ Repères du marché français, à confronter en F1 :
 
 **Hypothèse de départ à tester, jamais à annoncer avant F1** : 49 / 89 / 149 €
 HT/mois, service d'installation inclus, sans commission sur les commandes.
-L'argument reste celui qui marche déjà : *le produit mesure les commandes
-perdues et les affiche*. À 30 € de panier moyen, **une commande perdue par
-semaine paie l'abonnement**, et ce n'est pas une promesse — c'est un chiffre que
-l'écran affiche avec sa définition.
+L'argument repose sur ce que le produit mesure réellement, sans qu'un serveur
+ait à enregistrer quoi que ce soit : *le délai entre la commande du client et
+son arrivée en cuisine, et le panier moyen — avec et sans suggestion acceptée*.
+À 30 € de panier moyen, **une table servie en plus par semaine paie
+l'abonnement**. Ne jamais annoncer un comptage des ventes ratées : retiré du
+produit le 2026-09-09, il ne comptait que les annulations enregistrées par la
+salle.
 
 La règle de `ROADMAP.md` reste : **le prix ne bouge jamais une fois annoncé à un
 restaurateur ; le périmètre, oui.**
@@ -717,7 +720,7 @@ mesure « avant » qui rend la démonstration « après » vendable.**
 
 - [ ] Disqualifier à la porte : moins de 8 tables, pas de réseau exploitable en salle 🧑
 - [ ] Accord écrit d'une page : quatre semaines d'usage effectif, droit de citer, droit de publier les chiffres 🧑
-- [ ] **Relever la semaine de référence à la main, avant activation** (commandes perdues par service, panier moyen) 🧑 — impossible à rattraper après
+- [ ] **Relever la semaine de référence à la main, avant activation** (délai installée → commande, panier moyen — les deux que le produit saura remesurer seul) 🧑 — impossible à rattraper après
 - [ ] Arriver avec **sa** carte déjà chargée (`setup_restaurant.py` + import CSV, déjà outillés) 🧑
 - [ ] Former l'équipe sur place, dix minutes pendant un service creux 🧑
 - [ ] Tenir un journal de pilote le soir même de chaque service observé 🧑

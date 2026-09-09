@@ -133,9 +133,15 @@ def test_un_appareil_qui_rejoint_voit_le_roster_deja_declare(client):
             }
 
 
-def test_le_roster_disparait_quand_la_table_se_vide(client):
-    """Comme le panier partagé : une fois tout le monde parti, le roster ne
-    doit pas fuiter vers la prochaine table qui réutilise le même id."""
+def test_une_deconnexion_meme_longue_ne_purge_plus_le_roster(client):
+    """
+    2026-09-09 (demande de Wassim) : même règle que le panier partagé
+    (`test_table_cart.py`) — le roster ne doit plus jamais être vidé par une
+    déconnexion, aussi longue soit-elle. Seul le bouton « Libérer la table »
+    du serveur/manager (`release_table`) le vide désormais. Ici, plus aucun
+    appareil n'est connecté à la table après le `with` : si une purge
+    automatique existait encore, elle aurait cette fenêtre pour s'exécuter.
+    """
     restaurant, table = _setup_restaurant_with_table(client, "roster-clear")
 
     with _connect(client, restaurant, table) as ws:
@@ -146,7 +152,8 @@ def test_le_roster_disparait_quand_la_table_se_vide(client):
 
     with _connect(client, restaurant, table) as ws_after:
         _skip_cart_snapshot(ws_after)
-        assert ws_after.receive_json() == {"event": "roster.updated", "people": []}
+        snapshot = ws_after.receive_json()
+        assert snapshot == {"event": "roster.updated", "people": [{"key": "device-a", "name": "Ahmed"}]}
 
 
 def test_rosters_isoles_entre_deux_tables(client):

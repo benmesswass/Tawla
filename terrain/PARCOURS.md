@@ -113,7 +113,7 @@ Disqualifier durement à la porte, sans exception :
   installer, même s'il insiste. Le produit fonctionnera mal, et c'est ta faute
   qu'on retiendra, pas celle de son réseau ;
 - **service à faible volume, sans vraie pression de salle** → douleur trop
-  faible pour 120 DT, et du support pour rien.
+  faible pour 89 DT, et du support pour rien.
 
 **Accord écrit d'une page par pilote**, quatre lignes :
 
@@ -190,9 +190,9 @@ Deux choses à confronter au réel, et à me remonter :
 
 - le seuil de **dix minutes** avant qu'une table en attente soit signalée au
   serveur (`ATTENTE_ALERTE_MINUTES`, `frontend/app/staff/page.tsx`) — c'est une
-  proposition, pas une vérité. Elle ne compte plus dans « commandes perdues »
-  depuis le 2026-08-28 (seule une annulation compte), mais reste le seuil
-  d'alerte à l'écran serveur ;
+  proposition, pas une vérité. Purement visuelle : elle n'alimente aucun chiffre
+  montré au patron, et le compteur de « commandes perdues » auquel elle était
+  liée a été retiré du produit le 2026-09-09 ;
 - le **plan de salle** : les zones suffisaient-elles, ou le plan dessiné change-t-il
   vraiment la conversation ?
 

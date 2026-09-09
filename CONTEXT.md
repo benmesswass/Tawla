@@ -55,20 +55,26 @@ de tous les serveurs) pour se l'attribuer. Se produit explicitement (bouton
 dédié) ou implicitement à la confirmation si personne ne l'a encore prise.
 Base des statistiques par serveur.
 
-**Commande perdue (Lost order)** :
-Une commande annulée — définition unique (`stats/service.py::cancelled_orders`),
-partagée par le tableau de bord, la page de preuve et l'agrégat
-multi-restaurants. La métrique centrale de l'argument de vente du produit.
-Jusqu'au 2026-08-28, une commande restée `PENDING_CONFIRMATION` au-delà de dix
-minutes comptait aussi comme perdue ; Wassim a tranché que ça confondait une
-vente lente avec une vente ratée — elle peut toujours être prise en charge, ce
-qu'une annulation ne permet plus. Ce délai reste mesuré, sous un autre nom :
-voir **Temps d'attente** et **Charge active** ci-dessous.
+**Commande annulée (Cancelled order)** :
+Une commande au statut `CANCELLED` (`stats/service.py::cancelled_orders`).
+C'est un **filtre**, jamais une promesse : elle sert à exclure la commande de
+ce qu'elle fausserait — recette du jour, panier moyen, uplift des suggestions,
+prime d'un serveur — et à calculer le taux d'annulation tous restaurants
+confondus du dashboard plateforme, qui est un signal d'exploitation pour
+Wassim.
+
+La notion de « commande perdue » a été **retirée du produit le 2026-09-09**,
+avec la promesse de vente qui s'appuyait dessus. Ce compteur ne comptait que
+les annulations qu'un serveur avait pris la peine d'enregistrer : une équipe
+qui ne clique pas le laissait à zéro, et il ne voyait jamais le client qui se
+lasse et s'en va — donc il ne prouvait pas ce qu'on lui faisait dire. Ce qui
+se mesure vraiment, sans aucun geste de la salle, vit dans **Temps d'attente**
+et dans le délai commande → cuisine de la page de preuve.
 
 **Temps d'attente (`TimingStats.avg_wait_confirmation_seconds`)** :
 Délai moyen entre la validation du panier par le client et sa prise en charge
 par un serveur, sur la journée affichée. Chiffre de tête du tableau de bord
-depuis le 2026-08-28, à la place de « Commandes perdues ».
+depuis le 2026-08-28, à la place du compteur d'annulations.
 
 **Charge active (`StaffActiveLoad`)** :
 Nombre de tables qu'un serveur a actuellement sur les bras — commandes prises

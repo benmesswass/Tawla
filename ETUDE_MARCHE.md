@@ -187,8 +187,9 @@ dans l'écrasante majorité des services.
 
 ### 2.1 « Tawla est 3 à 6 fois plus cher que le marché » — vrai pour un palier, pas trois
 
-Le narratif de `PREMIERES_VENTES.md` (« à 120 DT, Tawla est 2,5 à 6 fois plus
-cher ») a été écrit le 14 août sur le prix unique d'alors. Depuis le
+Le narratif de `PREMIERES_VENTES.md` — « à 120 DT, Tawla est 2,5 à 6 fois plus
+cher » — a été écrit le 14 août sur le prix unique d'alors (depuis réécrit sur
+le palier Pro, 2026-09-09). Depuis le
 **2026-08-26** (PR #91), Tawla facture trois paliers : **Essentiel 49 DT /
 Pro 89 DT / Business 149 DT** (`core/markets.py::TUNISIA.tier_prices`). Voici
 ce que ça donne face à la fourchette Digital Menu (19-49 DT), palier par
@@ -444,8 +445,8 @@ Business côté Tawla.
 > commande par QR code livré avec un accompagnement humain sur place** —
 > carte saisie pour vous, QR imprimés et livrés, équipe formée sur place,
 > joignable pendant le service — **qui élimine les commandes oubliées et
-> transforme chaque service en chiffres** (commandes perdues, délai
-> commande → cuisine, panier moyen, performance par serveur). Contrairement à
+> transforme chaque service en chiffres** (délai commande → cuisine, panier
+> moyen, temps d'attente, performance par serveur). Contrairement à
 > **Digital Menu, Scanny et Menu-QR** — trois outils en libre-service où le
 > restaurateur saisit sa carte, imprime ses QR et se débrouille seul —
 > **Tawla ne vend pas un logiciel, elle vend quelqu'un qui vient**, forme
@@ -565,9 +566,11 @@ ouvrir une vérification dédiée, sur le modèle de ce que `MARCHE_FRANCE.md`
   20 entretiens de la Phase 21.
 - **Trancher le prix cité en entretien** : cette étude recommande Pro (89 DT)
   ou Business (149 DT) selon le profil du restaurant, jamais Essentiel ni
-  l'ancien « 120 dinars ». `terrain/GUIDE_ENTRETIEN.md` Q4 cite encore 120 DT
-  — à corriger à la main avant la première sortie terrain (non fait ici, ce
-  fichier ne se modifie pas depuis une session).
+  l'ancien « 120 dinars ». **Fait le 2026-09-09** : `GUIDE_ENTRETIEN.md`,
+  `ENTRETIENS.md` (colonne du tableau et synthèse), `PARCOURS.md`,
+  `PREMIERES_VENTES.md` et les tâches 🧑 de `ROADMAP.md` citent désormais
+  89 DT. Aucun relevé de terrain n'a été rempli — seules les consignes ont
+  été corrigées.
 - **Arbitrer Essentiel** sur la page tarifaire publique (§7, point 2) — rien
   n'a été changé dans le code.
 - **Décider si la niche France mérite d'être creusée plus tôt que prévu** :

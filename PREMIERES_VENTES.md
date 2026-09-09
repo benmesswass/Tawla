@@ -26,7 +26,7 @@ restaurateur remarquera dans sa première semaine ?**
 | Écran cuisine temps réel | Fin des tickets illisibles et des allers-retours |
 | Rupture de stock en un clic | Le plat disparaît instantanément des téléphones |
 | Appel serveur depuis la table | La table n'a plus à agiter le bras |
-| Trois chiffres de preuve | Commandes perdues, délai commande → cuisine, panier moyen |
+| Chiffres de preuve | Délai commande → cuisine, panier moyen (avec et sans suggestion acceptée) — mesurés sans aucun geste de la salle |
 | Rapport par serveur | Base d'une prime de rendement, pas d'une surveillance |
 | Suggestions « avec ce plat » | Vente incitative, et son effet est **mesuré** |
 | Mode ramadan + pré-commande iftar | Personne d'autre sur ce marché ne l'a |
@@ -86,20 +86,23 @@ pas, le construire serait deviner.
 
 C'est le calcul central, et il est vérifiable devant lui :
 
-- **120 DT/mois ≈ 4 DT par jour.**
-- Une commande perdue, panier moyen autour de 25 DT.
-- **Une commande perdue par semaine paie l'abonnement.**
+- **89 DT/mois ≈ 3 DT par jour** (palier Pro, celui de cette cible).
+- Panier moyen autour de 25 DT.
+- **Une table servie en plus par semaine paie l'abonnement.**
 - **Une par jour le paie six fois.**
 
-Ce calcul est solide parce qu'il ne demande pas de le croire : le produit
-**mesure** les commandes perdues. On promet un chiffre, puis on le montre.
+⚠️ Ce calcul chiffre la valeur d'une table, il ne prétend pas que le produit
+compte les ventes ratées : le compteur qui le prétendait a été retiré le
+2026-09-09 (il ne comptait que les annulations enregistrées par la salle). Ce
+que Tawla montre ensuite, et qui se mesure tout seul : le délai commande →
+cuisine et le panier moyen.
 
 Le panier moyen de 25 DT est une hypothèse à remplacer par le vrai chiffre du
 premier établissement dès qu'il existe. Ne jamais le citer comme un fait.
 
 ### Le vrai obstacle n'est pas le prix
 
-Le marché tunisien affiche 19 à 49 DT (cf. la revue). À 120 DT, Tawla est 2,5 à
+Le marché tunisien affiche 19 à 49 DT (cf. la revue). À 89 DT, Tawla est 2 à
 6 fois plus cher. Un restaurateur qui compare deux lignes de tarif dira non, et
 il aura raison — parce qu'il compare deux logiciels.
 
@@ -147,7 +150,7 @@ Rater cette fenêtre coûte un an.
 
 Classées par ordre d'exécution, pas par importance.
 
-### 1. Ne vends pas l'application. Vends la commande perdue.
+### 1. Ne vends pas l'application. Vends la table qu'on fait attendre.
 
 N'ouvre jamais un rendez-vous en montrant un écran. Ouvre-le par une question,
 et tais-toi :
@@ -156,8 +159,8 @@ et tais-toi :
 > parce que personne n'est venu à temps ? »
 
 Il donnera un chiffre — ou il dira « ça arrive ». Les deux te suffisent. Alors,
-et seulement alors, sors l'arithmétique : 4 DT par jour, une commande perdue par
-semaine qui paie l'abonnement, une par jour qui le paie six fois.
+et seulement alors, sors l'arithmétique : 4 DT par jour, une table servie en plus
+par semaine qui paie l'abonnement, une par jour qui le paie six fois.
 
 C'est lui qui aura posé le problème. Tu ne fais que chiffrer sa propre phrase.
 
@@ -191,9 +194,10 @@ d'installation, et personne à 29 DT ne le fera à ta place.
 
 Ne propose pas « essayez un mois ». Propose ceci :
 
-> « Je viens quatre soirs. Je compte vos commandes perdues et votre panier
-> moyen, à la main, sans rien installer. Je vous donne le chiffre. Si c'est zéro,
-> je repars et vous ne me devez rien. »
+> « Je viens quatre soirs. Je chronomètre le temps qu'une table attend avant
+> qu'on prenne sa commande, et je relève votre panier moyen, à la main, sans rien
+> installer. Je vous donne les chiffres. S'il n'y a rien à gagner, je repars et
+> vous ne me devez rien. »
 
 Trois choses se produisent en même temps. Tu obtiens la **semaine de référence
 avant activation**, sans laquelle la preuve d'après ne vaut rien. Tu passes
@@ -262,10 +266,10 @@ Deux questions avant toute démonstration :
    Si non, n'installe pas. Même s'il insiste. Le produit fonctionnera mal, et
    c'est ta faute qu'on retiendra, pas celle de son réseau.
 2. **Combien de tables ?** En dessous de six, la douleur est trop faible pour
-   justifier 120 DT, et tu vas passer ton temps en support pour rien.
+   justifier 89 DT, et tu vas passer ton temps en support pour rien.
 
 Un troisième signal, positif : **une terrasse**. Terrasse = tables loin du
-comptoir = serveur qui marche le plus = commandes perdues au maximum. Et le QR
+comptoir = serveur qui marche le plus = attente la plus longue à table. Et le QR
 est naturellement accepté dehors. C'est la douleur la plus forte pour le « oui »
 le plus facile.
 
@@ -295,8 +299,8 @@ pourtant le seul chiffre qu'un restaurateur cherche tous les soirs de sa vie.
 
 Mets-le en haut, en gros, avant tout le reste. Un patron qui ouvre Tawla chaque
 soir pour voir son chiffre ne résilie pas au troisième mois — et il découvre le
-délai commande → cuisine et les commandes perdues **en passant**, ce qui est
-exactement la bonne façon de les lui faire adopter.
+délai commande → cuisine et le temps d'attente de ses tables **en passant**, ce
+qui est exactement la bonne façon de les lui faire adopter.
 
 ---
 

@@ -64,7 +64,7 @@ chiffres relevés dans un vrai établissement, et les deux audits successifs ont
 montré qu'en visant la note directement on finit par se noter sur ses intentions.
 
 L'objectif ci-dessus, lui, n'est pas interprétable : soit deux patrons ont viré
-120 DT, soit non.
+leur abonnement, soit non.
 
 ## La règle qui a structuré cette roadmap jusqu'à la Phase 20
 
@@ -233,7 +233,7 @@ Le matériel existe depuis la Phase 13 et n'a jamais servi : au 2026-08-18,
 - [ ] Remplir `terrain/ENTRETIENS.md` sur place ou juste après 🧑 — une ligne par établissement, et les verbatims mot pour mot, surtout les refus
 - [ ] Poser la question de prix franchement, après avoir décrit le bénéfice et jamais la fonctionnalité 🧑
 - [ ] Repérer les trois profils de pilote au passage 🧑 : café de quartier, restaurant de centre-ville, zone touristique. Chercher celui dont les autres patrons parlent, pas le plus accueillant
-- [ ] Écrire la synthèse 🧑 : les trois douleurs les plus citées, le prix médian accepté, l'écart entre le prix spontané et la réaction à 120 DT
+- [ ] Écrire la synthèse 🧑 : les trois douleurs les plus citées, le prix médian accepté, l'écart entre le prix spontané et la réaction à 89 DT (palier Pro, celui de cette cible)
 
 **21.1 — La coupe** (ce qui rend cette phase utile au produit, et pas seulement
 au commercial)
@@ -252,7 +252,7 @@ pas au maintien « au cas où ».
 
 **Le prix unique envisagé ici (120 DT/mois, `PRICE_MONTHLY_DT`) a été
 abandonné le 2026-08-18, avant d'être codé.** Décision retenue à la place :
-**trois paliers (Essentiel 50 DT / Pro 100 DT / Business 150 DT), gating réel
+**trois paliers (Essentiel 49 DT / Pro 89 DT / Business 149 DT — les prix réellement codés, `lib/market.ts::tierPrices`), gating réel
 par fonctionnalité, et paiement en ligne du passage à un palier supérieur —
 livrés en PR #63** (`app/core/subscription.py`, `app/core/konnect.py`,
 `subscription_payments.py`, `frontend/lib/offer.ts`). `PRICE_MONTHLY_DT`
@@ -291,16 +291,16 @@ Au 2026-08-18, `terrain/PILOTES.md` ne contient qu'un modèle à copier.
 
 **23.1 — Avant d'installer quoi que ce soit** 🧑
 
-- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Service à faible volume, sans vraie pression de salle → la douleur est trop faible pour 120 DT. Une terrasse est le signal positif le plus fort
+- [ ] Disqualifier à la porte 🧑 : pas de Wi-Fi utilisable ou de réseau à toutes les tables → ne pas installer, même s'il insiste. Service à faible volume, sans vraie pression de salle → la douleur est trop faible pour 89 DT. Une terrasse est le signal positif le plus fort
 - [ ] Accord écrit d'une page par pilote 🧑 : quatre semaines d'usage **effectif en service**, droit de citer le nom, droit de publier les chiffres mesurés, et en échange installation, formation, chevalets et support pendant le service. Un pilote qui refuse le droit de citation est un client gratuit, pas un pilote
-- [ ] **Relever la semaine de référence à la main, avant activation** 🧑 : commandes perdues par service et panier moyen, comptés sur place pendant quatre soirs. Sans cet « avant », la preuve d'après ne vaut rien — et c'est le seul travail de cette roadmap qui devient impossible à rattraper une fois l'outil installé
+- [ ] **Relever la semaine de référence à la main, avant activation** 🧑 : délai moyen entre l'installation d'une table et la prise de sa commande, et panier moyen — les deux seules valeurs que le produit saura remesurer seul après installation (le compteur de « commandes perdues » a été retiré le 2026-09-09, PR à venir). Comptés sur place pendant quatre soirs. Sans cet « avant », la preuve d'après ne vaut rien — et c'est le seul travail de cette roadmap qui devient impossible à rattraper une fois l'outil installé
 - [ ] Arriver avec **sa** carte déjà chargée 🧑 (`setup_restaurant.py` + import CSV) et lui faire scanner son propre QR. « Voilà votre carte, elle tourne » ne se rattrape par aucun argument
 
 **23.2 — L'audit d'avant devient un écran** (à coder **quand le premier relevé
 existe**, pas avant : un écran qui n'a rien à afficher n'est pas une
 préparation)
 
-- [ ] `Restaurant.baseline_cancelled_orders_per_day`, `baseline_avg_basket`, `baseline_measured_on` + migration + `model_registry.py`
+- [ ] `Restaurant.baseline_seconds_to_order`, `baseline_avg_basket`, `baseline_measured_on` + migration + `model_registry.py`
 - [ ] Saisie depuis le dashboard manager, avec la date du relevé — rien d'affiché tant que ce n'est pas saisi
 - [ ] `/dashboard/preuve` affiche « avant Tawla » en face de « mesuré » quand le relevé existe. C'est **la** capture d'écran qui vend le passage au payant
 - [ ] Ne jamais inventer ni pré-remplir ces valeurs : un chiffre « avant » inventé rend toute la démonstration mensongère, et la mesure est la seule chose que Tawla a à vendre
@@ -417,6 +417,37 @@ resterait un chantier bien plus large, explicitement refusé pour l'instant
 - [ ] Traduction arabe non relue par un locuteur natif — à vérifier avant un
       vrai pilote (même règle que le reste du parcours client bilingue)
 
+**Extension du 2026-09-08, même override, sans nouveau déclencheur** : deux
+ajouts indépendants sur ce même override, arrivés en parallèle.
+
+D'abord, le client peut désormais modifier une déclaration de convives déjà
+faite (pas seulement la faire une fois) — bouton « Modifier » sur le résumé,
+qui rouvre `PartyPrompt` pré-rempli (taille + prénoms) et renvoie `party.set`,
+déjà idempotent côté backend (`tables/party.py`) — aucun nouvel endpoint. Ne
+change pas le diagnostic « premier candidat à la coupe » de `AUDIT_FINAL.md`.
+
+- [ ] Bouton « Modifier » sur le résumé convives (visible dès `party.size >
+      1`), rouvre `PartyPrompt` pré-rempli avec la taille et les prénoms
+      actuels
+
+Ensuite, l'assignation à un ou plusieurs convives (`shared_with`) se fait
+désormais indépendamment de la case "à partager" (`is_shared`) — disponible,
+facultative, sur n'importe quelle ligne du panier, pas seulement les plats
+cochés comme partagés (`frontend/app/menu/[qrToken]/page.tsx`, fonctions
+`setShared`/`toggleConvive`/`cartLineToWireItem`). Objectif inchangé :
+préremplir `SplitBill` plus tôt, au moment où le client compose sa commande et
+sait encore qui prend quoi — jamais générer de paiement réellement séparé, la
+table règle toujours l'addition en une fois (`Order.payment_status`, un seul
+statut). Aucun changement de modèle ni de migration : `OrderItem.is_shared` et
+`OrderItem.shared_with` étaient déjà deux colonnes indépendantes, seul le
+panier client (`cartLineToWireItem`) les couplait artificiellement en écrasant
+`shared_with` à vide dès que `is_shared` était décoché. Traductions ajustées en
+conséquence (`sharedCheckboxLabel`, `sharedWithLabel`, `sharedWithEveryone` —
+`fr.ts`/`en.ts`/`ar.ts`) : l'ancien libellé "partagé pour toute la table" était
+de toute façon inexact tant que `convives` reste bloqué à sa valeur par défaut
+de 2 (cf. `PartyPrompt`, tant que la taille réelle de la table n'est pas
+résolue).
+
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même
@@ -447,6 +478,8 @@ dans les PR citées.
 | **19 (suite)** | Recette limitée aux commandes réglées, résolution d'appel serveur poussée au client, commandes ouvertes multiples, durées par étape, cuisine en deux colonnes, note partageable, plats partagés par convive, rupture barrée | #52 |
 | **Audit** | Audit de pré-lancement : 299 tests, parcours rejoués, attaques mesurées, 20 constats, grille recalculée | #54 |
 | — | Ad-hoc (demande directe de Wassim, hors phase) : redéfinition de « commande perdue » (annulée seule — une commande lente n'est plus comptée perdue), tableau de bord manager remanié (temps d'attente moyen et charge active par serveur à la place), `/dashboard/preuve` et l'agrégat `/admin` mis à jour en cohérence | #103 |
+| — | Ad-hoc (décision de Wassim, 2026-09-09) : **« commande perdue » retirée du produit et de tout l'argumentaire**. Le compteur ne comptait que les annulations qu'un serveur enregistrait — zéro dans une équipe qui ne clique pas, aveugle au client qui repart — donc il ne prouvait pas ce qu'on lui faisait dire. Page de preuve à deux chiffres mesurés sans geste de la salle, nouvelle promesse d'accueil « Mieux servi. Mieux reçu. » | (cette PR) |
+| — | Ad-hoc (demande directe de Wassim, hors phase) : la démo s'ouvre avec deux semaines de service (`demo/historique.py`) — sans elles, tous les écrans chiffrés du manager (ventes du jour, temps par étape, commandes par serveur, plats les plus vendus, heures de pointe, page de preuve, rapport d'équipe) s'affichaient à zéro devant le restaurateur. Deux serveurs dans l'équipe de démo (ces écrans comparent), quatre commandes en cours (écran serveur et cuisine non vides), génération sans aléa pour que l'écart entre les deux semaines soit structurel et jamais rouge par malchance. Trois garde-fous : refus d'écrire sur un restaurant qui n'est pas `is_demo` (§23.2), démos exclues des agrégats de `/admin`, mention « chiffres d'exemple » dans le bandeau | #180 |
 
 Ce qui restait ouvert de ces phases a été repris ci-dessus, sans perte : la
 vérification du limiteur derrière le vrai proxy (→ 20.1), la mise en ligne

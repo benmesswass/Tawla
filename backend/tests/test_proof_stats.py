@@ -1,12 +1,14 @@
 """
-Les trois métriques de preuve (Phase 13.3).
+Les métriques de preuve (Phase 13.3).
 
 Ce sont les chiffres que Wassim montrera à un patron à la fin d'un pilote, et
 au jury. Ils doivent donc être justes au sens métier, pas seulement calculés :
-une annulation ne doit pas passer pour un panier, une commande encore en
-attente ne doit jamais compter comme perdue (elle peut toujours aboutir,
-décision du 2026-08-28), et la période de comparaison doit avoir la même
-longueur que la période mesurée.
+une annulation ne doit pas passer pour un panier, et la période de comparaison
+doit avoir la même longueur que la période mesurée.
+
+Le compteur d'annulations a été retiré de la preuve le 2026-09-09 : il ne
+comptait que ce qu'un serveur enregistrait, donc il ne prouvait rien. Ce qui
+reste ici se mesure sans aucun geste de la salle.
 """
 from datetime import date, datetime, timedelta, timezone
 
@@ -90,7 +92,7 @@ def test_counts_orders_and_average_basket_over_the_period(client, db_session):
     assert current["avg_basket_amount"] == 40.0
 
 
-def test_cancelled_order_is_lost_and_excluded_from_the_basket(client, db_session):
+def test_cancelled_order_is_excluded_from_the_basket(client, db_session):
     """Une commande annulée n'a jamais été un panier : la compter tirerait la
     moyenne vers le bas sans rien dire du service."""
     restaurant, table, item = _setup(db_session, "preuve-annulee")
@@ -105,33 +107,35 @@ def test_cancelled_order_is_lost_and_excluded_from_the_basket(client, db_session
 
     current = _proof(client, restaurant, manager)["current"]
     assert current["orders_count"] == 2
-    assert current["cancelled_orders_count"] == 1
     assert current["avg_basket_amount"] == 20.0  # la commande annulée est exclue
 
 
-def test_order_left_pending_indefinitely_does_not_count_as_lost(client, db_session):
+def test_order_left_pending_is_counted_but_never_priced(client, db_session):
     """
-    Décision de Wassim (2026-08-28) : une commande jamais prise en charge peut
-    toujours l'être, contrairement à une annulation — la compter comme perdue
-    confondait une vente lente avec une vente ratée. Peu importe son âge, elle
-    ne doit jamais entrer dans `cancelled_orders_count`.
+    Une commande jamais prise en charge n'a rien encaissé : elle compte dans le
+    volume de la période, jamais dans le panier moyen — sinon la preuve
+    montrerait un panier que le restaurant n'a pas réalisé.
     """
     restaurant, table, item = _setup(db_session, "preuve-oubliee")
     manager = create_staff(restaurant.id, StaffRole.MANAGER)
     now = datetime.now(timezone.utc)
 
+    # `payment_status` explicite : une commande jamais prise en charge n'a rien
+    # encaissé, contrairement au défaut PAID du helper.
     _add_order(
         db_session, restaurant, table, item,
         created_at=now - timedelta(hours=1), status=OrderStatus.PENDING_CONFIRMATION,
+        payment_status=PaymentStatus.UNPAID,
     )
     _add_order(
         db_session, restaurant, table, item,
         created_at=now - timedelta(minutes=2), status=OrderStatus.PENDING_CONFIRMATION,
+        payment_status=PaymentStatus.UNPAID,
     )
 
     current = _proof(client, restaurant, manager)["current"]
     assert current["orders_count"] == 2
-    assert current["cancelled_orders_count"] == 0
+    assert current["avg_basket_amount"] is None
 
 
 def test_average_delay_from_order_to_kitchen(client, db_session):

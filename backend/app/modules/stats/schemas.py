@@ -27,9 +27,9 @@ class StaffActiveLoad(BaseModel):
     (`StaffPerformance.orders_taken`) — combien de tables il a actuellement sur
     les bras (commandes prises en charge, pas encore servies ni annulées).
 
-    Demande de Wassim (2026-08-28), à la place de « Commandes perdues » en tête
-    du tableau de bord : le signal utile au quotidien n'est pas un compteur de
-    ventes ratées, c'est de voir tout de suite qui est en train de se noyer.
+    Demande de Wassim (2026-08-28), à la place du compteur d'annulations en
+    tête du tableau de bord : le signal utile au quotidien n'est pas un
+    compteur, c'est de voir tout de suite qui est en train de se noyer.
     """
 
     staff_id: int
@@ -53,11 +53,9 @@ class DashboardStats(BaseModel):
     # Les deux chiffres de tête (Phase 17.1, remaniés le 2026-08-28). La
     # recette est ce que le patron vient chercher tous les soirs ; le temps
     # d'attente moyen est posé juste à côté (voir `RecetteDuJour.tsx`) — un
-    # signal opérationnel du jour même, pas un compteur de ventes ratées.
-    # `cancelled_orders_today` a la même définition que `PeriodProof`, par
-    # construction, mais n'est plus mis en avant en tête du tableau de bord.
+    # signal opérationnel du jour même, mesuré sans qu'aucun serveur ait à
+    # cliquer quoi que ce soit.
     revenue_today: float
-    cancelled_orders_today: int
     active_orders_count: int
     timing: TimingStats
     staff_performance: list[StaffPerformance]
@@ -77,25 +75,23 @@ class KitchenTodayCount(BaseModel):
 
 class PeriodProof(BaseModel):
     """
-    Les trois seuls chiffres qui valent quelque chose devant un restaurateur ou
-    un jury (Phase 13.3) : combien de commandes ont été annulées, combien de
-    temps s'écoule entre la commande du client et son arrivée en cuisine, et
-    quel est le panier moyen.
+    Les seuls chiffres qui valent quelque chose devant un restaurateur ou un
+    jury (Phase 13.3) : combien de temps s'écoule entre la commande du client
+    et son arrivée en cuisine, et quel est le panier moyen — avec et sans
+    suggestion acceptée.
 
-    Volontairement pas un quatrième indicateur. Le reste est du confort.
+    Tous mesurés sans le moindre geste de la salle. Un compteur d'annulations
+    a vécu ici jusqu'au 2026-09-09 : il ne comptait que ce qu'un serveur avait
+    pris la peine d'enregistrer, donc il ne prouvait rien (voir
+    `stats/service.py::cancelled_orders`).
+
+    Volontairement pas un indicateur de plus. Le reste est du confort.
     """
 
     start: date_type
     end: date_type  # inclus
 
     orders_count: int
-
-    # « Commande perdue » = commande annulée (`stats/service.py::
-    # cancelled_orders`, décision de Wassim du 2026-08-28). Une commande
-    # restée longtemps sans être prise en charge n'est plus comptée ici : elle
-    # peut toujours aboutir, contrairement à une annulation. Ce délai reste
-    # mesuré ailleurs (`TimingStats.avg_wait_confirmation_seconds`).
-    cancelled_orders_count: int
 
     # Du panier validé par le client à l'arrivée sur l'écran cuisine. C'est le
     # délai que le produit prétend réduire — donc celui qu'il faut mesurer.

@@ -270,6 +270,37 @@ def test_overview_on_empty_database_shows_zeroes_not_an_error(client, db_session
     assert len(body["weekly_signups"]) == 12
 
 
+def test_les_demos_ne_polluent_aucun_chiffre_de_loperateur(client, db_session):
+    """
+    Une démo s'ouvre avec deux semaines de service fabriquées
+    (`demo/historique.py`) : comptées ici, elles gonfleraient le GMV, le
+    nombre de commandes, le taux d'annulation et les « restaurants actifs »
+    de l'écran qui sert à piloter l'entreprise. Wassim doit y lire ses vrais
+    clients, jamais des visiteurs de passage.
+    """
+    admin = _create_admin(db_session)
+    reponse = client.post("/api/v1/demo/sessions")
+    assert reponse.status_code == 201, reponse.text
+    demo = reponse.json()
+    # La démo a bien des commandes en base, et son manager ouvre son
+    # tableau de bord (ce qui enregistre une vue).
+    client.get(
+        f"/api/v1/stats/dashboard/{demo['restaurant_id']}",
+        headers={"Authorization": f"Bearer {demo['access_token']}"},
+    )
+    assert db_session.query(Order).filter(Order.restaurant_id == demo["restaurant_id"]).count() > 0
+
+    body = client.get("/api/v1/platform-admin/overview", headers=_admin_headers(admin)).json()
+
+    assert body["restaurants_total"] == 0
+    assert body["restaurants"] == []
+    assert body["orders_last_7d"] == 0
+    assert body["gmv_last_7d_tnd"] == 0
+    assert body["cancelled_orders_rate_last_7d"] is None
+    assert body["dashboard_views_last_7d"] == 0
+    assert body["restaurants_active_last_7d"] == 0
+
+
 def test_mrr_counts_only_active_online_paid_tiers(client, db_session):
     """
     Le cœur de la spec (§1.3) : un MRR qui compterait un pilote gratuit ou un

@@ -21,7 +21,13 @@ import { marketBaseUrl } from "@/lib/marketUrls";
  * détruit la seule chose qu'elle a à vendre.
  */
 export const metadata = {
-  title: "Tawla — la commande à table, sans commande perdue",
+  // Promesse de MÉCANISME, jamais de mesure (2026-09-09) : la précédente
+  // — « sans commande perdue » — reposait sur un compteur qui ne comptait que
+  // les annulations enregistrées par la salle, retiré du produit le même jour.
+  // Celle-ci ne s'appuie sur aucun chiffre : deux participes, le service et
+  // l'accueil. La catégorie reste dans le titre pour la recherche, jamais
+  // dans le H1 — c'est le slogan qui porte la page.
+  title: "Tawla — mieux servi, mieux reçu : la commande à table par QR",
   description:
     "Vos clients commandent depuis leur téléphone, vos serveurs gardent la main, et vous voyez enfin vos chiffres. Installation, formation et QR imprimés inclus.",
   // Deux domaines, même contenu commercial adapté au marché — France,
@@ -44,11 +50,11 @@ export default function HomePage() {
         <div className="max-w-3xl mx-auto px-6 py-14" data-visite="accueil-promesse">
           <TawlaLogo size={40} className="mb-8" inverse />
           <h1 className={`${lalezar.className} text-3xl sm:text-4xl leading-tight text-balance`}>
-            La commande à table, sans commande perdue
+            Mieux servi. Mieux reçu.
           </h1>
           <p className="mt-4 text-lg text-white/90 max-w-xl">
-            Vos clients scannent le QR de leur table et commandent. Vos serveurs gardent la main : rien ne part
-            en cuisine sans qu&apos;ils l&apos;aient vérifié à table.
+            Vos clients scannent le QR de leur table et commandent. Rien ne part en cuisine sans qu&apos;un
+            serveur l&apos;ait vérifié à table.
           </p>
           {/* Le qualificatif de cible passe avant le CTA, pas après : un
               petit café doit pouvoir s'auto-exclure avant de cliquer, pas

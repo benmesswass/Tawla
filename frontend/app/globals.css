@@ -317,6 +317,16 @@
 }
 .piece[data-tone="libre"] .etiquette { color: rgba(246, 239, 221, .7); }
 
+/* Occupée mais calme : personne à prévenir, juste des clients installés —
+   un plateau plein (pas de pointillé) mais pâle, jamais une des couleurs qui
+   demandent un déplacement. */
+.piece[data-tone="occupee"] .plateau {
+  fill: rgba(246, 239, 221, .4);
+  stroke: rgba(246, 239, 221, .6);
+  stroke-width: 2;
+}
+.piece[data-tone="occupee"] .etiquette { color: rgba(36, 24, 17, .82); }
+
 .piece[data-tone="cuisine"] .plateau { fill: #cdc2ae; stroke: #8fb0c4; stroke-width: 2.5; }
 .piece[data-tone="appelle"] .plateau { fill: #d6401e; stroke: #b8341a; }
 .piece[data-tone="appelle"] .chaise { fill: rgba(255, 180, 150, .45); }
