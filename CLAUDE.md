@@ -253,6 +253,10 @@ l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne. Depuis
 - `ROADMAP_DESIGN.md` — roadmap dédiée au design du parcours client (née le
   2026-09-01 d'un comparatif avec digitalmenu.tn). Troisième document
   parallèle : ne réordonne ni `ROADMAP.md` ni `MARCHE_FRANCE.md`.
+- `MOTION_DESIGN.md` — principes de mouvement du produit (né le 2026-09-09
+  d'une référence de motion mesurée image par image). `ROADMAP_DESIGN.md`
+  décide *quoi* montrer au client, celui-ci décide *comment* l'interface bouge
+  quand on s'en sert. Ne réordonne rien non plus.
 - `REVUE_INVESTISSEURS.md` — revue d'investissement du 2026-08-13 (grille de
   notation, failles vérifiées, plafond de revenus).
 - `PREMIERES_VENTES.md` — audit orienté vente et les dix recommandations pour
@@ -299,3 +303,19 @@ Issues et specs vivent dans les GitHub Issues de `benmesswass/Tawla`. Voir `docs
 ### Domain docs
 
 Single-context : `CONTEXT.md` + `docs/adr/` à la racine, créés au fil de l'eau dès qu'un terme ou une décision se précise. Voir `docs/agents/domain.md`.
+
+### Design du frontend
+
+Toute modification de l'apparence ou des interactions dans `frontend/`
+(composants, pages, `globals.css`, `tailwind.config.js`) charge la skill
+**`tawla-design`** (`.claude/skills/tawla-design/SKILL.md`). Elle porte les
+valeurs du système : les trois accents, les 8 rôles typographiques, les échelles
+d'espacement / rayon / élévation, les jetons de mouvement, les états
+obligatoires d'un composant, le plancher de contraste — et les deux dépendances
+d'UI qu'on n'ajoute pas (librairie de composants, librairie d'animation).
+
+La skill officielle `frontend-design` (plugin `claude-plugins-official`) reste
+utile pour sa discipline anti-template et sa retenue, mais elle est écrite pour
+**inventer** une identité visuelle. Celle de Tawla est arrêtée depuis
+longtemps : sur ce repo, `tawla-design` prime sur son étape « choisis une
+palette et un couple de polices ».
