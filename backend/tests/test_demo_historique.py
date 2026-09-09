@@ -46,9 +46,12 @@ def test_le_tableau_de_bord_souvre_avec_des_chiffres(client):
     # Le reste des écrans chiffrés du manager (/dashboard/stats).
     assert stats["top_items"], "aucun plat vendu : le classement des ventes est vide"
     assert stats["orders_by_hour"], "aucune heure de pointe : l'histogramme est vide"
-    assert stats["active_orders_count"] == 4
-    assert len(stats["staff_active_load"]) == 2, "un seul serveur en charge : rien à comparer"
     assert all(etape is not None for etape in stats["timing"].values())
+
+    # Rien en cours, en revanche : le service s'ouvre à l'arrêt, la première
+    # commande du pool sera celle que le visiteur passe lui-même.
+    assert stats["active_orders_count"] == 0
+    assert stats["staff_active_load"] == []
 
 
 def test_les_deux_serveurs_se_comparent(client):
@@ -162,12 +165,16 @@ def test_les_commandes_passees_sont_coherentes(client, db_session):
     Une démo dont les commandes se contredisent (payée mais annulée, servie
     avant d'être confirmée) casse les écrans qui les lisent, et se voit à
     l'œil nu sur l'écran serveur.
+
+    Vérifie aussi qu'aucune n'est restée en cours : l'historique n'écrit que
+    du passé, servi et payé ou annulé.
     """
     demo = ouvrir_demo(client)
     commandes = db_session.query(Order).filter(Order.restaurant_id == demo["restaurant_id"]).all()
     maintenant = datetime.now(timezone.utc)
 
     for commande in commandes:
+        assert commande.status in (OrderStatus.SERVED, OrderStatus.CANCELLED)
         # Aucun horodatage dans le futur : une commande passée il y a cinq
         # minutes et déjà encaissée porterait un paiement qui n'a pas encore
         # eu lieu, compté dans « Ventes du jour ».
