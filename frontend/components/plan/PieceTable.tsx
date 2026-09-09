@@ -111,7 +111,9 @@ export default function PieceTable({
           ? "addition"
           : etat.urgence === "en_cuisine"
             ? "cuisine"
-            : "libre";
+            : etat.urgence === "occupee"
+              ? "occupee"
+              : "libre";
 
   return (
     <button

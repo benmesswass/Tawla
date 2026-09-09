@@ -15,6 +15,7 @@ from app.modules.tenants.models import Restaurant, SubscriptionTier
 router = APIRouter(prefix="/api/v1/tables", tags=["tables"])
 
 _MANAGER = require_role(StaffRole.MANAGER)
+_WAITER_OR_MANAGER = require_role(StaffRole.WAITER, StaffRole.MANAGER)
 
 
 def _allow_plan(db: Session, restaurant_id: int) -> bool:
@@ -135,6 +136,43 @@ def get_table_by_token(qr_token: str, db: Session = Depends(get_db)):
     Le token est opaque : impossible de deviner une autre table.
     """
     return service.get_table_by_qr_token(db, qr_token)
+
+
+@router.post("/{table_id}/release", response_model=schemas.TableOut)
+async def release_table(
+    table_id: int,
+    payload: schemas.TableReleaseIn = schemas.TableReleaseIn(),
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_WAITER_OR_MANAGER),
+):
+    """
+    Le serveur ou le manager confirment que les clients sont partis — seule
+    façon de remettre la table à « libre » (2026-09-09). Aucune expiration
+    technique ne le fait à leur place : voir `service.py::release_table`,
+    qui exige une note et trace la libération si une commande est encore en
+    cours — jamais confiance au frontend seul pour l'imposer.
+    """
+    table = db.get(Table, table_id)
+    if not table or table.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "TABLE_NOT_FOUND", "message": "table not found"})
+
+    table = await service.release_table(db, table, staff, note=payload.note)
+    return _hide_plan_fields(schemas.TableOut.model_validate(table), _allow_plan(db, table.restaurant_id))
+
+
+@router.get("/forced-releases/{restaurant_id}", response_model=list[schemas.ForcedTableReleaseOut])
+async def list_forced_releases(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
+):
+    """
+    Écran manager « Libérations forcées » : quelle table a été libérée en
+    plein service, par qui, quand, à quelle étape, et pourquoi. Réservé au
+    manager — c'est un outil de contrôle sur l'équipe, pas un écran de
+    service (même logique que `stats/router.py::get_team_report`).
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return await service.list_forced_releases(db, restaurant_id)
 
 
 @router.post("/{table_id}/assign-staff", response_model=schemas.TableOut)

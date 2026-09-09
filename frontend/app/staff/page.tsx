@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lalezar } from "@/lib/fonts";
-import { api, staffWsUrl, LoyaltyMember, ModificationRequest, MyShift, Order, PlanLandmark, PlanTable } from "@/lib/api";
+import {
+  api,
+  staffWsUrl,
+  LoyaltyMember,
+  ModificationRequest,
+  MyShift,
+  Order,
+  OrderInProgressStatus,
+  PlanLandmark,
+  PlanTable,
+} from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
 import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
@@ -18,6 +28,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import MaSoiree from "@/components/MaSoiree";
 import PlanDeSalle from "@/components/plan/PlanDeSalle";
 import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
+import ModaleLibererTable from "@/components/plan/ModaleLibererTable";
 import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
 import { construireEtats } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon, ChevronLeftIcon } from "@/components/icons";
@@ -61,8 +72,10 @@ type CashRequest = {
 type CardTerminalRequest = CashRequest;
 type WaiterCall = { call_id: number; table_id: number; table_label: string; created_at: string | null };
 /** Commandes parties en cuisine : rien à faire pour le serveur, mais la table
- *  n'est pas libre pour autant — le plan doit la montrer occupée. */
-type EnCuisine = { order_id: number; table_id: number };
+ *  n'est pas libre pour autant — le plan doit la montrer occupée. `status`
+ *  sert uniquement à ModaleLibererTable (étape affichée avant confirmation) —
+ *  la trace réelle, elle, est toujours recalculée côté backend. */
+type EnCuisine = { order_id: number; table_id: number; status: "confirmed" | "sent_to_kitchen" | "in_preparation" };
 
 function fromApi(o: Order): PendingOrder {
   return {
@@ -178,6 +191,9 @@ export default function StaffPage() {
   const [enCuisine, setEnCuisine] = useState<EnCuisine[]>([]);
   const [vuePlan, setVuePlan] = useState(true);
   const [tableOuverte, setTableOuverte] = useState<number | null>(null);
+  const [modaleLiberation, setModaleLiberation] = useState<
+    { tableId: number; tableLabel: string; commandeEnCours: OrderInProgressStatus | null } | null
+  >(null);
   const [loyaltyByPhone, setLoyaltyByPhone] = useState<Record<string, LoyaltyMember>>({});
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupResult, setLookupResult] = useState<LoyaltyMember | null>(null);
@@ -256,7 +272,11 @@ export default function StaffPage() {
       setEnCuisine(
         orders
           .filter((o) => ["confirmed", "sent_to_kitchen", "in_preparation"].includes(o.status))
-          .map((o) => ({ order_id: o.id, table_id: o.table_id }))
+          .map((o) => ({
+            order_id: o.id,
+            table_id: o.table_id,
+            status: o.status as "confirmed" | "sent_to_kitchen" | "in_preparation",
+          }))
       );
     } catch (e) {
       setError(toFrenchMessage(e));
@@ -374,6 +394,16 @@ export default function StaffPage() {
     }
   }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan, loadReperes]);
 
+  // Une table occupée (scan du QR) n'a pas d'événement WebSocket dédié —
+  // contrairement à sa libération, qui en diffuse un (voir plus bas) — donc
+  // ce plan la rattrape par un sondage léger plutôt que de rester périmé
+  // jusqu'au prochain rechargement complet de l'écran.
+  useEffect(() => {
+    if (!restaurantId) return;
+    const tick = setInterval(loadPlan, 20_000);
+    return () => clearInterval(tick);
+  }, [restaurantId, loadPlan]);
+
   const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
     if (msg.event === "order.pending_confirmation") {
       // Le message temps réel ne porte pas les articles (pensé léger, comme
@@ -386,7 +416,7 @@ export default function StaffPage() {
       setEnCuisine((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
           ? prev
-          : [...prev, { order_id: msg.order_id, table_id: msg.table_id }]
+          : [...prev, { order_id: msg.order_id, table_id: msg.table_id, status: "sent_to_kitchen" }]
       );
     }
     if (msg.event === "order.claimed") {
@@ -469,6 +499,11 @@ export default function StaffPage() {
     if (msg.event === "waiter_call.resolved") {
       setWaiterCalls((prev) => prev.filter((c) => c.call_id !== msg.call_id));
     }
+    // Un collègue vient de libérer une table (ou nous-même, depuis un autre
+    // appareil) : elle doit repasser « libre » ici aussi, tout de suite.
+    if (msg.event === "table.released") {
+      setPlan((prev) => prev.map((t) => (t.id === msg.table_id ? { ...t, occupied_at: null } : t)));
+    }
   });
 
   // Canal refusé (session expirée, compte désactivé par le manager) : le hook
@@ -495,9 +530,15 @@ export default function StaffPage() {
     }
   }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift]);
 
+  const tablesOccupees = useMemo(
+    () => new Set(plan.filter((t) => t.occupied_at !== null).map((t) => t.id)),
+    [plan]
+  );
+
   const etatsDesTables = useMemo(
     () =>
       construireEtats({
+        tablesOccupees,
         aPrendre: pending.map((o) => ({
           table_id: o.table_id,
           depuis: o.created_at,
@@ -515,7 +556,7 @@ export default function StaffPage() {
         appels: waiterCalls.map((c) => ({ table_id: c.table_id, depuis: c.created_at })),
         enCuisine,
       }),
-    [pending, readyToServe, cashRequests, cardTerminalRequests, waiterCalls, enCuisine, staff?.id]
+    [tablesOccupees, pending, readyToServe, cashRequests, cardTerminalRequests, waiterCalls, enCuisine, staff?.id]
   );
 
   const salleDessinee = plan.some((t) => t.pos_x !== null && t.pos_y !== null);
@@ -547,7 +588,46 @@ export default function StaffPage() {
         : additionCarte
           ? () => confirmCardTerminal(additionCarte.order_id)
           : undefined,
+      libererTable: tablesOccupees.has(tableId) ? () => ouvrirModaleLiberation(tableId) : undefined,
     };
+  }
+
+  /**
+   * Ce que le client verra dans ModaleLibererTable avant de confirmer — un
+   * aperçu, jamais la source de vérité : le backend recalcule toujours
+   * lui-même l'état réel au moment de la libération (`service.py::
+   * _order_in_progress_status`), donc un léger décalage ici (ex: cuisine qui
+   * vient de commencer la préparation) ne fait jamais rater une note requise.
+   */
+  function commandeEnCoursPourTable(tableId: number): OrderInProgressStatus | null {
+    const aPrendre = pending.find((o) => o.table_id === tableId);
+    if (aPrendre) return "pending_confirmation";
+    const enCours = enCuisine.find((o) => o.table_id === tableId);
+    if (enCours) return enCours.status;
+    const aServir = readyToServe.find((o) => o.table_id === tableId);
+    if (aServir) return "ready";
+    const addition = cashRequests.find((o) => o.table_id === tableId) ?? cardTerminalRequests.find((o) => o.table_id === tableId);
+    if (addition) return "served_unpaid";
+    return null;
+  }
+
+  function ouvrirModaleLiberation(tableId: number) {
+    const table = plan.find((t) => t.id === tableId);
+    if (!table) return;
+    setModaleLiberation({ tableId, tableLabel: table.label, commandeEnCours: commandeEnCoursPourTable(tableId) });
+  }
+
+  async function confirmerLiberation(note?: string) {
+    if (!modaleLiberation) return;
+    const { tableId } = modaleLiberation;
+    setError(null);
+    try {
+      const updated = await api.releaseTable(tableId, note);
+      setPlan((prev) => prev.map((t) => (t.id === tableId ? { ...t, occupied_at: updated.occupied_at } : t)));
+      setModaleLiberation(null);
+    } catch (e) {
+      throw new Error(toFrenchMessage(e));
+    }
   }
 
   async function claim(orderId: number) {
@@ -770,6 +850,14 @@ export default function StaffPage() {
 
   return (
     <div className="min-h-screen bg-[var(--semoule)]">
+      {modaleLiberation && (
+        <ModaleLibererTable
+          tableLabel={modaleLiberation.tableLabel}
+          commandeEnCours={modaleLiberation.commandeEnCours}
+          onConfirm={confirmerLiberation}
+          onClose={() => setModaleLiberation(null)}
+        />
+      )}
       <header className="bg-[var(--espresso)] px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <TawlaMark size={30} variant="reserveSombre" />

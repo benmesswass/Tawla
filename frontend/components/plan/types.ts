@@ -15,6 +15,9 @@ export type PlanTable = {
   pos_y: number | null;
   shape: TableShape;
   seats: number;
+  /** Posé au scan du QR, remis à `null` uniquement par « Libérer la table »
+   *  (2026-09-09) — jamais par un délai ou une déconnexion. */
+  occupied_at: string | null;
 };
 
 /**
@@ -51,11 +54,14 @@ export const LIBELLE_REPERE: Record<LandmarkKind, string> = {
  * cuisine ET un appel serveur), et la tuile ne montre que la plus urgente —
  * un serveur qui traverse la salle a besoin d'une réponse, pas d'un inventaire.
  */
-export const URGENCES = ["libre", "en_cuisine", "a_servir", "addition", "a_prendre", "appel"] as const;
+export const URGENCES = ["libre", "occupee", "en_cuisine", "a_servir", "addition", "a_prendre", "appel"] as const;
 export type Urgence = (typeof URGENCES)[number];
 
 export const LIBELLE_URGENCE: Record<Urgence, string> = {
   libre: "",
+  // Installés, personne à prévenir — le libellé ne sert qu'à l'aria-label,
+  // jamais affiché tel quel sur la tuile (voir ActionTable.tsx).
+  occupee: "installés",
   en_cuisine: "en cuisine",
   a_servir: "prête à servir",
   addition: "addition",
@@ -65,7 +71,7 @@ export const LIBELLE_URGENCE: Record<Urgence, string> = {
 
 /** Les états qui demandent un déplacement maintenant. */
 export function demandeUnServeur(urgence: Urgence): boolean {
-  return urgence !== "libre" && urgence !== "en_cuisine";
+  return urgence !== "libre" && urgence !== "occupee" && urgence !== "en_cuisine";
 }
 
 export type EtatTable = {

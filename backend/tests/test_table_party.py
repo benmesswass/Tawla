@@ -77,10 +77,13 @@ def test_la_taille_est_bornee_et_les_prenoms_ajustes_a_la_taille(client):
         assert message["names"][0] == "Seul"
 
 
-def test_les_convives_disparaissent_quand_la_table_se_vide(client):
+def test_les_convives_survivent_a_une_deconnexion(client):
     """
-    Comme le panier partagé : une fois tout le monde parti, la déclaration ne
-    doit pas fuiter vers la prochaine table qui réutilise le même id.
+    2026-09-09 (demande de Wassim) : plus aucune déconnexion ne doit vider la
+    déclaration — les clients doivent pouvoir la garder tant qu'ils sont à
+    table, quelle que soit la durée passée sans appareil connecté. Seul le
+    bouton « Libérer la table » du serveur/manager la vide désormais (voir
+    `test_tables_release.py`).
     """
     restaurant, table = _setup_restaurant_with_table(client, "party-clear")
 
@@ -92,7 +95,9 @@ def test_les_convives_disparaissent_quand_la_table_se_vide(client):
 
     with _connect(client, restaurant, table) as ws_after:
         _skip_cart_snapshot(ws_after)
-        assert ws_after.receive_json() == {"event": "party.updated", "size": None, "names": []}
+        assert ws_after.receive_json() == {
+            "event": "party.updated", "size": 4, "names": ["Ahmed", None, None, None],
+        }
 
 
 def test_convives_isoles_entre_deux_tables(client):

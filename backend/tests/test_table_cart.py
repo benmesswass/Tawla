@@ -5,11 +5,7 @@ panier tenu en mémoire côté serveur (`orders/table_cart.py`) et valident une
 seule commande pour la table entière.
 """
 
-import asyncio
-
-from app.modules.notifications import router as notifications_router
 from app.modules.orders import table_cart
-from app.modules.orders.schemas import OrderItemCreate
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 
@@ -248,51 +244,28 @@ def test_rejouer_la_validation_avec_le_meme_client_order_id_ne_double_pas_la_com
     assert len([o for o in active if o["table_id"] == table["id"]]) == 1
 
 
-def test_purge_programmee_est_annulee_par_une_reconnexion(monkeypatch):
+def test_une_deconnexion_meme_longue_ne_purge_plus_le_panier(client):
     """
-    Une coupure réseau de quelques secondes reconnecte toute seule
-    (`useReconnectingSocket.ts`, backoff jusqu'à 15s) — purger le panier dès
-    que le dernier appareil part viderait celui d'un client SEUL à sa table
-    pour un simple trou wifi, aucun deuxième appareil requis (audit QA, PR
-    #160). Test sur les fonctions du routeur directement, en dehors du
-    `TestClient` : sa session WebSocket ferme et détruit sa propre boucle
-    asyncio dès la sortie du `with`, ce qui tue toute tâche différée créée
-    pendant la connexion avant qu'elle n'ait pu s'exécuter — un faux négatif
-    qui n'a rien à voir avec le comportement réel (vérifié manuellement
-    contre un vrai serveur uvicorn, où la boucle est partagée et persiste).
+    2026-09-09 (demande de Wassim) : le panier partagé ne doit plus jamais
+    être vidé par une déconnexion, aussi longue soit-elle — un client doit
+    pouvoir prendre son temps pour composer sa commande. Seul le bouton
+    « Libérer la table » du serveur/manager (`release_table`) le vide
+    désormais. Ici, plus aucun appareil n'est connecté à la table après le
+    `with` : si une purge automatique existait encore, elle aurait cette
+    fenêtre pour s'exécuter.
     """
-    monkeypatch.setattr(notifications_router, "TABLE_CART_PURGE_GRACE_SECONDS", 0.2)
-    table_id = 999_001
+    restaurant, table, item, _headers = _setup_restaurant_with_item(client)
 
-    async def scenario():
-        table_cart.table_cart_store.set_line(table_id, OrderItemCreate(menu_item_id=1))
-        notifications_router._schedule_table_cart_purge(1, table_id, "table-999001")
-        notifications_router._cancel_pending_table_cart_purge(table_id)
-        # Largement après le délai de grâce : si l'annulation n'avait pas
-        # fonctionné, la purge aurait eu largement le temps de s'exécuter.
-        await asyncio.sleep(0.3)
-        return table_cart.table_cart_store.snapshot(table_id)
+    with _connect(client, restaurant, table) as ws:
+        ws.receive_json()
+        _skip_party_snapshot(ws)
+        ws.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
+        ws.receive_json()
 
-    try:
-        assert asyncio.run(scenario()) != []
-    finally:
-        table_cart.table_cart_store.pop_all(table_id)
-
-
-def test_purge_programmee_sexecute_si_jamais_annulee(monkeypatch):
-    """La purge n'est pas supprimée, seulement différée : une table qui reste
-    vraiment vide au-delà du délai de grâce perd bien son panier — la fuite
-    que ce mécanisme corrigeait à l'origine n'est pas réintroduite."""
-    monkeypatch.setattr(notifications_router, "TABLE_CART_PURGE_GRACE_SECONDS", 0.1)
-    table_id = 999_002
-
-    async def scenario():
-        table_cart.table_cart_store.set_line(table_id, OrderItemCreate(menu_item_id=1))
-        notifications_router._schedule_table_cart_purge(1, table_id, "table-999002")
-        await asyncio.sleep(0.3)  # largement après la fin du délai de grâce
-        return table_cart.table_cart_store.snapshot(table_id)
-
-    assert asyncio.run(scenario()) == []
+    with _connect(client, restaurant, table) as ws_retour:
+        snapshot = ws_retour.receive_json()
+        assert snapshot["lines"] != []
+        assert snapshot["lines"][0]["menu_item_id"] == item["id"]
 
 
 def test_paniers_isoles_entre_deux_restaurants(client):

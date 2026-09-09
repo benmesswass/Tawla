@@ -40,8 +40,10 @@ def get_current_staff(
     if not staff:
         raise HTTPException(status_code=401, detail={"code": "INVALID_TOKEN", "message": "staff not found"})
 
-    # Contrôlé ici et pas seulement au login : un JWT vit 12h, donc un compte
-    # désactivé (salarié parti) resterait sinon utilisable toute une journée.
+    # Contrôlé ici et pas seulement au login : le JWT n'expire plus jamais
+    # de lui-même (2026-09-09, voir security.py::create_access_token), donc
+    # sans ce contrôle un compte désactivé (salarié parti) resterait
+    # utilisable indéfiniment.
     if not staff.is_active:
         raise HTTPException(
             status_code=401, detail={"code": "ACCOUNT_DISABLED", "message": "this account has been disabled"}
