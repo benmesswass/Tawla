@@ -1,7 +1,7 @@
 import secrets
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -128,3 +128,46 @@ class PlanLandmarkPart(Base):
     height: Mapped[float] = mapped_column(Float, nullable=False)
 
     landmark: Mapped["PlanLandmark"] = relationship(back_populates="parts")
+
+
+class ForcedTableRelease(Base):
+    """
+    Trace d'une table libérée alors qu'une commande n'était ni annulée ni
+    servie-et-payée (2026-09-09, demande de Wassim) — jamais posée pour une
+    libération normale (table déjà réglée), uniquement pour celle-ci :
+    c'est l'exception qui justifie la note, pas la libération elle-même.
+
+    But : que le manager sache quelle table a été libérée en plein service,
+    par qui, quand, à quelle étape était la commande, et pourquoi (note
+    obligatoire écrite par le serveur/manager sur le moment — voir
+    `service.py::release_table`). Jamais modifiable après coup : une trace
+    qu'on peut corriger n'en est plus une.
+    """
+
+    __tablename__ = "forced_table_releases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), nullable=False, index=True)
+    table_id: Mapped[int] = mapped_column(ForeignKey("tables.id"), nullable=False, index=True)
+    released_by_staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), nullable=False)
+    released_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    # Code technique de l'étape au moment de la libération (ex:
+    # "sent_to_kitchen", "served_unpaid") — jamais recalculé après coup à
+    # partir de la commande, qui peut avoir avancé depuis.
+    order_status_snapshot: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Obligatoire au niveau base aussi, pas seulement côté API : cette ligne
+    # n'existe QUE parce qu'une note a été fournie (voir service.py).
+    note: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    table: Mapped["Table"] = relationship()
+    released_by: Mapped["Staff"] = relationship()  # noqa: F821 — résolu par le registre SQLAlchemy
+
+    @property
+    def table_label(self) -> str:
+        return self.table.label
+
+    @property
+    def released_by_name(self) -> str:
+        return self.released_by.name

@@ -9,12 +9,26 @@ from app.modules.orders import table_cart
 from app.modules.orders.schemas import OrderItemCreate
 from app.modules.staff.models import StaffRole
 from app.modules.tables import party as table_party
-from tests.conftest import auth_headers, create_restaurant, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
 
 
 def _create_table(client, restaurant, manager):
     return client.post(
         "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=auth_headers(manager)
+    ).json()
+
+
+def _create_item(client, restaurant, manager):
+    return client.post(
+        "/api/v1/menu-items",
+        json={"restaurant_id": restaurant.id, "name": "Café", "price": 3.5},
+        headers=auth_headers(manager),
+    ).json()
+
+
+def _create_order(client, table, item):
+    return client.post(
+        "/api/v1/orders", json={"qr_token": table["qr_token"], "items": [{"menu_item_id": item["id"], "quantity": 1}]}
     ).json()
 
 
@@ -96,3 +110,151 @@ def test_liberer_une_table_dun_autre_restaurant_est_refuse(client):
     response = client.post(f"/api/v1/tables/{table_b['id']}/release", headers=auth_headers(manager_a))
 
     assert response.status_code == 404
+
+
+def test_liberer_une_table_avec_commande_en_cours_sans_note_est_refuse(client):
+    """Aucune confiance faite au frontend seul : le backend recalcule
+    lui-même si une commande est en cours et exige la note dans ce cas."""
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    table = _create_table(client, restaurant, manager)
+    item = _create_item(client, restaurant, manager)
+    _create_order(client, table, item)  # reste PENDING_CONFIRMATION
+
+    response = client.post(f"/api/v1/tables/{table['id']}/release", headers=auth_headers(manager))
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "NOTE_REQUIRED"
+    assert response.json()["detail"]["order_status"] == "pending_confirmation"
+    # Rien n'a été fait : la table reste occupée, personne ne doit croire
+    # qu'un refus a quand même libéré la table.
+    assert _occupied_at(client, restaurant, manager, table["id"]) is not None
+
+
+def test_liberer_une_table_avec_commande_en_cours_et_note_est_tracee(client):
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    waiter = create_staff(restaurant.id, StaffRole.WAITER)
+    table = _create_table(client, restaurant, manager)
+    item = _create_item(client, restaurant, manager)
+    _create_order(client, table, item)
+
+    response = client.post(
+        f"/api/v1/tables/{table['id']}/release",
+        json={"note": "Client parti sans prévenir, plat pas encore en cuisine."},
+        headers=auth_headers(waiter),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["occupied_at"] is None
+
+    releases = client.get(
+        f"/api/v1/tables/forced-releases/{restaurant.id}", headers=auth_headers(manager)
+    ).json()
+    assert len(releases) == 1
+    assert releases[0]["table_id"] == table["id"]
+    assert releases[0]["table_label"] == "Table 1"
+    assert releases[0]["released_by_name"] == waiter.name
+    assert releases[0]["order_status_snapshot"] == "pending_confirmation"
+    assert releases[0]["note"] == "Client parti sans prévenir, plat pas encore en cuisine."
+
+
+def test_liberer_une_table_sans_commande_ne_trace_rien(client):
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    table = _create_table(client, restaurant, manager)
+    client.get(f"/api/v1/tables/by-token/{table['qr_token']}")
+
+    response = client.post(f"/api/v1/tables/{table['id']}/release", headers=auth_headers(manager))
+
+    assert response.status_code == 200, response.text
+    releases = client.get(
+        f"/api/v1/tables/forced-releases/{restaurant.id}", headers=auth_headers(manager)
+    ).json()
+    assert releases == []
+
+
+def test_liberer_une_table_avec_commande_servie_et_payee_ne_trace_rien(client):
+    """Terminée et payée = le seul cas sûr explicitement demandé par
+    Wassim : pas de note, pas de trace, comme une libération normale."""
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    table = _create_table(client, restaurant, manager)
+    item = _create_item(client, restaurant, manager)
+    order = _create_order(client, table, item)
+
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/send-to-kitchen", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/start-preparation", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/mark-ready", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/mark-served", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=auth_headers(manager))
+
+    response = client.post(f"/api/v1/tables/{table['id']}/release", headers=auth_headers(manager))
+
+    assert response.status_code == 200, response.text
+    releases = client.get(
+        f"/api/v1/tables/forced-releases/{restaurant.id}", headers=auth_headers(manager)
+    ).json()
+    assert releases == []
+
+
+def test_liberer_une_table_avec_commande_servie_non_payee_exige_une_note(client):
+    """Servie mais pas encore encaissée n'est PAS "terminée et payée" — reste
+    une libération en cours de commande au sens de cette fonctionnalité."""
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    table = _create_table(client, restaurant, manager)
+    item = _create_item(client, restaurant, manager)
+    order = _create_order(client, table, item)
+
+    client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/send-to-kitchen", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/start-preparation", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/mark-ready", headers=auth_headers(manager))
+    client.post(f"/api/v1/orders/{order['id']}/mark-served", headers=auth_headers(manager))
+
+    refused = client.post(f"/api/v1/tables/{table['id']}/release", headers=auth_headers(manager))
+    assert refused.status_code == 422
+    assert refused.json()["detail"]["order_status"] == "served_unpaid"
+
+    accepted = client.post(
+        f"/api/v1/tables/{table['id']}/release",
+        json={"note": "Parti sans payer, addition à recouvrer."},
+        headers=auth_headers(manager),
+    )
+    assert accepted.status_code == 200, accepted.text
+    releases = client.get(
+        f"/api/v1/tables/forced-releases/{restaurant.id}", headers=auth_headers(manager)
+    ).json()
+    assert len(releases) == 1
+    assert releases[0]["order_status_snapshot"] == "served_unpaid"
+
+
+def test_liberer_une_table_avec_commande_annulee_ne_trace_rien(client):
+    """Une commande annulée n'est pas "en cours" — comme si elle n'existait
+    pas pour cette fonctionnalité."""
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    table = _create_table(client, restaurant, manager)
+    item = _create_item(client, restaurant, manager)
+    order = _create_order(client, table, item)
+    client.post(f"/api/v1/orders/{order['id']}/cancel", headers=auth_headers(manager))
+
+    response = client.post(f"/api/v1/tables/{table['id']}/release", headers=auth_headers(manager))
+
+    assert response.status_code == 200, response.text
+    releases = client.get(
+        f"/api/v1/tables/forced-releases/{restaurant.id}", headers=auth_headers(manager)
+    ).json()
+    assert releases == []
+
+
+def test_lister_les_liberations_forcees_est_reserve_au_manager(client):
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    waiter = create_staff(restaurant.id, StaffRole.WAITER)
+
+    response = client.get(f"/api/v1/tables/forced-releases/{restaurant.id}", headers=auth_headers(waiter))
+
+    assert response.status_code == 403

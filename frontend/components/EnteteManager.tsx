@@ -25,6 +25,7 @@ const PAGES = [
   { href: "/dashboard/stats", label: "Activité du jour" },
   { href: "/dashboard/preuve", label: "Preuve du pilote" },
   { href: "/dashboard/equipe", label: "Rapport d'équipe" },
+  { href: "/dashboard/liberations", label: "Libérations forcées" },
   // Le backend autorise un manager à confirmer une commande au même titre
   // qu'un serveur (_WAITER_OR_MANAGER, app/modules/orders/router.py), mais
   // /staff n'était lié depuis nulle part : un manager fraîchement inscrit

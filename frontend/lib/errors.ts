@@ -19,6 +19,12 @@ const MESSAGES: Record<string, (ctx: Record<string, unknown>) => string> = {
     "Cette table a déjà des commandes : la supprimer effacerait cet historique. Renommez-la plutôt si elle ne sert plus.",
   TABLE_HAS_WAITER_CALLS: () =>
     "Cette table a déjà des appels serveur enregistrés : la supprimer effacerait cet historique. Renommez-la plutôt si elle ne sert plus.",
+  // Ne devrait normalement jamais s'afficher : ModaleLibererTable exige déjà
+  // la note avant d'appeler l'API dès qu'une commande est en cours — ce
+  // message ne sert que si l'état côté client était périmé (le backend
+  // recalcule toujours lui-même, jamais confiance au seul frontend).
+  NOTE_REQUIRED: () =>
+    "Une commande est en cours sur cette table : rouvrez la fenêtre de libération pour expliquer pourquoi.",
   INVALID_CREDENTIALS: () => "E-mail ou mot de passe incorrect.",
   NOT_AUTHENTICATED: () => "Session expirée, merci de vous reconnecter.",
   INVALID_TOKEN: () => "Session expirée, merci de vous reconnecter.",
