@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.dates import as_utc
 from app.core.logging import log_event
 from app.core.markets import Market, current_market
+from app.modules.demo import historique
 from app.modules.loyalty.models import LoyaltyMember
 from app.modules.menu.models import (
     MenuItem,
@@ -98,15 +99,20 @@ CARTE_FR = [
     ("Verre de côtes-du-rhône", "Vins", 5.50),
 ]
 
+# Deux serveurs, pas un : « commandes par serveur », « tables en charge en ce
+# moment » et le rapport d'équipe sont des écrans de comparaison. Avec une
+# seule ligne, le manager ne voit pas une fonctionnalité, il voit un total.
 EQUIPE = [
     ("Amine (manager)", StaffRole.MANAGER),
     ("Sami (serveur)", StaffRole.WAITER),
+    ("Leïla (serveuse)", StaffRole.WAITER),
     ("Karim (cuisine)", StaffRole.KITCHEN),
 ]
 
 EQUIPE_FR = [
     ("Julie (manager)", StaffRole.MANAGER),
     ("Thomas (serveur)", StaffRole.WAITER),
+    ("Camille (serveuse)", StaffRole.WAITER),
     ("Nicolas (cuisine)", StaffRole.KITCHEN),
 ]
 
@@ -220,15 +226,17 @@ def purger_demos_expirees(db: Session) -> int:
 
 def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     """
-    Monte un établissement complet : l'équipe, trois tables, une carte.
+    Monte un établissement complet : l'équipe, trois tables, une carte, et
+    deux semaines de service déjà passées (`historique.py`) — sans elles, tous
+    les écrans chiffrés du manager s'ouvrent à zéro.
 
     Palier Pro et compte actif : la démonstration doit montrer le produit que
     l'on vend (paiement carte, fidélité, plan de salle), pas un écran
     d'activation. C'est le seul chemin qui crée un restaurant utilisable sans
     paiement — d'où `is_demo`, qui le distingue d'un vrai client à vie.
 
-    Renvoie les trois comptes plutôt que le seul manager : `router.py` émet un
-    jeton pour chacun, pour qu'un lien puisse ouvrir l'écran serveur ou
+    Renvoie un compte par rôle plutôt que le seul manager : `router.py` émet
+    un jeton pour chacun, pour qu'un lien puisse ouvrir l'écran serveur ou
     cuisine, déjà connecté, sur un autre appareil que celui qui a ouvert la
     démo — les comptes serveur et cuisine ont un mot de passe généré
     aléatoirement ci-dessous, jamais révélé, donc jamais saisissable à la main.
@@ -263,17 +271,19 @@ def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant
     db.flush()
 
     comptes = []
-    for nom, role in equipe:
+    for rang, (nom, role) in enumerate(equipe, start=1):
         compte = Staff(
             restaurant_id=restaurant.id,
             name=nom,
             role=role,
             # Adresse jetable et unique : `Staff.email` est unique sur toute
             # la base, deux démos simultanées ne doivent pas se télescoper.
+            # Le rang, et pas le seul rôle, depuis que l'équipe compte deux
+            # serveurs : sans lui les deux partageraient la même adresse.
             # Domaine par marché — jamais résolu ni envoyé nulle part (mot de
             # passe jamais révélé, cf. docstring), aucune dépendance à ce que
             # `tawla.fr` soit réellement réservé (F4, encore 🧑).
-            email=f"{role.value}@{restaurant.slug}.demo.tawla.{market.code}",
+            email=f"{role.value}{rang}@{restaurant.slug}.demo.tawla.{market.code}",
             password_hash=hash_password(secrets.token_urlsafe(16)),
         )
         db.add(compte)
@@ -283,20 +293,36 @@ def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant
     for table in tables:
         db.add(table)
 
-    for nom, categorie, prix in carte:
+    articles = [
         # Construit en ORM direct : ne passe pas par MenuItemCreate
         # (menu/schemas.py), donc le défaut market-aware d'is_halal doit être
         # posé ici explicitement, sinon la démo retombe sur le défaut SQL
         # (True) — une brasserie française se serait affichée "halal".
-        db.add(
-            MenuItem(
-                restaurant_id=restaurant.id,
-                name=nom,
-                category=categorie,
-                price=prix,
-                is_halal=market.code == "tn",
-            )
+        MenuItem(
+            restaurant_id=restaurant.id,
+            name=nom,
+            category=categorie,
+            price=prix,
+            is_halal=market.code == "tn",
         )
+        for nom, categorie, prix in carte
+    ]
+    for article in articles:
+        db.add(article)
+
+    # Identifiants des tables, des comptes et de la carte : l'historique en a
+    # besoin pour rattacher ses commandes.
+    db.flush()
+
+    historique.poser_suggestions(db, restaurant, articles)
+    historique.poser_historique(
+        db,
+        restaurant=restaurant,
+        tables=tables,
+        serveurs=[c for c in comptes if c.role == StaffRole.WAITER],
+        articles=articles,
+        market=market,
+    )
 
     db.commit()
     db.refresh(restaurant)
@@ -304,7 +330,13 @@ def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant
         db.refresh(compte)
     db.refresh(tables[0])
 
-    par_role = {compte.role: compte for compte in comptes}
+    # `setdefault` et pas une compréhension : l'équipe compte deux serveurs
+    # depuis que le tableau de bord doit montrer une comparaison, et le jeton
+    # « serveur » de la démo doit rester celui du premier — une compréhension
+    # aurait silencieusement gardé le second.
+    par_role: dict[StaffRole, Staff] = {}
+    for compte in comptes:
+        par_role.setdefault(compte.role, compte)
     log_event(logger, "demo.creee", restaurant_id=restaurant.id, table_id=tables[0].id)
     return restaurant, par_role, tables[0]
 

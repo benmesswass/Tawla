@@ -63,17 +63,31 @@ def _weekly_signups(restaurants: list[Restaurant], now: datetime) -> list[schema
 
 async def get_overview(db: Session) -> schemas.PlatformOverview:
     """
-    Les chiffres indispensables de l'opérateur, tous restaurants confondus —
-    échelle actuelle (quelques pilotes) : tout tient en mémoire sans
-    agrégation SQL, comme le reste du module `stats`, jamais de job planifié.
+    Les chiffres indispensables de l'opérateur, tous restaurants **réels**
+    confondus (les démonstrations en sont exclues, voir plus bas) — échelle
+    actuelle (quelques pilotes) : tout tient en mémoire sans agrégation SQL,
+    comme le reste du module `stats`, jamais de job planifié.
     """
     now = datetime.now(timezone.utc)
     thirty_days_ago = now - timedelta(days=30)
     seven_days_ago = now - timedelta(days=7)
 
-    restaurants = db.query(Restaurant).order_by(Restaurant.created_at).all()
-    orders = db.query(Order).all()
-    recent_views = db.query(DashboardView).filter(DashboardView.viewed_at >= seven_days_ago).all()
+    # Les établissements de démonstration sont exclus de bout en bout, et pas
+    # seulement du MRR (`_is_paying_online` s'en chargeait déjà) : depuis
+    # qu'une démo s'ouvre avec deux semaines de service (demo/historique.py),
+    # les compter reviendrait à lire un GMV, un taux d'annulation et un
+    # « restaurants actifs » fabriqués pour la vente. Un chiffre inventé dans
+    # l'écran qui sert à piloter l'entreprise est pire qu'un écran vide.
+    restaurants = (
+        db.query(Restaurant).filter(Restaurant.is_demo.is_(False)).order_by(Restaurant.created_at).all()
+    )
+    reels = [restaurant.id for restaurant in restaurants]
+    orders = db.query(Order).filter(Order.restaurant_id.in_(reels)).all()
+    recent_views = (
+        db.query(DashboardView)
+        .filter(DashboardView.viewed_at >= seven_days_ago, DashboardView.restaurant_id.in_(reels))
+        .all()
+    )
 
     orders_by_restaurant: dict[int, list[Order]] = defaultdict(list)
     for order in orders:
