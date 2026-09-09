@@ -66,16 +66,21 @@ montré qu'en visant la note directement on finit par se noter sur ses intention
 L'objectif ci-dessus, lui, n'est pas interprétable : soit deux patrons ont viré
 leur abonnement, soit non.
 
-## La règle qui structure toute cette roadmap
+## La règle qui a structuré cette roadmap jusqu'à la Phase 20
 
-**Une seule phase de code avant la mise en ligne, et plus rien ensuite avant le
+**Une seule phase de code avant la mise en ligne, et rien d'autre jusqu'au
 premier pilote.**
 
-Le produit ne manque pas de fonctionnalité — il manque un restaurateur. La
+Le produit ne manquait pas de fonctionnalité — il manquait un restaurateur. La
 Phase 19 a fermé les trois défauts de l'audit du 15 août ; la **Phase 19bis**
-ferme ce que l'audit du 18 août a trouvé en attaquant et en rejouant les
-parcours ; la Phase 20 met en ligne ; et **tout ce qui suit passe par la porte
-d'un restaurant**.
+a fermé ce que l'audit du 18 août a trouvé en attaquant et en rejouant les
+parcours ; la Phase 20 a mis le produit en ligne.
+
+**Décision de Wassim, 2026-09-09 : cette discipline ne bloque plus rien.**
+Les nouvelles fonctionnalités ne passent plus par un déclencheur nommé ou un
+restaurateur identifié — Wassim en décide directement, et en assume seul la
+responsabilité. Le backlog ci-dessous (ex-« Sous condition ») reste une
+référence utile, pas une porte fermée.
 
 ## Le calendrier, à rebours de Ramadan
 
@@ -239,7 +244,7 @@ pas au maintien « au cas où ».
 
 - [ ] Trancher le sort des trois candidats déjà identifiés par `AUDIT_FINAL.md` 🧑 : partage d'addition (noté 6,0), mode café (6,5), célébration et carte à partager (4,0). Les retirer coûte moins cher que les maintenir dans chaque écran, chaque traduction et chaque test
 - [ ] Écrire la coupe dans cette roadmap avec la raison, même si la décision est « on garde »
-- [ ] Si l'addition par table remonte spontanément chez plusieurs patrons, c'est la **seule** fonctionnalité qui remonte en Phase 23 ; sinon elle reste en § « Sous condition »
+- [ ] Si l'addition par table remonte spontanément chez plusieurs patrons, c'est la **seule** fonctionnalité qui remonte en Phase 23 ; sinon elle reste au § « Backlog produit »
 
 ---
 
@@ -330,12 +335,14 @@ réussite ne dépend d'aucune ligne de code.
 
 ---
 
-## Sous condition — ne pas ouvrir sans le déclencheur nommé
+## Backlog produit — idées non priorisées (gate levée le 2026-09-09)
 
-Chaque ligne est une chose qu'il serait tentant de construire. Le déclencheur
-est la condition **exacte** qui la ferait entrer dans la roadmap.
+Chaque ligne est une idée envisagée mais pas encore construite. Le signal
+d'origine documente ce qui l'avait fait remonter la première fois ; il
+n'est plus une condition pour la construire — Wassim peut piocher n'importe
+laquelle directement.
 
-| Chantier | Déclencheur |
+| Chantier | Signal d'origine (indicatif, non bloquant) |
 |---|---|
 | **Addition au niveau de la table** — vérifié le 2026-08-18 : `payment_status` vit sur `Order`, et les commandes ouvertes multiples (PR #52) font qu'une table qui commande en deux temps produit deux additions séparées | Trois patrons sur vingt le mentionnent **spontanément** en Phase 21 |
 | **Formules / menus du jour** | Idem — trois mentions spontanées |
