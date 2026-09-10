@@ -29,9 +29,20 @@ def compute_shares(order: Order, names: list[str]) -> dict[str, float]:
     totals = [0.0] * n
     for item in order.items:
         line_total = float(item.unit_price) * item.quantity
-        if item.is_shared:
-            places = [int(p) for p in (item.shared_with or "").split(",") if p.strip().isdigit()]
-            targets = [p for p in places if 1 <= p <= n] or list(range(1, n + 1))
+        places = [int(p) for p in (item.shared_with or "").split(",") if p.strip().isdigit()]
+        assignes = [p for p in places if 1 <= p <= n]
+        # L'assignation explicite prime sur `is_shared`, et n'en dépend plus :
+        # un plat commandé POUR quelqu'un d'autre ("je me décoche, je coche
+        # Sami") est facturé à Sami même s'il n'est partagé avec personne.
+        # Auparavant `shared_with` n'était lu que si `is_shared` était vrai,
+        # donc ce plat retombait sur son auteur : l'écran client affichait
+        # "Pour Sami" et l'addition le facturait à celui qui l'avait ajouté.
+        # `SplitBill.tsx::defaultAssignment` lisait déjà `shared_with` sans
+        # cette condition — c'est ici que les deux se réalignent.
+        if assignes:
+            targets = assignes
+        elif item.is_shared:
+            targets = list(range(1, n + 1))
         elif item.added_by_name in names:
             targets = [names.index(item.added_by_name) + 1]
         else:

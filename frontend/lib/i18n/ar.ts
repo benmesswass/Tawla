@@ -28,7 +28,7 @@ export const ar = {
   callWaiterButton: "نادي على الجرسون",
   callWaiterSent: "✓ الجرسون تعرّف، باش يجي دلوقتي",
   notePlaceholder: "ملاحظة للكوجينة (إختياري، مثال: بلا بصل)",
-  sharedCheckboxLabel: "أكلة نتقاسموها",
+  sharedCheckboxLabel: "نتقاسموها ولا نعيّنوها",
   preorderCheckboxLabel: (time) => `نطلب للفطور (${time}) بدل دلوقتي`,
   sending: "قاعد يتبعث...",
   validateOrder: "أكد الطلبية",
@@ -158,7 +158,10 @@ export const ar = {
   tableTotalNote:
     "الخلاص إلي تحت يخلص كان الطلبية المعروضة. ارجع للأخرين باش تخلصهم، ولا اطلب من الجرسون يخلصهم الكل مرة وحدة.",
   sharedWithLabel: "لمن؟",
-  sharedWithEveryone: "ما تعيّنش لحد : يتقسم بالتساوي في الفاتورة.",
+  assignedToMe: "ليك",
+  assignMeLabel: "إنتي",
+  assignReopenHint: "عاود اختار باش تبدّل",
+  sharedWithEveryone: "للطاولة الكل : يتقسم بالتساوي في الفاتورة.",
   sharedPerPersonAmount: (amount) => `${formatAmount(amount)} د.ت للشخص`,
   openOrdersTitle: (count, reste) =>
     count > 1

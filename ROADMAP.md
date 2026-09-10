@@ -461,6 +461,20 @@ résolue).
 > inventait un « Personne 2 » fantôme dans « Pour qui ? » sur une table où un
 > seul convive avait scanné (retour QA en direct).
 
+> **Deuxième mise à jour du 2026-09-10, décision de Wassim** — « Pour qui ? »
+> ne s'affiche plus par défaut. Le scan du QR étant nominatif depuis #186, un
+> plat ajouté est celui du convive qui l'ajoute : la liste des prénoms ne
+> s'ouvre qu'en cochant la case (renommée « Partager ou assigner »), où l'on
+> peut se décocher soi-même pour donner le plat à un voisin. Une ligne en clair
+> dit toujours à qui va le plat, liste ouverte ou non.
+> Corrige au passage un **défaut** (donc hors verrou « nomme le
+> restaurateur ») : `split.py::compute_shares` ne lisait `shared_with` que si
+> `is_shared` était vrai, alors que `SplitBill.tsx::defaultAssignment` le
+> lisait déjà sans cette condition — l'écran annonçait « Pour Sami » et
+> l'addition facturait celui qui avait ajouté le plat. `is_shared` devient par
+> ailleurs le nombre de destinataires et non l'état de la case, sans quoi le
+> ticket cuisine annonçait « à partager · 1 couverts ».
+
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même

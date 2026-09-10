@@ -258,7 +258,13 @@ function cartLineToWireItem(itemId: number, line: CartLine): OrderItemPayload {
     menu_item_id: itemId,
     quantity: line.quantity,
     notes: line.note || null,
-    is_shared: line.shared,
+    // `is_shared` n'est plus l'état de la case, mais le NOMBRE de destinataires
+    // : c'est ce que la cuisine lit ("à partager · N couverts") et ce qui, faute
+    // d'assignation, envoie le plat sur toute la table. Un plat pour une seule
+    // personne n'est donc pas un partage, même s'il a été assigné depuis la
+    // liste — sans quoi le ticket cuisine annonçait "à partager · 1 couverts"
+    // sur un plat destiné à un seul convive.
+    is_shared: line.sharedWith.length === 0 ? line.shared : line.sharedWith.length > 1,
     // Envoyé indépendamment de `shared` : assigner un plat à un convive reste
     // possible même pour un plat non coché "à partager" (ROADMAP.md §Override
     // 2026-09-08) — les deux réglages ne se conditionnent plus l'un l'autre.
@@ -323,9 +329,15 @@ function computeSharesLocal(order: Order, names: string[]): number[] {
   for (const item of order.items) {
     const lineTotal = item.unit_price * item.quantity;
     let targets: number[];
-    if (item.is_shared) {
-      const places = item.shared_with.filter((p) => p >= 1 && p <= n);
-      targets = places.length ? places : Array.from({ length: n }, (_, i) => i + 1);
+    // Même ordre de priorité que `split.py::compute_shares` : l'assignation
+    // explicite d'abord, `is_shared` seulement à défaut. Ces deux calculs
+    // doivent rester alignés — c'est le serveur qui facture, celui-ci ne fait
+    // qu'annoncer le montant avant de cliquer.
+    const assignes = item.shared_with.filter((p) => p >= 1 && p <= n);
+    if (assignes.length) {
+      targets = assignes;
+    } else if (item.is_shared) {
+      targets = Array.from({ length: n }, (_, i) => i + 1);
     } else if (item.added_by_name && names.includes(item.added_by_name)) {
       targets = [names.indexOf(item.added_by_name) + 1];
     } else {
@@ -462,6 +474,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // plancher à 2 qui inventait un « Personne 2 » fantôme dans « Pour qui ? »,
   // et se faisait de toute façon écraser dès qu'un autre convive scannait.
   const convives = Math.max(1, Math.min(12, roster.length));
+  // Ma place dans le roster (1..N), 0 tant qu'il n'est pas arrivé. Le scan du
+  // QR est nominatif : c'est elle qui fait qu'un plat ajouté est le mien sans
+  // avoir à le désigner dans une liste.
+  const myPlace = roster.findIndex((p) => p.key === myDeviceKey) + 1;
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
   const [offlineRetryCountdown, setOfflineRetryCountdown] = useState(5);
@@ -1560,15 +1576,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   function setShared(key: string, shared: boolean) {
-    // Cocher "à partager" pré-sélectionne sa propre place, quand elle est
-    // connue : on est forcément de la partie sur un plat qu'on est en train
+    // Cocher "partager / assigner" pré-sélectionne sa propre place, quand elle
+    // est connue : on est forcément de la partie sur un plat qu'on est en train
     // d'ajouter soi-même — sans ça, partager avec un voisin de table exigeait
     // de se cocher SOI-même en plus, un tap qu'on oublie facilement.
     // `sharedWith` n'est en revanche plus remis à zéro quand on décoche :
     // l'assignation à un convive reste un réglage indépendant de la case "à
     // partager" (ROADMAP.md §Override 2026-09-08) — décocher ne doit pas
     // faire perdre à qui un plat était destiné.
-    const myPlace = roster.findIndex((p) => p.key === myDeviceKey) + 1;
     setCart((prev) =>
       prev[key]
         ? {
@@ -2776,6 +2791,26 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     return roster[place - 1]?.name || t.personLabel(place);
   }
 
+  // Sa propre place se lit "Vous" et non son prénom : dans une liste où l'on se
+  // décoche pour donner le plat à un voisin, se reconnaître doit être immédiat.
+  function convivLabel(place: number): string {
+    return place === myPlace ? t.assignMeLabel : personLabel(place);
+  }
+
+  // Ce que dit la ligne sous la case, dans l'ordre où les cas se présentent :
+  // personne de désigné et rien de coché = pour moi (le défaut, le scan du QR
+  // le sait déjà) ; rien de désigné mais la case cochée = toute la table ;
+  // sinon les convives choisis, moi inclus ou non.
+  function assignationLabel(ligne: CartLine, perPerson: number): string {
+    if (ligne.sharedWith.length === 0) {
+      return ligne.shared ? t.sharedWithEveryone : t.assignedToMe;
+    }
+    if (ligne.sharedWith.length === 1) {
+      return ligne.sharedWith[0] === myPlace ? t.assignedToMe : t.cartForWhom(convivLabel(ligne.sharedWith[0]));
+    }
+    return `${t.cartForWhom(ligne.sharedWith.map(convivLabel).join(" · "))} — ${t.sharedPerPersonAmount(perPerson)}`;
+  }
+
   function renderItem(item: MenuItem, index = 0) {
     // Un plat en rupture reste sur la carte, barré : le faire disparaître
     // laissait le client chercher un plat qu'il avait vu la minute d'avant, ou
@@ -3021,40 +3056,58 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
               <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
             </label>
-            {/* Indépendant de la case "à partager" ci-dessus : assigner un
-                plat à un ou plusieurs convives reste facultatif et vaut pour
-                n'importe quel plat, pas seulement les plats à partager
-                (ROADMAP.md §Override 2026-09-08) — alimente directement
-                SplitBill au moment de payer plutôt que de reposer la
-                question. */}
-            <div className="mt-2">
-              <p className="text-legende text-ink-soft">{t.sharedWithLabel}</p>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
-                  const choisi = ligne.sharedWith.includes(place);
-                  return (
-                    <button
-                      key={place}
-                      type="button"
-                      onClick={() => toggleConvive(cartKey(item.id, myDeviceKey), place)}
-                      aria-pressed={choisi}
-                      className={`rounded-full border px-3 py-1.5 text-etiquette transition-colors duration-rapide ease-deplacement ${
-                        choisi
-                          ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
-                          : "border-[var(--line)] bg-white text-[var(--encre)]"
-                      }`}
-                    >
-                      {personLabel(place)}
-                    </button>
-                  );
-                })}
-              </div>
-              {ligne.sharedWith.length === 0 ? (
-                <p className="mt-1 text-legende text-ink-soft">{t.sharedWithEveryone}</p>
-              ) : (
-                <p className="mt-1 text-legende text-ink-soft">{t.sharedPerPersonAmount(perPerson)}</p>
+            {/* La liste des prénoms ne s'ouvre plus qu'à la demande (Wassim,
+                2026-09-10) : le scan du QR est nominatif, donc un plat ajouté
+                est le mien sans que j'aie à me désigner parmi douze jetons.
+                Cocher la case sert aux trois cas qui restent — partager,
+                donner le plat à un voisin en me décochant, ou le laisser à
+                toute la table en ne cochant personne. Reste indépendant de
+                `shared` côté données (ROADMAP.md §Override 2026-09-08) : c'est
+                l'assignation qui alimente le paiement par personne, pas la
+                case. */}
+            <AnimatePresence initial={false}>
+              {ligne.shared && (
+                <m.div
+                  key="convives-plat"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1, transition: TRANSITION.entree }}
+                  exit={{ height: 0, opacity: 0, transition: TRANSITION.sortie }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2">
+                    <p className="text-legende text-ink-soft">{t.sharedWithLabel}</p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
+                        const choisi = ligne.sharedWith.includes(place);
+                        return (
+                          <button
+                            key={place}
+                            type="button"
+                            onClick={() => toggleConvive(cartKey(item.id, myDeviceKey), place)}
+                            aria-pressed={choisi}
+                            className={`rounded-full border px-3 py-1.5 text-etiquette transition-colors duration-rapide ease-deplacement ${
+                              choisi
+                                ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
+                                : "border-[var(--line)] bg-white text-[var(--encre)]"
+                            }`}
+                          >
+                            {convivLabel(place)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </m.div>
               )}
-            </div>
+            </AnimatePresence>
+            {/* Toujours affichée, liste ouverte ou non : c'est elle qui empêche
+                qu'une assignation faite puis refermée passe pour perdue. */}
+            <p className="mt-2 text-legende text-ink-soft">
+              {assignationLabel(ligne, perPerson)}
+              {!ligne.shared && ligne.sharedWith.length > 0 && (
+                <span className="text-[var(--ink-faint)]"> · {t.assignReopenHint}</span>
+              )}
+            </p>
           </div>
             </m.div>
           )}
