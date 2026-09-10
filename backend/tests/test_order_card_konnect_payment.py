@@ -6,12 +6,19 @@ le mode démonstration, exercé par tout restaurant n'ayant rien connecté.
 `test_konnect_*` couvrent le chemin réel, dormant tant que ce restaurant
 précis n'a pas sa propre clé — Konnect lui-même est simulé via monkeypatch,
 jamais un vrai appel réseau.
+
+Sans `payer_key`/`payer_name` dans les requêtes (identité de table,
+ROADMAP.md §Override, extension paiement par personne) : ce fichier teste
+l'intégration Konnect elle-même, pas la répartition par personne (voir
+test_order_shared_payments.py pour ça) — le repli sans identité déclarée
+(« payer ce qu'il reste », donc l'addition entière ici) garde ces tests
+inchangés.
 """
 from app.core import konnect
 from app.core.crypto import encrypt_field
 from app.core.konnect import KonnectError, KonnectPayment
 from app.modules.orders import service as orders_service
-from app.modules.orders.models import Order, PaymentMethod, PaymentStatus
+from app.modules.orders.models import Order, OrderPayment, OrderPaymentStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import StaffRole
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff, order_headers
@@ -107,9 +114,11 @@ def test_konnect_card_payment_stays_pending_and_uses_the_restaurants_own_wallet(
     assert captured["amount_tnd"] == 45  # 2 x 20 DT + 5 DT de pourboire
 
     db_order = db_session.get(Order, order["id"])
-    assert db_order.payment_method == PaymentMethod.CARD
     assert db_order.payment_status == PaymentStatus.PENDING
-    assert db_order.payment_ref == "ref-123"
+    payment = db_session.query(OrderPayment).filter(OrderPayment.order_id == db_order.id).one()
+    assert payment.method == PaymentMethod.CARD
+    assert payment.status == OrderPaymentStatus.PENDING
+    assert payment.payment_ref == "ref-123"
 
 
 def test_konnect_card_payment_init_broadcasts_to_the_order_channel_for_other_devices(client, monkeypatch):
@@ -160,7 +169,9 @@ def test_konnect_webhook_rejects_bad_signature(client, monkeypatch):
     restaurant = create_restaurant(slug="card-webhook-bad-sig")
     order = _setup_order(client, restaurant)
 
-    res = client.get(f"/api/v1/orders/{order['id']}/pay/card/webhook", params={"sig": "not-the-real-one"})
+    res = client.get(
+        f"/api/v1/orders/{order['id']}/pay/card/webhook", params={"payment_id": 1, "sig": "not-the-real-one"}
+    )
 
     assert res.status_code == 401
 
@@ -169,27 +180,33 @@ def test_konnect_webhook_disabled_when_payment_mode_is_not_konnect(client):
     restaurant = create_restaurant(slug="card-webhook-disabled")
     order = _setup_order(client, restaurant)
 
-    res = client.get(f"/api/v1/orders/{order['id']}/pay/card/webhook", params={"sig": "whatever"})
+    res = client.get(f"/api/v1/orders/{order['id']}/pay/card/webhook", params={"payment_id": 1, "sig": "whatever"})
 
     assert res.status_code == 404
 
 
-def _pending_konnect_order(client, restaurant: Restaurant, *, price: float = 20, quantity: int = 1) -> dict:
+def _pending_konnect_order(client, restaurant: Restaurant, *, price: float = 20, quantity: int = 1) -> tuple[dict, int]:
+    """Renvoie `(order, payment_id)` : une part carte en attente, comme si
+    `start_card_payment` venait de l'initier chez Konnect."""
     _connect_konnect(restaurant)
     order = _setup_order(client, restaurant, price=price, quantity=quantity)
     db = _TestingSessionLocal()
     db_order = db.get(Order, order["id"])
-    db_order.payment_method = PaymentMethod.CARD
     db_order.payment_status = PaymentStatus.PENDING
-    db_order.payment_ref = "ref-abc"
+    payment = OrderPayment(
+        order_id=db_order.id, payer_key="", payer_name="", amount=db_order.total_amount,
+        tip_amount=0, method=PaymentMethod.CARD, status=OrderPaymentStatus.PENDING, payment_ref="ref-abc",
+    )
+    db.add(payment)
     db.commit()
+    payment_id = payment.id
     db.close()
-    return order
+    return order, payment_id
 
 
 def test_settle_applies_paid_and_clears_the_pending_state(client, db_session, monkeypatch):
     restaurant = create_restaurant(slug="card-settle-completed")
-    order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
+    order, payment_id = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
         konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
@@ -197,7 +214,7 @@ def test_settle_applies_paid_and_clears_the_pending_state(client, db_session, mo
 
     import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"]))
+    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
 
     assert result == "paid"
     db_order = db_session.get(Order, order["id"])
@@ -207,7 +224,7 @@ def test_settle_applies_paid_and_clears_the_pending_state(client, db_session, mo
 
 def test_settle_is_a_noop_when_payment_still_pending(client, db_session, monkeypatch):
     restaurant = create_restaurant(slug="card-settle-pending")
-    order = _pending_konnect_order(client, restaurant)
+    order, payment_id = _pending_konnect_order(client, restaurant)
     monkeypatch.setattr(
         konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="pending", amount=20_000, reached_amount=0),
@@ -215,7 +232,7 @@ def test_settle_is_a_noop_when_payment_still_pending(client, db_session, monkeyp
 
     import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"]))
+    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
 
     assert result == "pending"
     db_order = db_session.get(Order, order["id"])
@@ -224,7 +241,7 @@ def test_settle_is_a_noop_when_payment_still_pending(client, db_session, monkeyp
 
 def test_settle_rejects_an_amount_lower_than_the_order_total(client, db_session, monkeypatch):
     restaurant = create_restaurant(slug="card-settle-amount-mismatch")
-    order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
+    order, payment_id = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
         konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=1_000),
@@ -232,7 +249,7 @@ def test_settle_rejects_an_amount_lower_than_the_order_total(client, db_session,
 
     import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"]))
+    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
 
     assert result == "error"
     db_order = db_session.get(Order, order["id"])
@@ -241,7 +258,7 @@ def test_settle_rejects_an_amount_lower_than_the_order_total(client, db_session,
 
 def test_settle_is_idempotent_against_a_concurrent_replay(client, db_session, monkeypatch):
     restaurant = create_restaurant(slug="card-settle-idempotent")
-    order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
+    order, payment_id = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
         konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
@@ -249,16 +266,16 @@ def test_settle_is_idempotent_against_a_concurrent_replay(client, db_session, mo
 
     import asyncio
 
-    first = asyncio.run(orders_service.settle_card_payment(db_session, order["id"]))
-    second = asyncio.run(orders_service.settle_card_payment(db_session, order["id"]))  # webhook rejoué / course avec /check
+    first = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
+    second = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))  # webhook rejoué / course avec /check
 
     assert first == "paid"
-    assert second == "pending"  # plus rien en attente (payment_status n'est plus PENDING)
+    assert second == "pending"  # plus rien en attente (la part n'est plus PENDING)
 
 
 def test_settle_returns_error_on_konnect_fetch_failure(client, db_session, monkeypatch):
     restaurant = create_restaurant(slug="card-settle-fetch-error")
-    order = _pending_konnect_order(client, restaurant)
+    order, payment_id = _pending_konnect_order(client, restaurant)
 
     def _boom(ref, api_key=None):
         raise KonnectError("réseau indisponible")
@@ -267,20 +284,24 @@ def test_settle_returns_error_on_konnect_fetch_failure(client, db_session, monke
 
     import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"]))
+    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
 
     assert result == "error"
 
 
 def test_check_endpoint_settles_a_completed_pending_payment(client, monkeypatch):
     restaurant = create_restaurant(slug="card-check-endpoint-settles")
-    order = _pending_konnect_order(client, restaurant, price=20, quantity=1)
+    order, payment_id = _pending_konnect_order(client, restaurant, price=20, quantity=1)
     monkeypatch.setattr(
         konnect, "get_konnect_payment",
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
     )
 
-    res = client.post(f"/api/v1/orders/{order['id']}/pay/card/check", headers=order_headers(order))
+    res = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card/check",
+        params={"payment_id": payment_id},
+        headers=order_headers(order),
+    )
 
     assert res.status_code == 200
     assert res.json()["payment_status"] == "paid"
@@ -288,9 +309,9 @@ def test_check_endpoint_settles_a_completed_pending_payment(client, monkeypatch)
 
 def test_check_endpoint_requires_the_order_token(client):
     restaurant = create_restaurant(slug="card-check-endpoint-no-token")
-    order = _pending_konnect_order(client, restaurant)
+    order, payment_id = _pending_konnect_order(client, restaurant)
 
-    res = client.post(f"/api/v1/orders/{order['id']}/pay/card/check")
+    res = client.post(f"/api/v1/orders/{order['id']}/pay/card/check", params={"payment_id": payment_id})
 
     assert res.status_code == 404  # même contrat que get_order_by_token : jamais 401/403
 

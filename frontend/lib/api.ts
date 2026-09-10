@@ -236,7 +236,35 @@ export type OrderStatus =
   | "cancelled";
 
 export type PaymentMethod = "card" | "card_terminal" | "cash";
-export type PaymentStatus = "unpaid" | "pending" | "paid";
+export type PaymentStatus = "unpaid" | "pending" | "partially_paid" | "paid";
+
+/** Une part de l'addition réglée (ou en cours de règlement) par une
+ *  personne — identité de table, ROADMAP.md §Override, extension paiement
+ *  par personne. */
+export type OrderPayment = {
+  id: number;
+  payer_key: string;
+  payer_name: string;
+  amount: number;
+  tip_amount: number;
+  method: PaymentMethod;
+  status: "pending" | "paid";
+  paid_at: string | null;
+};
+
+/** Vue serveur d'une part en attente d'encaissement en salle (espèces ou
+ *  terminal) — une ligne par personne, pas par commande. */
+export type PendingSharePayment = {
+  payment_id: number;
+  order_id: number;
+  table_id: number;
+  table_label: string;
+  payer_name: string;
+  amount: number;
+  tip_amount: number;
+  taken_by_staff_id: number | null;
+  loyalty_phone: string | null;
+};
 
 /**
  * Une ligne de panier telle qu'envoyée au backend — forme commune à la
@@ -251,6 +279,12 @@ export type OrderItemPayload = {
   shared_with?: number[];
   from_suggestion?: boolean;
   selected_option_ids?: number[];
+  /** Clé d'appareil (identité de table) : qui a ajouté cette ligne depuis son
+   *  propre téléphone — sert à la clé du panier partagé et à restreindre le
+   *  retrait aux plats qu'on a soi-même ajoutés. */
+  added_by_key?: string | null;
+  /** Prénom affiché sous le plat, figé sur la commande une fois validée. */
+  added_by_name?: string | null;
 };
 
 export type ModificationLineStatus = "pending" | "accepted" | "declined";
@@ -312,6 +346,11 @@ export type Order = {
   payment_status: PaymentStatus;
   tip_amount: number;
   total_amount: number;
+  /** Paiement par personne (identité de table, ROADMAP.md §Override,
+   *  extension) — chaque part réglée ou en attente, et ce qui reste dû. */
+  payments: OrderPayment[];
+  amount_paid: number;
+  amount_remaining: number;
   // Posé uniquement par la réponse de `payByCard` quand le restaurant a
   // connecté son propre Konnect : rediriger le client vers cette URL pour
   // qu'il règle. `payment_status` reste "pending" tant que ce n'est pas fait.
@@ -327,6 +366,9 @@ export type Order = {
     /** Numéros de places entre lesquelles le plat est partagé. Vide = toute la table. */
     shared_with: number[];
     from_suggestion: boolean;
+    /** Prénom de qui a ajouté ce plat depuis son propre téléphone (identité de
+     *  table) — null pour une commande passée avant ce chantier. */
+    added_by_name: string | null;
     /** Choix figés au moment de la commande (« Cuisson : à point »). Le
      *  supplément est indicatif, déjà compté dans unit_price. */
     options: { group_name: string; option_name: string; price_delta: number }[];
@@ -890,41 +932,64 @@ export const api = {
   },
   getKitchenTodayCount: (restaurantId: number) =>
     request<KitchenTodayCount>(`/api/v1/stats/kitchen-today-count/${restaurantId}`),
-  payByCard: (orderId: number, tipAmount: number, orderToken: string, customerEmail?: string) =>
+  // Chacun paie SA PART, jamais l'addition entière (identité de table,
+  // ROADMAP.md §Override, extension paiement par personne) — `payerKey`/
+  // `payerName` identifient qui paie ; le montant réel est recalculé et figé
+  // côté serveur, jamais fourni par le client.
+  payByCard: (
+    orderId: number, payerKey: string, payerName: string, tipAmount: number, orderToken: string,
+    customerEmail?: string
+  ) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/card`, {
       method: "POST",
-      body: JSON.stringify({ tip_amount: tipAmount, customer_email: customerEmail || undefined }),
+      body: JSON.stringify({
+        payer_key: payerKey, payer_name: payerName, tip_amount: tipAmount,
+        customer_email: customerEmail || undefined,
+      }),
       headers: orderHeaders(orderToken),
     }),
-  requestCashPayment: (orderId: number, tipAmount: number, orderToken: string, customerEmail?: string) =>
+  requestCashPayment: (
+    orderId: number, payerKey: string, payerName: string, tipAmount: number, orderToken: string,
+    customerEmail?: string
+  ) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash`, {
       method: "POST",
-      body: JSON.stringify({ tip_amount: tipAmount, customer_email: customerEmail || undefined }),
+      body: JSON.stringify({
+        payer_key: payerKey, payer_name: payerName, tip_amount: tipAmount,
+        customer_email: customerEmail || undefined,
+      }),
       headers: orderHeaders(orderToken),
     }),
-  confirmCashPayment: (orderId: number) =>
-    request<Order>(`/api/v1/orders/${orderId}/pay/cash/confirm`, { method: "POST" }),
+  confirmCashPayment: (orderId: number, paymentId: number) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/cash/confirm/${paymentId}`, { method: "POST" }),
   // Carte physique : le client demande, un serveur apporte le terminal —
   // même mécanique que les espèces, moyen distinct (2026-08-19).
-  requestCardTerminalPayment: (orderId: number, tipAmount: number, orderToken: string, customerEmail?: string) =>
+  requestCardTerminalPayment: (
+    orderId: number, payerKey: string, payerName: string, tipAmount: number, orderToken: string,
+    customerEmail?: string
+  ) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/card-terminal`, {
       method: "POST",
-      body: JSON.stringify({ tip_amount: tipAmount, customer_email: customerEmail || undefined }),
+      body: JSON.stringify({
+        payer_key: payerKey, payer_name: payerName, tip_amount: tipAmount,
+        customer_email: customerEmail || undefined,
+      }),
       headers: orderHeaders(orderToken),
     }),
-  confirmCardTerminalPayment: (orderId: number) =>
-    request<Order>(`/api/v1/orders/${orderId}/pay/card-terminal/confirm`, { method: "POST" }),
+  confirmCardTerminalPayment: (orderId: number, paymentId: number) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/card-terminal/confirm/${paymentId}`, { method: "POST" }),
   listPendingCardTerminalPayments: (restaurantId: number) =>
-    request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-card-terminal-payments`),
-  // Filet de sécurité appelé au retour de Konnect (`?konnect=success`) : en
-  // dev, Konnect ne peut jamais joindre le webhook sur localhost.
-  checkCardPayment: (orderId: number, orderToken: string) =>
-    request<Order>(`/api/v1/orders/${orderId}/pay/card/check`, {
+    request<PendingSharePayment[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-card-terminal-payments`),
+  // Filet de sécurité appelé au retour de Konnect/Stripe (`?konnect=success`,
+  // `payment_id` porté par l'URL de retour) : en dev, Konnect ne peut jamais
+  // joindre le webhook sur localhost.
+  checkCardPayment: (orderId: number, paymentId: number, orderToken: string) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/card/check?payment_id=${paymentId}`, {
       method: "POST",
       headers: orderHeaders(orderToken),
     }),
   listPendingCashPayments: (restaurantId: number) =>
-    request<Order[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-cash-payments`),
+    request<PendingSharePayment[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-cash-payments`),
   setRamadanMode: (restaurantId: number, enabled: boolean, iftarTime: string | null) =>
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/ramadan-mode`, {
       method: "PATCH",

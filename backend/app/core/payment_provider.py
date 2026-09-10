@@ -27,6 +27,15 @@ l'appelant n'a plus à connaître, construit ici à partir du seul `order_id`.
 Stripe, lui, signe ses webhooks nativement (`stripe_gateway`) — mais cette
 vérification-là, et la route qui la consomme, restent à câbler avec
 l'onboarding restaurant (Phase F6, étapes 3 et 5), pas encore ouvert.
+
+`payment_id` (identité de table, ROADMAP.md §Override, extension paiement par
+personne) : distinct d'`order_id` depuis qu'une commande peut porter
+PLUSIEURS règlements en vol à la fois (une part par convive, voir
+`orders/models.py::OrderPayment`) — sans lui, un webhook Konnect/Stripe qui
+revient ne saurait dire LAQUELLE de ces parts vient d'être réglée. Konnect
+l'ajoute à l'URL de webhook qu'il signe lui-même (`KonnectProvider`) ; Stripe
+l'ajoute à ses métadonnées (`StripeProvider`), lues telles quelles par son
+webhook nativement signé.
 """
 from dataclasses import dataclass
 from typing import Protocol
@@ -67,6 +76,7 @@ class PaymentProvider(Protocol):
         *,
         amount: float,
         order_id: str,
+        payment_id: str,
         description: str,
         success_url: str,
         fail_url: str,
@@ -101,6 +111,7 @@ class KonnectProvider:
         *,
         amount: float,
         order_id: str,
+        payment_id: str,
         description: str,
         success_url: str,
         fail_url: str,
@@ -108,7 +119,8 @@ class KonnectProvider:
     ) -> PaymentInit:
         webhook = (
             f"{settings.backend_url}/api/v1/orders/{order_id}/pay/card/webhook"
-            f"?sig={konnect.sign_konnect_order_webhook(int(order_id))}"
+            f"?payment_id={payment_id}"
+            f"&sig={konnect.sign_konnect_order_webhook(int(order_id), int(payment_id))}"
         )
         try:
             pay_url, payment_ref = konnect.init_konnect_payment(
@@ -156,6 +168,7 @@ class StripeProvider:
         *,
         amount: float,
         order_id: str,
+        payment_id: str,
         description: str,
         success_url: str,
         fail_url: str,
@@ -165,6 +178,7 @@ class StripeProvider:
             pay_url, payment_ref = stripe_gateway.create_checkout_session(
                 amount_eur=amount,
                 order_id=order_id,
+                payment_id=payment_id,
                 description=description,
                 success_url=success_url,
                 fail_url=fail_url,

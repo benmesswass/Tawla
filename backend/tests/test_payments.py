@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from app.core.dates import service_day_start
 from app.modules.orders import service as orders_service
-from app.modules.orders.models import Order
+from app.modules.orders.models import Order, OrderPayment
 from app.modules.staff.models import StaffRole
 from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff, order_headers
 
@@ -105,9 +105,10 @@ def test_request_cash_payment_notifies_staff_and_is_confirmable(client):
     assert res.json()["payment_method"] == "cash"
 
     pending = client.get(f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-cash-payments", headers=manager_headers)
-    assert [o["id"] for o in pending.json()] == [order["id"]]
+    assert [o["order_id"] for o in pending.json()] == [order["id"]]
+    payment_id = pending.json()[0]["payment_id"]
 
-    confirmed = client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=manager_headers)
+    confirmed = client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=manager_headers)
     assert confirmed.status_code == 200
     assert confirmed.json()["payment_status"] == "paid"
 
@@ -148,9 +149,12 @@ def test_pending_cash_payments_excludes_orders_before_service_day(client):
     restaurant, manager_headers, order = _setup_order(client)
     client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
 
+    # La demande elle-même est datée (OrderPayment.created_at), pas la
+    # commande : une commande vieille de plusieurs jours qui vient TOUT DE
+    # SUITE de demander à payer doit rester visible.
     db = _TestingSessionLocal()
-    db_order = db.get(Order, order["id"])
-    db_order.created_at = service_day_start() - timedelta(days=2)
+    payment = db.query(OrderPayment).filter(OrderPayment.order_id == order["id"]).one()
+    payment.created_at = service_day_start() - timedelta(days=2)
     db.commit()
     db.close()
 
@@ -266,13 +270,16 @@ def test_pending_cash_payments_survives_order_being_served(client):
     client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
 
     pending = client.get(f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-cash-payments", headers=manager_headers)
-    assert [o["id"] for o in pending.json()] == [order["id"]]
+    assert [o["order_id"] for o in pending.json()] == [order["id"]]
 
 
 def test_confirm_cash_payment_rejects_when_no_pending_request(client):
     _restaurant, manager_headers, order = _setup_order(client)
+    requested = client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
+    payment_id = requested.json()["payments"][0]["id"]
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=manager_headers)
 
-    res = client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=manager_headers)
+    res = client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=manager_headers)
     assert res.status_code == 409
     assert res.json()["detail"]["code"] == "NO_PENDING_CASH_PAYMENT"
 
@@ -365,9 +372,12 @@ def test_request_card_terminal_payment_notifies_staff_and_is_confirmable(client)
     pending = client.get(
         f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-card-terminal-payments", headers=manager_headers
     )
-    assert [o["id"] for o in pending.json()] == [order["id"]]
+    assert [o["order_id"] for o in pending.json()] == [order["id"]]
+    payment_id = pending.json()[0]["payment_id"]
 
-    confirmed = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal/confirm", headers=manager_headers)
+    confirmed = client.post(
+        f"/api/v1/orders/{order['id']}/pay/card-terminal/confirm/{payment_id}", headers=manager_headers
+    )
     assert confirmed.status_code == 200
     assert confirmed.json()["payment_status"] == "paid"
 
@@ -409,8 +419,11 @@ def test_card_terminal_requests_are_isolated_from_cash_requests(client):
 
 def test_confirm_card_terminal_payment_rejects_when_no_pending_request(client):
     _restaurant, manager_headers, order = _setup_order(client)
+    requested = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal", headers=order_headers(order))
+    payment_id = requested.json()["payments"][0]["id"]
+    client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal/confirm/{payment_id}", headers=manager_headers)
 
-    res = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal/confirm", headers=manager_headers)
+    res = client.post(f"/api/v1/orders/{order['id']}/pay/card-terminal/confirm/{payment_id}", headers=manager_headers)
     assert res.status_code == 409
     assert res.json()["detail"]["code"] == "NO_PENDING_CARD_TERMINAL_PAYMENT"
 
@@ -509,14 +522,15 @@ def test_confirmation_email_sent_on_cash_confirmation_not_on_request(client, mon
     monkeypatch.setattr(orders_service, "send_email_with_attachment", lambda **kwargs: calls.append(kwargs) or True)
 
     restaurant, manager_headers, order = _setup_order(client)
-    client.post(
+    requested = client.post(
         f"/api/v1/orders/{order['id']}/pay/cash",
         json={"tip_amount": 0, "customer_email": "client@example.com"},
         headers=order_headers(order),
     )
     assert calls == []  # pas encore payée, juste demandée
+    payment_id = requested.json()["payments"][0]["id"]
 
-    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=manager_headers)
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=manager_headers)
     assert len(calls) == 1
 
 

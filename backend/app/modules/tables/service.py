@@ -8,7 +8,7 @@ from app.modules.notifications.manager import manager, table_channel
 from app.modules.orders import table_cart
 from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.staff.models import Staff
-from app.modules.tables import party as table_party
+from app.modules.tables import roster as table_roster
 from app.modules.tables.models import ForcedTableRelease, Table
 from app.modules.tenants.models import Restaurant
 from app.modules.waiter_calls.models import WaiterCall
@@ -110,7 +110,7 @@ async def release_table(db: Session, table: Table, staff: Staff, note: str | Non
     db.refresh(table)
 
     table_cart.table_cart_store.pop_all(table.id)
-    table_party.table_party_store.clear(table.id)
+    table_roster.table_roster_store.clear(table.id)
 
     if order_status is not None:
         db.add(
@@ -143,7 +143,7 @@ async def release_table(db: Session, table: Table, staff: Staff, note: str | Non
     # ceux diffusés à chaque changement (voir notifications/router.py).
     client_channel = table_channel(table.id)
     await manager.broadcast(table.restaurant_id, client_channel, table_cart.snapshot_message(table.id))
-    await manager.broadcast(table.restaurant_id, client_channel, table_party.party_message(table.id))
+    await manager.broadcast(table.restaurant_id, client_channel, table_roster.roster_message(table.id))
 
     return table
 

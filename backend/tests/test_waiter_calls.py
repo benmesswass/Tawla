@@ -100,9 +100,9 @@ def test_le_client_apprend_en_direct_que_son_appel_est_resolu(client):
         # ajouté.
         snapshot = ws.receive_json()
         assert snapshot == {"event": "cart.updated", "lines": []}
-        # Deuxième message envoyé à la connexion : les convives déclarés
-        # (même chantier), vides ici — hors sujet de ce fichier.
-        assert ws.receive_json() == {"event": "party.updated", "size": None, "names": []}
+        # Deuxième message envoyé à la connexion : qui commande sous quel
+        # prénom (même chantier), vide ici — hors sujet de ce fichier.
+        assert ws.receive_json() == {"event": "roster.updated", "people": []}
 
         client.post(f"/api/v1/waiter-calls/{call['id']}/resolve", headers=headers)
         message = ws.receive_json()

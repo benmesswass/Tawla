@@ -49,6 +49,17 @@ class PaymentMethod(str, enum.Enum):
 class PaymentStatus(str, enum.Enum):
     UNPAID = "unpaid"
     PENDING = "pending"  # cash/carte physique : en attente que le serveur encaisse
+    # Au moins une part réglée (voir OrderPayment), mais pas encore tout le
+    # monde — identité de table, ROADMAP.md §Override, extension paiement par
+    # personne. Distinct de PENDING : PENDING reste réservé à UNE demande
+    # d'encaissement en salle en cours pour la commande entière (ancien
+    # modèle, toujours valable si personne ne paie sa part séparément).
+    PARTIALLY_PAID = "partially_paid"
+    PAID = "paid"
+
+
+class OrderPaymentStatus(str, enum.Enum):
+    PENDING = "pending"  # carte en ligne initiée, ou espèces/terminal demandés — pas encore réglé
     PAID = "paid"
 
 
@@ -166,8 +177,27 @@ class Order(Base):
     modification_requests: Mapped[list["OrderModificationRequest"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
     )
+    # Paiements par personne (identité de table, ROADMAP.md §Override,
+    # extension) — `payment_method`/`tip_amount`/`paid_at` ci-dessus restent
+    # les champs agrégés lus par la facture/l'e-mail de confirmation une fois
+    # la commande ENTIÈREMENT réglée (voir _finalize_payment côté service.py),
+    # jamais mis à jour par une part encore partielle.
+    payments: Mapped[list["OrderPayment"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan", order_by="OrderPayment.id"
+    )
     taken_by: Mapped["Staff | None"] = relationship()
     table: Mapped["Table"] = relationship()
+
+    @property
+    def amount_paid(self) -> float:
+        """Somme des parts déjà réglées (hors pourboire) — jamais le
+        pourboire, qui n'entre pour rien dans ce qui reste dû sur l'addition
+        elle-même."""
+        return sum(float(p.amount) for p in self.payments if p.status == OrderPaymentStatus.PAID)
+
+    @property
+    def amount_remaining(self) -> float:
+        return max(0.0, self.total_amount - self.amount_paid)
 
     @property
     def taken_by_staff_name(self) -> str | None:
@@ -244,6 +274,13 @@ class OrderItem(Base):
     # argument chiffré (Phase 14.1).
     from_suggestion: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Prénom de qui a ajouté ce plat depuis son propre téléphone (panier
+    # partagé de table, ROADMAP.md §Override — identité de table) — figé au
+    # moment de la commande, comme `menu_item_name`/`unit_price` : NULL pour
+    # une commande passée avant ce chantier, ou composée par un seul appareil
+    # sans identité déclarée.
+    added_by_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
     order: Mapped["Order"] = relationship(back_populates="items")
     options: Mapped[list["OrderItemOption"]] = relationship(back_populates="order_item", cascade="all, delete-orphan")
 
@@ -269,6 +306,46 @@ class OrderItemOption(Base):
     price_delta: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
 
     order_item: Mapped["OrderItem"] = relationship(back_populates="options")
+
+
+class OrderPayment(Base):
+    """
+    Une part de l'addition réglée par UNE personne (identité de table,
+    ROADMAP.md §Override, extension paiement par personne) — remplace le
+    règlement en un seul bloc pour toute la table : chacun peut payer sa
+    propre part en ligne, au terminal ou en espèces, indépendamment des
+    autres. La commande passe PARTIALLY_PAID puis PAID au fil des parts
+    réglées (voir orders/service.py).
+
+    `payer_key`/`payer_name` sont de simples chaînes copiées depuis le roster
+    éphémère de la table (`tables/roster.py`) au moment du paiement — jamais
+    une clé étrangère : ce roster ne survit pas à un redémarrage (ADR 0005),
+    la table doit rester lisible même s'il a disparu depuis. `payer_key`
+    identifie qui a réglé (empêche un même appareil de payer deux fois sa
+    part) ; `payer_name` est ce qu'affichent les autres convives.
+    """
+
+    __tablename__ = "order_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    payer_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    payer_name: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Part de l'addition (hors pourboire) que ce paiement couvre — recalculée
+    # et figée côté serveur au moment de l'initier (orders/split.py), jamais
+    # un montant fourni tel quel par le client.
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    tip_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod), nullable=False)
+    status: Mapped[OrderPaymentStatus] = mapped_column(Enum(OrderPaymentStatus), default=OrderPaymentStatus.PENDING)
+    # Référence du fournisseur (Konnect/Stripe) — nul pour les espèces/terminal,
+    # qui n'ont pas de fournisseur externe à régler.
+    payment_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    order: Mapped["Order"] = relationship(back_populates="payments")
 
 
 class ModificationRequestStatus(str, enum.Enum):

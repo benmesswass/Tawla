@@ -17,7 +17,7 @@ from app.core.subscription import effective_tier, tier_includes, upgrade_require
 from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import manager, table_channel
-from app.modules.orders import schemas
+from app.modules.orders import schemas, split
 from app.modules.orders.menu_item_resolution import resolve_selected_options
 from app.modules.orders.models import (
     ModificationLineStatus,
@@ -27,6 +27,8 @@ from app.modules.orders.models import (
     OrderItemOption,
     OrderModificationLine,
     OrderModificationRequest,
+    OrderPayment,
+    OrderPaymentStatus,
     OrderStatus,
     PaymentMethod,
     PaymentStatus,
@@ -140,46 +142,39 @@ async def list_kitchen_done_orders_today(db: Session, restaurant_id: int) -> lis
     )
 
 
-async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[Order]:
+def _pending_share_payments(db: Session, restaurant_id: int, method: PaymentMethod) -> list[OrderPayment]:
     """
-    Tables ayant demandé à payer en espèces mais pas encore encaissées. Séparé
-    de `list_active_orders` : le paiement arrive souvent APRÈS "servie", donc
-    hors de `ACTIVE_STATUSES` — sans cette requête dédiée, un écran serveur
-    rafraîchi après la demande de paiement ne la verrait jamais (même classe
-    de bug que l'audit du 2026-08-10 sur les commandes en attente).
+    Parts en attente d'encaissement en salle (espèces ou terminal) — une ligne
+    par PERSONNE qui a demandé à régler, pas par commande (identité de table,
+    ROADMAP.md §Override, extension paiement par personne) : une même
+    commande peut porter plusieurs demandes en attente à la fois, un serveur
+    doit pouvoir confirmer celle de Karim sans toucher à celle de Sami.
+    Même borne de date que `list_active_orders` (Phase 19.5, F-4) : sans elle,
+    une demande vieille de plusieurs jours resterait affichée indéfiniment.
     """
     return (
-        db.query(Order)
-        .options(selectinload(Order.table), selectinload(Order.items).selectinload(OrderItem.options))
+        db.query(OrderPayment)
+        .join(Order, OrderPayment.order_id == Order.id)
+        .options(selectinload(OrderPayment.order).selectinload(Order.table))
         .filter(
             Order.restaurant_id == restaurant_id,
-            Order.payment_method == PaymentMethod.CASH,
-            Order.payment_status == PaymentStatus.PENDING,
-            # Même borne que list_active_orders (Phase 19.5) : sans elle, une
-            # demande d'encaissement vieille de plusieurs jours reste affichée
-            # indéfiniment à l'écran serveur (F-4, audit 2026-08-18).
-            Order.created_at >= service_day_start(),
+            OrderPayment.method == method,
+            OrderPayment.status == OrderPaymentStatus.PENDING,
+            OrderPayment.created_at >= service_day_start(),
         )
-        .order_by(Order.created_at)
+        .order_by(OrderPayment.created_at)
         .all()
     )
 
 
-async def list_pending_card_terminal_payments(db: Session, restaurant_id: int) -> list[Order]:
-    """Tables ayant demandé à payer par carte physique, pas encore encaissées
-    — même principe que list_pending_cash_payments, moyen distinct."""
-    return (
-        db.query(Order)
-        .options(selectinload(Order.table), selectinload(Order.items).selectinload(OrderItem.options))
-        .filter(
-            Order.restaurant_id == restaurant_id,
-            Order.payment_method == PaymentMethod.CARD_TERMINAL,
-            Order.payment_status == PaymentStatus.PENDING,
-            Order.created_at >= service_day_start(),
-        )
-        .order_by(Order.created_at)
-        .all()
-    )
+async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[OrderPayment]:
+    """Parts en attente de règlement en espèces — voir `_pending_share_payments`."""
+    return _pending_share_payments(db, restaurant_id, PaymentMethod.CASH)
+
+
+async def list_pending_card_terminal_payments(db: Session, restaurant_id: int) -> list[OrderPayment]:
+    """Parts en attente de règlement au terminal — voir `_pending_share_payments`."""
+    return _pending_share_payments(db, restaurant_id, PaymentMethod.CARD_TERMINAL)
 
 
 def save_push_subscription(db: Session, order_id: int, subscription: schemas.PushSubscriptionIn) -> None:
@@ -270,6 +265,7 @@ def _build_order_items(
                 is_shared=line.is_shared,
                 shared_with=",".join(str(p) for p in line.shared_with) or None,
                 from_suggestion=line.from_suggestion,
+                added_by_name=line.added_by_name,
                 options=[
                     OrderItemOption(
                         group_name=opt.group.name, option_name=opt.name, price_delta=opt.price_delta
@@ -565,7 +561,10 @@ async def create_modification_request(
     # (models.py, recalculé depuis `order.items`) grimpant sans jamais être
     # réencaissé — même angle mort que le F-5 (audit 2026-08-18) déjà corrigé
     # pour l'annulation dans `transition_status`.
-    if order.payment_status == PaymentStatus.PAID:
+    # PARTIALLY_PAID inclus, même raison que transition_status ci-dessous :
+    # ajouter des articles changerait `total_amount` alors qu'une part a déjà
+    # été réglée sur la base de l'ancien total.
+    if order.payment_status in (PaymentStatus.PAID, PaymentStatus.PARTIALLY_PAID):
         raise HTTPException(
             status_code=409,
             detail={"code": "ORDER_ALREADY_PAID", "message": "cannot request a modification on a paid order"},
@@ -884,7 +883,13 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
     # `ALLOWED_TRANSITIONS` ne connaît que `status` : une commande déjà payée
     # pouvait donc être annulée (F-5, audit 2026-08-18), `payment_status`
     # n'étant jamais regardé ici.
-    if new_status == OrderStatus.CANCELLED and order.payment_status == PaymentStatus.PAID:
+    # PARTIALLY_PAID inclus (identité de table, ROADMAP.md §Override,
+    # extension paiement par personne) : annuler une commande dont au moins
+    # une part a déjà été réglée laisserait cet argent encaissé pour rien,
+    # sans commande à servir en face.
+    if new_status == OrderStatus.CANCELLED and order.payment_status in (
+        PaymentStatus.PAID, PaymentStatus.PARTIALLY_PAID,
+    ):
         raise HTTPException(
             status_code=409,
             detail={"code": "ORDER_ALREADY_PAID", "message": "cannot cancel an order that has already been paid"},
@@ -1047,6 +1052,107 @@ def _get_payable_order(db: Session, order_id: int) -> Order:
     return order
 
 
+def _roster_names(table_id: int) -> list[str]:
+    """Le roster courant de la table (identité de table, ROADMAP.md
+    §Override) — import différé : `tables/roster` n'a pas besoin de connaître
+    `orders`, seul ce module a besoin de lui (même raison que l'import
+    différé de `table_cart` dans `create_order_from_table_cart`)."""
+    from app.modules.tables.roster import table_roster_store
+
+    return [p.name for p in table_roster_store.snapshot(table_id)]
+
+
+def _paid_names(order: Order) -> set[str]:
+    return {p.payer_name for p in order.payments if p.status == OrderPaymentStatus.PAID}
+
+
+def _get_payable_share(
+    db: Session, order_id: int, payer_key: str, payer_name: str
+) -> tuple[Order, OrderPayment | None, float]:
+    """
+    Garde-fous + montant pour UNE part de commande. `payer_key` vide (aucune
+    identité déclarée) : traité comme un appareil anonyme unique, jamais
+    confondu avec un autre appel anonyme — voir le repli de `PayShareRequest`.
+
+    Renvoie `(order, ligne_en_attente_existante, montant)` : si une part
+    PENDING existe déjà pour cette clé (rejeu d'un double clic, ou retour sur
+    un paiement carte non encore réglé), elle est renvoyée telle quelle —
+    l'appelant ne doit jamais en créer une seconde pour la même personne.
+    """
+    order = _get_payable_order(db, order_id)
+
+    for payment in order.payments:
+        if payment.payer_key == payer_key:
+            if payment.status == OrderPaymentStatus.PAID:
+                raise HTTPException(
+                    status_code=409, detail={"code": "SHARE_ALREADY_PAID", "message": "your share is already paid"}
+                )
+            return order, payment, float(payment.amount)
+
+    names = _roster_names(order.table_id)
+    amount = split.compute_payable_amount(order, names, payer_name, _paid_names(order))
+    return order, None, amount
+
+
+def _mark_order_pending(db: Session, order: Order, payment: OrderPayment) -> None:
+    """
+    Reflète, au niveau agrégé de la commande, qu'une part vient d'être mise
+    en attente (carte initiée chez le fournisseur, espèces/terminal
+    demandés) — `payment_method`/`tip_amount` continuent d'y être lisibles
+    avant même qu'une part soit confirmée, comme avant ce chantier (l'écran
+    de suivi et le serveur les affichaient déjà à ce stade). PARTIALLY_PAID
+    prime sur PENDING : si quelqu'un a déjà réglé sa part, une nouvelle
+    demande d'un autre convive ne doit pas faire disparaître cette
+    information au niveau de la commande. `_after_share_paid` réécrit ces
+    mêmes champs une fois la commande entièrement payée, à partir des seules
+    parts PAID cette fois — une tentative abandonnée en cours de route (carte
+    jamais réglée, cash finalement payé) ne doit pas polluer le total final.
+    """
+    db.flush()
+    db.refresh(order)
+    order.payment_method = payment.method
+    order.tip_amount = sum(float(p.tip_amount) for p in order.payments)
+    if order.payment_status not in (PaymentStatus.PARTIALLY_PAID, PaymentStatus.PAID):
+        order.payment_status = PaymentStatus.PENDING
+    db.commit()
+
+
+def _after_share_paid(db: Session, order: Order, restaurant: Restaurant | None) -> bool:
+    """
+    Met à jour l'état agrégé de la commande après qu'UNE part vient d'être
+    marquée payée. Renvoie True si la commande est désormais ENTIÈREMENT
+    payée — c'est ce moment-là, et lui seul, qui déclenche facture/e-mail/
+    fidélité, jamais à chaque part réglée (une table de trois ne doit pas
+    recevoir trois factures).
+
+    `payment_method`/`tip_amount`/`paid_at` restent les colonnes AGRÉGÉES
+    lues par la facture — jamais mises à jour tant que tout le monde n'a pas
+    payé, pour ne jamais représenter la commande comme payée par un seul
+    moyen ou pour un seul pourboire pendant qu'il en manque une part.
+    """
+    db.refresh(order)
+    if order.amount_remaining > 0.005:
+        order.payment_status = PaymentStatus.PARTIALLY_PAID
+        db.commit()
+        return False
+
+    paid_payments = [p for p in order.payments if p.status == OrderPaymentStatus.PAID]
+    last = max(paid_payments, key=lambda p: p.paid_at or datetime.min.replace(tzinfo=timezone.utc)) if paid_payments else None
+    if last:
+        order.payment_method = last.method
+    order.tip_amount = sum(float(p.tip_amount) for p in paid_payments)
+    order.payment_status = PaymentStatus.PAID
+    order.paid_at = datetime.now(timezone.utc)
+    ensure_invoice_number(db, order)
+    db.commit()
+    db.refresh(order)
+
+    if order.loyalty_phone:
+        loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
+    _send_payment_confirmation(order, restaurant)
+    return True
+
+
 def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> None:
     """
     Confirmation + facture PDF par email, si (et seulement si) le client a
@@ -1078,73 +1184,75 @@ def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> N
         log_event(logger, "order.payment_confirmation_email_failed", order_id=order.id, error=str(err))
 
 
-async def pay_by_card_simulated(db: Session, order_id: int, tip_amount: float, customer_email: str | None = None) -> Order:
+async def pay_by_card_simulated(
+    db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float,
+    customer_email: str | None = None,
+) -> Order:
     """
-    Paiement carte — mode simulé (Konnect choisi comme prestataire, mais pas
-    de vraie intégration tant qu'un pilote resto réel n'a pas de clés API).
-    Couvre le prix total de la commande, pas juste des frais de service.
-    Confirmation immédiate, comme le fallback simulé de Darna quand Konnect
-    est désactivé — `payment_ref` reste vide ici, prêt à accueillir la
-    référence Konnect le jour où l'intégration réelle remplace cette fonction.
+    Paiement carte — mode simulé (Konnect/Stripe choisis comme prestataires,
+    mais pas de vraie intégration tant qu'un pilote resto réel n'a pas de clés
+    API). Règle la part de CE convive (identité de table, ROADMAP.md
+    §Override, extension paiement par personne), pas forcément toute
+    l'addition. Confirmation immédiate, comme le fallback simulé de Darna
+    quand Konnect est désactivé.
 
     Réservé à Pro et Business (offre à trois paliers, 2026-08-18) : en
     Essentiel, seul l'encaissement en espèces est proposé.
     """
-    order = _get_payable_order(db, order_id)
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
     restaurant = db.get(Restaurant, order.restaurant_id)
     if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
         raise upgrade_required_error(SubscriptionTier.PRO)
 
-    order.payment_method = PaymentMethod.CARD
-    order.tip_amount = tip_amount
-    order.payment_status = PaymentStatus.PAID
-    order.paid_at = datetime.now(timezone.utc)
+    payment = existing or OrderPayment(order_id=order.id, payer_key=payer_key, payer_name=payer_name, method=PaymentMethod.CARD)
+    payment.amount = amount
+    payment.tip_amount = tip_amount
+    payment.status = OrderPaymentStatus.PAID
+    payment.paid_at = datetime.now(timezone.utc)
     if customer_email:
+        payment.customer_email = customer_email
         order.customer_email = customer_email
-    ensure_invoice_number(db, order)
+    if not existing:
+        db.add(payment)
     db.commit()
-    db.refresh(order)
-
-    if order.loyalty_phone:
-        loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
-    _send_payment_confirmation(order, restaurant)
 
     log_event(
-        logger, "order.paid_card_simulated",
-        restaurant_id=order.restaurant_id, order_id=order.id,
-        amount=order.total_amount, tip_amount=tip_amount,
+        logger, "order.share_paid_card_simulated",
+        restaurant_id=order.restaurant_id, order_id=order.id, payer_name=payer_name,
+        amount=amount, tip_amount=tip_amount,
     )
-    # Le client qui a payé peut ne pas être le seul appareil à suivre cette
-    # commande (panier de table partagé) — même événement que le paiement
-    # carte réel (`settle_card_payment`) et les paiements cash/terminal,
-    # jamais diffusé jusqu'ici sur ce chemin simulé alors que c'est le SEUL
-    # chemin carte actif tant qu'aucun pilote n'a ses clés Konnect (voir
-    # docstring de cette fonction) : sans lui, aucun des autres convives ne
-    # voyait jamais la commande passer payée sans rafraîchir.
+    fully_paid = _after_share_paid(db, order, restaurant)
+    db.refresh(order)
+    # Les autres appareils qui suivent cette commande (panier de table
+    # partagé) doivent voir la part réglée sans rafraîchir — même événement
+    # que le paiement carte réel (`settle_card_payment`) et les paiements
+    # cash/terminal.
     await manager.broadcast(
         order.restaurant_id, channel=_order_channel(order.id),
-        message={"event": "order.payment_confirmed", "order_id": order.id},
+        message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
     )
     return order
 
 
 async def start_card_payment(
-    db: Session, order_id: int, tip_amount: float, customer_email: str | None = None
+    db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float,
+    customer_email: str | None = None,
 ) -> tuple[Order, str | None]:
     """
-    Paiement carte du client — modèle direct (connexion Konnect au paiement
-    carte, 2026-08-19) : réglé chez LE RESTAURANT, jamais chez Tawla (dont le
-    wallet ne sert qu'à son propre abonnement, voir subscription_payments.py).
-    Retombe sur le mode démo (`pay_by_card_simulated`) tant que ce restaurant
-    précis n'a pas connecté son propre wallet — dégradation gracieuse comme le
-    reste de l'intégration Konnect.
+    Paiement carte du client — modèle direct (connexion Konnect/Stripe au
+    paiement carte, 2026-08-19) : réglé chez LE RESTAURANT, jamais chez Tawla.
+    Règle la part de CE convive, pas forcément toute l'addition (identité de
+    table, ROADMAP.md §Override, extension paiement par personne). Retombe
+    sur le mode démo (`pay_by_card_simulated`) tant que ce restaurant précis
+    n'a pas connecté son propre wallet/compte — dégradation gracieuse comme
+    le reste de l'intégration.
 
     Renvoie `(order, pay_url)` : `pay_url` non-null seulement quand un
-    règlement Konnect réel vient d'être initié — la commande reste alors
-    `payment_status="pending"`, le client doit être redirigé pour payer.
+    règlement réel vient d'être initié — cette part reste alors PENDING, le
+    client doit être redirigé pour payer.
     """
-    order = _get_payable_order(db, order_id)
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
     restaurant = db.get(Restaurant, order.restaurant_id)
     if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
@@ -1153,19 +1261,46 @@ async def start_card_payment(
     credentials = restaurant.payment_credentials()
     provider = get_payment_provider(credentials)
     if not provider.is_available():
-        order = await pay_by_card_simulated(db, order_id, tip_amount, customer_email)
+        order = await pay_by_card_simulated(db, order_id, payer_key, payer_name, tip_amount, customer_email)
         return order, None
 
-    amount = order.total_amount + tip_amount
+    # Rejeu (retour navigateur avant règlement, double clic) : redirige vers
+    # LE MÊME paiement en cours plutôt que d'en initier un second pour la
+    # même personne — `payment_ref` a été gardé sur la ligne existante.
+    if existing and existing.payment_ref:
+        provider_again = get_payment_provider(credentials)
+        try:
+            state = provider_again.get_payment(existing.payment_ref)
+            if state.status == "completed":
+                await settle_card_payment(db, order_id, existing.id)
+                db.refresh(order)
+                return order, None
+        except PaymentProviderError:
+            pass  # retombe sur une nouvelle initiation ci-dessous
+
+    payment = existing or OrderPayment(order_id=order.id, payer_key=payer_key, payer_name=payer_name, method=PaymentMethod.CARD)
+    payment.amount = amount
+    payment.tip_amount = tip_amount
+    payment.status = OrderPaymentStatus.PENDING
+    if customer_email:
+        payment.customer_email = customer_email
+        order.customer_email = customer_email
+    if not existing:
+        db.add(payment)
+    _mark_order_pending(db, order, payment)
+    db.refresh(payment)
+
+    charge_amount = amount + tip_amount
     qr_token = order.table.qr_token
     try:
         result = provider.init_payment(
-            amount=amount,
+            amount=charge_amount,
             order_id=str(order.id),
-            description=f"{order.table_label} — commande #{order.id}",
+            payment_id=str(payment.id),
+            description=f"{order.table_label} — {payer_name or 'commande'} #{order.id}",
             success_url=(
                 f"{settings.frontend_url}/menu/{qr_token}"
-                f"?konnect=success&order_id={order.id}&order_token={order.public_token}"
+                f"?konnect=success&order_id={order.id}&order_token={order.public_token}&payment_id={payment.id}"
             ),
             fail_url=f"{settings.frontend_url}/menu/{qr_token}?konnect=fail",
             lifespan_minutes=30,
@@ -1173,29 +1308,23 @@ async def start_card_payment(
     except PaymentProviderError as err:
         log_event(
             logger, "order.card_payment_init_failed",
-            restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
+            restaurant_id=order.restaurant_id, order_id=order.id, payer_name=payer_name, error=str(err),
         )
         raise HTTPException(
             status_code=502, detail={"code": "PAYMENT_INIT_FAILED", "message": "could not start the payment"}
         ) from err
 
-    order.payment_method = PaymentMethod.CARD
-    order.payment_status = PaymentStatus.PENDING
-    order.tip_amount = tip_amount
-    order.payment_ref = result.payment_ref
-    if customer_email:
-        order.customer_email = customer_email
+    payment.payment_ref = result.payment_ref
     db.commit()
     db.refresh(order)
 
     log_event(
         logger, "order.card_payment_initiated",
-        restaurant_id=order.restaurant_id, order_id=order.id, payment_ref=result.payment_ref, amount=amount,
+        restaurant_id=order.restaurant_id, order_id=order.id, payer_name=payer_name,
+        payment_ref=result.payment_ref, amount=charge_amount,
     )
     # Les AUTRES appareils qui suivent cette commande doivent voir qu'un
-    # paiement est en cours — sans ça, `_get_payable_order` ne les empêche
-    # pas de démarrer un second paiement concurrent pendant que celui-ci est
-    # en attente sur le navigateur du premier convive.
+    # paiement est en cours pour cette personne.
     await manager.broadcast(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_requested", "order_id": order.id},
@@ -1206,22 +1335,25 @@ async def start_card_payment(
 SettleCardResult = Literal["paid", "pending", "not_found", "error"]
 
 
-async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
+async def settle_card_payment(db: Session, order_id: int, payment_id: int) -> SettleCardResult:
     """
-    Règle un paiement carte Konnect en attente — appelée par le webhook ET par
-    le filet de sécurité `/pay/card/check`, même principe d'idempotence que
-    `settle_subscription_payment` : gardée par `payment_ref`, jamais réglée
-    deux fois pour la même référence.
+    Règle une part payée par carte (Konnect/Stripe) en attente — appelée par
+    le webhook ET par le filet de sécurité `/pay/card/check`, même principe
+    d'idempotence que `settle_subscription_payment` : gardée par
+    `payment_ref`, jamais réglée deux fois pour la même référence.
     """
     order = db.get(Order, order_id)
     if not order:
         return "not_found"
+    payment = db.get(OrderPayment, payment_id)
+    if not payment or payment.order_id != order_id:
+        return "not_found"
 
     # Rien à régler : déjà réglé par un appel concurrent (webhook + retour
-    # client arrivés en même temps), jamais initié, ou payé autrement.
-    if order.payment_method != PaymentMethod.CARD or order.payment_status != PaymentStatus.PENDING:
+    # client arrivés en même temps), ou pas une part carte en attente.
+    if payment.method != PaymentMethod.CARD or payment.status != OrderPaymentStatus.PENDING:
         return "pending"
-    payment_ref = order.payment_ref
+    payment_ref = payment.payment_ref
     if not payment_ref:
         return "pending"
 
@@ -1237,32 +1369,32 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
         # identifiants du restaurant comptent à ce stade.
         log_event(
             logger, "order.card_payment_settle_missing_credentials",
-            restaurant_id=order.restaurant_id, order_id=order.id,
+            restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment_id,
         )
         return "error"
     provider = get_payment_provider(credentials)
 
     try:
-        payment = provider.get_payment(payment_ref)
+        state = provider.get_payment(payment_ref)
     except PaymentProviderError as err:
         log_event(
             logger, "order.card_payment_settle_fetch_failed",
-            restaurant_id=order.restaurant_id, order_id=order.id, error=str(err),
+            restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment_id, error=str(err),
         )
         return "error"
 
-    if payment.status != "completed":
+    if state.status != "completed":
         return "pending"
 
-    # Contrôle d'intégrité : montant réellement reçu jamais inférieur au
-    # total + pourboire figés à l'initiation — jamais un montant transmis par
+    # Contrôle d'intégrité : montant réellement reçu jamais inférieur à la
+    # part + pourboire figés à l'initiation — jamais un montant transmis par
     # le client ou par le webhook lui-même.
-    expected_smallest_unit = provider.to_smallest_unit(order.total_amount + float(order.tip_amount))
-    if payment.reached_amount < expected_smallest_unit:
+    expected_smallest_unit = provider.to_smallest_unit(float(payment.amount) + float(payment.tip_amount))
+    if state.reached_amount < expected_smallest_unit:
         log_event(
             logger, "order.card_payment_amount_mismatch",
-            restaurant_id=order.restaurant_id, order_id=order.id,
-            expected_smallest_unit=expected_smallest_unit, reached_amount=payment.reached_amount,
+            restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment_id,
+            expected_smallest_unit=expected_smallest_unit, reached_amount=state.reached_amount,
         )
         return "error"
 
@@ -1270,60 +1402,59 @@ async def settle_card_payment(db: Session, order_id: int) -> SettleCardResult:
     # d'idempotence — un règlement concurrent pour la MÊME référence ne peut
     # jamais s'appliquer deux fois.
     updated = (
-        db.query(Order)
-        .filter(Order.id == order.id, Order.payment_ref == payment_ref)
-        .update({"payment_status": PaymentStatus.PAID, "paid_at": datetime.now(timezone.utc)})
+        db.query(OrderPayment)
+        .filter(OrderPayment.id == payment.id, OrderPayment.payment_ref == payment_ref)
+        .update({"status": OrderPaymentStatus.PAID, "paid_at": datetime.now(timezone.utc)})
     )
-    # Seulement quand CET appel a effectué le règlement : un webhook rejoué
-    # (ou la course webhook / retour client) ne doit jamais consommer un
-    # second numéro pour la même facture — `ensure_invoice_number` est déjà
-    # idempotent, la garde ici évite jusqu'à la lecture du compteur.
-    if updated:
-        db.refresh(order)
-        ensure_invoice_number(db, order)
     db.commit()
-    db.refresh(order)
 
     log_event(
         logger, "order.card_payment_settled",
-        restaurant_id=order.restaurant_id, order_id=order.id, already_settled=updated == 0,
+        restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment_id, already_settled=updated == 0,
     )
 
     if updated:
-        if order.loyalty_phone:
-            loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
-        _send_payment_confirmation(order, restaurant)
+        fully_paid = _after_share_paid(db, order, restaurant)
+        db.refresh(order)
         # Le client peut avoir sa page ouverte en attendant le webhook —
         # même événement que la confirmation d'un paiement en espèces.
         await manager.broadcast(
             order.restaurant_id, channel=_order_channel(order.id),
-            message={"event": "order.payment_confirmed", "order_id": order.id},
+            message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
         )
 
     return "paid"
 
 
 async def request_cash_payment(
-    db: Session, order_id: int, tip_amount: float = 0, customer_email: str | None = None
+    db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float = 0,
+    customer_email: str | None = None,
 ) -> Order:
-    """Le client demande à payer en espèces — prévient le serveur assigné."""
-    order = _get_payable_order(db, order_id)
+    """Le client demande à payer sa part en espèces — prévient le serveur
+    assigné (identité de table, ROADMAP.md §Override, extension paiement par
+    personne : plusieurs demandes peuvent être en attente pour la même
+    commande, une par convive)."""
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
-    order.payment_method = PaymentMethod.CASH
-    order.payment_status = PaymentStatus.PENDING
+    payment = existing or OrderPayment(order_id=order.id, payer_key=payer_key, payer_name=payer_name, method=PaymentMethod.CASH)
+    payment.amount = amount
     # Le pourboire était ignoré sur ce chemin : le client le saisissait, le
     # serveur venait encaisser le total sans lui, et l'écart n'apparaissait
     # qu'au comptage de la caisse.
-    order.tip_amount = tip_amount
+    payment.tip_amount = tip_amount
+    payment.status = OrderPaymentStatus.PENDING
     if customer_email:
+        payment.customer_email = customer_email
         order.customer_email = customer_email
-    db.commit()
-    db.refresh(order)
+    if not existing:
+        db.add(payment)
+    _mark_order_pending(db, order, payment)
+    db.refresh(payment)
 
-    a_encaisser = order.total_amount + tip_amount
+    a_encaisser = amount + tip_amount
     log_event(
         logger, "order.cash_payment_requested",
-        restaurant_id=order.restaurant_id, order_id=order.id, amount=a_encaisser,
+        restaurant_id=order.restaurant_id, order_id=order.id, payer_name=payer_name, amount=a_encaisser,
     )
 
     # Diffusé sur le canal "staff" partagé (pas d'infra par membre du
@@ -1336,21 +1467,19 @@ async def request_cash_payment(
         message={
             "event": "order.cash_requested",
             "order_id": order.id,
+            "payment_id": payment.id,
             "table_id": order.table_id,
             "table_label": order.table_label,
-            # Ce que le serveur doit réellement encaisser, pourboire compris —
-            # c'est le montant qu'il annonce à la table.
+            "payer_name": payer_name,
+            # Ce que le serveur doit réellement encaisser pour CETTE
+            # personne, pourboire compris.
             "amount": a_encaisser,
             "taken_by_staff_id": order.taken_by_staff_id,
             "loyalty_phone": order.loyalty_phone,
         },
     )
     # Les AUTRES appareils qui suivent cette commande doivent voir la demande
-    # de paiement — l'écran de suivi sait déjà afficher `payment_status ===
-    # "pending"` (attente d'encaissement) ; sans ce broadcast, un convive qui
-    # n'a pas demandé le paiement pouvait en redemander un autre en même
-    # temps, écrasant silencieusement `payment_method` (`_get_payable_order`
-    # ne s'y oppose pas).
+    # de paiement sans rafraîchir.
     await manager.broadcast(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_requested", "order_id": order.id},
@@ -1358,64 +1487,70 @@ async def request_cash_payment(
     return order
 
 
-async def confirm_cash_payment(db: Session, order_id: int, staff: Staff) -> Order:
-    """Le serveur confirme avoir encaissé le cash à table."""
-    order = db.get(Order, order_id)
+async def confirm_cash_payment(db: Session, payment_id: int, staff: Staff) -> Order:
+    """Le serveur confirme avoir encaissé la part en espèces de CE convive."""
+    payment = db.get(OrderPayment, payment_id)
+    if not payment:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    order = db.get(Order, payment.order_id)
     if not order or order.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    if order.payment_method != PaymentMethod.CASH or order.payment_status != PaymentStatus.PENDING:
+    if payment.method != PaymentMethod.CASH or payment.status != OrderPaymentStatus.PENDING:
         raise HTTPException(
             status_code=409,
-            detail={"code": "NO_PENDING_CASH_PAYMENT", "message": "no pending cash payment for this order"},
+            detail={"code": "NO_PENDING_CASH_PAYMENT", "message": "no pending cash payment for this share"},
         )
 
-    order.payment_status = PaymentStatus.PAID
-    order.paid_at = datetime.now(timezone.utc)
-    ensure_invoice_number(db, order)
+    payment.status = OrderPaymentStatus.PAID
+    payment.paid_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(order)
-
-    if order.loyalty_phone:
-        loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
-    _send_payment_confirmation(order, db.get(Restaurant, order.restaurant_id))
 
     log_event(
         logger, "order.cash_payment_confirmed",
-        restaurant_id=order.restaurant_id, order_id=order.id, staff_id=staff.id,
+        restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment.id, staff_id=staff.id,
     )
+    fully_paid = _after_share_paid(db, order, db.get(Restaurant, order.restaurant_id))
+    db.refresh(order)
 
     # Le client qui a demandé à payer en espèces peut avoir sa page ouverte
     # en attendant que le serveur passe encaisser.
     await manager.broadcast(
         order.restaurant_id, channel=_order_channel(order.id),
-        message={"event": "order.payment_confirmed", "order_id": order.id},
+        message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
     )
     return order
 
 
 async def request_card_terminal_payment(
-    db: Session, order_id: int, tip_amount: float = 0, customer_email: str | None = None
+    db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float = 0,
+    customer_email: str | None = None,
 ) -> Order:
     """
-    Le client demande à payer par carte physique — un serveur apporte le
-    terminal. Même mécanique que le paiement en espèces (carte physique / en
-    ligne / espèces, 2026-08-19), moyen distinct pour ne pas mélanger les
-    deux dans les stats de moyen de paiement.
+    Le client demande à payer sa part par carte physique — un serveur
+    apporte le terminal. Même mécanique que le paiement en espèces (carte
+    physique / en ligne / espèces, 2026-08-19), moyen distinct pour ne pas
+    mélanger les deux dans les stats de moyen de paiement.
     """
-    order = _get_payable_order(db, order_id)
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
-    order.payment_method = PaymentMethod.CARD_TERMINAL
-    order.payment_status = PaymentStatus.PENDING
-    order.tip_amount = tip_amount
+    payment = existing or OrderPayment(
+        order_id=order.id, payer_key=payer_key, payer_name=payer_name, method=PaymentMethod.CARD_TERMINAL
+    )
+    payment.amount = amount
+    payment.tip_amount = tip_amount
+    payment.status = OrderPaymentStatus.PENDING
     if customer_email:
+        payment.customer_email = customer_email
         order.customer_email = customer_email
-    db.commit()
-    db.refresh(order)
+    if not existing:
+        db.add(payment)
+    _mark_order_pending(db, order, payment)
+    db.refresh(payment)
 
-    a_encaisser = order.total_amount + tip_amount
+    a_encaisser = amount + tip_amount
     log_event(
         logger, "order.card_terminal_payment_requested",
-        restaurant_id=order.restaurant_id, order_id=order.id, amount=a_encaisser,
+        restaurant_id=order.restaurant_id, order_id=order.id, payer_name=payer_name, amount=a_encaisser,
     )
 
     await manager.broadcast(
@@ -1423,8 +1558,10 @@ async def request_card_terminal_payment(
         message={
             "event": "order.card_terminal_requested",
             "order_id": order.id,
+            "payment_id": payment.id,
             "table_id": order.table_id,
             "table_label": order.table_label,
+            "payer_name": payer_name,
             "amount": a_encaisser,
             "taken_by_staff_id": order.taken_by_staff_id,
             "loyalty_phone": order.loyalty_phone,
@@ -1439,37 +1576,36 @@ async def request_card_terminal_payment(
     return order
 
 
-async def confirm_card_terminal_payment(db: Session, order_id: int, staff: Staff) -> Order:
-    """Le serveur confirme avoir encaissé la carte physique à table."""
-    order = db.get(Order, order_id)
+async def confirm_card_terminal_payment(db: Session, payment_id: int, staff: Staff) -> Order:
+    """Le serveur confirme avoir encaissé la carte physique de CE convive."""
+    payment = db.get(OrderPayment, payment_id)
+    if not payment:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    order = db.get(Order, payment.order_id)
     if not order or order.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    if order.payment_method != PaymentMethod.CARD_TERMINAL or order.payment_status != PaymentStatus.PENDING:
+    if payment.method != PaymentMethod.CARD_TERMINAL or payment.status != OrderPaymentStatus.PENDING:
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "NO_PENDING_CARD_TERMINAL_PAYMENT",
-                "message": "no pending card terminal payment for this order",
+                "message": "no pending card terminal payment for this share",
             },
         )
 
-    order.payment_status = PaymentStatus.PAID
-    order.paid_at = datetime.now(timezone.utc)
-    ensure_invoice_number(db, order)
+    payment.status = OrderPaymentStatus.PAID
+    payment.paid_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(order)
-
-    if order.loyalty_phone:
-        loyalty_service.record_completed_order(db, order.restaurant_id, order.loyalty_phone)
-    _send_payment_confirmation(order, db.get(Restaurant, order.restaurant_id))
 
     log_event(
         logger, "order.card_terminal_payment_confirmed",
-        restaurant_id=order.restaurant_id, order_id=order.id, staff_id=staff.id,
+        restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment.id, staff_id=staff.id,
     )
+    fully_paid = _after_share_paid(db, order, db.get(Restaurant, order.restaurant_id))
+    db.refresh(order)
 
     await manager.broadcast(
         order.restaurant_id, channel=_order_channel(order.id),
-        message={"event": "order.payment_confirmed", "order_id": order.id},
+        message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
     )
     return order

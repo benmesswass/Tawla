@@ -8,7 +8,7 @@ libère pas explicitement via un bouton dédié — plus aucun mécanisme techni
 from app.modules.orders import table_cart
 from app.modules.orders.schemas import OrderItemCreate
 from app.modules.staff.models import StaffRole
-from app.modules.tables import party as table_party
+from app.modules.tables import roster as table_roster
 from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
 
 
@@ -75,18 +75,18 @@ def test_le_serveur_peut_liberer_la_table(client):
     assert _occupied_at(client, restaurant, manager, table["id"]) is None
 
 
-def test_liberer_la_table_vide_le_panier_et_les_convives(client):
+def test_liberer_la_table_vide_le_panier_et_le_roster(client):
     restaurant = create_restaurant()
     manager = create_staff(restaurant.id, StaffRole.MANAGER)
     table = _create_table(client, restaurant, manager)
     client.get(f"/api/v1/tables/by-token/{table['qr_token']}")
     table_cart.table_cart_store.set_line(table["id"], OrderItemCreate(menu_item_id=1))
-    table_party.table_party_store.set(table["id"], 3, ["Sami", None, None])
+    table_roster.table_roster_store.set_name(table["id"], "device-a", "Sami")
 
     client.post(f"/api/v1/tables/{table['id']}/release", headers=auth_headers(manager))
 
     assert table_cart.table_cart_store.snapshot(table["id"]) == []
-    assert table_party.table_party_store.get(table["id"]) is None
+    assert table_roster.table_roster_store.snapshot(table["id"]) == []
 
 
 def test_la_cuisine_ne_peut_pas_liberer_une_table(client):
@@ -188,7 +188,11 @@ def test_liberer_une_table_avec_commande_servie_et_payee_ne_trace_rien(client):
     client.post(f"/api/v1/orders/{order['id']}/mark-ready", headers=auth_headers(manager))
     client.post(f"/api/v1/orders/{order['id']}/mark-served", headers=auth_headers(manager))
     client.post(f"/api/v1/orders/{order['id']}/pay/cash", headers=order_headers(order))
-    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm", headers=auth_headers(manager))
+    pending = client.get(
+        f"/api/v1/orders/by-restaurant/{restaurant.id}/pending-cash-payments", headers=auth_headers(manager)
+    )
+    payment_id = pending.json()[0]["payment_id"]
+    client.post(f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=auth_headers(manager))
 
     response = client.post(f"/api/v1/tables/{table['id']}/release", headers=auth_headers(manager))
 

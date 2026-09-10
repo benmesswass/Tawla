@@ -14,11 +14,10 @@ from app.modules.orders import schemas as orders_schemas
 from app.modules.orders import service as orders_service
 from app.modules.orders import table_cart
 from app.modules.staff.models import StaffRole
-from app.modules.tables import party as table_party
+from app.modules.tables import roster as table_roster
 from app.modules.tables.models import Table
 
 router = APIRouter(tags=["notifications"])
-
 
 @router.get("/api/v1/notifications/vapid-public-key")
 async def get_vapid_public_key():
@@ -93,8 +92,8 @@ async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: 
     panier partagé de la table : tout appareil qui scanne ce QR reçoit l'état
     courant à la connexion, puis chaque mise à jour, et peut valider pour
     toute la table (`table_cart.py`). Porte aussi, depuis la même extension,
-    le nombre de convives et leurs prénoms facultatifs (`tables/party.py`) —
-    purement déclaratif, jamais lu pour une règle métier.
+    qui commande sous quel prénom (`tables/roster.py`) — purement déclaratif,
+    jamais lu pour une règle métier.
     """
     table = await authenticate_table_socket(websocket, restaurant_id, qr_token, db)
     if not table:
@@ -106,7 +105,7 @@ async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: 
     # suite ce que les autres ont déjà fait, sans attendre leur prochaine
     # mutation.
     await websocket.send_json(table_cart.snapshot_message(table.id))
-    await websocket.send_json(table_party.party_message(table.id))
+    await websocket.send_json(table_roster.roster_message(table.id))
     await _pump_table(websocket, restaurant_id, table, db, channel)
 
 
@@ -136,11 +135,16 @@ async def _pump_table(websocket: WebSocket, restaurant_id: int, table: Table, db
                 elif action == "cart.validate":
                     client_order_id = raw.get("client_order_id")
                     await orders_service.create_order_from_table_cart(db, table, client_order_id=client_order_id)
-                elif action == "party.set":
-                    size = int(raw.get("size", 0))
-                    names = raw.get("names") or []
-                    table_party.table_party_store.set(table.id, size, names)
-                    await manager.broadcast(restaurant_id, channel, table_party.party_message(table.id))
+                elif action == "identity.set":
+                    device_key = str(raw.get("device_key", ""))[:80]
+                    name = str(raw.get("name", ""))
+                    if device_key:
+                        table_roster.table_roster_store.set_name(table.id, device_key, name)
+                        await manager.broadcast(restaurant_id, channel, table_roster.roster_message(table.id))
+                elif action == "identity.add_guest":
+                    name = str(raw.get("name", ""))
+                    table_roster.table_roster_store.add_guest(table.id, name)
+                    await manager.broadcast(restaurant_id, channel, table_roster.roster_message(table.id))
                 # Action inconnue ou message malformé sans champ "action" :
                 # ignoré plutôt que de casser la connexion — un client d'une
                 # version plus récente ou plus ancienne ne doit jamais faire

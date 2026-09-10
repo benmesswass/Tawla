@@ -14,7 +14,7 @@ Stripe lui-même (déjà couvert côté `construct_webhook_event`/abonnement).
 from app.core import stripe_gateway
 from app.core.rate_limit import _hits
 from app.modules.orders import router as orders_router
-from app.modules.orders.models import Order, PaymentMethod, PaymentStatus
+from app.modules.orders.models import Order, OrderPayment, OrderPaymentStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import StaffRole
 from app.modules.tenants.models import Restaurant
 from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff
@@ -36,7 +36,9 @@ def _event(event_type: str, obj: dict) -> dict:
     return {"type": event_type, "data": {"object": _fake_stripe_object(obj)}}
 
 
-def _setup_pending_stripe_order(client, restaurant: Restaurant, *, price: float = 20, quantity: int = 1) -> dict:
+def _setup_pending_stripe_order(client, restaurant: Restaurant, *, price: float = 20, quantity: int = 1) -> tuple[dict, int]:
+    """Renvoie `(order, payment_id)` : une part carte en attente, comme si
+    `start_card_payment` venait de l'initier chez Stripe."""
     manager_headers = _manager_headers(restaurant.id)
     table = client.post(
         "/api/v1/tables", json={"restaurant_id": restaurant.id, "label": "Table 1"}, headers=manager_headers
@@ -54,16 +56,20 @@ def _setup_pending_stripe_order(client, restaurant: Restaurant, *, price: float 
 
     db = _TestingSessionLocal()
     db_order = db.get(Order, order["id"])
-    db_order.payment_method = PaymentMethod.CARD
     db_order.payment_status = PaymentStatus.PENDING
-    db_order.payment_ref = "cs_test_123"
+    payment = OrderPayment(
+        order_id=db_order.id, payer_key="", payer_name="", amount=db_order.total_amount,
+        tip_amount=0, method=PaymentMethod.CARD, status=OrderPaymentStatus.PENDING, payment_ref="cs_test_123",
+    )
+    db.add(payment)
     db.commit()
+    payment_id = payment.id
     db.close()
-    return order
+    return order, payment_id
 
 
 def _make_async_settle_stub(result: str):
-    async def _stub(db, order_id):
+    async def _stub(db, order_id, payment_id):
         return result
 
     return _stub
@@ -85,10 +91,13 @@ def test_webhook_rejects_a_bad_signature(client, monkeypatch):
 
 def test_webhook_settles_a_pending_order_from_the_session_metadata(client, db_session, monkeypatch):
     restaurant = create_restaurant(slug="stripe-card-webhook-settle")
-    order = _setup_pending_stripe_order(client, restaurant)
+    order, payment_id = _setup_pending_stripe_order(client, restaurant)
     event = _event(
         "checkout.session.completed",
-        {"mode": "payment", "id": "cs_test_123", "metadata": {"order_id": str(order["id"])}},
+        {
+            "mode": "payment", "id": "cs_test_123",
+            "metadata": {"order_id": str(order["id"]), "payment_id": str(payment_id)},
+        },
     )
     monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
     monkeypatch.setattr(
@@ -110,7 +119,7 @@ def test_webhook_ignores_a_subscription_mode_event(client, monkeypatch):
     stripe-subscription-webhook (tenants/router.py), jamais celui-ci."""
     event = _event(
         "checkout.session.completed",
-        {"mode": "subscription", "id": "cs_test_sub", "metadata": {"order_id": "1"}},
+        {"mode": "subscription", "id": "cs_test_sub", "metadata": {"order_id": "1", "payment_id": "1"}},
     )
     monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
 
@@ -133,6 +142,29 @@ def test_webhook_ignores_a_session_without_an_order_id_in_metadata(client, monke
 
     def _boom(*a, **kw):
         raise AssertionError("aucun order_id dans metadata — rien à régler")
+
+    monkeypatch.setattr(orders_router.service, "settle_card_payment", _boom)
+
+    res = client.post(
+        "/api/v1/orders/stripe-card-webhook", content=b"{}", headers={"stripe-signature": "whatever"}
+    )
+
+    assert res.status_code == 200
+    assert res.json()["result"] == "ignored"
+
+
+def test_webhook_ignores_a_session_without_a_payment_id_in_metadata(client, monkeypatch):
+    """Régression : `order_id` seul ne suffit plus (identité de table,
+    ROADMAP.md §Override, extension paiement par personne) — une commande
+    peut porter plusieurs parts en vol, `payment_id` dit laquelle régler."""
+    event = _event(
+        "checkout.session.completed",
+        {"mode": "payment", "id": "cs_test_no_payment_id", "metadata": {"order_id": "1"}},
+    )
+    monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
+
+    def _boom(*a, **kw):
+        raise AssertionError("aucun payment_id dans metadata — rien à régler")
 
     monkeypatch.setattr(orders_router.service, "settle_card_payment", _boom)
 
@@ -168,10 +200,13 @@ def test_webhook_settles_on_async_payment_succeeded_too(client, db_session, monk
     bloquées en `pending` pour toujours — exactement le défaut que ce
     webhook existe pour fermer."""
     restaurant = create_restaurant(slug="stripe-card-webhook-async")
-    order = _setup_pending_stripe_order(client, restaurant)
+    order, payment_id = _setup_pending_stripe_order(client, restaurant)
     event = _event(
         "checkout.session.async_payment_succeeded",
-        {"mode": "payment", "id": "cs_test_123", "metadata": {"order_id": str(order["id"])}},
+        {
+            "mode": "payment", "id": "cs_test_123",
+            "metadata": {"order_id": str(order["id"]), "payment_id": str(payment_id)},
+        },
     )
     monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
     monkeypatch.setattr(orders_router.service, "settle_card_payment", _make_async_settle_stub("paid"))
@@ -191,7 +226,7 @@ def test_webhook_ignores_a_non_numeric_order_id_instead_of_crashing(client, monk
     l'ignorer proprement."""
     event = _event(
         "checkout.session.completed",
-        {"mode": "payment", "id": "cs_test_bad_id", "metadata": {"order_id": "not-a-number"}},
+        {"mode": "payment", "id": "cs_test_bad_id", "metadata": {"order_id": "not-a-number", "payment_id": "1"}},
     )
     monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
 
