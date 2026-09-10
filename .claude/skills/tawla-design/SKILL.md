@@ -62,7 +62,8 @@ page qui les porte est reprise. Du code neuf, lui, n'a aucune raison d'y
   que produisent les `shadow-lg`/`shadow-xl` posés au cas par cas.
 - **Mouvement** (`transitionDuration` / `transitionTimingFunction`) —
   `duration-micro|rapide|normal|lent|sortie` et
-  `ease-entree|sortie|deplacement`. Côté JS, `lib/mouvement.ts`.
+  `ease-entree|sortie|deplacement`. Tout le mouvement est en CSS — il n'y a
+  plus de jetons JS, voir la section « Dépendances d'UI ».
 
 ## Mouvement
 
@@ -116,34 +117,32 @@ sans animation d'entrée s'ouvre quand même.
 
 ## Dépendances d'UI
 
-- **Pas de shadcn/ui, ni aucune librairie de composants.** Le frontend est du
+- **Pas de librairie de composants (shadcn/ui ou autre).** Le frontend est du
   Tailwind nu sur variables CSS, avec `components/ui/*` écrits à la main. Une
   librairie apporterait sa propre charte à recouvrir et son propre système de
   jetons à concilier — pour remplacer 5 composants de 8 à 50 lignes.
-- **Motion est installé** (paquet `motion`, v13). Décision de Wassim le
-  2026-09-10, qui revient sur le « pas de librairie d'animation par défaut »
-  écrit ici la veille. Le coût était réel, il est traité plutôt qu'accepté :
-  `components/ui/Mouvement.tsx` charge le moteur **en différé**
-  (`LazyMotion features={() => import(…)}`) et refuse le paquet complet
-  (`strict`), de sorte que le HTML de la carte arrive sans lui.
-  - Importer les éléments depuis **`motion/react-m`** (`import * as m from
-    "motion/react-m"` — en v13 ce sous-chemin exporte `div`, `button`… et non
-    un objet `m`), jamais `motion.*` : `strict` fait échouer le rendu, exprès.
-  - `LazyMotion`, `AnimatePresence`, `MotionConfig`, `useReducedMotion`
-    viennent de `motion/react`.
-  - Le socle charge `domAnimation` (animation, survol/pression,
-    `AnimatePresence`). Le glisser et les animations de layout sont dans
-    `domMax` : à charger localement là où ils servent (plan de salle,
-    carrousel), pas pour tout le monde.
-  - Durées, courbes et ressorts viennent de **`lib/mouvement.ts`**, jamais
-    d'un littéral. Le fichier est le miroir JS des variables CSS : modifier
-    l'un sans l'autre désaccorde une animation CSS et une animation Motion sur
-    le même geste.
-  - Ce qu'un `:hover`/`:active` CSS fait déjà, il continue de le faire. Motion
-    sert à ce que CSS ne sait pas faire : sortie d'un élément démonté,
-    animation de layout, transition d'élément partagé, geste.
+- **Pas de librairie d'animation.** Motion a été adopté puis **retiré le
+  2026-09-10 après mesure** : +68 kB gzip par ouverture du menu client (+46 %
+  de JS), et le moteur n'était pas différable — un composant `m.*` sans son
+  moteur applique son `initial` en style inline et n'anime jamais, donc le
+  convive ajoutait un plat et ne voyait rien. Le détail chiffré est dans
+  `MOTION_DESIGN.md`.
+  - **Tout le mouvement s'écrit en CSS**, avec les jetons
+    `duration-*`/`ease-*`. Le bloc « Carte client » de `globals.css` sert de
+    modèle : dépliement par `grid-template-rows: 0fr → 1fr` sous `@supports`,
+    élément gardé monté quand sa sortie doit s'animer, animation rejouée par
+    une clé React quand une valeur change.
+  - **Deux limites à connaître** : CSS ne peut pas animer la sortie d'un nœud
+    démonté (garder l'élément monté, ou renoncer à la sortie), et
+    `grid-template-rows: 0fr` n'est interpolable qu'à partir de Chrome 117 /
+    Safari 17.4 / Firefox 120 — d'où le `@supports`, qui laisse un affichage
+    instantané ailleurs plutôt qu'un panneau invisible.
+  - **Rouvrir la question** demande un besoin que CSS ne couvre pas (élément
+    partagé, animation de layout, glisser) **et** une route autre que le menu
+    client. Le plan de salle et le carrousel, qui auraient ce profil, sont
+    écrits à la main aujourd'hui.
 
-Rouvrir le premier point est une décision de Wassim, pas un choix
+Rouvrir l'un de ces deux points est une décision de Wassim, pas un choix
 d'implémentation.
 
 ## Une page à la fois, et une critique après chaque page

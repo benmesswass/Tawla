@@ -66,43 +66,71 @@ pour être utilisables en classes.
 --ease-move:  cubic-bezier(.4, 0, .2, 1);    /* ce qui se déplace sans arriver ni partir */
 ```
 
-Pas de ressort (`spring`) en CSS — CSS n'en a pas. Depuis l'adoption de Motion
-(décision de Wassim, 2026-09-10), les ressorts existent côté JS dans
-`frontend/lib/mouvement.ts`, et la restriction reste la même : le rebond ne se
-justifie que là où le doigt tient physiquement l'élément, ou là où un élément
-atterrit à une nouvelle place. Partout ailleurs il ajoute du délai sans ajouter
-d'information.
+Pas de ressort (`spring`) : CSS n'en a pas, et la librairie qui en fournissait
+a été retirée (voir ci-dessous). Le rebond reste de toute façon réservé à ce
+que le doigt tient physiquement — le glisser d'une table sur le plan de salle,
+le carrousel de la home, tous deux écrits à la main. Partout ailleurs il
+ajoute du délai sans ajouter d'information.
 
-Trois ressorts, nommés par rôle et non par adjectif — un ressort appelé
-« bouncy » finit posé partout :
+## Motion : essayé, mesuré, retiré (2026-09-10)
 
-| Jeton | Rôle | Réglage |
-|---|---|---|
-| `RESSORT.prise` | ce que le doigt tient : glisser une table sur le plan, le carrousel | `visualDuration: .22`, `bounce: .18` |
-| `RESSORT.depot` | un élément qui atterrit ailleurs : animation de layout, réordonnancement | `visualDuration: .32`, `bounce: .12` |
-| `RESSORT.saillie` | une valeur qui s'impose : compteur du panier, pastille de quantité | `visualDuration: .26`, `bounce: .3` |
+Motion (paquet `motion`, v13) a été adopté le 2026-09-10 sur décision de
+Wassim, puis **retiré le même jour** après mesure. Le raisonnement est
+consigné ici pour qu'on ne le rejoue pas.
 
-`visualDuration` plutôt que `stiffness`/`damping` : c'est la durée réellement
-perçue jusqu'à la cible, donc la seule qu'on puisse accorder aux quatre durées
-ci-dessus.
+**Ce qui a été mesuré** sur la route du menu client (`next build`, puis gzip
+des morceaux listés par `app-build-manifest.json`) :
 
-## Motion — ce qu'on lui confie, et ce qu'on laisse à CSS
+| | Premier chargement | Moteur | Total par ouverture |
+|---|---|---|---|
+| Avec Motion | 166,7 kB gz | + 49,5 kB gz | **216,2 kB** |
+| Sans Motion | 147,7 kB gz | — | **147,7 kB** |
 
-Motion (paquet `motion`, v13) est installé et branché par
-`frontend/components/ui/Mouvement.tsx`. Le partage des rôles n'est pas une
-préférence de style, c'est ce qui garde la page légère :
+Soit **+68 kB gzip par ouverture, +46 % de JS**, sur la seule page qu'un
+inconnu charge sur un réseau qu'on ne choisit pas.
+
+**Pourquoi le différé ne sauvait rien.** `LazyMotion` appelle son chargeur au
+**montage**, pas à la première animation : le morceau du moteur partait à
+131 ms, juste après `loadEventEnd`, à chaque ouverture, que le convive anime
+quelque chose ou non. Et le repousser plus loin est impossible : un composant
+`m.*` privé de son moteur applique son `initial` en style inline et n'anime
+jamais. Vérifié sur un build où le moteur n'arrivait pas — le panneau du plat
+restait à `height: 0; opacity: 0` et la barre de panier hors écran
+(`y = 1114` dans une fenêtre de 1100 px). Le convive ajoute un plat et ne voit
+rien. Ce n'est pas une optimisation, c'est un défaut.
+
+**Ce qu'on a gardé, en CSS** (voir le bloc « Carte client » de
+`frontend/app/globals.css`) : les quatre mouvements d'état de la carte, avec
+deux renoncements assumés — les *sorties* de la ligne dépliée et du pas de
+quantité ne sont pas animées (CSS ne peut pas animer un nœud que React a
+retiré), et le total entre en fondu au lieu de se croiser avec l'ancienne
+valeur.
+
+**À quelle condition Motion revient.** Un besoin que CSS ne sait pas couvrir
+*et* sur une route qui n'est pas le menu client : une transition d'élément
+partagé, une animation de layout, un glisser au doigt — donc plutôt le plan de
+salle ou le tableau de bord, chargés une fois par service sur les appareils du
+restaurant. Le remettre est `npm i motion` plus une quinzaine de lignes de
+provider ; ce n'est pas ce coût-là qui doit peser dans la décision, c'est les
+68 kB sur le téléphone du convive.
+
+## Ce que CSS garde, et ce qui justifierait autre chose
 
 - **CSS garde tout ce qu'il sait faire** : survol, état pressé, changement de
-  couleur, apparition d'un élément qui reste monté, transition de hauteur. Un
-  retour au doigt passé par JS arrive toujours plus tard qu'un `:active`.
-- **Motion prend ce que CSS ne sait pas faire** : la sortie d'un élément qu'on
-  démonte (`AnimatePresence`), l'animation de layout, la transition d'élément
-  partagé, le geste (glisser).
+  couleur, apparition d'un élément qui reste monté, transition de hauteur via
+  `grid-template-rows: 0fr → 1fr`. Un retour au doigt passé par JS arrive
+  toujours plus tard qu'un `:active`.
+- **Ce que CSS ne sait pas faire** : la sortie d'un élément qu'on démonte,
+  l'animation de layout, la transition d'élément partagé, le geste. Quand un
+  de ces besoins se présente, la question se repose — avec les chiffres
+  ci-dessus sous les yeux.
 
-Le moteur est chargé **en différé** (`LazyMotion features={() => import(…)}`)
-et le mode `strict` refuse `motion.*` au profit de `motion/react-m` : sans ce
-garde-fou, un seul `motion.div` oublié dans une page annule le découpage et
-ramène le paquet complet dans le premier chargement du menu client.
+Un détail de vérification, pour la prochaine fois : **le panneau navigateur de
+la session gèle les horloges d'animation** (`document.visibilityState` vaut
+`hidden`, `document.timeline.currentTime` reste à 0). Une animation y paraît
+bloquée à son état de départ. Pour la contrôler malgré ça, forcer la tête de
+lecture (`element.getAnimations()[0].currentTime = 280`) et lire le style
+calculé, ou neutraliser la transition et lire la valeur cible.
 
 ## Les sept principes
 

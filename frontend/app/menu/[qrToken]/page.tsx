@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import * as m from "motion/react-m";
-import { AnimatePresence } from "motion/react";
 import { cairo, lalezar } from "@/lib/fonts";
-import { COURBE, DUREE, TRANSITION } from "@/lib/mouvement";
 import {
   api,
   mediaUrl,
@@ -1685,6 +1682,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
   const total = cartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
   const myTotal = myCartLines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
+  // La barre de panier est montée en permanence pour que sa sortie soit
+  // animable en CSS : c'est cet indicateur, et non un montage conditionnel,
+  // qui la fait entrer et sortir du cadre.
+  const visibleBarrePanier = myCartLines.length > 0 && !showCartReview;
 
   async function validateOrder() {
     if (!table || cartLines.length === 0) return;
@@ -3067,15 +3068,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 {formatAmount(item.price)} {t.currency}
               </span>
               <div className="flex items-center gap-2 shrink-0">
-                <AnimatePresence initial={false}>
-                  {ligne && (
-                    <m.div
-                      key="pas-quantite"
-                      initial={{ opacity: 0, width: 0 }}
-                      animate={{ opacity: 1, width: "auto", transition: TRANSITION.deplacement }}
-                      exit={{ opacity: 0, width: 0, transition: TRANSITION.sortie }}
-                      className="flex items-center gap-2 overflow-hidden"
-                    >
+                {ligne && (
+                  <div key="pas-quantite" className="pas-quantite flex items-center gap-2">
                     <button
                       onClick={() => removeFromCart(cartKey(item.id, myDeviceKey))}
                       aria-label={t.removeFromCartAria(item.name)}
@@ -3092,9 +3086,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     >
                       {ligne.quantity}
                     </span>
-                    </m.div>
-                  )}
-                </AnimatePresence>
+                  </div>
+                )}
                 {/* 40 px et non 34 : sous 40, la cible se rate au pouce en
                     tenant le téléphone d'une main, et le client tape deux fois.
                     Le « 19px » du glyphe reste en dur — c'est un dessin de
@@ -3123,15 +3116,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             L'enveloppe porte l'animation et `overflow-hidden` ; le panneau
             garde sa marge et son filet, sinon un `height: 0` laisserait un
             talon de 21 px (box-sizing: border-box). */}
-        <AnimatePresence initial={false}>
-          {ligne && (
-            <m.div
-              key="detail-plat"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1, transition: TRANSITION.entree }}
-              exit={{ height: 0, opacity: 0, transition: TRANSITION.sortie }}
-              className="overflow-hidden"
-            >
+        {ligne && (
+          <div className="plat-detail">
+            {/* La piste de grille est ce qui s'anime : le panneau lui-même
+                garde sa marge et son filet. */}
+            <div className="min-h-0">
           <div className="mt-2.5 pt-2.5 border-t border-line">
             {ligne.selectedOptions.length > 0 && (
               <p className="text-legende text-ink-soft mb-2">
@@ -3211,9 +3200,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               )}
             </div>
           </div>
-            </m.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -3517,70 +3506,47 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             table) : la carte ne doit pas réagir aux ajouts des autres
             convives, seul le panier de table (ci-dessous) englobe tout le
             monde. */}
-        {/* La barre arrive par le bas et repart par le bas. Elle apparaissait
-            sèchement au premier plat ajouté — au moment précis où l'œil est
-            ailleurs, sur la ligne qui vient de se déplier — donc on ne la
-            voyait pas arriver. `AnimatePresence` sert la sortie : un élément
-            démonté ne peut pas s'animer en CSS. */}
-        <AnimatePresence>
-          {myCartLines.length > 0 && !showCartReview && (
-            <m.div
-              key="barre-panier"
-              initial={{ y: "100%" }}
-              animate={{ y: 0, transition: TRANSITION.entree }}
-              exit={{ y: "100%", transition: TRANSITION.sortie }}
-              className="fixed bottom-0 left-0 right-0 bg-espresso pt-3.5 px-4 pb-[max(1.125rem,env(safe-area-inset-bottom))] shadow-barre"
-            >
-              <div className="max-w-md mx-auto">
-                <div className="flex justify-between items-center gap-3" data-visite="client-panier">
-                  <div>
-                    <p className="text-surtitre font-semibold text-[var(--ink-on-espresso)]">
-                      {t.cartItemsCount(myCartLines.reduce((s, l) => s + l.quantity, 0))}
-                    </p>
-                    {/* Le total se remplace en fondu à chaque changement. La clé
-                        porte la valeur : React remonte le nœud, donc
-                        AnimatePresence peut faire sortir l'ancien montant
-                        pendant que le nouveau entre. Un chiffre qui se substitue
-                        d'un coup se lit comme un rafraîchissement de données,
-                        pas comme la conséquence du clic (principe 6).
-
-                        Le gabarit en flux donne sa taille à la boîte : les deux
-                        copies qui se croisent sont en position absolue et ne
-                        mesurent rien, sans lui le montant serait tronqué à la
-                        largeur du libellé du dessus. C'est aussi lui que lisent
-                        les lecteurs d'écran, les copies animées étant masquées
-                        — pendant le fondu, deux montants coexistent. */}
-                    <span className="relative mt-0.5 block overflow-hidden">
-                      <span className={`${lalezar.className} block text-[26px] leading-none tabular-nums opacity-0`}>
-                        {formatAmount(myTotal)} {t.currency}
-                      </span>
-                      <AnimatePresence initial={false}>
-                        <m.span
-                          key={myTotal}
-                          aria-hidden
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0, transition: TRANSITION.deplacement }}
-                          exit={{ opacity: 0, y: -10, transition: { duration: DUREE.rapide, ease: COURBE.sortie } }}
-                          className={`${lalezar.className} absolute inset-0 whitespace-nowrap text-[26px] leading-none tabular-nums text-semoule`}
-                        >
-                          {formatAmount(myTotal)} {t.currency}
-                        </m.span>
-                      </AnimatePresence>
-                    </span>
-                  </div>
-                  <Button
-                    size="lg"
-                    shape="pilule"
-                    onClick={() => setShowCartReview(true)}
-                    className="shrink-0 px-[22px] font-bold"
-                  >
-                    {t.viewCartButton}
-                  </Button>
-                </div>
+        {/* La barre reste montée en permanence et sort simplement du cadre :
+            c'est ce qui permet d'animer ses DEUX sens en CSS, là où un nœud
+            démonté ne pourrait animer que son entrée. `visibility` fait partie
+            de la transition — sans elle, une barre hors cadre reste
+            atteignable au clavier. */}
+        <div
+          data-visible={visibleBarrePanier || undefined}
+          aria-hidden={!visibleBarrePanier}
+          className="barre-panier fixed bottom-0 left-0 right-0 bg-espresso pt-3.5 px-4 pb-[max(1.125rem,env(safe-area-inset-bottom))] shadow-barre"
+        >
+          <div className="max-w-md mx-auto">
+            <div className="flex justify-between items-center gap-3" data-visite="client-panier">
+              <div>
+                <p className="text-surtitre font-semibold text-[var(--ink-on-espresso)]">
+                  {t.cartItemsCount(myCartLines.reduce((s, l) => s + l.quantity, 0))}
+                </p>
+                {/* Le total entre en fondu à chaque changement : la clé porte le
+                    montant, donc React remonte le nœud et l'animation repart.
+                    Un chiffre qui se substitue sans rien dire se lit comme un
+                    rafraîchissement de données, pas comme la conséquence du
+                    clic (principe 6). L'ancienne valeur n'est plus croisée
+                    avec la nouvelle — voir le renoncement 2 de globals.css. */}
+                <p
+                  key={myTotal}
+                  className={`${lalezar.className} total-panier mt-0.5 whitespace-nowrap text-[26px] leading-none tabular-nums text-semoule`}
+                >
+                  {formatAmount(myTotal)} {t.currency}
+                </p>
               </div>
-            </m.div>
-          )}
-        </AnimatePresence>
+              <Button
+                size="lg"
+                shape="pilule"
+                onClick={() => setShowCartReview(true)}
+                tabIndex={visibleBarrePanier ? undefined : -1}
+                className="shrink-0 px-[22px] font-bold"
+              >
+                {t.viewCartButton}
+              </Button>
+            </div>
+          </div>
+        </div>
 
         {/* Récapitulatif façon panier d'appli de livraison, ouvert avant de
             valider : tout ce qui compose la commande (articles, quantités,

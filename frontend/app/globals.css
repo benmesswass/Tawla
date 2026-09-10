@@ -700,3 +700,128 @@
     transition: none;
   }
 }
+
+/* ==========================================================================
+   Carte client : les quatre mouvements d'état, en CSS
+   --------------------------------------------------------------------------
+   Écrits en CSS et non avec Motion après mesure du 2026-09-10 : le moteur
+   d'animation coûtait 68 kB gzip par ouverture du menu (+46 % de JS sur la
+   seule page qu'un convive charge sur un réseau qu'on ne choisit pas), et il
+   ne pouvait pas être différé — un composant Motion sans son moteur applique
+   son état initial en style inline et n'anime jamais, donc le panneau restait
+   invisible et la barre hors écran.
+
+   Deux renoncements assumés par rapport à Motion, écrits ici pour qu'on ne les
+   redécouvre pas :
+
+   1. Les SORTIES de la ligne dépliée et du pas de quantité ne sont pas
+      animées : CSS ne peut pas animer un nœud que React a déjà retiré. C'est
+      l'entrée qui portait le défaut (~250 px révélés d'un coup), et c'est elle
+      qu'on répare. La barre de panier, elle, garde ses deux sens : elle reste
+      montée en permanence et se contente de sortir du cadre.
+   2. Le total ne se croise plus, il entre en fondu. L'ancienne valeur est
+      remplacée d'un coup sous la nouvelle — ce qui reste lisible comme « le
+      clic a changé le nombre », l'essentiel du principe 6.
+   ========================================================================== */
+
+/* --- 1. La ligne de plat se déplie ---------------------------------------
+   `grid-template-rows: 0fr -> 1fr` est la seule façon d'animer vers une
+   hauteur inconnue sans mesurer en JS. Le contenu vit dans une piste de
+   grille, l'enveloppe masque le débordement. Non interpolable avant
+   Chrome 117 / Safari 17.4 / Firefox 120 : le `@supports` ci-dessous
+   n'applique l'animation que là où elle fonctionne, ailleurs le panneau
+   apparaît d'un coup — soit le comportement d'avant, jamais un panneau
+   invisible. */
+.plat-detail {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+}
+
+@supports (grid-template-rows: 0fr) {
+  @keyframes plat-detail-deplie {
+    from {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+    to {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+  }
+
+  .plat-detail {
+    animation: plat-detail-deplie var(--motion-normal) var(--ease-enter) both;
+  }
+}
+
+/* --- 2. Le pas de quantité apparaît -------------------------------------- */
+@keyframes pas-quantite-entre {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.pas-quantite {
+  animation: pas-quantite-entre var(--motion-fast) var(--ease-enter) both;
+}
+
+/* --- 3. La barre de panier monte et redescend ----------------------------
+   Toujours montée, donc les deux sens sont animables. `visibility` est dans
+   la transition pour que la barre sortie ne capte plus rien — sans elle, un
+   panneau hors cadre reste atteignable au clavier. */
+.barre-panier {
+  transform: translateY(100%);
+  visibility: hidden;
+  transition:
+    transform var(--motion-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-exit);
+}
+
+.barre-panier[data-visible] {
+  transform: translateY(0);
+  visibility: visible;
+  transition:
+    transform var(--motion-normal) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+/* --- 4. Le total entre en fondu ------------------------------------------
+   Rejoué à chaque changement de valeur parce que la clé React porte le
+   montant : le nœud est remonté, donc l'animation repart. */
+@keyframes total-entre {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.total-panier {
+  animation: total-entre var(--motion-fast) var(--ease-move) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plat-detail,
+  .pas-quantite,
+  .total-panier {
+    animation: none;
+  }
+  /* L'état final immédiatement, jamais l'absence d'état final. */
+  .plat-detail {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  .barre-panier,
+  .barre-panier[data-visible] {
+    transition: none;
+  }
+}
