@@ -152,6 +152,10 @@ export const fr = {
   rosterAddGuestPlaceholder: "Prénom (ex : Yassine)",
   rosterAddGuestConfirm: "Ajouter",
   rosterOwnItemsOnlyNote: "Vous ne pouvez retirer que vos propres plats.",
+  // Rappel dans le panier de l'assignation faite sur la carte (« Pour qui ? »).
+  // Sans ça, le convive coche des prénoms côté carte et le panier n'en garde
+  // aucune trace visible — l'assignation semble perdue (retour QA).
+  cartForWhom: (names: string) => `Pour ${names}`,
 
   offlineQueuedTitle: "Connexion perdue",
   offlineQueuedMessage: "Votre commande est enregistrée sur ce téléphone. Elle partira dès le retour du réseau — n'actualisez pas la page.",

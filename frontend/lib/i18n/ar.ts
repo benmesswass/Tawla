@@ -132,6 +132,7 @@ export const ar = {
   rosterAddGuestPlaceholder: "الاسم (مثال : ياسين)",
   rosterAddGuestConfirm: "زيد",
   rosterOwnItemsOnlyNote: "تنجم تنحي كان الأكلات متاعك.",
+  cartForWhom: (names) => `لـ ${names}`,
 
   offlineQueuedTitle: "ما فماش نات",
   offlineQueuedMessage: "الطلبية تسجلت في تليفونك وباش تتبعث وحدها كي ترجع النات.",

@@ -2459,6 +2459,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   <span className="text-[var(--ink-faint)]"> — {it.options.map((o) => o.option_name).join(", ")}</span>
                 )}
                 {it.notes && <span className="text-[var(--ink-faint)]"> — {it.notes}</span>}
+                {/* Assignation faite sur la carte, reportée jusqu'ici : c'est
+                    elle qui décide de la part de chacun au paiement
+                    (orders/split.py), donc la cacher au moment de payer est
+                    précisément le pire endroit pour la perdre. */}
+                {it.shared_with.length > 0 && (
+                  <span className="block text-legende text-[var(--ink-soft)]">
+                    {t.cartForWhom(it.shared_with.map(personLabel).join(" · "))}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -3531,6 +3540,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                               {mine ? t.rosterYouTag(line.addedByName) : line.addedByName}
                             </span>
                           </div>
+                          {/* « Pour qui ? » assigné sur la carte : le panier
+                              doit le refléter, sinon l'assignation paraît
+                              perdue (retour QA). Le tag ci-dessus dit qui a
+                              ajouté le plat — deux informations distinctes :
+                              Karim peut commander un plat pour Sami. */}
+                          {line.sharedWith.length > 0 && (
+                            <p className="mt-1 text-legende text-[var(--ink-soft)]">
+                              {t.cartForWhom(line.sharedWith.map(personLabel).join(" · "))}
+                            </p>
+                          )}
                         </div>
                         <span className="shrink-0 text-[14.5px] font-bold tabular-nums text-[var(--harissa-text)]">
                           {formatAmount(lineUnitPrice(line) * line.quantity)} {t.currency}
