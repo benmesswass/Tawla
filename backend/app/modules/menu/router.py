@@ -8,7 +8,7 @@ from app.core.logging import get_logger, log_event
 from app.core.subscription import require_tier
 from app.modules.menu import csv_import, options, regimes, schemas, suggestions
 from app.modules.menu.models import MenuItem, MenuItemOptionGroup, MenuRegime
-from app.modules.notifications.manager import manager
+from app.modules.notifications.manager import Diffusion, executer_puis_diffuser
 from app.modules.staff.dependencies import require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tables import service as tables_service
@@ -251,22 +251,26 @@ async def set_availability(
     item_id: int, payload: schemas.MenuItemAvailability, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)
 ):
     """Rupture de stock en un clic — le resto en a besoin en permanence."""
-    item = _get_item_in_scope(db, item_id, staff)
-    item.is_available = payload.is_available
-    db.commit()
-    db.refresh(item)
 
-    # Un client déjà sur la page menu doit voir la rupture instantanément,
-    # pas seulement au moment où il tente de commander l'article.
-    await manager.broadcast(
-        item.restaurant_id, channel="menu",
-        message={
-            "event": "menu_item.availability_changed",
-            "menu_item_id": item.id,
-            "is_available": item.is_available,
-        },
-    )
-    return item
+    def _basculer():
+        item = _get_item_in_scope(db, item_id, staff)
+        item.is_available = payload.is_available
+        db.commit()
+        db.refresh(item)
+        # Un client déjà sur la page menu doit voir la rupture instantanément,
+        # pas seulement au moment où il tente de commander l'article.
+        return item, [Diffusion(
+            item.restaurant_id, channel="menu",
+            message={
+                "event": "menu_item.availability_changed",
+                "menu_item_id": item.id,
+                "is_available": item.is_available,
+            },
+        )]
+
+    # Hors de la boucle d'événements (ROADMAP_PRODUCTION.md §P1.1) : c'est un
+    # geste de plein service, répété, et qui écrit en base.
+    return await executer_puis_diffuser(_basculer)
 
 
 @router.patch("/{item_id}", response_model=schemas.MenuItemOut)

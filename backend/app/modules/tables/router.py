@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -7,6 +8,7 @@ from app.core.markets import current_market
 from app.core.subscription import effective_tier, require_tier, tier_includes
 from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
+from app.modules.notifications.manager import executer_puis_diffuser
 from app.modules.tables import schemas, service
 from app.modules.tables.models import PlanLandmark, PlanLandmarkPart, Table
 from app.modules.tables.poster import generate_table_poster_pdf
@@ -156,7 +158,7 @@ async def release_table(
     if not table or table.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=404, detail={"code": "TABLE_NOT_FOUND", "message": "table not found"})
 
-    table = await service.release_table(db, table, staff, note=payload.note)
+    table = await executer_puis_diffuser(service.release_table, db, table, staff, note=payload.note)
     return _hide_plan_fields(schemas.TableOut.model_validate(table), _allow_plan(db, table.restaurant_id))
 
 
@@ -172,7 +174,7 @@ async def list_forced_releases(
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return await service.list_forced_releases(db, restaurant_id)
+    return await run_in_threadpool(service.list_forced_releases, db, restaurant_id)
 
 
 @router.post("/{table_id}/assign-staff", response_model=schemas.TableOut)

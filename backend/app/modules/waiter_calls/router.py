@@ -5,6 +5,9 @@ from app.core.database import get_db
 from app.core.rate_limit import rate_limit
 from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
+from starlette.concurrency import run_in_threadpool
+
+from app.modules.notifications.manager import executer_puis_diffuser
 from app.modules.waiter_calls import schemas, service
 
 router = APIRouter(prefix="/api/v1/waiter-calls", tags=["waiter-calls"])
@@ -24,7 +27,7 @@ async def create_call(payload: schemas.WaiterCallCreate, db: Session = Depends(g
     table, donc un client attablé peut insister. On appelle le serveur quelques
     fois par repas, pas vingt.
     """
-    return await service.create_call(db, payload)
+    return await executer_puis_diffuser(service.create_call, db, payload)
 
 
 @router.get("/by-restaurant/{restaurant_id}/pending", response_model=list[schemas.WaiterCallOut])
@@ -33,9 +36,9 @@ async def list_pending_calls(
 ):
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return await service.list_pending_calls(db, restaurant_id)
+    return await run_in_threadpool(service.list_pending_calls, db, restaurant_id)
 
 
 @router.post("/{call_id}/resolve", response_model=schemas.WaiterCallOut)
 async def resolve_call(call_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
-    return await service.resolve_call(db, call_id, staff)
+    return await executer_puis_diffuser(service.resolve_call, db, call_id, staff)

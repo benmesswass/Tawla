@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -9,7 +10,7 @@ from app.modules.notifications.dependencies import (
     authenticate_staff_socket,
     authenticate_table_socket,
 )
-from app.modules.notifications.manager import manager, table_channel
+from app.modules.notifications.manager import diffuser, manager, table_channel
 from app.modules.orders import schemas as orders_schemas
 from app.modules.orders import service as orders_service
 from app.modules.orders import table_cart
@@ -157,6 +158,24 @@ async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: 
     await _pump_table(websocket, restaurant_id, table_id, db, channel)
 
 
+def _valider_le_panier_de_table(db: Session, table_id: int, client_order_id: str | None):
+    """
+    Tout le travail base d'une validation de panier, en un seul appel
+    synchrone — pour qu'il tienne dans un `run_in_threadpool` (§P1.1).
+
+    La table est relue ici plutôt que gardée d'un message à l'autre : entre
+    deux messages, cette session ne tient plus aucune connexion (§P1.2), donc
+    l'instance serait détachée.
+    """
+    table = db.get(Table, table_id)
+    if table is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "TABLE_NOT_FOUND", "message": "table no longer exists"},
+        )
+    return orders_service.create_order_from_table_cart(db, table, client_order_id=client_order_id)
+
+
 def _cart_error_payload(exc: HTTPException) -> dict:
     detail = exc.detail if isinstance(exc.detail, dict) else {"code": "ERROR", "message": str(exc.detail)}
     return {"event": "cart.error", **detail}
@@ -182,21 +201,28 @@ async def _pump_table(websocket: WebSocket, restaurant_id: int, table_id: int, d
                     item = orders_schemas.OrderItemCreate.model_validate(
                         {k: v for k, v in raw.items() if k != "action"}
                     )
-                    table_cart.validate_cart_line(db, restaurant_id, item)
+                    # Hors de la boucle (§P1.1) : `validate_cart_line` relit la
+                    # carte en base, et ce canal est ouvert pour toute une
+                    # salle — bloquer ici bloquerait tous les restaurants.
+                    await run_in_threadpool(table_cart.validate_cart_line, db, restaurant_id, item)
                     table_cart.table_cart_store.set_line(table_id, item)
                     await manager.broadcast(restaurant_id, channel, table_cart.snapshot_message(table_id))
                 elif action == "cart.validate":
-                    # Relue à chaque validation plutôt que gardée d'un message
-                    # à l'autre : entre deux messages, cette session ne tient
-                    # plus aucune connexion.
-                    table = db.get(Table, table_id)
-                    if table is None:
-                        raise HTTPException(
-                            status_code=404,
-                            detail={"code": "TABLE_NOT_FOUND", "message": "table no longer exists"},
-                        )
                     client_order_id = raw.get("client_order_id")
-                    await orders_service.create_order_from_table_cart(db, table, client_order_id=client_order_id)
+                    try:
+                        _commande, diffusions = await run_in_threadpool(
+                            _valider_le_panier_de_table, db, table_id, client_order_id
+                        )
+                    except HTTPException as exc:
+                        # Un échec qui a modifié l'état partagé attache ce
+                        # qu'il reste à dire à toute la table — typiquement le
+                        # panier restauré après un article devenu indisponible
+                        # (voir `create_order_from_table_cart`). La plupart des
+                        # échecs n'attachent rien, et n'envoient donc que le
+                        # `cart.error` du gestionnaire ci-dessous.
+                        await diffuser(getattr(exc, "diffusions", []))
+                        raise
+                    await diffuser(diffusions)
                 elif action == "identity.set":
                     device_key = str(raw.get("device_key", ""))[:80]
                     name = str(raw.get("name", ""))

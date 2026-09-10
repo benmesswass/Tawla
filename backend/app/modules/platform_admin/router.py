@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -114,7 +115,7 @@ async def overview(
     db: Session = Depends(get_db),
     _admin: PlatformAdmin = Depends(get_current_platform_admin),
 ):
-    return await service.get_overview(db)
+    return await run_in_threadpool(service.get_overview, db)
 
 
 @router.get("/product-analytics", response_model=schemas.ProductAnalytics)

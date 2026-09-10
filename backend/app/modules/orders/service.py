@@ -16,7 +16,7 @@ from app.core.push import send_push_notification
 from app.core.subscription import effective_tier, tier_includes, upgrade_required_error
 from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
-from app.modules.notifications.manager import manager, table_channel
+from app.modules.notifications.manager import Diffusion, table_channel
 from app.modules.orders import schemas, split
 from app.modules.orders.menu_item_resolution import resolve_selected_options
 from app.modules.orders.models import (
@@ -93,7 +93,7 @@ def _order_channel(order_id: int) -> str:
     return f"order-{order_id}"
 
 
-async def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
+def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
     """
     Rechargement d'état au montage des écrans serveur/cuisine — sans ça, un
     écran ouvert/rafraîchi APRÈS qu'une commande soit passée ne la voit
@@ -120,7 +120,7 @@ async def list_active_orders(db: Session, restaurant_id: int) -> list[Order]:
     )
 
 
-async def list_kitchen_done_orders_today(db: Session, restaurant_id: int) -> list[Order]:
+def list_kitchen_done_orders_today(db: Session, restaurant_id: int) -> list[Order]:
     """
     Détail des commandes terminées par la cuisine aujourd'hui (onglet
     "Terminées" de l'écran cuisine) — jusqu'ici cet onglet n'affichait qu'un
@@ -167,12 +167,12 @@ def _pending_share_payments(db: Session, restaurant_id: int, method: PaymentMeth
     )
 
 
-async def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[OrderPayment]:
+def list_pending_cash_payments(db: Session, restaurant_id: int) -> list[OrderPayment]:
     """Parts en attente de règlement en espèces — voir `_pending_share_payments`."""
     return _pending_share_payments(db, restaurant_id, PaymentMethod.CASH)
 
 
-async def list_pending_card_terminal_payments(db: Session, restaurant_id: int) -> list[OrderPayment]:
+def list_pending_card_terminal_payments(db: Session, restaurant_id: int) -> list[OrderPayment]:
     """Parts en attente de règlement au terminal — voir `_pending_share_payments`."""
     return _pending_share_payments(db, restaurant_id, PaymentMethod.CARD_TERMINAL)
 
@@ -277,7 +277,7 @@ def _build_order_items(
     return built
 
 
-async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
+def create_order(db: Session, payload: schemas.OrderCreate) -> tuple[Order, list[Diffusion]]:
     # La table est retrouvée par son token de QR code, et le restaurant en est
     # déduit : aucun identifiant numérique n'est accepté du client, donc rien
     # n'est devinable (Phase 12.2).
@@ -299,7 +299,9 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
                 logger, "order.create_replayed",
                 restaurant_id=replayed.restaurant_id, order_id=replayed.id, table_id=replayed.table_id,
             )
-            return replayed
+            # Rien à diffuser : la commande existe déjà et l'écran serveur la
+            # porte depuis sa création.
+            return replayed, []
 
     if not payload.items:
         raise HTTPException(
@@ -318,7 +320,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
         if restaurant and tier_includes(effective_tier(restaurant), SubscriptionTier.PRO)
         else None
     )
-    return await _finalize_order(
+    return _finalize_order(
         db, table, _build_order_items(db, restaurant_id, payload.items),
         client_order_id=payload.client_order_id,
         scheduled_for=payload.scheduled_for,
@@ -327,7 +329,7 @@ async def create_order(db: Session, payload: schemas.OrderCreate) -> Order:
     )
 
 
-async def _finalize_order(
+def _finalize_order(
     db: Session,
     table: Table,
     order_items: list[OrderItem],
@@ -336,7 +338,7 @@ async def _finalize_order(
     scheduled_for: datetime | None = None,
     loyalty_phone: str | None = None,
     loyalty_birth_date: date | None = None,
-) -> Order:
+) -> tuple[Order, list[Diffusion]]:
     """
     Queue commune à toute création de commande, quelle que soit l'origine des
     `OrderItem` déjà validés/figés : le panier envoyé par un seul appareil
@@ -344,6 +346,7 @@ async def _finalize_order(
     (`create_order_from_table_cart`). Isolée ici pour que les deux chemins ne
     puissent jamais diverger sur la fidélité, les logs ou la diffusion staff.
     """
+    diffusions: list[Diffusion] = []
     order = Order(
         restaurant_id=table.restaurant_id,
         table_id=table.id,
@@ -369,9 +372,9 @@ async def _finalize_order(
     )
 
     # Le serveur assigné à la table doit voir la commande immédiatement.
-    await manager.broadcast(
-        order.restaurant_id, channel="staff",
-        message={
+    diffusions.append(Diffusion(
+        order.restaurant_id, "staff",
+        {
             "event": "order.pending_confirmation",
             "order_id": order.id,
             "table_id": order.table_id,
@@ -379,7 +382,7 @@ async def _finalize_order(
             "created_at": order.created_at.isoformat(),
             "scheduled_for": order.scheduled_for.isoformat() if order.scheduled_for else None,
         },
-    )
+    ))
     # Alerte même écran éteint (demande de Wassim, 2026-08-26) — jamais pour
     # une pré-commande programmée (mode Ramadan) : "à anticiper", pas à
     # prendre en charge maintenant, ce serait une fausse alerte.
@@ -389,12 +392,12 @@ async def _finalize_order(
             title="Nouvelle commande",
             body=f"Table {order.table_label} vient de commander.",
         )
-    return order
+    return order, diffusions
 
 
-async def create_order_from_table_cart(
+def create_order_from_table_cart(
     db: Session, table: Table, client_order_id: str | None = None
-) -> Order:
+) -> tuple[Order, list[Diffusion]]:
     """
     Valide le panier partagé d'une table (voir `table_cart.py`) : n'importe
     quel appareil connecté au canal de la table peut déclencher cet appel,
@@ -406,6 +409,7 @@ async def create_order_from_table_cart(
     appareils qui valident au même instant ne peuvent jamais transformer
     deux fois le même panier en deux commandes distinctes.
     """
+    diffusions: list[Diffusion] = []
     # Rejeu du même appareil : même garde-fou que `create_order` (ligne plus
     # bas) — une coupure entre le `pop_all` ci-dessous et le "cart.validated"
     # qui devait revenir au client laisse ce dernier réessayer en pensant
@@ -427,11 +431,11 @@ async def create_order_from_table_cart(
             # chemin normal (plus bas) prévient le canal via "cart.validated",
             # jamais la valeur de retour de cette fonction (`_pump_table` l'ignore) —
             # sans le rejouer ici, il resterait bloqué sur "Valider..." indéfiniment.
-            await manager.broadcast(
+            diffusions.append(Diffusion(
                 replayed.restaurant_id, channel=table_channel(table.id),
                 message={"event": "cart.validated", "order_id": replayed.id, "public_token": replayed.public_token},
-            )
-            return replayed
+            ))
+            return replayed, diffusions
 
     # Import différé : `table_cart` importe `resolve_selected_options` depuis
     # `menu_item_resolution`, jamais depuis ce module, pour éviter le cycle
@@ -449,7 +453,7 @@ async def create_order_from_table_cart(
 
     try:
         order_items = _build_order_items(db, table.restaurant_id, items)
-    except HTTPException:
+    except HTTPException as exc:
         # Un article devenu indisponible entre l'ajout et la validation ne
         # doit jamais faire disparaître le panier des AUTRES convives : on le
         # restaure tel quel et on informe toute la table, plutôt que de
@@ -457,21 +461,31 @@ async def create_order_from_table_cart(
         # mutation — qu'il est resté ce qu'ils avaient sous les yeux.
         for item in items:
             table_cart.table_cart_store.set_line(table.id, item)
-        await manager.broadcast(
+        # Cette fonction lève : elle ne peut plus rien RENDRE, et une
+        # `Diffusion` construite ici partirait silencieusement avec
+        # l'exception — les autres appareils attendraient alors pour toujours
+        # un instantané qui n'arrive jamais (régression introduite puis
+        # rattrapée par `test_table_cart.py` en écrivant §P1.1). On l'attache
+        # donc à l'exception : la règle « le métier décrit, l'appelant
+        # diffuse » tient aussi sur le chemin d'erreur. Attaché ICI et nulle
+        # part ailleurs, parce que c'est le seul chemin qui modifie l'état
+        # partagé avant d'échouer — un panier vide, lui, n'a rien à rediffuser.
+        exc.diffusions = [Diffusion(
             table.restaurant_id, channel=table_channel(table.id), message=table_cart.snapshot_message(table.id)
-        )
+        )]
         raise
 
-    order = await _finalize_order(db, table, order_items, client_order_id=client_order_id)
+    order, diffusions_creation = _finalize_order(db, table, order_items, client_order_id=client_order_id)
+    diffusions.extend(diffusions_creation)
 
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         table.restaurant_id, channel=table_channel(table.id),
         message={"event": "cart.validated", "order_id": order.id, "public_token": order.public_token},
-    )
-    return order
+    ))
+    return order, diffusions
 
 
-async def update_order_items(db: Session, order: Order, payload: schemas.OrderItemsUpdate) -> Order:
+def update_order_items(db: Session, order: Order, payload: schemas.OrderItemsUpdate) -> tuple[Order, list[Diffusion]]:
     """
     Édition directe par le client — fenêtre 1 uniquement, tant que la
     commande est encore `PENDING_CONFIRMATION`. Passé ce point, une
@@ -480,6 +494,7 @@ async def update_order_items(db: Session, order: Order, payload: schemas.OrderIt
     serveur a pu confirmer entre l'ouverture de cet écran et cet appel, d'où
     le 409 explicite plutôt qu'un écrasement.
     """
+    diffusions: list[Diffusion] = []
     if order.status != OrderStatus.PENDING_CONFIRMATION:
         raise HTTPException(
             status_code=409,
@@ -512,33 +527,33 @@ async def update_order_items(db: Session, order: Order, payload: schemas.OrderIt
     # Le pool serveur doit voir que la commande a changé avant de confirmer —
     # sans ce broadcast, un serveur qui a ouvert l'écran juste avant l'édition
     # confirmerait sur l'ancien contenu affiché à l'écran.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel="staff",
         message={
             "event": "order.items_updated",
             "order_id": order.id,
             "items_updated_at": order.items_updated_at.isoformat(),
         },
-    )
+    ))
     # Et les AUTRES appareils qui suivent cette même commande (panier de
     # table partagé, `table_cart.py` : plusieurs convives valident ensemble
     # puis suivent tous le même `order_id`) — sans ce second broadcast sur le
     # canal de la commande, un convive qui n'a pas fait la modification ne la
     # voit jamais tant qu'il ne rafraîchit pas sa page à la main.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={
             "event": "order.items_updated",
             "order_id": order.id,
             "items_updated_at": order.items_updated_at.isoformat(),
         },
-    )
-    return order
+    ))
+    return order, diffusions
 
 
-async def create_modification_request(
+def create_modification_request(
     db: Session, order: Order, payload: schemas.ModificationRequestCreate
-) -> OrderModificationRequest:
+) -> tuple[OrderModificationRequest, list[Diffusion]]:
     """
     Fenêtre 2 : la commande est déjà confirmée (peut-être déjà en cuisine),
     le client ne modifie plus directement — il demande, et le serveur décide
@@ -547,6 +562,7 @@ async def create_modification_request(
     `update_order_items` (le panier souhaité dans son ensemble) : le diff est
     calculé ici, jamais envoyé tel quel par le client.
     """
+    diffusions: list[Diffusion] = []
     if order.status not in MODIFICATION_REQUEST_STATUSES:
         raise HTTPException(
             status_code=409,
@@ -642,7 +658,7 @@ async def create_modification_request(
 
     # La file dédiée du pool serveur doit voir la demande sans recharger la
     # page — même principe que "order.pending_confirmation" à la création.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel="staff",
         message={
             "event": "order.modification_requested",
@@ -660,21 +676,21 @@ async def create_modification_request(
                 for line in lines
             ],
         },
-    )
+    ))
     # Et les AUTRES appareils qui suivent cette même commande (panier de
     # table partagé) : sans ce broadcast, l'écran de suivi d'un convive qui
     # n'a pas fait la demande ne désactive jamais son propre bouton
     # "modifier" (`OrderOut.pending_modification_request`, lu par le
     # frontend) — il peut tenter une seconde demande concurrente et tomber
     # sur MODIFICATION_REQUEST_ALREADY_PENDING sans comprendre pourquoi.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.modification_requested", "order_id": order.id},
-    )
-    return request
+    ))
+    return request, diffusions
 
 
-async def list_pending_modification_requests(db: Session, restaurant_id: int) -> list[OrderModificationRequest]:
+def list_pending_modification_requests(db: Session, restaurant_id: int) -> list[OrderModificationRequest]:
     """Rechargement d'état pour la file serveur au montage — même raison
     d'être que list_active_orders : le WebSocket seul ne rattrape jamais ce
     qui s'est passé avant la connexion."""
@@ -693,13 +709,13 @@ async def list_pending_modification_requests(db: Session, restaurant_id: int) ->
     )
 
 
-async def resolve_modification_request(
+def resolve_modification_request(
     db: Session,
     order: Order,
     request_id: int,
     decisions: list[schemas.ModificationLineDecision],
     staff: Staff,
-) -> OrderModificationRequest:
+) -> tuple[OrderModificationRequest, list[Diffusion]]:
     """
     Le serveur répond ligne par ligne, après vérification avec la cuisine —
     en un seul appel qui doit couvrir exactement les lignes encore en
@@ -708,6 +724,7 @@ async def resolve_modification_request(
     touchent à rien, le client peut ensuite commander séparément ce qui a
     été refusé (flux normal de création, aucune route dédiée).
     """
+    diffusions: list[Diffusion] = []
     request = db.get(OrderModificationRequest, request_id)
     if not request or request.order_id != order.id or request.restaurant_id != staff.restaurant_id:
         raise HTTPException(
@@ -777,7 +794,7 @@ async def resolve_modification_request(
     # Le client attend la réponse sur l'écran de suivi — détail ligne par
     # ligne pour qu'un refus partiel ne se lise jamais comme un refus global
     # ni comme une acceptation totale.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={
             "event": "order.modification_resolved",
@@ -798,23 +815,24 @@ async def resolve_modification_request(
                 for line in request.lines
             ],
         },
-    )
+    ))
     # Retire la demande de la file serveur partagée, chez les collègues qui
     # ne sont pas celui qui vient de répondre.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel="staff",
         message={"event": "order.modification_resolved", "order_id": order.id, "request_id": request.id},
-    )
-    return request
+    ))
+    return request, diffusions
 
 
-async def claim_order(db: Session, order_id: int, staff: Staff) -> Order:
+def claim_order(db: Session, order_id: int, staff: Staff) -> tuple[Order, list[Diffusion]]:
     """
     Prise en charge d'une commande en attente depuis le pool partagé —
     c'est ce qui fait passer une commande de "visible par tous les
     serveurs" à "affectée à Sami", et alimente les stats par serveur
     (dashboard manager, Phase 3).
     """
+    diffusions: list[Diffusion] = []
     order = db.get(Order, order_id)
     if not order or order.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
@@ -840,7 +858,7 @@ async def claim_order(db: Session, order_id: int, staff: Staff) -> Order:
 
     log_event(logger, "order.claimed", restaurant_id=order.restaurant_id, order_id=order.id, staff_id=staff.id)
 
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel="staff",
         message={
             "event": "order.claimed",
@@ -848,22 +866,23 @@ async def claim_order(db: Session, order_id: int, staff: Staff) -> Order:
             "taken_by_staff_id": staff.id,
             "taken_by_staff_name": staff.name,
         },
-    )
-    await _broadcast_staff_assigned(order, staff)
-    return order
+    ))
+    diffusions.append(_diffusion_staff_assigned(order, staff))
+    return order, diffusions
 
 
-async def _broadcast_staff_assigned(order: Order, staff: Staff) -> None:
+def _diffusion_staff_assigned(order: Order, staff: Staff) -> Diffusion:
     """Le client suit sa commande sur son téléphone — dès qu'un serveur est
     affecté (claim explicite ou auto-claim à la confirmation), on le lui dit
     par son prénom plutôt que de le laisser deviner."""
-    await manager.broadcast(
+    return Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.staff_assigned", "order_id": order.id, "staff_name": staff.name},
     )
 
 
-async def transition_status(db: Session, order_id: int, new_status: OrderStatus, staff: Staff) -> Order:
+def transition_status(db: Session, order_id: int, new_status: OrderStatus, staff: Staff) -> tuple[Order, list[Diffusion]]:
+    diffusions: list[Diffusion] = []
     order = db.get(Order, order_id)
     if not order or order.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
@@ -931,11 +950,11 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
     )
 
     if newly_assigned:
-        await _broadcast_staff_assigned(order, staff)
+        diffusions.append(_diffusion_staff_assigned(order, staff))
 
     # La cuisine ne doit voir la commande QUE une fois validée par le serveur.
     if new_status == OrderStatus.SENT_TO_KITCHEN:
-        await manager.broadcast(
+        diffusions.append(Diffusion(
             order.restaurant_id, channel="kitchen",
             message={
                 "event": "order.sent_to_kitchen",
@@ -961,13 +980,13 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                     for i in order.items
                 ],
             },
-        )
+        ))
 
     # Les serveurs aussi doivent savoir que la table est passée en cuisine :
     # sans ça, leur plan de salle la montre libre alors qu'elle est occupée, et
     # ils ne le découvrent qu'au prochain rechargement de page.
     if new_status == OrderStatus.SENT_TO_KITCHEN:
-        await manager.broadcast(
+        diffusions.append(Diffusion(
             order.restaurant_id, channel="staff",
             message={
                 "event": "order.sent_to_kitchen",
@@ -975,20 +994,20 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
                 "table_id": order.table_id,
                 "table_label": order.table_label,
             },
-        )
+        ))
 
     # Le plat est prêt : le serveur doit venir le chercher et le servir.
     # Sans ce broadcast, "ready" n'a jamais eu de porte de sortie dans l'UI
     # (audit QA — statut "served" mort).
     if new_status == OrderStatus.READY:
-        await manager.broadcast(
+        diffusions.append(Diffusion(
             order.restaurant_id, channel="staff",
             message={
                 "event": "order.ready", "order_id": order.id,
                 "table_id": order.table_id, "table_label": order.table_label,
                 "ready_at": order.ready_at.isoformat() if order.ready_at else None,
             },
-        )
+        ))
         # Le WebSocket ci-dessus ne réveille que l'onglet resté ouvert au
         # premier plan — la notification push touche aussi le client qui a
         # quitté la page (best-effort, no-op si pas d'abonnement/clés VAPID).
@@ -1007,12 +1026,12 @@ async def transition_status(db: Session, order_id: int, new_status: OrderStatus,
 
     # Le client qui a scanné le QR suit sa commande en direct (audit PO —
     # aucune visibilité après "commande envoyée" jusqu'ici).
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.status_changed", "order_id": order.id, "status": new_status.value},
-    )
+    ))
 
-    return order
+    return order, diffusions
 
 
 def _get_payable_order(db: Session, order_id: int) -> Order:
@@ -1192,10 +1211,10 @@ def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> N
         log_event(logger, "order.payment_confirmation_email_failed", order_id=order.id, error=str(err))
 
 
-async def pay_by_card_simulated(
+def pay_by_card_simulated(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float,
     customer_email: str | None = None,
-) -> Order:
+) -> tuple[Order, list[Diffusion]]:
     """
     Paiement carte — mode simulé (Konnect/Stripe choisis comme prestataires,
     mais pas de vraie intégration tant qu'un pilote resto réel n'a pas de clés
@@ -1207,6 +1226,7 @@ async def pay_by_card_simulated(
     Réservé à Pro et Business (offre à trois paliers, 2026-08-18) : en
     Essentiel, seul l'encaissement en espèces est proposé.
     """
+    diffusions: list[Diffusion] = []
     order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
     restaurant = db.get(Restaurant, order.restaurant_id)
@@ -1236,17 +1256,17 @@ async def pay_by_card_simulated(
     # partagé) doivent voir la part réglée sans rafraîchir — même événement
     # que le paiement carte réel (`settle_card_payment`) et les paiements
     # cash/terminal.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-    )
-    return order
+    ))
+    return order, diffusions
 
 
-async def start_card_payment(
+def start_card_payment(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float,
     customer_email: str | None = None,
-) -> tuple[Order, str | None]:
+) -> tuple[Order, str | None, list[Diffusion]]:
     """
     Paiement carte du client — modèle direct (connexion Konnect/Stripe au
     paiement carte, 2026-08-19) : réglé chez LE RESTAURANT, jamais chez Tawla.
@@ -1256,10 +1276,11 @@ async def start_card_payment(
     n'a pas connecté son propre wallet/compte — dégradation gracieuse comme
     le reste de l'intégration.
 
-    Renvoie `(order, pay_url)` : `pay_url` non-null seulement quand un
-    règlement réel vient d'être initié — cette part reste alors PENDING, le
-    client doit être redirigé pour payer.
+    Renvoie `(order, pay_url, diffusions)` : `pay_url` non-null seulement
+    quand un règlement réel vient d'être initié — cette part reste alors
+    PENDING, le client doit être redirigé pour payer.
     """
+    diffusions: list[Diffusion] = []
     order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
     restaurant = db.get(Restaurant, order.restaurant_id)
@@ -1269,8 +1290,10 @@ async def start_card_payment(
     credentials = restaurant.payment_credentials()
     provider = get_payment_provider(credentials)
     if not provider.is_available():
-        order = await pay_by_card_simulated(db, order_id, payer_key, payer_name, tip_amount, customer_email)
-        return order, None
+        order, diffusions_simule = pay_by_card_simulated(
+            db, order_id, payer_key, payer_name, tip_amount, customer_email
+        )
+        return order, None, diffusions_simule
 
     # Rejeu (retour navigateur avant règlement, double clic) : redirige vers
     # LE MÊME paiement en cours plutôt que d'en initier un second pour la
@@ -1280,9 +1303,9 @@ async def start_card_payment(
         try:
             state = provider_again.get_payment(existing.payment_ref)
             if state.status == "completed":
-                await settle_card_payment(db, order_id, existing.id)
+                _resultat, diffusions_reglement = settle_card_payment(db, order_id, existing.id)
                 db.refresh(order)
-                return order, None
+                return order, None, diffusions_reglement
         except PaymentProviderError:
             pass  # retombe sur une nouvelle initiation ci-dessous
 
@@ -1333,37 +1356,41 @@ async def start_card_payment(
     )
     # Les AUTRES appareils qui suivent cette commande doivent voir qu'un
     # paiement est en cours pour cette personne.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_requested", "order_id": order.id},
-    )
-    return order, result.pay_url
+    ))
+    return order, result.pay_url, diffusions
 
 
 SettleCardResult = Literal["paid", "pending", "not_found", "error"]
 
 
-async def settle_card_payment(db: Session, order_id: int, payment_id: int) -> SettleCardResult:
+def settle_card_payment(db: Session, order_id: int, payment_id: int) -> tuple[SettleCardResult, list[Diffusion]]:
     """
     Règle une part payée par carte (Konnect/Stripe) en attente — appelée par
     le webhook ET par le filet de sécurité `/pay/card/check`, même principe
     d'idempotence que `settle_subscription_payment` : gardée par
     `payment_ref`, jamais réglée deux fois pour la même référence.
+
+    Renvoie `(resultat, diffusions)` — c'est l'appelant qui diffuse
+    (ROADMAP_PRODUCTION.md §P1.1).
     """
+    diffusions: list[Diffusion] = []
     order = db.get(Order, order_id)
     if not order:
-        return "not_found"
+        return "not_found", diffusions
     payment = db.get(OrderPayment, payment_id)
     if not payment or payment.order_id != order_id:
-        return "not_found"
+        return "not_found", diffusions
 
     # Rien à régler : déjà réglé par un appel concurrent (webhook + retour
     # client arrivés en même temps), ou pas une part carte en attente.
     if payment.method != PaymentMethod.CARD or payment.status != OrderPaymentStatus.PENDING:
-        return "pending"
+        return "pending", diffusions
     payment_ref = payment.payment_ref
     if not payment_ref:
-        return "pending"
+        return "pending", diffusions
 
     restaurant = db.get(Restaurant, order.restaurant_id)
     credentials = restaurant.payment_credentials() if restaurant else None
@@ -1379,7 +1406,7 @@ async def settle_card_payment(db: Session, order_id: int, payment_id: int) -> Se
             logger, "order.card_payment_settle_missing_credentials",
             restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment_id,
         )
-        return "error"
+        return "error", diffusions
     provider = get_payment_provider(credentials)
 
     try:
@@ -1389,10 +1416,10 @@ async def settle_card_payment(db: Session, order_id: int, payment_id: int) -> Se
             logger, "order.card_payment_settle_fetch_failed",
             restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment_id, error=str(err),
         )
-        return "error"
+        return "error", diffusions
 
     if state.status != "completed":
-        return "pending"
+        return "pending", diffusions
 
     # Contrôle d'intégrité : montant réellement reçu jamais inférieur à la
     # part + pourboire figés à l'initiation — jamais un montant transmis par
@@ -1404,7 +1431,7 @@ async def settle_card_payment(db: Session, order_id: int, payment_id: int) -> Se
             restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment_id,
             expected_smallest_unit=expected_smallest_unit, reached_amount=state.reached_amount,
         )
-        return "error"
+        return "error", diffusions
 
     # Mise à jour gardée par `payment_ref` (pas par id seul) : c'est la garde
     # d'idempotence — un règlement concurrent pour la MÊME référence ne peut
@@ -1426,22 +1453,23 @@ async def settle_card_payment(db: Session, order_id: int, payment_id: int) -> Se
         db.refresh(order)
         # Le client peut avoir sa page ouverte en attendant le webhook —
         # même événement que la confirmation d'un paiement en espèces.
-        await manager.broadcast(
+        diffusions.append(Diffusion(
             order.restaurant_id, channel=_order_channel(order.id),
             message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-        )
+        ))
 
-    return "paid"
+    return "paid", diffusions
 
 
-async def request_cash_payment(
+def request_cash_payment(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float = 0,
     customer_email: str | None = None,
-) -> Order:
+) -> tuple[Order, list[Diffusion]]:
     """Le client demande à payer sa part en espèces — prévient le serveur
     assigné (identité de table, ROADMAP.md §Override, extension paiement par
     personne : plusieurs demandes peuvent être en attente pour la même
     commande, une par convive)."""
+    diffusions: list[Diffusion] = []
     order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
     payment = existing or OrderPayment(order_id=order.id, payer_key=payer_key, payer_name=payer_name, method=PaymentMethod.CASH)
@@ -1470,7 +1498,7 @@ async def request_cash_payment(
     # demande qu'au serveur dédié à cette table (ou au manager, qui voit
     # tout). Toute commande qui en est là est forcément déjà confirmée, donc
     # taken_by_staff_id est garanti non-nul (auto-claim à la confirmation).
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel="staff",
         message={
             "event": "order.cash_requested",
@@ -1485,18 +1513,19 @@ async def request_cash_payment(
             "taken_by_staff_id": order.taken_by_staff_id,
             "loyalty_phone": order.loyalty_phone,
         },
-    )
+    ))
     # Les AUTRES appareils qui suivent cette commande doivent voir la demande
     # de paiement sans rafraîchir.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_requested", "order_id": order.id},
-    )
-    return order
+    ))
+    return order, diffusions
 
 
-async def confirm_cash_payment(db: Session, payment_id: int, staff: Staff) -> Order:
+def confirm_cash_payment(db: Session, payment_id: int, staff: Staff) -> tuple[Order, list[Diffusion]]:
     """Le serveur confirme avoir encaissé la part en espèces de CE convive."""
+    diffusions: list[Diffusion] = []
     payment = db.get(OrderPayment, payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
@@ -1522,23 +1551,24 @@ async def confirm_cash_payment(db: Session, payment_id: int, staff: Staff) -> Or
 
     # Le client qui a demandé à payer en espèces peut avoir sa page ouverte
     # en attendant que le serveur passe encaisser.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-    )
-    return order
+    ))
+    return order, diffusions
 
 
-async def request_card_terminal_payment(
+def request_card_terminal_payment(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float = 0,
     customer_email: str | None = None,
-) -> Order:
+) -> tuple[Order, list[Diffusion]]:
     """
     Le client demande à payer sa part par carte physique — un serveur
     apporte le terminal. Même mécanique que le paiement en espèces (carte
     physique / en ligne / espèces, 2026-08-19), moyen distinct pour ne pas
     mélanger les deux dans les stats de moyen de paiement.
     """
+    diffusions: list[Diffusion] = []
     order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
 
     payment = existing or OrderPayment(
@@ -1561,7 +1591,7 @@ async def request_card_terminal_payment(
         restaurant_id=order.restaurant_id, order_id=order.id, payer_name=payer_name, amount=a_encaisser,
     )
 
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel="staff",
         message={
             "event": "order.card_terminal_requested",
@@ -1574,18 +1604,19 @@ async def request_card_terminal_payment(
             "taken_by_staff_id": order.taken_by_staff_id,
             "loyalty_phone": order.loyalty_phone,
         },
-    )
+    ))
     # Même raison que `request_cash_payment` : les autres appareils de la
     # table doivent voir la demande sans rafraîchir.
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_requested", "order_id": order.id},
-    )
-    return order
+    ))
+    return order, diffusions
 
 
-async def confirm_card_terminal_payment(db: Session, payment_id: int, staff: Staff) -> Order:
+def confirm_card_terminal_payment(db: Session, payment_id: int, staff: Staff) -> tuple[Order, list[Diffusion]]:
     """Le serveur confirme avoir encaissé la carte physique de CE convive."""
+    diffusions: list[Diffusion] = []
     payment = db.get(OrderPayment, payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
@@ -1612,8 +1643,8 @@ async def confirm_card_terminal_payment(db: Session, payment_id: int, staff: Sta
     fully_paid = _after_share_paid(db, order, db.get(Restaurant, order.restaurant_id))
     db.refresh(order)
 
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         order.restaurant_id, channel=_order_channel(order.id),
         message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-    )
-    return order
+    ))
+    return order, diffusions

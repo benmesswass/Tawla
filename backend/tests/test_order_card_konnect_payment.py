@@ -212,9 +212,8 @@ def test_settle_applies_paid_and_clears_the_pending_state(client, db_session, mo
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
     )
 
-    import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
+    result = orders_service.settle_card_payment(db_session, order["id"], payment_id)[0]
 
     assert result == "paid"
     db_order = db_session.get(Order, order["id"])
@@ -230,9 +229,8 @@ def test_settle_is_a_noop_when_payment_still_pending(client, db_session, monkeyp
         lambda ref, api_key=None: KonnectPayment(id=ref, status="pending", amount=20_000, reached_amount=0),
     )
 
-    import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
+    result = orders_service.settle_card_payment(db_session, order["id"], payment_id)[0]
 
     assert result == "pending"
     db_order = db_session.get(Order, order["id"])
@@ -247,9 +245,8 @@ def test_settle_rejects_an_amount_lower_than_the_order_total(client, db_session,
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=1_000),
     )
 
-    import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
+    result = orders_service.settle_card_payment(db_session, order["id"], payment_id)[0]
 
     assert result == "error"
     db_order = db_session.get(Order, order["id"])
@@ -264,10 +261,9 @@ def test_settle_is_idempotent_against_a_concurrent_replay(client, db_session, mo
         lambda ref, api_key=None: KonnectPayment(id=ref, status="completed", amount=20_000, reached_amount=20_000),
     )
 
-    import asyncio
 
-    first = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
-    second = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))  # webhook rejoué / course avec /check
+    first = orders_service.settle_card_payment(db_session, order["id"], payment_id)[0]
+    second = orders_service.settle_card_payment(db_session, order["id"], payment_id)[0]  # webhook rejoué / course avec /check
 
     assert first == "paid"
     assert second == "pending"  # plus rien en attente (la part n'est plus PENDING)
@@ -282,9 +278,8 @@ def test_settle_returns_error_on_konnect_fetch_failure(client, db_session, monke
 
     monkeypatch.setattr(konnect, "get_konnect_payment", _boom)
 
-    import asyncio
 
-    result = asyncio.run(orders_service.settle_card_payment(db_session, order["id"], payment_id))
+    result = orders_service.settle_card_payment(db_session, order["id"], payment_id)[0]
 
     assert result == "error"
 

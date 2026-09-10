@@ -92,15 +92,23 @@ qu'une panne soit vue et récupérable.
 
 ### P1.1 — Supprimer l'interblocage (F1)
 
-- [ ] Convertir en `def` les handlers qui exécutent du SQLAlchemy synchrone —
-      51 endpoints sont `async def` aujourd'hui, dont `POST /orders`. FastAPI
-      les exécutera alors dans son threadpool, où l'attente d'une connexion ne
-      gèle plus la boucle d'événements. Les fonctions de service qui `await`
-      une diffusion WebSocket doivent être découpées : partie synchrone (base)
-      d'un côté, diffusion de l'autre.
-      *Fichiers : `app/modules/*/router.py`, `app/modules/orders/service.py`*
-      *Validation : 40 requêtes simultanées sur `POST /orders` → 40/40, et
-      `/health` répond en < 100 ms juste après.*
+- [x] Sortir le travail base de la boucle d'événements. Approche retenue par
+      Wassim : une fonction de service devient **synchrone** et se contente de
+      décrire ce qu'il faudra diffuser (`Diffusion`) ; le routeur exécute ce
+      travail bloquant dans un thread (`run_in_threadpool`) puis envoie les
+      messages. La règle est vérifiable d'un grep — **aucune couche métier
+      n'appelle `manager.broadcast`**. Point d'entrée unique :
+      `manager.executer_puis_diffuser()`.
+      **Mesuré, harnais et pool identiques à ceux de l'audit
+      (5+10, timeout 30 s) : `0/40, serveur mort` → `40/40 en 0,7 s`,
+      `/health` à 10 ms. Avec les défauts actuels : `200/200 en 3,8 s`.**
+      (PR #201)
+      *Reste, assumé et sans risque de concurrence : les trois routes de dépôt
+      de photo (`tenants` ×2, `menu` ×1) gardent leur travail base sur la
+      boucle. Ce sont des gestes de manager, isolés, jamais en rafale — les
+      convertir imposait de réordonner leurs contrôles 403/415/413, du risque
+      pour aucun gain mesurable. À faire avec §P2.2, qui les réécrit de toute
+      façon en sortant les photos de la base.*
 
 L'alternative — passer à `AsyncSession` + asyncpg — est écartée pour ce palier :
 elle touche tous les modules, exige de réécrire chaque requête, et le gain sur
@@ -229,15 +237,18 @@ fois.
 
 ### P1.9 — Le test qui empêche la rechute
 
-- [ ] Test de charge de non-régression en CI (niveau **N0**) : 40 requêtes
-      simultanées sur `POST /orders`, contre un vrai PostgreSQL, avec
-      vérification que `/health` répond après la rafale.
-      *Échoue si l'interblocage revient. Sans lui, rien n'empêche un futur
-      `async def` de le réintroduire.*
-      *Le service PostgreSQL nécessaire est déjà en CI depuis la PR #200, avec
-      un premier test de concurrence (`tests/test_pool_connexions.py`) : il
-      reste à écrire la rafale sur `POST /orders`, qui n'a de sens qu'avec
-      §P1.1.*
+- [x] Test de charge de non-régression en CI (niveau **N0**) : 40 requêtes
+      simultanées sur `POST /orders` contre un vrai `uvicorn` et un vrai
+      PostgreSQL, plus un témoin sur un endpoint `def` — si le témoin se met à
+      échouer, c'est qu'on a cassé le monde qui marchait.
+      **Deux faux négatifs rencontrés en l'écrivant, tous deux documentés dans
+      la docstring du test** : `TestClient` sérialise les requêtes derrière son
+      portail, et 40 threads clients sont étalés par le GIL — les deux
+      donnaient un test vert des DEUX côtés de la correction, donc sans
+      valeur. Il faut `asyncio.gather` sur un client async.
+      Vérifié dans les deux sens : échoue sur le code d'avant (`0/40`,
+      `ReadTimeout`), passe après (PR #201)
+      *Fichier : `tests/test_concurrence_commandes.py`*
 
 ⚠️ `backend/tests/test_service_load.py` porte le nom de test de charge mais joue
 200 commandes **séquentielles** sur SQLite en mémoire, dans un seul thread : il
