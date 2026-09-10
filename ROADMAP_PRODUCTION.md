@@ -152,15 +152,20 @@ meilleur mode de panne.
 
 ### P1.4 — Fermer la course de règlement de paiement (F6)
 
-- [ ] La mise à jour dite « idempotente » filtre sur `id` et `payment_ref`, deux
+- [x] La mise à jour dite « idempotente » filtre sur `id` et `payment_ref`, deux
       valeurs qui ne changent pas au règlement, mais **pas sur le statut**. Deux
       appelants concurrents (webhook + retour navigateur) obtiennent chacun
       `rowcount = 1` et rejouent tous deux `_after_share_paid`. Ajouter
       `OrderPayment.status == OrderPaymentStatus.PENDING` au filtre du
-      `.update()`.
-      *Fichier : `app/modules/orders/service.py:1400`*
-      *Validation : test de course avec deux sessions concurrentes →
-      `order_count = 1`, facture `F2026-00001`, compteur à 1, un seul e-mail.*
+      `.update()` — c'est alors PostgreSQL qui arbitre, le perdant voit
+      `rowcount = 0` et n'entre pas dans `_after_share_paid`.
+      **Vérifié dans les deux sens** : le test de course échoue sur le code
+      d'avant (`compteur de fidélité à 2`), passe après — `order_count = 1`,
+      facture `F2026-00001`, compteur à 1, une seule part PAID. Témoin
+      séquentiel (webhook puis page de retour une seconde plus tard) conservé :
+      un rejeu légitime doit continuer de ne rien casser (PR #202)
+      *Fichiers : `app/modules/orders/service.py`,
+      `tests/test_reglement_concurrent.py`*
 
 Reproduit en conditions réelles : compteur de fidélité à 2 au lieu de 1, e-mail
 et PDF envoyés deux fois, et facture `F2026-00002` — **le numéro `F2026-00001`
