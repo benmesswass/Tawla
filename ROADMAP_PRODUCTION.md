@@ -199,22 +199,33 @@ fois.
 
 ### P1.6 — Rejeu concurrent et refus WebSocket (F11, F12)
 
-- [ ] Le contrôle de rejeu d'une commande est un `SELECT` suivi d'un `INSERT`
+- [x] Le contrôle de rejeu d'une commande est un `SELECT` suivi d'un `INSERT`
       sans verrou : deux rejeux simultanés du même `client_order_id` passent
       tous deux le `SELECT`, et le second heurte la contrainte d'unicité —
       `IntegrityError` non rattrapée, **500** au lieu de la réponse idempotente.
-      La file hors ligne du téléphone réessaie, et retombe sur le même 500.
-      Rattraper, refaire le `SELECT`, renvoyer la commande existante — le motif
-      est déjà écrit dans `core/invoice_number.py`.
-      *Fichiers : `app/modules/orders/service.py:291` et `:415`*
-- [ ] Un refus WebSocket `4401` arrête définitivement les tentatives côté
-      client. Or, pool saturé = authentification en échec = `4401` : un client
-      dont le QR est parfaitement valide voit son panier partagé mourir jusqu'à
-      rechargement manuel, même après rétablissement. Distinguer « refusé »
-      (jeton invalide, ne pas réessayer) de « indisponible » (ressource
-      saturée, réessayer avec backoff) par deux codes de fermeture distincts.
-      *Fichiers : `frontend/lib/useReconnectingSocket.ts:66`,
-      `app/modules/notifications/dependencies.py:14`*
+      Rattrapé sur les deux chemins de création (commande directe et panier de
+      table), même motif que `core/invoice_number.py`. Vérifié dans les deux
+      sens : le test échoue avant (`UniqueViolation` remontée au client), passe
+      après — une seule commande en base, un seul `public_token` rendu aux deux
+      appelants (PR #207)
+      *Piège rencontré : l'identifiant de table doit être lu AVANT le `try`.
+      Une session dont le flush a échoué refuse tout accès ORM, et `table.id`
+      dans le `except` levait un `PendingRollbackError` qui masquait
+      l'`IntegrityError` qu'on voulait traiter.*
+      *Fichier : `app/modules/orders/service.py`*
+- [x] ⚠️ **La prémisse de cette tâche était fausse, mesuré le 2026-09-10.**
+      L'audit supposait que « pool saturé = authentification en échec = 4401 ».
+      Vérifié sur un vrai `uvicorn`, base réellement arrêtée : une base
+      injoignable fait échouer la **poignée de main au niveau HTTP** (le
+      navigateur rapporte 1006, que le hook réessaie déjà avec backoff), et
+      n'émet **jamais** 4401. Ce dernier ne sort que de `_reject`, appelé
+      uniquement sur un vrai défaut d'autorisation. Rien à corriger, donc — et
+      surtout pas un second code de fermeture que rien ne pourrait émettre.
+      La bonne propriété tient toutefois par construction (l'erreur base
+      survient avant le `accept()`) et non par intention : quatre tests la
+      verrouillent désormais, pour qu'un remaniement de l'authentification ne
+      la renverse pas silencieusement (PR #207)
+      *Fichier : `tests/test_refus_websocket.py`*
 
 ### P1.7 — Voir les pannes (F5) — absorbe `ROADMAP.md` Phase 20
 
