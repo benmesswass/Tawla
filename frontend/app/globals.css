@@ -457,6 +457,39 @@
 }
 .piece[data-tone="appelle"] .mienne { background: rgba(255, 255, 255, .85); }
 
+/* Le règlement de la table : un état de l'addition, pas une urgence — il ne
+   demande rien, donc il ne prend jamais la couleur du plateau (voir
+   components/plan/types.ts). Posé dans le coin bas-droit, il coexiste avec le
+   rang (haut-gauche) et « ma table » (haut-droite) : une table qui a payé et
+   qui appelle reste harissa, avec sa pastille en plus. */
+.reglement {
+  position: absolute;
+  bottom: 13%;
+  right: 11%;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--menthe);
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, .55);
+  pointer-events: none;
+}
+/* Une table ronde n'a pas de coin, même correction que pour le rang. */
+.piece[data-forme="round"] .reglement { bottom: 18%; right: 18%; }
+/* Partiellement réglée : laiton, la couleur de « il reste à encaisser »
+   partout ailleurs dans l'écran, avec l'encre espresso pour rester lisible
+   sur un fond doré (le blanc n'y passe pas le seuil AA). */
+.reglement[data-partiel] {
+  background: var(--laiton);
+  color: var(--espresso);
+  border-color: rgba(36, 24, 17, .25);
+}
+
 /* Une seule table respire, la plus urgente. Trois en feraient un sapin. */
 @keyframes plan-respire {
   0%, 100% { box-shadow: 0 0 0 0 rgba(214, 64, 30, .45); }
@@ -626,6 +659,29 @@
 }
 .plan-action-item { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
 .plan-action-item-detail { color: var(--ink-on-espresso); font-size: 11.5px; text-align: right; }
+/* Ce que la table a réglé. Les dérivés `*-on-espresso-text` et pas `--menthe`
+   / `--laiton` bruts : ce panneau est sombre, les accents pleins y perdent
+   tout contraste (voir les jetons en tête de fichier). */
+.plan-action-reglement {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-on-espresso);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.plan-action-reglement[data-tone="menthe"] { color: var(--menthe-on-espresso-text); }
+.plan-action-reglement[data-tone="laiton"] { color: var(--laiton-on-espresso-text); }
+.plan-action-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-on-espresso);
+}
 .plan-action-relire { margin: 2px 0 0; font-size: 11.5px; color: var(--laiton-on-espresso-text); }
 
 @media (prefers-reduced-motion: reduce) {

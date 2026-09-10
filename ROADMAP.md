@@ -482,6 +482,57 @@ résolue).
 > inventait un « Personne 2 » fantôme dans « Pour qui ? » sur une table où un
 > seul convive avait scanné (retour QA en direct).
 
+## Défaut du 2026-09-10 — le règlement d'une table
+
+**Pas une fonctionnalité, donc exempt du verrou « nommer le restaurateur qui la
+demande »** : le produit faisait faux. Constaté en relisant le code du paiement
+avec Wassim, sans pilote actif pour le signaler — et c'est précisément le genre
+de trou qu'un pilote découvre le premier soir, devant sa caisse.
+
+Tawla savait encaisser un paiement, mais pas l'enregistrer quand le client ne le
+demandait pas depuis son téléphone, pas le montrer au serveur, et pas le compter
+tant que la commande n'était pas soldée en entier. Quatre défauts d'une même
+famille, fermés ensemble parce qu'ils se tiennent : le premier rendait les trois
+autres invisibles.
+
+- [x] **R-1** — aucun chemin pour enregistrer un encaissement à l'initiative du
+      serveur : les trois moyens de paiement partaient tous d'une demande du
+      client (routes `pay/*` sous token de commande), le serveur ne pouvait que
+      *confirmer* une part créée par quelqu'un d'autre. Une table qui règle en
+      espèces au comptoir — le cas ordinaire en salle — restait `UNPAID` pour
+      toujours : pas de facture, libération avec note obligatoire, et rien dans
+      la recette. `POST /orders/{id}/pay/collect` + modale d'encaissement sur
+      l'écran serveur, avec la trace de qui a encaissé
+      (`OrderPayment.collected_by_staff_id`)
+- [x] **R-2** — aucun retour positif « réglée » sur `/staff`, quel que soit le
+      moyen : le seul signal était la disparition du rouge, et il ne survivait
+      pas à un rafraîchissement (une commande servie puis payée sort
+      d'`ACTIVE_STATUSES`). `GET /orders/by-restaurant/{id}/table-settlement`
+      (agrégat par table, fenêtré sur l'occupation en cours) + pastille sur la
+      tuile, hors de l'échelle d'urgence pour ne jamais masquer un appel
+- [x] **R-3** — la confirmation d'un encaissement n'était diffusée qu'au client
+      (canal de la commande) : les autres écrans serveur gardaient la demande
+      affichée et pouvaient aller réclamer une addition déjà encaissée.
+      Diffusion `order.payment_settled` sur le canal `staff`, charge utile
+      unifiée pour les cinq chemins de paiement
+- [x] **R-4** — la recette du dashboard ignorait tout règlement partiel (une
+      table de quatre dont trois avaient payé pesait 0 DT) et ne ventilait rien
+      par moyen de paiement, alors que `CARD_TERMINAL` avait été créé pour ça.
+      Recette = ce qui est réellement encaissé, « reste à encaisser » affiché à
+      côté, ventilation agrégée part par part (jamais depuis
+      `Order.payment_method`, qui ne porte que la dernière part réglée)
+
+Reste ouvert, volontairement :
+
+- [ ] Le pourboire d'un encaissement serveur ne crédite personne dans « Ma
+      soirée » ni dans le rapport d'équipe (`total_amount_handled` compte ce
+      que le serveur a pris en charge, pas ce qu'il a encaissé). La trace
+      existe désormais en base (`collected_by_staff_id`) : à trancher avec un
+      pilote réel, pas avant
+- [ ] La copie de la carte « Ventes du jour » est en blanc translucide sur
+      harissa (contraste sous le seuil AA) — dette antérieure à ce chantier,
+      à reprendre avec la passe design du dashboard, pas ici
+
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même

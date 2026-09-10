@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
 
@@ -219,6 +219,75 @@ class PayCardTerminalRequest(PayShareRequest):
     même mécanique que PayCashRequest, moyen de paiement distinct (voir
     PaymentMethod.CARD_TERMINAL).
     """
+
+
+class CollectPaymentRequest(BaseModel):
+    """
+    Encaissement à l'initiative du SERVEUR, pour une table qui n'a rien
+    demandé depuis son téléphone (voir `service.collect_payment`). Rien à voir
+    avec `PayShareRequest`, qui est la demande d'un convive : ici c'est le
+    personnel qui déclare avoir pris l'argent, et le montant est donc bien
+    fourni — borné côté serveur au restant dû.
+
+    `method` n'accepte que les deux moyens qu'un humain encaisse en salle : la
+    carte en ligne se règle chez le fournisseur, personne ne peut la déclarer
+    encaissée à sa place.
+    """
+
+    method: Literal[PaymentMethod.CASH, PaymentMethod.CARD_TERMINAL]
+    # Absent = tout le restant dû, ce que fait le bouton de l'écran serveur.
+    amount: float | None = Field(default=None, gt=0)
+    tip_amount: float = Field(default=0, ge=0)
+
+
+class SettledShareOut(BaseModel):
+    """Une part effectivement encaissée, vue staff — `collected_by_name` est
+    nul pour un paiement en ligne, que personne n'encaisse."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    payment_id: int
+    order_id: int
+    method: PaymentMethod
+    payer_name: str
+    amount: float
+    tip_amount: float
+    paid_at: UtcDatetime | None
+    collected_by_name: str | None
+
+
+class OrderDueOut(BaseModel):
+    """Une commande de la table sur laquelle il reste à encaisser — un
+    encaissement s'applique à une commande, alors que le serveur encaisse une
+    table (voir `orders/reglement.py::CommandeDue`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    order_id: int
+    amount_remaining: float
+
+
+class TableSettlementOut(BaseModel):
+    """
+    Le règlement d'une TABLE, agrégé sur les commandes de l'occupation en
+    cours (voir `orders/reglement.py`) — ce que l'écran serveur recharge au
+    montage pour savoir quelles tables ont déjà payé. Le WebSocket seul ne
+    rattrape jamais ce qui s'est passé avant la connexion, et une commande
+    servie puis réglée n'est plus dans `/active` (hors `ACTIVE_STATUSES`).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    table_id: int
+    table_label: str
+    total_amount: float
+    amount_paid: float
+    amount_remaining: float
+    fully_paid: bool
+    orders_count: int
+    last_paid_at: UtcDatetime | None
+    parts: list[SettledShareOut] = Field(default_factory=list)
+    dues: list[OrderDueOut] = Field(default_factory=list)
 
 
 class OrderPaymentOut(BaseModel):

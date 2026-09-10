@@ -12,6 +12,7 @@ import {
   OrderInProgressStatus,
   PlanLandmark,
   PlanTable,
+  TableSettlement,
 } from "@/lib/api";
 import { toFrenchMessage } from "@/lib/errors";
 import { formatMoney } from "@/lib/currency";
@@ -29,8 +30,9 @@ import MaSoiree from "@/components/MaSoiree";
 import PlanDeSalle from "@/components/plan/PlanDeSalle";
 import ActionTable, { ActionsTable } from "@/components/plan/ActionTable";
 import ModaleLibererTable from "@/components/plan/ModaleLibererTable";
+import ModaleEncaissement from "@/components/plan/ModaleEncaissement";
 import { ETAT_LIBRE, ordreDArrivee } from "@/components/plan/types";
-import { construireEtats } from "@/components/plan/etats";
+import { construireEtats, construireReglements } from "@/components/plan/etats";
 import { BellIcon, MoonIcon, GiftIcon, CakeIcon, PencilIcon, ChevronLeftIcon } from "@/components/icons";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
 
@@ -183,6 +185,12 @@ export default function StaffPage() {
   const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
   const [cardTerminalRequests, setCardTerminalRequests] = useState<CardTerminalRequest[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
+  // Ce que chaque table a déjà réglé aujourd'hui, par table_id. Rechargé par
+  // une route dédiée et pas déduit des commandes actives : une commande servie
+  // puis payée sort d'`ACTIVE_STATUSES`, donc de tout ce que cet écran
+  // connaît — sans cet état, la pastille de règlement disparaissait au premier
+  // rafraîchissement de page.
+  const [reglements, setReglements] = useState<Record<number, TableSettlement>>({});
   const [modificationRequests, setModificationRequests] = useState<ModificationRequest[]>([]);
   // Décisions prises localement avant l'envoi (line_id -> accepté) : le
   // serveur choisit ligne par ligne, mais rien n'est appliqué tant qu'il n'a
@@ -198,6 +206,12 @@ export default function StaffPage() {
   const [tableOuverte, setTableOuverte] = useState<number | null>(null);
   const [modaleLiberation, setModaleLiberation] = useState<
     { tableId: number; tableLabel: string; commandeEnCours: OrderInProgressStatus | null } | null
+  >(null);
+  // Encaissement à l'initiative du serveur : la table paie au comptoir sans
+  // avoir rien demandé depuis son téléphone. `orderId` est la commande sur
+  // laquelle il reste quelque chose à encaisser.
+  const [modaleEncaissement, setModaleEncaissement] = useState<
+    { tableId: number; tableLabel: string; orderId: number; restant: number } | null
   >(null);
   const [loyaltyByPhone, setLoyaltyByPhone] = useState<Record<string, LoyaltyMember>>({});
   const [lookupPhone, setLookupPhone] = useState("");
@@ -336,6 +350,16 @@ export default function StaffPage() {
     }
   }, [restaurantId]);
 
+  const loadReglements = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const etats = await api.listTableSettlements(restaurantId);
+      setReglements(Object.fromEntries(etats.map((etat) => [etat.table_id, etat])));
+    } catch (e) {
+      setError(toFrenchMessage(e));
+    }
+  }, [restaurantId]);
+
   const loadPlan = useCallback(async () => {
     if (!restaurantId) return;
     // Best-effort : une salle non dessinée ne doit pas empêcher le service.
@@ -398,8 +422,9 @@ export default function StaffPage() {
       loadMyShift();
       loadPlan();
       loadReperes();
+      loadReglements();
     }
-  }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan, loadReperes]);
+  }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan, loadReperes, loadReglements]);
 
   // Une table occupée (scan du QR) n'a pas d'événement WebSocket dédié —
   // contrairement à sa libération, qui en diffuse un (voir plus bas) — donc
@@ -502,6 +527,27 @@ export default function StaffPage() {
       );
       if (msg.loyalty_phone && restaurantId) fetchLoyaltyForPhone(restaurantId, msg.loyalty_phone);
     }
+    // Une part vient d'être réglée, par n'importe quel moyen — y compris en
+    // ligne, que personne en salle n'encaisse, et y compris par un collègue.
+    // Deux effets, jamais l'un sans l'autre : la table affiche ce qu'elle a
+    // réglé, et la demande d'addition déjà encaissée disparaît de CET écran
+    // aussi (elle y restait jusqu'au prochain rechargement, et un serveur
+    // pouvait aller réclamer une addition déjà payée).
+    if (msg.event === "order.payment_settled") {
+      // Deux effets, jamais l'un sans l'autre.
+      //
+      // 1. La demande d'addition disparaît de CET écran aussi. Elle n'y
+      //    disparaissait que chez le serveur qui avait cliqué : les autres
+      //    gardaient une table laiton pour une addition déjà encaissée, et
+      //    pouvaient aller la réclamer une seconde fois.
+      // 2. Le règlement de la table est relu. Un aller-retour plutôt qu'un
+      //    objet reconstruit depuis le message : celui-ci porte les agrégats,
+      //    pas le détail des parts ni l'addition suivante encore due — et
+      //    cet événement arrive quelques fois par service, pas en continu.
+      setCashRequests((prev) => prev.filter((o) => o.payment_id !== msg.payment_id));
+      setCardTerminalRequests((prev) => prev.filter((o) => o.payment_id !== msg.payment_id));
+      loadReglements();
+    }
     if (msg.event === "waiter_call.created") {
       setWaiterCalls((prev) =>
         prev.some((c) => c.call_id === msg.call_id) ? prev : [...prev, { call_id: msg.call_id, table_id: msg.table_id, table_label: msg.table_label, created_at: msg.created_at ?? null }]
@@ -514,6 +560,13 @@ export default function StaffPage() {
     // appareil) : elle doit repasser « libre » ici aussi, tout de suite.
     if (msg.event === "table.released") {
       setPlan((prev) => prev.map((t) => (t.id === msg.table_id ? { ...t, occupied_at: null } : t)));
+      // La tablée suivante ne doit pas hériter du règlement de la précédente —
+      // même remise à zéro que côté backend, qui fenêtre l'agrégat sur
+      // l'occupation en cours.
+      setReglements((prev) => {
+        const { [msg.table_id]: _libere, ...reste } = prev;
+        return reste;
+      });
     }
   });
 
@@ -538,8 +591,9 @@ export default function StaffPage() {
       loadWaiterCalls();
       loadModificationRequests();
       loadMyShift();
+      loadReglements();
     }
-  }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift]);
+  }, [status, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadReglements]);
 
   const tablesOccupees = useMemo(
     () => new Set(plan.filter((t) => t.occupied_at !== null).map((t) => t.id)),
@@ -575,6 +629,13 @@ export default function StaffPage() {
   // Le même classement que celui affiché sur le plan : le panneau d'action doit
   // dire la même chose que la table qu'on vient de toucher.
   const rangs = useMemo(() => ordreDArrivee(etatsDesTables), [etatsDesTables]);
+  // Ce que les tuiles montrent du règlement — un second canal, jamais fondu
+  // dans `etatsDesTables` : une table réglée qui appelle doit rester harissa
+  // (voir `components/plan/types.ts::Reglement`).
+  const marquesDeReglement = useMemo(
+    () => construireReglements(Object.values(reglements)),
+    [reglements]
+  );
 
   /**
    * Ce que le serveur peut faire pour la table qu'il vient de toucher.
@@ -600,6 +661,9 @@ export default function StaffPage() {
           ? () => confirmCardTerminal(additionCarte.order_id, additionCarte.payment_id)
           : undefined,
       libererTable: tablesOccupees.has(tableId) ? () => ouvrirModaleLiberation(tableId) : undefined,
+      encaisserLeRestant: reglements[tableId]?.dues[0]
+        ? () => ouvrirModaleEncaissement(tableId)
+        : undefined,
     };
   }
 
@@ -620,6 +684,38 @@ export default function StaffPage() {
     const addition = cashRequests.find((o) => o.table_id === tableId) ?? cardTerminalRequests.find((o) => o.table_id === tableId);
     if (addition) return "served_unpaid";
     return null;
+  }
+
+  function ouvrirModaleEncaissement(tableId: number) {
+    const table = plan.find((t) => t.id === tableId);
+    // L'addition la plus ancienne encore due : un encaissement s'applique à
+    // une commande, alors que le serveur encaisse une table (voir
+    // `TableSettlement.dues`).
+    const due = reglements[tableId]?.dues[0];
+    if (!table || !due) return;
+    setModaleEncaissement({
+      tableId,
+      tableLabel: table.label,
+      orderId: due.order_id,
+      restant: due.amount_remaining,
+    });
+  }
+
+  async function confirmerEncaissement(
+    method: "cash" | "card_terminal", amount: number, tipAmount: number
+  ) {
+    if (!modaleEncaissement) return;
+    setError(null);
+    try {
+      await api.collectPayment(modaleEncaissement.orderId, method, amount, tipAmount);
+      // La diffusion WebSocket reviendra aussi sur cet écran et relira l'état,
+      // mais la modale doit se fermer sur une information à jour, pas sur la
+      // promesse qu'un message va arriver.
+      await loadReglements();
+      setModaleEncaissement(null);
+    } catch (e) {
+      throw new Error(toFrenchMessage(e));
+    }
   }
 
   function ouvrirModaleLiberation(tableId: number) {
@@ -730,6 +826,10 @@ export default function StaffPage() {
     try {
       await api.confirmCashPayment(orderId, paymentId);
       setCashRequests((prev) => prev.filter((o) => o.payment_id !== paymentId));
+      // La diffusion `order.payment_settled` le fera aussi, mais elle n'arrive
+      // pas si ce poste a perdu le canal : l'encaissement qu'il vient de faire
+      // lui-même doit être visible même hors WebSocket.
+      loadReglements();
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -740,6 +840,7 @@ export default function StaffPage() {
     try {
       await api.confirmCardTerminalPayment(orderId, paymentId);
       setCardTerminalRequests((prev) => prev.filter((o) => o.payment_id !== paymentId));
+      loadReglements();
     } catch (e) {
       setError(toFrenchMessage(e));
     }
@@ -870,8 +971,17 @@ export default function StaffPage() {
         <ModaleLibererTable
           tableLabel={modaleLiberation.tableLabel}
           commandeEnCours={modaleLiberation.commandeEnCours}
+          reglement={reglements[modaleLiberation.tableId] ?? null}
           onConfirm={confirmerLiberation}
           onClose={() => setModaleLiberation(null)}
+        />
+      )}
+      {modaleEncaissement && (
+        <ModaleEncaissement
+          tableLabel={modaleEncaissement.tableLabel}
+          restant={modaleEncaissement.restant}
+          onConfirm={confirmerEncaissement}
+          onClose={() => setModaleEncaissement(null)}
         />
       )}
       <header className="bg-[var(--espresso)] px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-3">
@@ -957,6 +1067,7 @@ export default function StaffPage() {
                       tables={plan}
                       landmarks={reperes}
                       etats={etatsDesTables}
+                      reglements={marquesDeReglement}
                       onTableActivee={(t) => setTableOuverte((ouverte) => (ouverte === t.id ? null : t.id))}
                       tableSelectionnee={tableOuverte}
                       action={
@@ -967,6 +1078,7 @@ export default function StaffPage() {
                             rang={rangs[tableActive.id] ?? null}
                             actions={actionsPourTable(tableActive.id)}
                             commandeItems={pending.find((o) => o.table_id === tableActive.id)?.items}
+                            reglement={reglements[tableActive.id] ?? null}
                             onFermer={() => setTableOuverte(null)}
                           />
                         )

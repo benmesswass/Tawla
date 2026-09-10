@@ -17,7 +17,7 @@ from app.core.subscription import effective_tier, tier_includes, upgrade_require
 from app.modules.loyalty import service as loyalty_service
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.manager import Diffusion, table_channel
-from app.modules.orders import schemas, split
+from app.modules.orders import reglement, schemas, split
 from app.modules.orders.menu_item_resolution import resolve_selected_options
 from app.modules.orders.models import (
     ModificationLineStatus,
@@ -1180,6 +1180,53 @@ def _after_share_paid(db: Session, order: Order, restaurant: Restaurant | None) 
     return True
 
 
+def _diffusions_reglement(
+    db: Session, order: Order, payment: OrderPayment, fully_paid: bool
+) -> list[Diffusion]:
+    """
+    Les deux diffusions d'une part encaissée, décrites au même endroit pour
+    TOUS les chemins de paiement (carte en ligne, carte simulée, espèces,
+    terminal, encaissement à l'initiative du serveur).
+
+    Deux raisons de les avoir sorties de chaque fonction :
+
+    1. La charge utile ne portait que `order_id`/`fully_paid`. L'écran serveur
+       n'en tirait rien d'affichable — ni quelle table, ni combien — et cinq
+       chemins recopiant le même message finissaient par diverger, donc par
+       laisser un écran traiter un cas sur deux.
+    2. Rien ne partait sur le canal `staff` : un paiement en ligne était
+       invisible en salle, et l'encaissement d'un collègue laissait la demande
+       affichée chez les autres serveurs jusqu'au prochain rechargement.
+    """
+    etat = reglement.reglement_de_table(db, order.table)
+    corps = {
+        "order_id": order.id,
+        "fully_paid": fully_paid,
+        "payment_id": payment.id,
+        "table_id": order.table_id,
+        "table_label": order.table_label,
+        "method": payment.method.value,
+        "payer_name": payment.payer_name,
+        "amount": float(payment.amount),
+        "order_remaining": reglement.reste_a_encaisser(order),
+        # L'état de la TABLE, pas de la commande : c'est lui qui décide de la
+        # pastille du plan de salle, et une table peut porter deux commandes.
+        "table_amount_paid": etat.amount_paid,
+        "table_amount_remaining": etat.amount_remaining,
+        "table_fully_paid": etat.fully_paid,
+    }
+    return [
+        Diffusion(
+            order.restaurant_id, channel=_order_channel(order.id),
+            message={"event": "order.payment_confirmed", **corps},
+        ),
+        Diffusion(
+            order.restaurant_id, channel="staff",
+            message={"event": "order.payment_settled", **corps},
+        ),
+    ]
+
+
 def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> None:
     """
     Confirmation + facture PDF par email, si (et seulement si) le client a
@@ -1253,13 +1300,9 @@ def pay_by_card_simulated(
     fully_paid = _after_share_paid(db, order, restaurant)
     db.refresh(order)
     # Les autres appareils qui suivent cette commande (panier de table
-    # partagé) doivent voir la part réglée sans rafraîchir — même événement
-    # que le paiement carte réel (`settle_card_payment`) et les paiements
-    # cash/terminal.
-    diffusions.append(Diffusion(
-        order.restaurant_id, channel=_order_channel(order.id),
-        message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-    ))
+    # partagé) doivent voir la part réglée sans rafraîchir, et la salle doit
+    # voir la table se solder — voir `_diffusions_reglement`.
+    diffusions.extend(_diffusions_reglement(db, order, payment, fully_paid))
     return order, diffusions
 
 
@@ -1451,12 +1494,10 @@ def settle_card_payment(db: Session, order_id: int, payment_id: int) -> tuple[Se
     if updated:
         fully_paid = _after_share_paid(db, order, restaurant)
         db.refresh(order)
-        # Le client peut avoir sa page ouverte en attendant le webhook —
-        # même événement que la confirmation d'un paiement en espèces.
-        diffusions.append(Diffusion(
-            order.restaurant_id, channel=_order_channel(order.id),
-            message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-        ))
+        # Le client peut avoir sa page ouverte en attendant le webhook, et la
+        # salle n'apprenait rien d'un paiement en ligne — voir
+        # `_diffusions_reglement`.
+        diffusions.extend(_diffusions_reglement(db, order, payment, fully_paid))
 
     return "paid", diffusions
 
@@ -1540,6 +1581,7 @@ def confirm_cash_payment(db: Session, payment_id: int, staff: Staff) -> tuple[Or
 
     payment.status = OrderPaymentStatus.PAID
     payment.paid_at = datetime.now(timezone.utc)
+    payment.collected_by_staff_id = staff.id
     db.commit()
 
     log_event(
@@ -1550,11 +1592,9 @@ def confirm_cash_payment(db: Session, payment_id: int, staff: Staff) -> tuple[Or
     db.refresh(order)
 
     # Le client qui a demandé à payer en espèces peut avoir sa page ouverte
-    # en attendant que le serveur passe encaisser.
-    diffusions.append(Diffusion(
-        order.restaurant_id, channel=_order_channel(order.id),
-        message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-    ))
+    # en attendant que le serveur passe encaisser, et les autres serveurs
+    # doivent voir la demande disparaître — voir `_diffusions_reglement`.
+    diffusions.extend(_diffusions_reglement(db, order, payment, fully_paid))
     return order, diffusions
 
 
@@ -1634,6 +1674,7 @@ def confirm_card_terminal_payment(db: Session, payment_id: int, staff: Staff) ->
 
     payment.status = OrderPaymentStatus.PAID
     payment.paid_at = datetime.now(timezone.utc)
+    payment.collected_by_staff_id = staff.id
     db.commit()
 
     log_event(
@@ -1643,8 +1684,100 @@ def confirm_card_terminal_payment(db: Session, payment_id: int, staff: Staff) ->
     fully_paid = _after_share_paid(db, order, db.get(Restaurant, order.restaurant_id))
     db.refresh(order)
 
-    diffusions.append(Diffusion(
-        order.restaurant_id, channel=_order_channel(order.id),
-        message={"event": "order.payment_confirmed", "order_id": order.id, "fully_paid": fully_paid},
-    ))
+    diffusions.extend(_diffusions_reglement(db, order, payment, fully_paid))
+    return order, diffusions
+
+
+# Les deux seuls moyens qu'un serveur encaisse de sa main. La carte EN LIGNE
+# n'en fait pas partie : elle se règle chez le fournisseur, personne en salle
+# ne peut la déclarer encaissée.
+COLLECTABLE_METHODS = {PaymentMethod.CASH, PaymentMethod.CARD_TERMINAL}
+
+
+def collect_payment(
+    db: Session, order_id: int, staff: Staff, method: PaymentMethod,
+    amount: float | None = None, tip_amount: float = 0,
+) -> tuple[Order, list[Diffusion]]:
+    """
+    Le serveur encaisse lui-même, sans que le client ait rien demandé depuis
+    son téléphone.
+
+    C'était le trou du modèle : les trois moyens de paiement partaient tous
+    d'une demande du client (`pay/cash`, `pay/card-terminal`, `pay/card`) et le
+    serveur ne pouvait que *confirmer* une part créée par quelqu'un d'autre.
+    Une table qui règle en espèces au comptoir — le cas ordinaire en salle —
+    n'avait donc aucun chemin pour être enregistrée : `payment_status` restait
+    UNPAID, la libération réclamait une note, aucune facture n'était émise, et
+    la recette du patron ne voyait rien passer.
+
+    `amount` absent = tout le restant, ce que fait le bouton de l'écran
+    serveur. Un montant explicite sert le cas où la table règle une partie en
+    espèces et le reste autrement.
+
+    Refuse tant qu'une part est PENDING : le serveur doit confirmer la demande
+    déjà affichée plutôt que d'encaisser deux fois le même argent.
+    """
+    diffusions: list[Diffusion] = []
+    # Isolation d'abord, garde-fous de paiement ensuite : `_get_payable_order`
+    # répond 409 « déjà payée » avant de savoir de quel restaurant il s'agit,
+    # ce qui renseignerait un tiers sur une commande qui n'est pas la sienne.
+    connue = db.get(Order, order_id)
+    if not connue or connue.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    order = _get_payable_order(db, order_id)
+
+    if method not in COLLECTABLE_METHODS:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "METHOD_NOT_COLLECTABLE", "message": "only cash and card terminal are collected in the room"},
+        )
+    if any(payment.status == OrderPaymentStatus.PENDING for payment in order.payments):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PENDING_SHARE_EXISTS",
+                "message": "a share is already waiting to be collected — confirm it instead",
+            },
+        )
+
+    restant = reglement.reste_a_encaisser(order)
+    if restant <= reglement.TOLERANCE:
+        raise HTTPException(status_code=409, detail={"code": "ALREADY_PAID", "message": "order already paid"})
+    a_encaisser = restant if amount is None else round(amount, 2)
+    if a_encaisser <= 0:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_AMOUNT", "message": "amount must be positive"})
+    if a_encaisser > restant + reglement.TOLERANCE:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "AMOUNT_ABOVE_REMAINING", "message": "amount is higher than what remains due"},
+        )
+
+    # `payer_name` vide, comme un client sans identité déclarée : personne à
+    # table n'a réclamé cette part, et inventer un convive polluerait le calcul
+    # des parts restantes (`split.compute_payable_amount`). Qui a encaissé se
+    # lit sur `collected_by_staff_id`, pas sur un faux prénom.
+    payment = OrderPayment(
+        order_id=order.id,
+        payer_key=f"staff:{staff.id}",
+        payer_name="",
+        method=method,
+        status=OrderPaymentStatus.PAID,
+        amount=a_encaisser,
+        tip_amount=tip_amount,
+        paid_at=datetime.now(timezone.utc),
+        collected_by_staff_id=staff.id,
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+
+    log_event(
+        logger, "order.payment_collected_by_staff",
+        restaurant_id=order.restaurant_id, order_id=order.id, payment_id=payment.id,
+        staff_id=staff.id, method=method.value, amount=a_encaisser, tip_amount=tip_amount,
+    )
+    fully_paid = _after_share_paid(db, order, db.get(Restaurant, order.restaurant_id))
+    db.refresh(order)
+
+    diffusions.extend(_diffusions_reglement(db, order, payment, fully_paid))
     return order, diffusions

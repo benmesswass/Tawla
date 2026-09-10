@@ -2,17 +2,18 @@ from collections import defaultdict
 from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core import posthog_query
 from app.core.config import settings
 from app.core.dates import as_utc
 from app.core.markets import current_market
 from app.core.subscription import effective_tier
-from app.modules.orders.models import Order
+from app.modules.orders.models import Order, OrderStatus
+from app.modules.orders.reglement import montant_encaisse
 from app.modules.platform_admin import schemas
 from app.modules.stats.models import DashboardView
-from app.modules.stats.service import cancelled_orders, paid_orders
+from app.modules.stats.service import cancelled_orders
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 # Trois mois de tendance : assez pour montrer un rythme d'inscriptions, pas
@@ -82,7 +83,16 @@ def get_overview(db: Session) -> schemas.PlatformOverview:
         db.query(Restaurant).filter(Restaurant.is_demo.is_(False)).order_by(Restaurant.created_at).all()
     )
     reels = [restaurant.id for restaurant in restaurants]
-    orders = db.query(Order).filter(Order.restaurant_id.in_(reels)).all()
+    # `items` (le total d'une commande s'en déduit) et `payments` (ce qui a été
+    # réellement encaissé) chargées en une fois : cet écran lit TOUTES les
+    # commandes de la plateforme, une requête par commande le rendrait
+    # inutilisable dès le dixième restaurant.
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items), selectinload(Order.payments))
+        .filter(Order.restaurant_id.in_(reels))
+        .all()
+    )
     recent_views = (
         db.query(DashboardView)
         .filter(DashboardView.viewed_at >= seven_days_ago, DashboardView.restaurant_id.in_(reels))
@@ -115,7 +125,6 @@ def get_overview(db: Session) -> schemas.PlatformOverview:
             mrr_tnd += current_market.tier_prices.get(tier, 0)
 
         restaurant_orders = orders_by_restaurant.get(restaurant.id, [])
-        restaurant_paid_orders = paid_orders(restaurant_orders)
         last_order_at = max((o.created_at for o in restaurant_orders), default=None)
         restaurant_summaries.append(
             schemas.RestaurantSummary(
@@ -125,7 +134,11 @@ def get_overview(db: Session) -> schemas.PlatformOverview:
                 effective_tier=tier,
                 created_at=restaurant.created_at,
                 orders_count=len(restaurant_orders),
-                revenue_tnd=sum(o.total_amount for o in restaurant_paid_orders),
+                # Même définition que la recette du dashboard restaurateur
+                # (`stats/service.py`) : ce qui est réellement encaissé, parts
+                # partielles comprises. Deux définitions du chiffre d'affaires
+                # d'un même restaurant finiraient par se contredire devant lui.
+                revenue_tnd=sum(montant_encaisse(o) for o in restaurant_orders if o.status != OrderStatus.CANCELLED),
                 last_order_at=last_order_at,
                 dashboard_views_last_7d=views_by_restaurant.get(restaurant.id, 0),
                 is_active=restaurant.is_active,
@@ -140,7 +153,7 @@ def get_overview(db: Session) -> schemas.PlatformOverview:
     restaurant_summaries.sort(key=lambda r: r.orders_count, reverse=True)
 
     orders_last_7d = [o for o in orders if as_utc(o.created_at) >= seven_days_ago]
-    gmv_last_7d = sum(o.total_amount for o in paid_orders(orders_last_7d))
+    gmv_last_7d = sum(montant_encaisse(o) for o in orders_last_7d if o.status != OrderStatus.CANCELLED)
     cancelled_last_7d = cancelled_orders(orders_last_7d)
     cancelled_rate_last_7d = (len(cancelled_last_7d) / len(orders_last_7d)) if orders_last_7d else None
 

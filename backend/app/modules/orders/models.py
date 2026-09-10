@@ -344,8 +344,21 @@ class OrderPayment(Base):
     customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Le membre du personnel qui a encaissé cette part, quand c'est un humain
+    # qui l'a fait : les deux confirmations en salle (espèces, terminal) et
+    # l'encaissement à l'initiative du serveur. Nul pour un paiement en ligne,
+    # que personne n'encaisse. Sert à afficher « encaissé par Karim » dans le
+    # détail d'un règlement — aucune statistique n'est construite dessus pour
+    # l'instant, mais sans la trace, « qui a pris cet argent » n'a aucune
+    # réponse le jour d'un écart de caisse.
+    collected_by_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
 
     order: Mapped["Order"] = relationship(back_populates="payments")
+    collected_by: Mapped["Staff | None"] = relationship()
+
+    @property
+    def collected_by_name(self) -> str | None:
+        return self.collected_by.name if self.collected_by else None
 
 
 class ModificationRequestStatus(str, enum.Enum):
