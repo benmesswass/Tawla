@@ -291,7 +291,16 @@ function wireItemToCartLine(wireItem: OrderItemPayload, menu: MenuItem[]): CartL
     item,
     quantity: wireItem.quantity,
     note: wireItem.notes ?? "",
-    shared: wireItem.is_shared ?? false,
+    // La case est cochée dès qu'il y a un partage OU une assignation, et pas
+    // seulement quand `is_shared` est vrai : depuis #204 ce drapeau porte le
+    // NOMBRE de destinataires, donc un plat assigné à une seule personne part
+    // avec `is_shared: false`. Le relire tel quel rendait l'aller-retour
+    // asymétrique — le serveur rediffusait la ligne (`cart.updated`), la case
+    // se décochait toute seule, et le premier clic ne faisait que replier la
+    // liste aussitôt dépliée. Le deuxième semblait fonctionner parce que le
+    // payload encodé n'avait alors plus changé : plus d'envoi, donc plus
+    // d'écho pour écraser l'état local.
+    shared: (wireItem.is_shared ?? false) || (wireItem.shared_with ?? []).length > 0,
     sharedWith: wireItem.shared_with ?? [],
     fromSuggestion: wireItem.from_suggestion ?? false,
     selectedOptions,
