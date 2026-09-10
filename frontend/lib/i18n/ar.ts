@@ -50,6 +50,12 @@ export const ar = {
   editOrderCancel: "الغي",
   itemsUpdatedAt: (heure) => `تبدلت الساعة ${heure}`,
 
+  myOrderTitle: "الطلبية متاعي",
+  orderPanelCount: (n) => `${n} أكلة`,
+  browseCarteButton: "+ زيد أكلات أخرى",
+  browseCarteTitle: "المينيو",
+  backToOrderButton: "ارجع للطلبية متاعي",
+
   requestModificationButton: "اطلب تبديل",
   requestModificationHint: "لازم الجرسون يتأكد مع الكوجينة قبل أي تبديل",
   requestEditBanner: "هاذا الطلب لازم الجرسون يتأكد منه مع الكوجينة قبل ما يتطبق.",
