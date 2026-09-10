@@ -146,6 +146,36 @@ sans animation d'entrée s'ouvre quand même.
 Rouvrir le premier point est une décision de Wassim, pas un choix
 d'implémentation.
 
+## Une page à la fois, et une critique après chaque page
+
+Règle posée par Wassim le 2026-09-10. **Jamais « refais tout le frontend »** :
+un seul écran par PR, dans cet ordre — socle (fait), vue carte du menu client,
+panier + envoi, suivi + paiement, `/staff`, `/kitchen`, `/dashboard` et ses
+sous-pages, `/login` + `/signup`, vitrine. La vitrine passe en dernier : elle a
+déjà été travaillée par les phases D2 et D2bis.
+
+Une page n'est finie qu'après ces deux passes, dans l'ordre :
+
+1. **Cohérence avec le système.** Relire la zone reprise et remplacer ce qui
+   contourne les jetons (`text-[12.5px]`, `rounded-[10px]`, `gap-[7px]`, un
+   accent posé en texte). Le périmètre de la passe est la zone redessinée, pas
+   le fichier entier — sinon le diff devient illisible.
+2. **Critique de product designer senior.** Arrêter de raisonner en
+   développeur et regarder l'écran comme s'il était présenté pour la première
+   fois. Passer en revue : ce qui paraît cheap, générique ou « généré par IA » ;
+   la hiérarchie ; les espacements incohérents ; ce qui est trop lourd ou trop
+   faible ; les interactions manquantes ; les animations à ajouter **et celles
+   à retirer** ; le mobile ; l'accessibilité ; et les endroits où
+   l'utilisateur peut hésiter.
+
+   Classer en **P0** (doit être corrigé), **P1** (amélioration importante),
+   **P2** (polish). **Implémenter P0 et P1 seulement**, et laisser les P2
+   écrits dans la PR. Pas de liste de cinquante points : si tout est P0, rien
+   ne l'est.
+
+Les défauts trouvés par cette critique se corrigent **dans la même PR** que la
+page — une critique dont les P0 partent dans un ticket séparé ne sert à rien.
+
 ## Gouvernance
 
 `ROADMAP_DESIGN.md` décide **quoi** montrer au client, `MOTION_DESIGN.md`

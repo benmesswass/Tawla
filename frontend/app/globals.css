@@ -29,6 +29,20 @@
      couleur de fond, donc sans retoucher la charte. */
   --on-harissa: #ffffff;
 
+  /* Les accents en APLAT et les accents en TEXTE ne peuvent pas être la même
+     valeur : mesuré le 2026-09-10 sur semoule, --harissa donne 3,97:1 et
+     --laiton 2,82:1 en texte, soit très en dessous du seuil AA de 4,5:1. Or ils
+     sont utilisés ainsi 63 et 39 fois. Ces deux jetons-ci sont réservés au
+     texte ; --harissa et --laiton restent les couleurs de remplissage.
+
+     --harissa-text reprend --harissa-dark, déjà dans la charte : 5,17 sur
+     semoule, 5,54 sur semoule-raised, 4,93 sur creme.
+     --laiton-text est un laiton assombri : 5,46 / 5,85 / 5,21. Le #8a6420
+     employé jusqu'ici à la main dans ui/Badge tombait à 4,45 sur creme, donc
+     juste sous le seuil — il est remplacé par ce jeton. */
+  --harissa-text: #b8341a;
+  --laiton-text: #7d5a1c;
+
   /* Tuiles de la vignette générique par catégorie (VignetteCategorie, Phase
      D1 de ROADMAP_DESIGN.md) — fond/bord teintés à faible opacité, le trait
      de l'icône reprend directement --harissa/--menthe/--laiton. */

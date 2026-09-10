@@ -49,9 +49,14 @@ const TRAIT: Record<Teinte, string> = {
  */
 export default function VignetteCategorie({ category }: { category: string }) {
   const { Icon, tint } = VISUELS[category] ?? { Icon: UtensilsIcon, tint: "neutre" as const };
+  // La taille vient du conteneur (`w-full h-full`) et non d'un 72 px en dur :
+  // c'est la carte de plat qui décide de sa densité, et la tuile doit alors
+  // suivre au lieu de dépasser. Elle reste carrée par l'aspect-ratio.
   return (
-    <div className={`w-[72px] h-[72px] rounded-xl border flex items-center justify-center ${FOND[tint]}`}>
-      <Icon className={`w-[30px] h-[30px] ${TRAIT[tint]}`} />
+    <div
+      className={`w-full h-full aspect-square rounded-controle border flex items-center justify-center ${FOND[tint]}`}
+    >
+      <Icon className={`w-7 h-7 ${TRAIT[tint]}`} />
     </div>
   );
 }

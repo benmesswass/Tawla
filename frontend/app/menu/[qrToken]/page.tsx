@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import * as m from "motion/react-m";
+import { AnimatePresence } from "motion/react";
 import { cairo, lalezar } from "@/lib/fonts";
+import { COURBE, DUREE, TRANSITION } from "@/lib/mouvement";
 import {
   api,
   mediaUrl,
@@ -50,6 +53,7 @@ import {
   BagIcon,
 } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
+import Button from "@/components/ui/Button";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
 import EmptyCartIllustration from "@/components/illustrations/EmptyCartIllustration";
 import LoyaltyStampCard from "@/components/LoyaltyStampCard";
@@ -368,6 +372,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // — stocke l'ancre (`categoryAnchor(category)`), pas le nom brut : c'est ce
   // que l'IntersectionObserver lit directement sur `section.id`.
   const [activeCategoryAnchor, setActiveCategoryAnchor] = useState<string | null>(null);
+  // Position et dimensions du repère qui glisse sous la catégorie active.
+  // Mesurées et non calculées : les libellés changent de longueur avec la
+  // langue (« À emporter » n'a pas la largeur de « Vins »).
+  const listeCategoriesRef = useRef<HTMLUListElement>(null);
+  const [repereCategorie, setRepereCategorie] = useState<{
+    x: number;
+    y: number;
+    largeur: number;
+    hauteur: number;
+  } | null>(null);
   // groupId -> ids des options choisies dans ce groupe, pendant la composition.
   const [chooserSelection, setChooserSelection] = useState<Record<number, number[]>>({});
   // Toutes les commandes encore ouvertes de cette table — celle qu'on suit à
@@ -492,9 +506,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         }`}
       >
         <div className="flex items-center gap-1.5">
-          <StampIcon className={`w-4 h-4 shrink-0 ${complete ? "text-[var(--laiton-on-espresso-text)]" : "text-[var(--laiton)]"}`} />
+          <StampIcon className={`w-4 h-4 shrink-0 ${complete ? "text-[var(--laiton-on-espresso-text)]" : "text-[var(--laiton-text)]"}`} />
           {complete ? (
-            <h3 className={`${lalezar.className} text-[21px] leading-none text-[var(--laiton)]`}>
+            <h3 className={`${lalezar.className} text-[21px] leading-none text-[var(--laiton-text)]`}>
               {t.loyaltyCompleteTitle}
             </h3>
           ) : (
@@ -516,7 +530,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         {status.is_birthday_today && (
           <p
             className={`mt-1.5 flex items-center justify-center gap-1.5 text-xs ${
-              complete ? "text-[var(--laiton-on-espresso-text)]" : "text-[var(--laiton)]"
+              complete ? "text-[var(--laiton-on-espresso-text)]" : "text-[var(--laiton-text)]"
             }`}
           >
             <CakeIcon className="w-4 h-4 shrink-0" /> {t.loyaltyBirthdayBanner}
@@ -1163,6 +1177,40 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     });
   }, [activeCategoryAnchor]);
 
+  // Mesure du repère qui glisse sous la catégorie active. `offsetLeft`/
+  // `offsetTop` se mesurent depuis le bord intérieur de la bordure du
+  // conteneur, et le repère est ancré au même endroit par `left-0 top-0` :
+  // les deux coïncident. Ancrer explicitement est indispensable — sans
+  // `left`, un élément absolu part de sa position statique, donc après le
+  // padding, et le décalage se cumule.
+  useEffect(() => {
+    if (!listeCategoriesRef.current) return;
+
+    function mesurer() {
+      const ul = listeCategoriesRef.current;
+      if (!ul) return;
+      const rendues = Array.from(new Set(menu.map((item) => item.category)));
+      const ancre = activeCategoryAnchor ?? (rendues.length > 0 ? categoryAnchor(rendues[0]) : null);
+      if (!ancre) return setRepereCategorie(null);
+      const cible = ul.querySelector<HTMLElement>(`[data-ancre="${ancre}"]`);
+      if (!cible) return setRepereCategorie(null);
+      // La hauteur est mesurée aussi : elle dépend des métriques de la police.
+      setRepereCategorie({
+        x: cible.offsetLeft,
+        y: cible.offsetTop,
+        largeur: cible.offsetWidth,
+        hauteur: cible.offsetHeight,
+      });
+    }
+
+    mesurer();
+    // Les polices arrivent après le premier rendu : sans cette remesure, le
+    // repère garde la largeur du texte en police de repli.
+    document.fonts?.ready.then(mesurer).catch(() => {});
+    window.addEventListener("resize", mesurer);
+    return () => window.removeEventListener("resize", mesurer);
+  }, [menu, activeCategoryAnchor, locale]);
+
   // Chacun paie SA PART, jamais l'addition entière (identité de table,
   // ROADMAP.md §Override, extension paiement par personne) — `myDeviceKey`/
   // `myIdentity.name` identifient qui paie, le montant réel est recalculé et
@@ -1757,7 +1805,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   if (loadError) {
     return (
       <div dir={dir} className={`min-h-screen bg-[var(--semoule)] p-6 max-w-md mx-auto text-center ${wrapperClassName ?? ""}`}>
-        <p className="text-[var(--harissa)] mb-4">{loadError}</p>
+        <p className="text-[var(--harissa-text)] mb-4">{loadError}</p>
         <button
           onClick={load}
           className="bg-[var(--harissa)] text-[var(--semoule)] px-5 py-3 rounded-xl font-bold text-[14.5px] shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px]"
@@ -1798,7 +1846,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         className="w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-[var(--semoule-raised)] p-[22px] text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-center gap-1 text-[var(--laiton)]">
+        <div className="flex items-center justify-center gap-1 text-[var(--laiton-text)]">
           {Array.from({ length: 5 }).map((_, i) => (
             <svg key={i} viewBox="0 0 24 24" fill="currentColor" className="w-[22px] h-[22px]">
               <path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1L12 2Z" />
@@ -1833,7 +1881,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
       <div dir={dir} className={`min-h-screen bg-[var(--semoule)] p-6 max-w-md mx-auto ${wrapperClassName ?? ""}`}>
         <div className="rounded-2xl border border-[var(--laiton)] bg-[var(--creme)] p-[14px]">
           <div className="flex items-center gap-2">
-            <WifiOffIcon className="w-[18px] h-[18px] shrink-0 text-[var(--laiton)]" />
+            <WifiOffIcon className="w-[18px] h-[18px] shrink-0 text-[var(--laiton-text)]" />
             <h1 className="text-[13.5px] font-bold text-[var(--encre)]">{t.offlineQueuedTitle}</h1>
           </div>
           <p className="mt-2 text-[12.5px] leading-[1.5] text-[var(--ink-soft)]">{t.offlineQueuedMessage}</p>
@@ -1887,7 +1935,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               {item.description && (
                 <div className="text-[11px] text-[var(--ink-soft)] truncate mt-0.5">{item.description}</div>
               )}
-              <div className="text-[12px] font-bold tabular-nums text-[var(--harissa)] mt-1">
+              <div className="text-[12px] font-bold tabular-nums text-[var(--harissa-text)] mt-1">
                 {formatAmount(item.price)} {t.currency}
               </div>
             </div>
@@ -2013,7 +2061,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
 
           {editError && (
-            <p className="mt-3 text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
+            <p className="mt-3 text-sm text-[var(--harissa-text)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
               {editError}
             </p>
           )}
@@ -2021,8 +2069,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           {Object.keys(editItems).length > 0 && (
             <div className="mt-6 bg-[var(--semoule-raised)] border border-[var(--line-strong)] rounded-2xl p-3.5">
               <div className="flex items-center gap-2 mb-3">
-                <BagIcon className="w-[15px] h-[15px] shrink-0 text-[var(--laiton)]" />
-                <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+                <BagIcon className="w-[15px] h-[15px] shrink-0 text-[var(--laiton-text)]" />
+                <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton-text)]">
                   {t.myOrderTitle}
                 </p>
               </div>
@@ -2033,7 +2081,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       <span className="text-[14.5px] font-semibold">{line.name}</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
+                      <span className="text-[14.5px] font-bold tabular-nums text-[var(--harissa-text)]">
                         {formatAmount(line.unitPrice)} {t.currency}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
@@ -2170,7 +2218,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             const secondes = elapsedSeconds(trackedOrder.created_at, maintenant);
             if (secondes === null) return null;
             return (
-              <p className="mt-1 text-[12.5px] font-semibold text-center text-[var(--laiton)] tabular-nums">
+              <p className="mt-1 text-[12.5px] font-semibold text-center text-[var(--laiton-text)] tabular-nums">
                 {t.orderElapsed(duree(secondes))}
               </p>
             );
@@ -2224,7 +2272,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </button>
           )}
         </div>
-        {waiterCallError && <p className="mt-2 text-sm text-center text-[var(--harissa)]">{waiterCallError}</p>}
+        {waiterCallError && <p className="mt-2 text-sm text-center text-[var(--harissa-text)]">{waiterCallError}</p>}
         {trackedOrder.status === "pending_confirmation" && (
           <p className="mt-1.5 flex items-center justify-center gap-1 text-[11.5px] text-[var(--ink-soft)] text-center">
             <ClockIcon className="w-3 h-3 shrink-0" />
@@ -2245,7 +2293,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         )}
         {lastResolution && (
           <div className="mt-4 border border-[var(--line)] bg-[var(--semoule-raised)] rounded-xl p-3">
-            <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+            <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton-text)]">
               {t.requestOutcomeTitle}
             </p>
             <div className="space-y-2">
@@ -2272,7 +2320,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     {line.status === "declined" && line.previous_quantity === 0 && (
                       <button
                         onClick={() => orderDeclinedLineSeparately(line)}
-                        className="mt-1 block text-[12px] font-semibold text-[var(--harissa)] underline"
+                        className="mt-1 block text-[12px] font-semibold text-[var(--harissa-text)] underline"
                       >
                         {t.requestOrderSeparately}
                       </button>
@@ -2286,7 +2334,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
         {!cancelled && trackedOrder.scheduled_for && (
           <p className="mt-4 text-sm text-center bg-[rgba(184,134,46,.12)] text-[#8a6420] border border-[rgba(184,134,46,.55)] rounded-xl py-2 px-3 flex items-center justify-center gap-1.5">
-            <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
+            <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton-text)]" />
             {t.preorderBadge(formatTime(trackedOrder.scheduled_for))}
           </p>
         )}
@@ -2382,14 +2430,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
         {!cancelled && showCulturalFacts && (
           <div className="mt-4 text-[12.5px] leading-[1.5] rounded-xl py-[11px] px-3 flex items-start gap-2 bg-[var(--semoule-raised)] border border-[var(--line)] text-[var(--encre)]">
-            <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton)]" />
+            <FlameIcon className="w-[15px] h-[15px] shrink-0 mt-0.5 text-[var(--laiton-text)]" />
             <span>{culturalFacts[culturalFactIndex]}</span>
           </div>
         )}
 
         <div className="mt-8 border-t border-[var(--line)] pt-[14px]">
           <div className="flex items-baseline justify-between mb-2">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton-text)]">
               {t.orderDetailsTitle}
             </p>
             {trackedOrder.items_updated_at && (
@@ -2403,7 +2451,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <li key={it.id}>
                 {it.quantity}× {it.menu_item_name}
                 {it.is_shared && (
-                  <span className="text-[var(--laiton)] inline-flex items-center gap-1 align-middle">
+                  <span className="text-[var(--laiton-text)] inline-flex items-center gap-1 align-middle">
                     · <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
                   </span>
                 )}
@@ -2453,7 +2501,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
         {!cancelled && (
           <div className="mt-6 border-t border-[var(--line)] pt-[14px]">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)] mb-3">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton-text)] mb-3">
               {t.paymentTitle}
             </p>
 
@@ -2531,7 +2579,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   )}
 
                   {paymentError && (
-                    <div className="text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
+                    <div className="text-sm text-[var(--harissa-text)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-xl p-3">
                       {paymentError}
                     </div>
                   )}
@@ -2568,7 +2616,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                                 onClick={() => setTipInput(pct === 0 ? "" : String(amount))}
                                 className={`flex-1 rounded-[10px] py-[9px] text-center ${
                                   selected
-                                    ? "border border-[var(--harissa)] bg-[var(--creme)] text-[var(--harissa)] text-[12.5px] font-bold"
+                                    ? "border border-[var(--harissa)] bg-[var(--creme)] text-[var(--harissa-text)] text-[12.5px] font-bold"
                                     : "border border-[var(--line)] bg-white text-[var(--encre)] text-[12.5px] font-semibold"
                                 }`}
                               >
@@ -2686,6 +2734,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // restaurant a bien des desserts, il n'en a plus ce soir.
   const categories = Array.from(new Set(menu.map((m) => m.category)));
 
+  // Avant tout défilement, `activeCategoryAnchor` vaut null et aucune pastille
+  // n'était surlignée : la barre collante n'indiquait donc pas où on se trouve
+  // à l'ouverture de la carte, précisément quand on en a le plus besoin. On
+  // retombe sur la première catégorie, qui est bien celle qu'on regarde.
+  const ancreCategorieActive =
+    activeCategoryAnchor ?? (categories.length > 0 ? categoryAnchor(categories[0]) : null);
+
   function categoryAnchor(category: string): string {
     // Ancre stable et sûre en URL : les catégories sont saisies par le
     // restaurant, donc accentuées et espacées.
@@ -2724,7 +2779,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         // Décalage plafonné à 6 plats : au-delà, l'attente se verrait plus que
         // l'effet. Le style inline est le seul moyen d'indexer un délai.
         style={{ animationDelay: `${Math.min(index, 6) * 35}ms` }}
-        className="plat-apparait mb-[10px] rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-[11px] transition-shadow"
+        // `group` : la photo réagit au survol de toute la carte, pas seulement
+        // d'elle-même. Le survol est conditionné à `hover: hover` — sur un
+        // téléphone, un `:hover` reste collé après le tap et la carte garde
+        // une élévation qui ne veut plus rien dire.
+        className="group plat-apparait mb-3 rounded-carte border border-line bg-semoule-raised p-3 shadow-pose
+          transition-shadow duration-rapide ease-deplacement
+          [@media(hover:hover)]:hover:shadow-carte"
       >
         <div className="flex items-start gap-3">
           {/* La vignette est toujours présente, même sans photo : une carte de
@@ -2732,7 +2793,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               photo, une tuile générique par catégorie (VignetteCategorie)
               plutôt qu'un vide — jamais une fausse photo qui ne ressemblerait
               pas au plat réel. */}
-          <div className={`relative shrink-0 w-[72px] h-[72px] ${rupture ? "opacity-45" : ""}`}>
+          <div className={`relative shrink-0 w-16 h-16 ${rupture ? "opacity-45" : ""}`}>
             {photo ? (
               <>
                 {/* La même image, floutée derrière la vignette : elle projette la
@@ -2740,14 +2801,23 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     sans ajouter le moindre octet. */}
                 <div
                   aria-hidden
-                  className="absolute inset-0 rounded-xl bg-cover bg-center blur-md opacity-40 scale-95"
+                  className="absolute inset-0 rounded-controle bg-cover bg-center blur-md opacity-40 scale-95"
                   style={{ backgroundImage: `url(${photo})` }}
                 />
+                {/* La photo vient du média du restaurant, servie par l'API :
+                    `next/image` demanderait un domaine déclaré au build, alors
+                    que l'URL dépend du déploiement. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={photo}
                   alt={item.name}
                   loading="lazy"
-                  className="relative w-[72px] h-[72px] rounded-xl object-cover border-2 border-white shadow-md"
+                  // Le grossissement est contenu (2 %) et porté par l'image
+                  // seule, pas par la carte : au survol, c'est le plat qui
+                  // avance d'un pas, pas l'interface qui gonfle.
+                  className="relative w-16 h-16 rounded-controle object-cover border-2 border-white shadow-carte
+                    transition-transform duration-normal ease-deplacement
+                    [@media(hover:hover)]:group-hover:scale-[1.02]"
                 />
               </>
             ) : (
@@ -2755,10 +2825,10 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className={`text-[14.5px] font-semibold leading-[1.25] ${rupture ? "line-through opacity-45" : ""}`}>
+            <div className={`text-corps font-semibold ${rupture ? "line-through opacity-45" : ""}`}>
               {item.name}
               {item.spice_level > 0 && (
-                <span className="ms-1 inline-flex items-center gap-0.5 align-middle text-[var(--harissa)]">
+                <span className="ms-1 inline-flex items-center gap-0.5 align-middle text-[var(--harissa-text)]">
                   {Array.from({ length: item.spice_level }).map((_, i) => (
                     <FlameIcon key={i} className="w-[13px] h-[13px] shrink-0" />
                   ))}
@@ -2772,28 +2842,28 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   deux badges affichés en même temps. */}
               {currentMarket.defaultHalal
                 ? !item.is_halal && (
-                    <span className="ms-1 text-xs font-normal text-[var(--harissa)] border border-[var(--harissa)] rounded px-1 align-middle">
+                    <span className="ms-1 text-legende font-normal text-[var(--harissa-text)] border border-[var(--harissa)] rounded px-1 align-middle">
                       {t.notHalalBadge}
                     </span>
                   )
                 : item.is_halal && (
-                    <span className="ms-1 text-xs font-normal text-[var(--menthe)] border border-[var(--menthe)] rounded px-1 align-middle">
+                    <span className="ms-1 text-legende font-normal text-[var(--menthe)] border border-[var(--menthe)] rounded px-1 align-middle">
                       {t.halalBadge}
                     </span>
                   )}
             </div>
             {item.description && (
-              <div className="text-[12.5px] leading-[1.35] text-[var(--ink-soft)] mt-[3px]">{item.description}</div>
+              <div className="text-legende text-[var(--ink-soft)] mt-1">{item.description}</div>
             )}
             {item.allergens && (
-              <div className="text-xs text-[var(--ink-soft)]/70 mt-0.5">{t.allergensLabel(item.allergens)}</div>
+              <div className="text-legende text-ink-soft/70 mt-0.5">{t.allergensLabel(item.allergens)}</div>
             )}
             {item.regimes.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1">
                 {item.regimes.map((r) => (
                   <span
                     key={r.id}
-                    className="text-[10.5px] font-medium text-[var(--menthe)] border border-[var(--menthe)] rounded px-1.5 py-[1px]"
+                    className="text-legende font-medium text-[var(--menthe)] border border-[var(--menthe)] rounded px-1.5 py-px"
                   >
                     {r.name}
                   </span>
@@ -2801,7 +2871,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               </div>
             )}
             {rupture && (
-              <div className="text-[11.5px] font-semibold text-[var(--harissa)] mt-1">{t.itemOutOfStock}</div>
+              <div className="text-legende font-semibold text-[var(--harissa-text)] mt-1">{t.itemOutOfStock}</div>
             )}
 
             {/* Prix et boutons sur la même ligne, au bas de la carte : le prix
@@ -2809,40 +2879,59 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 part et d'autre les rendait tous les deux difficiles à trouver. */}
             <div className="flex items-center justify-between gap-2 mt-2">
               <span
-                className={`text-[14.5px] font-bold tabular-nums text-[var(--harissa)] ${
+                // Le prix passe en encre : il n'est pas une action. Deux
+                // harissa sur la même ligne — le prix et le bouton — mettaient
+                // l'œil en concurrence et contredisaient la règle « un seul
+                // harissa cliquable par zone de décision » de ui/Button.
+                className={`text-corps font-bold tabular-nums text-encre ${
                   rupture ? "line-through opacity-45" : ""
                 }`}
               >
                 {formatAmount(item.price)} {t.currency}
               </span>
               <div className="flex items-center gap-2 shrink-0">
-                {ligne && (
-                  <>
+                <AnimatePresence initial={false}>
+                  {ligne && (
+                    <m.div
+                      key="pas-quantite"
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: "auto", transition: TRANSITION.deplacement }}
+                      exit={{ opacity: 0, width: 0, transition: TRANSITION.sortie }}
+                      className="flex items-center gap-2 overflow-hidden"
+                    >
                     <button
                       onClick={() => removeFromCart(cartKey(item.id, myDeviceKey))}
                       aria-label={t.removeFromCartAria(item.name)}
-                      className="w-[34px] h-[34px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                      className="w-10 h-10 shrink-0 rounded-full border border-line bg-white text-encre
+                        transition-transform duration-micro ease-deplacement active:scale-90
+                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harissa focus-visible:ring-offset-2 focus-visible:ring-offset-semoule-raised"
                     >
                       −
                     </button>
                     <span
-                      className={`inline-block min-w-[16px] text-center text-[14px] font-bold tabular-nums ${
+                      className={`inline-block min-w-[16px] text-center text-etiquette font-bold tabular-nums ${
                         bumpedItemId === item.id ? "animate-cart-bump" : ""
                       }`}
                     >
                       {ligne.quantity}
                     </span>
-                  </>
-                )}
+                    </m.div>
+                  )}
+                </AnimatePresence>
+                {/* 40 px et non 34 : sous 40, la cible se rate au pouce en
+                    tenant le téléphone d'une main, et le client tape deux fois.
+                    Le « 19px » du glyphe reste en dur — c'est un dessin de
+                    caractère, pas du texte courant. */}
                 <button
                   onClick={() => (hasOptionGroups && !ligne ? openOptionChooser(item) : addToCart(item))}
                   disabled={rupture}
                   aria-label={t.addToCartAria(item.name)}
-                  className={`w-[34px] h-[34px] rounded-full text-[19px] leading-none shadow-sm transition-transform active:scale-90 disabled:cursor-not-allowed disabled:active:scale-100 ${
-                    rupture
-                      ? "bg-[var(--line-strong)] text-[var(--semoule)]"
-                      : "bg-[var(--harissa)] text-[var(--semoule)]"
-                  }`}
+                  className={`w-10 h-10 shrink-0 rounded-full text-[19px] leading-none shadow-carte
+                    transition-transform duration-micro ease-deplacement active:scale-90
+                    disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harissa focus-visible:ring-offset-2 focus-visible:ring-offset-semoule-raised ${
+                      rupture ? "bg-line-strong text-semoule" : "bg-harissa text-[var(--on-harissa)]"
+                    }`}
                 >
                   +
                 </button>
@@ -2850,10 +2939,25 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             </div>
           </div>
         </div>
-        {ligne && (
-          <div className="mt-[10px] pt-[10px] border-t border-[var(--line)]">
+        {/* Le dépliement était le défaut le plus visible de la carte : ajouter
+            un plat révélait d'un coup ~250 px (note, plat à partager, convives)
+            et poussait toute la carte vers le bas, sans transition. L'œil
+            perdait sa place au moment précis où il vérifiait son geste.
+            L'enveloppe porte l'animation et `overflow-hidden` ; le panneau
+            garde sa marge et son filet, sinon un `height: 0` laisserait un
+            talon de 21 px (box-sizing: border-box). */}
+        <AnimatePresence initial={false}>
+          {ligne && (
+            <m.div
+              key="detail-plat"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1, transition: TRANSITION.entree }}
+              exit={{ height: 0, opacity: 0, transition: TRANSITION.sortie }}
+              className="overflow-hidden"
+            >
+          <div className="mt-2.5 pt-2.5 border-t border-line">
             {ligne.selectedOptions.length > 0 && (
-              <p className="text-xs text-[var(--ink-soft)] mb-2">
+              <p className="text-legende text-ink-soft mb-2">
                 {ligne.selectedOptions.map((o) => o.optionName).join(" · ")}
               </p>
             )}
@@ -2862,9 +2966,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               value={ligne.note}
               onChange={(e) => setNote(cartKey(item.id, myDeviceKey), e.target.value)}
               placeholder={t.notePlaceholder}
-              className="w-full text-xs bg-white border border-[var(--line)] rounded-[10px] px-[10px] py-2 placeholder:text-[var(--ink-soft)]"
+              className="w-full text-etiquette bg-white border border-[var(--line)] rounded-controle px-2.5 py-2 placeholder:text-[var(--ink-soft)]"
             />
-            <label className="mt-2 flex items-center gap-2 text-sm cursor-pointer">
+            <label className="mt-2 flex items-center gap-2 text-etiquette cursor-pointer">
               <input
                 type="checkbox"
                 checked={ligne.shared}
@@ -2872,7 +2976,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 className="sr-only"
               />
               <span
-                className="w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0"
+                className="w-[18px] h-[18px] rounded-champ border-[1.5px] flex items-center justify-center shrink-0"
                 style={{
                   backgroundColor: ligne.shared ? "var(--menthe)" : "#fff",
                   borderColor: ligne.shared ? "var(--menthe)" : "var(--line-strong)",
@@ -2902,8 +3006,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 SplitBill au moment de payer plutôt que de reposer la
                 question. */}
             <div className="mt-2">
-              <p className="text-xs text-[var(--ink-soft)]">{t.sharedWithLabel}</p>
-              <div className="mt-1 flex flex-wrap gap-[6px]">
+              <p className="text-legende text-ink-soft">{t.sharedWithLabel}</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
                 {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
                   const choisi = ligne.sharedWith.includes(place);
                   return (
@@ -2912,7 +3016,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       type="button"
                       onClick={() => toggleConvive(cartKey(item.id, myDeviceKey), place)}
                       aria-pressed={choisi}
-                      className={`rounded-full border px-[12px] py-[5px] text-sm transition-colors ${
+                      className={`rounded-full border px-3 py-1.5 text-etiquette transition-colors duration-rapide ease-deplacement ${
                         choisi
                           ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
                           : "border-[var(--line)] bg-white text-[var(--encre)]"
@@ -2924,15 +3028,15 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 })}
               </div>
               {ligne.sharedWith.length === 0 ? (
-                <p className="mt-1 text-xs text-[var(--ink-soft)]/80">{t.sharedWithEveryone}</p>
+                <p className="mt-1 text-legende text-ink-soft">{t.sharedWithEveryone}</p>
               ) : (
-                <p className="mt-1 text-[11.5px] text-[var(--ink-soft)]">
-                  {t.sharedPerPersonAmount(perPerson)}
-                </p>
+                <p className="mt-1 text-legende text-ink-soft">{t.sharedPerPersonAmount(perPerson)}</p>
               )}
             </div>
           </div>
-        )}
+            </m.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -2990,7 +3094,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[rgba(36,24,17,.55)]" />
             <div className="absolute top-[10px] end-[10px] flex flex-col items-end gap-[7px]">{enTeteActions}</div>
           </div>
-          <div className="relative bg-[var(--harissa)] text-[var(--semoule)] pt-2 pb-3 ps-20 pe-4">
+          <div className="relative bg-harissa text-[var(--on-harissa)] pt-2 pb-3 ps-20 pe-4">
             <div className="absolute -top-7 start-3.5 w-14 h-14 rounded-full border-[3px] border-[var(--harissa)] shadow-md bg-[var(--semoule)] flex items-center justify-center overflow-hidden">
               {logoPhoto ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -2999,8 +3103,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 <TawlaMark size={32} />
               )}
             </div>
-            <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
-            <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
+            <h1 className={`${lalezar.className} text-affiche text-balance`}>{restaurant.name}</h1>
+            {/* Même correction de contraste que la variante sans couverture. */}
+            <p className="text-etiquette font-medium mt-0.5">{table.label}</p>
             {/* Ancrées à la ligne de la table, pas à celle du nom : cette
                 ligne-là reste courte à gauche quelle que soit la longueur du
                 nom au-dessus, donc jamais de collision (Phase D1, point 3). */}
@@ -3008,7 +3113,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
         </header>
       ) : (
-        <header className="bg-[var(--harissa)] text-[var(--semoule)] px-4 pt-[10px] pb-[14px] flex items-start justify-between gap-3">
+        /* Sur téléphone, l'en-tête tient sur deux rangs : le nom du restaurant
+           d'abord, sur toute la largeur, les actions en dessous. Côte à côte,
+           les deux pastilles prenaient 170 des 390 px et « Dar Chaabane » se
+           coupait en deux lignes — le nom du restaurant est le seul moment de
+           marque de la page, il ne se casse pas pour laisser place à un
+           bouton. À partir de `sm`, la place existe et on revient sur un rang. */
+        <header className="bg-harissa text-[var(--on-harissa)] px-4 pt-2.5 pb-3.5 flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           <div className="flex items-start gap-3 min-w-0">
             {logoPhoto ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -3021,11 +3132,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               <TawlaMark size={30} variant="reserve" className="shrink-0 mt-0.5" />
             )}
             <div className="min-w-0">
-              <h1 className={`${lalezar.className} text-[28px] leading-[1.05] text-balance`}>{restaurant.name}</h1>
-              <p className="text-[13px] font-medium text-[rgba(246,239,221,.82)] mt-0.5">{table.label}</p>
+              <h1 className={`${lalezar.className} text-affiche text-balance`}>{restaurant.name}</h1>
+              {/* Blanc plein, pas un semoule à 82 % : mesuré à 3,13:1 sur
+                  l'aplat harissa, très en dessous du seuil AA. La hiérarchie
+                  passe par la taille et la graisse, jamais par l'opacité — sur
+                  un accent saturé, l'opacité mange le contraste avant de
+                  produire de la nuance. */}
+              <p className="text-etiquette font-medium mt-0.5">{table.label}</p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-[7px] shrink-0">
+          <div className="flex items-center justify-end gap-2 shrink-0 sm:flex-col sm:items-end sm:gap-2">
             {enTeteActions}
             <ReseauxSociaux restaurant={restaurant} />
           </div>
@@ -3034,9 +3150,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
 
       {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
         <div className="bg-[var(--espresso)] px-4 py-[11px] flex items-start gap-2 text-[12.5px] leading-[1.45] text-[rgba(246,239,221,.88)]">
-          <MoonIcon className="w-4 h-4 shrink-0 mt-0.5 text-[var(--laiton)]" />
+          <MoonIcon className="w-4 h-4 shrink-0 mt-0.5 text-[var(--laiton-text)]" />
           <p>
-            <b className="text-[var(--laiton)]">{t.ramadanBannerPrefix}</b>
+            <b className="text-[var(--laiton-text)]">{t.ramadanBannerPrefix}</b>
             {t.ramadanBannerRest(formatTime(restaurant.iftar_time))}
           </p>
         </div>
@@ -3051,20 +3167,42 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           data-visite="client-categories"
           className="sticky top-0 z-30 bg-[rgba(246,239,221,.95)] backdrop-blur border-b border-[var(--line)]"
         >
-          <ul className="flex gap-2 overflow-x-auto px-4 py-[11px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <ul
+            ref={listeCategoriesRef}
+            className="relative flex gap-2 overflow-x-auto px-4 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {/* Un seul repère qui glisse d'une catégorie à l'autre, au lieu
+                d'une couleur qui s'éteint ici et se rallume là : le glissement
+                dit d'où on vient. Piloté par mesure plutôt que par une
+                animation de layout — le socle ne charge que `domAnimation`, et
+                CSS suffit pour un déplacement dans le même écran. */}
+            {repereCategorie && (
+              <span
+                aria-hidden
+                className="absolute left-0 top-0 rounded-full bg-harissa transition-[transform,width] duration-rapide ease-deplacement motion-reduce:transition-none"
+                style={{
+                  width: repereCategorie.largeur,
+                  height: repereCategorie.hauteur,
+                  transform: `translate(${repereCategorie.x}px, ${repereCategorie.y}px)`,
+                }}
+              />
+            )}
             {categories.map((category) => {
               const anchor = categoryAnchor(category);
-              const active = anchor === activeCategoryAnchor;
+              const active = anchor === ancreCategorieActive;
               return (
-                <li key={category}>
+                <li key={category} data-ancre={anchor} className="relative z-[1]">
                   <a
                     id={`${anchor}-pill`}
                     href={`#${anchor}`}
-                    className={`inline-block whitespace-nowrap rounded-full border px-[13px] py-[6px] text-[12.5px] font-semibold transition-colors active:bg-[var(--harissa)] active:text-[var(--semoule)] active:border-[var(--harissa)] ${
-                      active
-                        ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
-                        : "bg-[var(--semoule-raised)] text-[var(--encre)] border-[var(--line)]"
-                    }`}
+                    aria-current={active ? "true" : undefined}
+                    className={`inline-block whitespace-nowrap rounded-full border px-[13px] py-1.5 text-legende font-semibold
+                      transition-colors duration-rapide ease-deplacement
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harissa focus-visible:ring-offset-2 focus-visible:ring-offset-semoule ${
+                        active
+                          ? "text-[var(--on-harissa)] border-transparent"
+                          : "bg-semoule-raised text-encre border-line"
+                      }`}
                   >
                     {menuCategoryLabel(category, locale)}
                   </a>
@@ -3089,7 +3227,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 <li key={ref.order.id}>
                   <button
                     onClick={() => suivreCommande(ref)}
-                    className="w-full text-start text-sm underline text-[var(--laiton)] flex justify-between gap-2"
+                    className="w-full text-start text-sm underline text-[var(--laiton-text)] flex justify-between gap-2"
                   >
                     <span>{t.openOrderLine(ref.order.id, ref.order.items.length)}</span>
                     <span className="tabular-nums shrink-0">
@@ -3102,24 +3240,36 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           </div>
         )}
         {waiterCallError && (
-          <div className="mb-4 text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3">
+          <div className="mb-4 text-sm text-[var(--harissa-text)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3">
             {waiterCallError}
           </div>
         )}
         {orderError && (
-          <div className="mb-4 text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3 flex justify-between items-start gap-2">
+          <div className="mb-4 text-sm text-[var(--harissa-text)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3 flex justify-between items-start gap-2">
             <span>{orderError}</span>
-            <button onClick={() => setOrderError(null)} aria-label={t.closeErrorAria} className="text-[var(--harissa)]">
+            <button onClick={() => setOrderError(null)} aria-label={t.closeErrorAria} className="text-[var(--harissa-text)]">
               ✕
             </button>
           </div>
         )}
 
-        <div className="mb-4 rounded-2xl border border-[rgba(184,134,46,.5)] bg-[var(--creme)] p-3">
+        {/* Replié, ce n'est qu'une proposition facultative : elle ne porte donc
+            plus le cadre laiton plein, qui la faisait lire comme une offre
+            promue juste au-dessus du premier plat. Le cadre revient une fois la
+            section ouverte, où il délimite un vrai formulaire. */}
+        <div
+          className={
+            loyaltySectionOpen
+              ? "mb-4 rounded-carte border border-[rgba(184,134,46,.5)] bg-creme p-3"
+              : "mb-4"
+          }
+        >
           {!loyaltySectionOpen ? (
             <button
               onClick={() => setLoyaltySectionOpen(true)}
-              className="text-[13px] font-semibold text-[var(--laiton)] inline-flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5 rounded-champ text-etiquette font-semibold text-laiton-text
+                transition-colors duration-micro ease-deplacement
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harissa focus-visible:ring-offset-2 focus-visible:ring-offset-semoule"
             >
               <StampIcon className="w-4 h-4 shrink-0" />
               {t.loyaltyToggle}
@@ -3130,7 +3280,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   taper — pas dans une page qu'il n'ouvrira jamais (Phase 16). */}
               <p className="text-xs text-[var(--ink-soft)] leading-relaxed">
                 {t.loyaltyConsentNotice}{" "}
-                <Link href="/confidentialite" className="underline text-[var(--laiton)]">
+                <Link href="/confidentialite" className="underline text-[var(--laiton-text)]">
                   {t.loyaltyPrivacyLink}
                 </Link>
               </p>
@@ -3156,7 +3306,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 />
               </label>
               {loyaltyFirstVisit && (
-                <p className="text-sm text-[var(--laiton)] pt-1 flex items-center gap-1.5">
+                <p className="text-sm text-[var(--laiton-text)] pt-1 flex items-center gap-1.5">
                   <GiftIcon className="w-4 h-4 shrink-0" />
                   {t.loyaltyFirstVisit}
                 </p>
@@ -3175,11 +3325,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   ce qui fait qu'on voit qu'on a changé de section en faisant
                   défiler, sans avoir à lire. */}
               <h2 className="flex items-center gap-3 mb-3">
-                <span className="h-px flex-1 bg-[var(--line)]" />
-                <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-[var(--laiton)] whitespace-nowrap">
+                <span className="h-px flex-1 bg-line" />
+                <span className="text-surtitre font-bold uppercase text-laiton-text whitespace-nowrap">
                   {menuCategoryLabel(category, locale)}
                 </span>
-                <span className="h-px flex-1 bg-[var(--line)]" />
+                <span className="h-px flex-1 bg-line" />
               </h2>
               {menu.filter((m) => m.category === category).map((item, i) => renderItem(item, i))}
             </section>
@@ -3190,28 +3340,70 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             table) : la carte ne doit pas réagir aux ajouts des autres
             convives, seul le panier de table (ci-dessous) englobe tout le
             monde. */}
-        {myCartLines.length > 0 && !showCartReview && (
-          <div className="fixed bottom-0 left-0 right-0 bg-[var(--espresso)] pt-[14px] px-4 pb-[18px]">
-            <div className="max-w-md mx-auto">
-              <div className="flex justify-between items-center gap-3" data-visite="client-panier">
-                <div>
-                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[rgba(246,239,221,.6)]">
-                    {t.cartItemsCount(myCartLines.reduce((s, l) => s + l.quantity, 0))}
-                  </p>
-                  <p className={`${lalezar.className} text-[26px] leading-none tabular-nums text-[var(--semoule)] mt-0.5`}>
-                    {formatAmount(myTotal)} {t.currency}
-                  </p>
+        {/* La barre arrive par le bas et repart par le bas. Elle apparaissait
+            sèchement au premier plat ajouté — au moment précis où l'œil est
+            ailleurs, sur la ligne qui vient de se déplier — donc on ne la
+            voyait pas arriver. `AnimatePresence` sert la sortie : un élément
+            démonté ne peut pas s'animer en CSS. */}
+        <AnimatePresence>
+          {myCartLines.length > 0 && !showCartReview && (
+            <m.div
+              key="barre-panier"
+              initial={{ y: "100%" }}
+              animate={{ y: 0, transition: TRANSITION.entree }}
+              exit={{ y: "100%", transition: TRANSITION.sortie }}
+              className="fixed bottom-0 left-0 right-0 bg-espresso pt-3.5 px-4 pb-[max(1.125rem,env(safe-area-inset-bottom))] shadow-barre"
+            >
+              <div className="max-w-md mx-auto">
+                <div className="flex justify-between items-center gap-3" data-visite="client-panier">
+                  <div>
+                    <p className="text-surtitre font-semibold text-[var(--ink-on-espresso)]">
+                      {t.cartItemsCount(myCartLines.reduce((s, l) => s + l.quantity, 0))}
+                    </p>
+                    {/* Le total se remplace en fondu à chaque changement. La clé
+                        porte la valeur : React remonte le nœud, donc
+                        AnimatePresence peut faire sortir l'ancien montant
+                        pendant que le nouveau entre. Un chiffre qui se substitue
+                        d'un coup se lit comme un rafraîchissement de données,
+                        pas comme la conséquence du clic (principe 6).
+
+                        Le gabarit en flux donne sa taille à la boîte : les deux
+                        copies qui se croisent sont en position absolue et ne
+                        mesurent rien, sans lui le montant serait tronqué à la
+                        largeur du libellé du dessus. C'est aussi lui que lisent
+                        les lecteurs d'écran, les copies animées étant masquées
+                        — pendant le fondu, deux montants coexistent. */}
+                    <span className="relative mt-0.5 block overflow-hidden">
+                      <span className={`${lalezar.className} block text-[26px] leading-none tabular-nums opacity-0`}>
+                        {formatAmount(myTotal)} {t.currency}
+                      </span>
+                      <AnimatePresence initial={false}>
+                        <m.span
+                          key={myTotal}
+                          aria-hidden
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0, transition: TRANSITION.deplacement }}
+                          exit={{ opacity: 0, y: -10, transition: { duration: DUREE.rapide, ease: COURBE.sortie } }}
+                          className={`${lalezar.className} absolute inset-0 whitespace-nowrap text-[26px] leading-none tabular-nums text-semoule`}
+                        >
+                          {formatAmount(myTotal)} {t.currency}
+                        </m.span>
+                      </AnimatePresence>
+                    </span>
+                  </div>
+                  <Button
+                    size="lg"
+                    shape="pilule"
+                    onClick={() => setShowCartReview(true)}
+                    className="shrink-0 px-[22px] font-bold"
+                  >
+                    {t.viewCartButton}
+                  </Button>
                 </div>
-                <button
-                  onClick={() => setShowCartReview(true)}
-                  className="shrink-0 bg-[var(--harissa)] text-[var(--semoule)] rounded-full px-[22px] py-[14px] text-[14.5px] font-bold shadow-[0_2px_0_var(--harissa-pressed)] active:shadow-none active:translate-y-[2px]"
-                >
-                  {t.viewCartButton}
-                </button>
               </div>
-            </div>
-          </div>
-        )}
+            </m.div>
+          )}
+        </AnimatePresence>
 
         {/* Récapitulatif façon panier d'appli de livraison, ouvert avant de
             valider : tout ce qui compose la commande (articles, quantités,
@@ -3239,12 +3431,12 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     sans ça un échec de validation (article devenu indisponible,
                     connexion perdue...) resterait invisible derrière lui. */}
                 {orderError && (
-                  <div className="text-sm text-[var(--harissa)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3 flex justify-between items-start gap-2">
+                  <div className="text-sm text-[var(--harissa-text)] bg-[rgba(214,64,30,.1)] border border-[rgba(214,64,30,.55)] rounded-2xl p-3 flex justify-between items-start gap-2">
                     <span>{orderError}</span>
                     <button
                       onClick={() => setOrderError(null)}
                       aria-label={t.closeErrorAria}
-                      className="text-[var(--harissa)]"
+                      className="text-[var(--harissa-text)]"
                     >
                       ✕
                     </button>
@@ -3322,7 +3514,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                           {line.note && <p className="text-xs text-[var(--ink-soft)] mt-0.5">{line.note}</p>}
                           <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                             {line.shared && (
-                              <span className="text-xs text-[var(--laiton)] inline-flex items-center gap-1">
+                              <span className="text-xs text-[var(--laiton-text)] inline-flex items-center gap-1">
                                 <UtensilsIcon className="w-3.5 h-3.5 shrink-0" /> {t.sharedTag}
                               </span>
                             )}
@@ -3340,7 +3532,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                             </span>
                           </div>
                         </div>
-                        <span className="shrink-0 text-[14.5px] font-bold tabular-nums text-[var(--harissa)]">
+                        <span className="shrink-0 text-[14.5px] font-bold tabular-nums text-[var(--harissa-text)]">
                           {formatAmount(lineUnitPrice(line) * line.quantity)} {t.currency}
                         </span>
                       </div>
@@ -3394,7 +3586,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       onChange={(e) => setPreOrderForIftar(e.target.checked)}
                       className="accent-[var(--laiton)]"
                     />
-                    <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton)]" />
+                    <MoonIcon className="w-4 h-4 shrink-0 text-[var(--laiton-text)]" />
                     {t.preorderCheckboxLabel(formatTime(restaurant.iftar_time))}
                   </label>
                 )}
