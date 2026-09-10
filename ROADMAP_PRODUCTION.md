@@ -176,17 +176,24 @@ fois.
 
 ### P1.5 — Sortir les appels réseau de la boucle d'événements (F7)
 
-- [ ] `pywebpush` est appelé **à chaque création de commande**, une fois par
+- [x] `pywebpush` est appelé **à chaque création de commande**, une fois par
       membre du staff abonné, sans timeout : le défaut de la librairie vaut
-      `10000`, interprété par `requests` comme **10 000 secondes**. Un service
-      de push lent gèle Tawla entière. Poser un timeout court et explicite, et
-      sortir l'appel du chemin de requête.
-      *Fichiers : `app/core/push.py:28`, `app/modules/staff/service.py:167`*
-- [ ] Même traitement pour les appels `httpx` synchrones (15 s) vers le
-      prestataire de paiement et Resend.
-      *Fichiers : `app/core/konnect.py:191,209`, `app/core/email.py:45`*
-      *Validation : prestataire simulé à 30 s de latence → une seule requête
-      affectée, les autres continuent d'être servies.*
+      `10000`, interprété par `requests` comme **10 000 secondes**. Deux bornes
+      posées : `DELAI_PUSH_SECONDES = 5` par envoi, et
+      `BUDGET_PUSH_EQUIPE_SECONDES = 15` pour toute l'équipe — sans ce second
+      plafond, le premier se multiplie par la taille de la brigade. Vérifié
+      dans les deux sens : le test échoue sans le `timeout=` (`[None] == [5]`),
+      passe avec (PR #206)
+      *Fichiers : `app/core/push.py`, `app/modules/staff/service.py`*
+- [x] Appels `httpx` vers le prestataire de paiement et Resend : ils portaient
+      **déjà** un `timeout=15` explicite, et **§P1.1 les avait déjà sortis de
+      la boucle d'événements** en faisant tourner les fonctions de service dans
+      un thread. Rien à corriger donc — mais le critère de validation, lui,
+      n'avait jamais été vérifié : il l'est désormais par un test (un envoi qui
+      traîne pendant qu'une requête ordinaire passe en < 2 s), plus un
+      garde-fou de lecture qui échoue si un appel `httpx` repart un jour sans
+      `timeout` (PR #206)
+      *Fichier : `tests/test_appels_reseau_lents.py`*
 
 `run_in_threadpool` suffit à ce palier. Une vraie file d'attente est en P3.
 

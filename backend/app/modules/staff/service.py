@@ -1,10 +1,11 @@
 import secrets
+import time
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger, log_event
-from app.core.push import send_push_notification
+from app.core.push import BUDGET_PUSH_EQUIPE_SECONDES, send_push_notification
 from app.modules.staff import schemas, security
 from app.modules.staff.models import Staff, StaffRole
 
@@ -163,7 +164,20 @@ def notify_restaurant_staff(db: Session, restaurant_id: int, title: str, body: s
         )
         .all()
     )
-    for member in subscribers:
+    # Budget global, en plus du délai par envoi (ROADMAP_PRODUCTION.md §P1.5) :
+    # sans lui, le plafond de `send_push_notification` se multiplie par la
+    # taille de l'équipe, et une seule commande peut retenir un thread — et sa
+    # connexion base — bien plus longtemps que prévu. Les abonnés suivants sont
+    # alors sautés, ce qui est le bon arbitrage : la notification est
+    # best-effort, la commande ne l'est pas.
+    echeance = time.monotonic() + BUDGET_PUSH_EQUIPE_SECONDES
+    for index, member in enumerate(subscribers):
+        if time.monotonic() >= echeance:
+            log_event(
+                logger, "push.budget_equipe_depasse",
+                restaurant_id=restaurant_id, prevenus=index, abonnes=len(subscribers),
+            )
+            return
         send_push_notification(member.push_subscription, title, body)
 
 
