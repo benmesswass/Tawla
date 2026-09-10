@@ -103,6 +103,9 @@ def test_le_client_apprend_en_direct_que_son_appel_est_resolu(client):
         # Deuxième message envoyé à la connexion : qui commande sous quel
         # prénom (même chantier), vide ici — hors sujet de ce fichier.
         assert ws.receive_json() == {"event": "roster.updated", "people": []}
+        # Troisième message : le mode de répartition de l'addition, par
+        # défaut ici — hors sujet de ce fichier, voir test_table_split_mode.py.
+        assert ws.receive_json() == {"event": "split_mode.updated", "mode": "items"}
 
         client.post(f"/api/v1/waiter-calls/{call['id']}/resolve", headers=headers)
         message = ws.receive_json()

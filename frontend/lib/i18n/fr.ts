@@ -1,6 +1,6 @@
 // Dictionnaire de référence — définit la forme (Dictionary) que chaque
 // autre langue doit respecter exactement (voir ar.ts). Ne couvre QUE le
-// parcours client (page /menu/[qrToken] + SplitBill) : les écrans
+// parcours client (page /menu/[qrToken]) : les écrans
 // staff/cuisine/manager restent en français pour l'instant (back-office
 // interne, cf. ROADMAP.md).
 import { formatMoney } from "@/lib/currency";
@@ -125,16 +125,19 @@ export const fr = {
   orderAgain: "Commander à nouveau",
   postOrderSuggestionTitle: "Envie d'autre chose avant l'addition ?",
 
-  splitBillToggle: "Partager l'addition entre plusieurs personnes",
-  splitBillTitle: "Partager l'addition",
-  close: "Fermer",
+  // Répartir l'addition (chantier hiérarchie du paiement, 2026-09-10) — nom
+  // choisi pour ne plus se confondre avec `shareOrderButton` ("Partager ma
+  // commande", partage social, sans rapport).
+  repartitionSectionTitle: "Répartition",
+  shareBillCardTitle: "Répartir l'addition",
+  shareBillHelper: "Répartissez cette commande avec les autres personnes à table.",
+  totalOrderAmountNote: (amount: number) => `sur une addition totale de ${formatMoney(amount)}`,
   splitModeEqual: "Équitable",
   splitModeByItem: "Par plat",
-  peopleCountLabel: "Nombre de personnes",
   sharedOption: "Partagé",
   personLabel: (n: number) => `Personne ${n}`,
   unassignedSharedNote: "Les plats non attribués sont partagés équitablement.",
-  splitBillDisclaimer: "Indicatif — le paiement se fait pour l'addition complète, une seule fois pour la table.",
+  equalSplitNote: "Chacun paie le même montant, quel que soit ce qu'il a commandé.",
 
   // Identité de table (ROADMAP.md §Override, extension) : modale affichée dès
   // le scan, remplace l'ancien "vous êtes combien à table ?" posé une fois

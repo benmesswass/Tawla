@@ -114,16 +114,16 @@ export const en = {
   orderAgain: "Order again",
   postOrderSuggestionTitle: "Fancy something else before the bill?",
 
-  splitBillToggle: "Split the bill between several people",
-  splitBillTitle: "Split the bill",
-  close: "Close",
+  repartitionSectionTitle: "Breakdown",
+  shareBillCardTitle: "Split the bill",
+  shareBillHelper: "Split this order with everyone else at the table.",
+  totalOrderAmountNote: (amount) => `out of a total bill of ${formatMoney(amount)}`,
   splitModeEqual: "Equal",
   splitModeByItem: "By dish",
-  peopleCountLabel: "Number of people",
   sharedOption: "Shared",
   personLabel: (n) => `Person ${n}`,
   unassignedSharedNote: "Unassigned dishes are shared equally.",
-  splitBillDisclaimer: "For guidance only — payment covers the full bill, once for the whole table.",
+  equalSplitNote: "Everyone pays the same amount, regardless of what they ordered.",
 
   identityPromptTitle: "Your first name",
   identityPromptSubtitle:

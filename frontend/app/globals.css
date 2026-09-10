@@ -204,12 +204,26 @@
   animation: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Un montant qui vient de se recalculer (répartition de l'addition) se
+   remplace en fondu, jamais en substitution sèche — principe 6 de
+   MOTION_DESIGN.md, jusqu'ici seulement documenté comme manquant. Rejoué à
+   chaque changement de valeur via `key` côté React (React remonte le nœud). */
+@keyframes montant-change {
+  from { opacity: .35; }
+  to { opacity: 1; }
+}
+
+.animate-montant-change {
+  animation: montant-change var(--motion-fast) var(--ease-move);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-celebration-pop,
   .animate-celebration-fade,
   .animate-confetti,
   .animate-cart-bump,
-  .animate-pulse-ring {
+  .animate-pulse-ring,
+  .animate-montant-change {
     animation: none;
   }
 }

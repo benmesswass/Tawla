@@ -15,6 +15,7 @@ from app.modules.orders import service as orders_service
 from app.modules.orders import table_cart
 from app.modules.staff.models import StaffRole
 from app.modules.tables import roster as table_roster
+from app.modules.tables import split_mode as table_split_mode
 from app.modules.tables.models import Table
 
 router = APIRouter(tags=["notifications"])
@@ -106,6 +107,7 @@ async def ws_table(websocket: WebSocket, restaurant_id: int, qr_token: str, db: 
     # mutation.
     await websocket.send_json(table_cart.snapshot_message(table.id))
     await websocket.send_json(table_roster.roster_message(table.id))
+    await websocket.send_json(table_split_mode.split_mode_message(table.id))
     await _pump_table(websocket, restaurant_id, table, db, channel)
 
 
@@ -145,6 +147,10 @@ async def _pump_table(websocket: WebSocket, restaurant_id: int, table: Table, db
                     name = str(raw.get("name", ""))
                     table_roster.table_roster_store.add_guest(table.id, name)
                     await manager.broadcast(restaurant_id, channel, table_roster.roster_message(table.id))
+                elif action == "split_mode.set":
+                    mode = str(raw.get("mode", ""))
+                    table_split_mode.table_split_mode_store.set_mode(table.id, mode)
+                    await manager.broadcast(restaurant_id, channel, table_split_mode.split_mode_message(table.id))
                 # Action inconnue ou message malformé sans champ "action" :
                 # ignoré plutôt que de casser la connexion — un client d'une
                 # version plus récente ou plus ancienne ne doit jamais faire

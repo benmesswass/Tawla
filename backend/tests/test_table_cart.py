@@ -29,9 +29,11 @@ def _connect(client, restaurant, table):
     return client.websocket_connect(f"/ws/table/{restaurant.id}/{table['qr_token']}")
 
 
-def _skip_roster_snapshot(ws) -> None:
-    """Deuxième message envoyé à la connexion (qui commande sous quel
-    prénom) — hors sujet de ce fichier, voir test_table_roster.py."""
+def _skip_roster_and_split_mode_snapshots(ws) -> None:
+    """Deuxième et troisième messages envoyés à la connexion (qui commande
+    sous quel prénom, puis le mode de répartition de l'addition) — hors sujet
+    de ce fichier, voir test_table_roster.py et test_table_split_mode.py."""
+    ws.receive_json()
     ws.receive_json()
 
 
@@ -40,9 +42,9 @@ def test_deux_appareils_composent_le_meme_panier_en_temps_reel(client):
 
     with _connect(client, restaurant, table) as ws_a, _connect(client, restaurant, table) as ws_b:
         assert ws_a.receive_json() == {"event": "cart.updated", "lines": []}
-        _skip_roster_snapshot(ws_a)
+        _skip_roster_and_split_mode_snapshots(ws_a)
         assert ws_b.receive_json() == {"event": "cart.updated", "lines": []}
-        _skip_roster_snapshot(ws_b)
+        _skip_roster_and_split_mode_snapshots(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 2})
         expected = {
@@ -73,13 +75,13 @@ def test_un_appareil_qui_rejoint_voit_deja_ce_que_les_autres_ont_ajoute(client):
 
     with _connect(client, restaurant, table) as ws_a:
         ws_a.receive_json()  # snapshot initial, vide
-        _skip_roster_snapshot(ws_a)
+        _skip_roster_and_split_mode_snapshots(ws_a)
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()  # écho de sa propre mutation
 
         with _connect(client, restaurant, table) as ws_b:
             snapshot = ws_b.receive_json()
-            _skip_roster_snapshot(ws_b)
+            _skip_roster_and_split_mode_snapshots(ws_b)
             assert snapshot["lines"] == [
                 {
                     "menu_item_id": item["id"], "quantity": 1, "notes": None, "is_shared": False,
@@ -94,9 +96,9 @@ def test_nimporte_quel_appareil_peut_valider_pour_toute_la_table(client):
 
     with _connect(client, restaurant, table) as ws_a, _connect(client, restaurant, table) as ws_b:
         ws_a.receive_json()
-        _skip_roster_snapshot(ws_a)
+        _skip_roster_and_split_mode_snapshots(ws_a)
         ws_b.receive_json()
-        _skip_roster_snapshot(ws_b)
+        _skip_roster_and_split_mode_snapshots(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()
@@ -129,7 +131,7 @@ def test_valider_un_panier_vide_ne_cree_aucune_commande(client):
 
     with _connect(client, restaurant, table) as ws:
         ws.receive_json()
-        _skip_roster_snapshot(ws)
+        _skip_roster_and_split_mode_snapshots(ws)
         ws.send_json({"action": "cart.validate"})
         error = ws.receive_json()
 
@@ -144,7 +146,7 @@ def test_un_article_indisponible_est_refuse_sans_corrompre_le_panier(client):
 
     with _connect(client, restaurant, table) as ws:
         ws.receive_json()
-        _skip_roster_snapshot(ws)
+        _skip_roster_and_split_mode_snapshots(ws)
         ws.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         error = ws.receive_json()
         assert error["event"] == "cart.error"
@@ -165,9 +167,9 @@ def test_devenir_indisponible_apres_ajout_ne_perd_pas_le_panier_des_autres(clien
 
     with _connect(client, restaurant, table) as ws_a, _connect(client, restaurant, table) as ws_b:
         ws_a.receive_json()
-        _skip_roster_snapshot(ws_a)
+        _skip_roster_and_split_mode_snapshots(ws_a)
         ws_b.receive_json()
-        _skip_roster_snapshot(ws_b)
+        _skip_roster_and_split_mode_snapshots(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()
@@ -199,9 +201,9 @@ def test_paniers_isoles_entre_deux_tables(client):
 
     with _connect(client, restaurant, table_a) as ws_a, _connect(client, restaurant, table_b) as ws_b:
         ws_a.receive_json()
-        _skip_roster_snapshot(ws_a)
+        _skip_roster_and_split_mode_snapshots(ws_a)
         ws_b.receive_json()
-        _skip_roster_snapshot(ws_b)
+        _skip_roster_and_split_mode_snapshots(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws_a.receive_json()
@@ -225,7 +227,7 @@ def test_rejouer_la_validation_avec_le_meme_client_order_id_ne_double_pas_la_com
 
     with _connect(client, restaurant, table) as ws:
         ws.receive_json()
-        _skip_roster_snapshot(ws)
+        _skip_roster_and_split_mode_snapshots(ws)
         ws.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws.receive_json()
         ws.send_json({"action": "cart.validate", "client_order_id": "retry-abc"})
@@ -233,7 +235,7 @@ def test_rejouer_la_validation_avec_le_meme_client_order_id_ne_double_pas_la_com
 
     with _connect(client, restaurant, table) as ws_retry:
         ws_retry.receive_json()  # panier déjà vide, validé plus haut
-        _skip_roster_snapshot(ws_retry)
+        _skip_roster_and_split_mode_snapshots(ws_retry)
         # Sans le garde-fou, ceci échouerait en EMPTY_ORDER plutôt que de
         # rejouer la même commande.
         ws_retry.send_json({"action": "cart.validate", "client_order_id": "retry-abc"})
@@ -260,7 +262,7 @@ def test_une_deconnexion_meme_longue_ne_purge_plus_le_panier(client):
 
     with _connect(client, restaurant, table) as ws:
         ws.receive_json()
-        _skip_roster_snapshot(ws)
+        _skip_roster_and_split_mode_snapshots(ws)
         ws.send_json({"action": "cart.set", "menu_item_id": item["id"], "quantity": 1})
         ws.receive_json()
 
@@ -276,9 +278,9 @@ def test_paniers_isoles_entre_deux_restaurants(client):
 
     with _connect(client, restaurant_a, table_a) as ws_a, _connect(client, restaurant_b, table_b) as ws_b:
         ws_a.receive_json()
-        _skip_roster_snapshot(ws_a)
+        _skip_roster_and_split_mode_snapshots(ws_a)
         ws_b.receive_json()
-        _skip_roster_snapshot(ws_b)
+        _skip_roster_and_split_mode_snapshots(ws_b)
 
         ws_a.send_json({"action": "cart.set", "menu_item_id": item_a["id"], "quantity": 1})
         ws_a.receive_json()

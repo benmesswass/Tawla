@@ -1062,6 +1062,14 @@ def _roster_names(table_id: int) -> list[str]:
     return [p.name for p in table_roster_store.snapshot(table_id)]
 
 
+def _split_mode(table_id: int) -> split.SplitMode:
+    """Mode de répartition choisi par la table (« par plat » par défaut) —
+    même import différé que `_roster_names`, même raison."""
+    from app.modules.tables.split_mode import table_split_mode_store
+
+    return table_split_mode_store.get(table_id)
+
+
 def _paid_names(order: Order) -> set[str]:
     return {p.payer_name for p in order.payments if p.status == OrderPaymentStatus.PAID}
 
@@ -1090,7 +1098,7 @@ def _get_payable_share(
             return order, payment, float(payment.amount)
 
     names = _roster_names(order.table_id)
-    amount = split.compute_payable_amount(order, names, payer_name, _paid_names(order))
+    amount = split.compute_payable_amount(order, names, payer_name, _paid_names(order), _split_mode(order.table_id))
     return order, None, amount
 
 
