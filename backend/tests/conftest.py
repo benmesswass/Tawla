@@ -171,10 +171,19 @@ def create_restaurant(
 
 @pytest.fixture()
 def client():
-    # Volontairement PAS de "with TestClient(app) as c" : ça déclencherait
-    # le lifespan de l'app (donc create_all sur la VRAIE base Postgres,
-    # qui n'existe pas dans cet environnement de test).
-    return TestClient(app)
+    # `with` obligatoire depuis Starlette 1.x (ROADMAP_PRODUCTION.md §P1.8) :
+    # hors contexte, chaque `websocket_connect` ouvre SON PROPRE portail, donc
+    # sa propre boucle d'événements dans son propre thread. Les files d'attente
+    # de la session, autrefois des `queue.Queue` thread-safe, sont désormais des
+    # flux anyio liés à cette boucle : un `broadcast` déclenché par le socket B
+    # ne réveille jamais le socket A s'il attend déjà — le test se fige pour
+    # toujours (vu sur `test_table_cart.py`, hang à `ws_a.receive_json()`).
+    # Dans le contexte, toutes les sessions partagent un portail unique, comme
+    # un processus uvicorn réel n'a qu'une boucle. Le commentaire d'origine
+    # refusait le `with` à cause du `create_all()` du lifespan : celui-ci a
+    # disparu à la Phase 12.2 (`app/main.py::lifespan` ne fait plus que `yield`).
+    with TestClient(app) as c:
+        yield c
 
 
 def create_staff(restaurant_id: int, role: StaffRole = StaffRole.MANAGER, password: str = "test-pass-1234") -> Staff:

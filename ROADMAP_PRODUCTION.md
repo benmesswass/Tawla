@@ -248,15 +248,61 @@ fois.
 
 ### P1.8 — Dépendances (F10)
 
-- [ ] Monter PyJWT (7 avis — c'est la bibliothèque qui valide toute
+- [x] Monter PyJWT (7 avis — c'est la bibliothèque qui valide toute
       l'authentification du personnel), Starlette + FastAPI, python-multipart,
       python-dotenv, et Next.js (avis **RCE critique** sur l'API d'optimisation
-      d'images).
-- [ ] **Ajouter `pip-audit` et `npm audit` à la CI** — c'est le correctif
-      durable. Les 43 avis étaient invisibles pour l'équipe faute de scan.
-      *Fichiers : `backend/requirements.txt`, `frontend/package.json`,
-      `.github/workflows/ci.yml`*
-      *Validation : 789 tests toujours verts, les deux scans propres.*
+      d'images). Mesuré avant/après : `pip-audit` passe de **42 avis sur 4
+      paquets à 0**, `npm audit` de **1 critique + 1 haut à 0** (PR #208)
+      *Versions : `fastapi` 0.115.0 → 0.141.1 (qui tire `starlette` 0.38.6 →
+      1.6.0), `pyjwt` 2.9.0 → 2.13.0, `python-multipart` 0.0.12 → 0.0.32,
+      `python-dotenv` 1.0.1 → 1.2.3, `next` 14.2.35 → 15.5.25.*
+- [x] **Ajouter `pip-audit` et `npm audit` à la CI** — c'est le correctif
+      durable. Les 42 avis étaient invisibles pour l'équipe faute de scan.
+      Bloquants tous les deux (PR #208)
+      *Fichiers : `backend/requirements.txt`, `backend/requirements-dev.txt`,
+      `frontend/package.json`, `.github/workflows/ci.yml`*
+      *Validation : 813 tests toujours verts, les deux scans propres.*
+
+**Trois décisions prises pendant la montée, à ne pas redécouvrir plus tard :**
+
+1. **Next 15.5.25 et non Next 16.** Les deux avis critiques (exécution de code
+   à distance sur l'API d'optimisation d'images, et sur un hôte Windows) sont
+   corrigés en **15.5.24** : `npm audit fix --force` proposait 16.3.4 parce que
+   c'est la dernière version, pas parce qu'il la faut. Une seule version
+   majeure franchie au lieu de deux, sur un frontend sans test de bout en bout.
+2. **`overrides: { postcss }`** dans `frontend/package.json` : Next 15 embarque
+   `postcss` 8.4.31, visé par quatre avis. Ils sont tous **au moment du build**
+   (lecture d'un `.map` désigné par un commentaire CSS) et Tawla ne compile que
+   son propre CSS — l'exposition réelle est nulle. L'`override` les ferme quand
+   même, parce que le critère de sortie est « scan propre » : une porte avec une
+   exception permanente n'est plus une porte. À retirer le jour où on passe à
+   Next 16, qui embarque un `postcss` corrigé.
+3. **Portée des deux scans.** `pip-audit -r requirements.txt` (et non
+   l'environnement installé) et `npm audit --omit=dev --audit-level=high` : on
+   bloque sur ce qui **part en production**. Un avis sur eslint ou vitest
+   n'atteint aucun client, et un avis modéré sur une dépendance de build ne doit
+   pas empêcher un correctif urgent — une porte qu'on apprend à contourner ne
+   protège plus rien.
+
+⚠️ **Piège rencontré, et le seul vrai changement de code de cette tâche.**
+Starlette 1.x réécrit son `TestClient` : hors `with`, chaque
+`websocket_connect` ouvre **son propre portail**, donc sa propre boucle
+d'événements dans son propre thread, et les files de la session — autrefois des
+`queue.Queue` thread-safe — sont désormais des flux anyio liés à cette boucle.
+Un `broadcast` déclenché par le socket B ne réveille alors jamais le socket A
+s'il attend déjà : `test_table_cart.py` se figeait **pour toujours** sur
+`ws_a.receive_json()` (diagnostiqué à la pile, `py-spy dump`, la suite étant
+muette). La correction tient en une ligne de `tests/conftest.py` — la fixture
+`client` entre enfin dans le contexte du `TestClient`, ce qui donne un portail
+unique à toutes les sessions, comme un processus uvicorn réel n'a qu'une
+boucle. Le commentaire qui refusait ce `with` invoquait le `create_all()` du
+lifespan : celui-ci a disparu à la Phase 12.2, le commentaire était périmé.
+
+Côté produit, une seule adaptation : `params` est une `Promise` depuis Next 15,
+y compris dans un composant client. `app/menu/[qrToken]/page.tsx` lit désormais
+le segment avec `useParams()` — la valeur directement, sans `use()` à dérouler.
+À noter, `npx tsc --noEmit` **ne voit pas** cette erreur (elle vient des types
+générés par Next) : c'est `npm run build` qui l'attrape, d'où son intérêt en CI.
 
 ### P1.9 — Le test qui empêche la rechute
 
