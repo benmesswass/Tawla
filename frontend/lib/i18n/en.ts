@@ -35,7 +35,7 @@ export const en = {
   cartItemsCount: (n) => `${n} item${n > 1 ? "s" : ""}`,
   viewCartButton: "Table cart",
   cartSummaryTitle: "Table cart",
-  backToMenuButton: "← Back to menu",
+  backToMenuButton: "Back to menu",
 
   orderCancelledTitle: "Order cancelled",
   orderSentTitle: "Order sent 🎉",
