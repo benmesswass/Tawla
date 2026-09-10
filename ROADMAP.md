@@ -412,8 +412,9 @@ resterait un chantier bien plus large, explicitement refusé pour l'instant
       dernier appareil)
 - [ ] Prompt côté client à l'ouverture du menu, jamais bloquant (« Passer » à
       chaque étape), suggestion de taille pré-remplie depuis `Table.seats`
-- [ ] `SplitBill` utilise le prénom déclaré à la place de « Personne N »
-      quand il existe
+- [x] Le prénom déclaré s'affiche à la place de « Personne N » dans la
+      répartition de l'addition — plus via `SplitBill` (supprimé, remplacé
+      par le bloc Répartition de l'écran de paiement, PR #196)
 - [ ] Traduction arabe non relue par un locuteur natif — à vérifier avant un
       vrai pilote (même règle que le reste du parcours client bilingue)
 
