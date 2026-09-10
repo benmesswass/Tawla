@@ -8,6 +8,8 @@ from app.core.database import get_db
 from app.core.subscription import require_tier
 from app.modules.staff.dependencies import require_active_restaurant, require_role
 from app.modules.staff.models import Staff, StaffRole
+from starlette.concurrency import run_in_threadpool
+
 from app.modules.stats import schemas, service
 from app.modules.tenants.models import SubscriptionTier
 
@@ -28,7 +30,7 @@ async def my_shift(
 ):
     """Sa soirée à lui. Ouverte à tous les rôles : le poste chaud prend rarement
     des commandes, l'écran doit répondre zéro plutôt que refuser l'accès."""
-    return await service.get_my_shift(db, staff, date or datetime.now(timezone.utc).date())
+    return await run_in_threadpool(service.get_my_shift, db, staff, date or datetime.now(timezone.utc).date())
 
 
 @router.get("/dashboard/{restaurant_id}", response_model=schemas.DashboardStats)
@@ -44,7 +46,7 @@ async def dashboard(
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     day = date or datetime.now(timezone.utc).date()
-    return await service.get_dashboard_stats(db, restaurant_id, day)
+    return await run_in_threadpool(service.get_dashboard_stats, db, restaurant_id, day)
 
 
 @router.get("/preuve/{restaurant_id}", response_model=schemas.ProofStats)
@@ -78,7 +80,7 @@ async def proof(
             status_code=422,
             detail={"code": "INVALID_PERIOD", "message": "start must not be after end"},
         )
-    return await service.get_proof_stats(db, restaurant_id, period_start, period_end)
+    return await run_in_threadpool(service.get_proof_stats, db, restaurant_id, period_start, period_end)
 
 
 @router.get("/equipe/{restaurant_id}", response_model=schemas.TeamReport)
@@ -108,7 +110,7 @@ async def team_report(
             status_code=422,
             detail={"code": "INVALID_PERIOD", "message": "start must not be after end"},
         )
-    return await service.get_team_report(db, restaurant_id, period_start, period_end)
+    return await run_in_threadpool(service.get_team_report, db, restaurant_id, period_start, period_end)
 
 
 @router.get("/kitchen-today-count/{restaurant_id}", response_model=schemas.KitchenTodayCount)
@@ -123,4 +125,4 @@ async def kitchen_today_count(
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     day = datetime.now(timezone.utc).date()
-    return await service.get_kitchen_today_count(db, restaurant_id, day)
+    return await run_in_threadpool(service.get_kitchen_today_count, db, restaurant_id, day)

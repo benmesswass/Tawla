@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core import stripe_gateway
@@ -9,6 +10,7 @@ from app.core.konnect import is_konnect_enabled, verify_konnect_order_webhook
 from app.core.logging import get_logger, log_event
 from app.core.rate_limit import ORDER_VOLUME_MAX_REQUESTS, rate_limit
 from app.modules.orders import schemas, service
+from app.modules.notifications.manager import diffuser, executer_puis_diffuser
 from app.modules.orders.dependencies import get_order_by_token, get_paid_order_by_query_token
 from app.modules.orders.models import Order, OrderStatus
 from app.modules.staff.dependencies import require_active_restaurant, require_role
@@ -36,7 +38,7 @@ async def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_d
     `public_token` de la commande : c'est la seule fois où il est renvoyé, le
     navigateur doit le garder pour suivre et payer sa commande.
     """
-    return await service.create_order(db, payload)
+    return await executer_puis_diffuser(service.create_order, db, payload)
 
 
 @router.put("/{order_id}/items", response_model=schemas.OrderOut)
@@ -51,7 +53,7 @@ async def update_order_items(
     confirmation, une modification passe par
     `POST /{order_id}/modification-requests`.
     """
-    return await service.update_order_items(db, order, payload)
+    return await executer_puis_diffuser(service.update_order_items, db, order, payload)
 
 
 @router.post(
@@ -67,7 +69,7 @@ async def create_modification_request(
     confirmée. Le serveur doit vérifier avec la cuisine avant d'appliquer quoi
     que ce soit (voir `/modification-requests/{request_id}/resolve`).
     """
-    return await service.create_modification_request(db, order, payload)
+    return await executer_puis_diffuser(service.create_modification_request, db, order, payload)
 
 
 @router.get(
@@ -81,7 +83,7 @@ async def list_pending_modification_requests(
     pool serveur."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return await service.list_pending_modification_requests(db, restaurant_id)
+    return await run_in_threadpool(service.list_pending_modification_requests, db, restaurant_id)
 
 
 @router.post(
@@ -98,7 +100,9 @@ async def resolve_modification_request(
     order = db.get(Order, order_id)
     if not order or order.restaurant_id != staff.restaurant_id:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    return await service.resolve_modification_request(db, order, request_id, payload.decisions, staff)
+    return await executer_puis_diffuser(
+        service.resolve_modification_request, db, order, request_id, payload.decisions, staff
+    )
 
 
 @router.get("/by-restaurant/{restaurant_id}/active", response_model=list[schemas.OrderOutStaff])
@@ -111,7 +115,7 @@ async def list_active_orders(
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return await service.list_active_orders(db, restaurant_id)
+    return await run_in_threadpool(service.list_active_orders, db, restaurant_id)
 
 
 @router.get("/by-restaurant/{restaurant_id}/kitchen-done-today", response_model=list[schemas.OrderOutStaff])
@@ -125,7 +129,7 @@ async def list_kitchen_done_orders_today(
     """
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    return await service.list_kitchen_done_orders_today(db, restaurant_id)
+    return await run_in_threadpool(service.list_kitchen_done_orders_today, db, restaurant_id)
 
 
 @router.get("/{order_id}", response_model=schemas.OrderOut)
@@ -160,7 +164,7 @@ async def list_pending_cash_payments(
     """Convives ayant demandé à payer leur part en espèces, pas encore encaissés."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    payments = await service.list_pending_cash_payments(db, restaurant_id)
+    payments = await run_in_threadpool(service.list_pending_cash_payments, db, restaurant_id)
     return [_serialize_pending_share(p) for p in payments]
 
 
@@ -193,9 +197,11 @@ async def pay_by_card(
     Konnect/Stripe (modèle direct, 2026-08-19), sinon mode démo — voir
     `service.start_card_payment`. `pay_url` non-null = rediriger le client.
     """
-    order, pay_url = await service.start_card_payment(
-        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
+    order, pay_url, diffusions = await run_in_threadpool(
+        service.start_card_payment,
+        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email,
     )
+    await diffuser(diffusions)
     return schemas.serialize_order(order, pay_url)
 
 
@@ -225,7 +231,8 @@ async def order_card_payment_webhook(
         log_event(logger, "order.card_payment_webhook_bad_signature", order_id=order_id, payment_id=payment_id)
         raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"})
 
-    result = await service.settle_card_payment(db, order_id, payment_id)
+    result, diffusions = await run_in_threadpool(service.settle_card_payment, db, order_id, payment_id)
+    await diffuser(diffusions)
     return {"received": True, "result": result}
 
 
@@ -311,7 +318,8 @@ async def order_card_payment_stripe_webhook(request: Request, db: Session = Depe
         log_event(logger, "stripe.card_webhook_invalid_order_id", order_id_raw=order_id_raw)
         return {"received": True, "result": "ignored"}
 
-    result = await service.settle_card_payment(db, order_id, payment_id)
+    result, diffusions = await run_in_threadpool(service.settle_card_payment, db, order_id, payment_id)
+    await diffuser(diffusions)
     log_event(logger, "stripe.card_webhook", event_type=event["type"], order_id=order_id, result=result)
     return {"received": True, "result": result}
 
@@ -328,7 +336,8 @@ async def check_card_payment(
     voir settle_card_payment), donc sans risque à appeler même quand aucun
     fournisseur réel n'est activé.
     """
-    await service.settle_card_payment(db, order.id, payment_id)
+    _resultat, diffusions = await run_in_threadpool(service.settle_card_payment, db, order.id, payment_id)
+    await diffuser(diffusions)
     db.refresh(order)
     return schemas.serialize_order(order)
 
@@ -341,7 +350,8 @@ async def request_cash_payment(
 ):
     """Le client demande à payer sa part en espèces — prévient le serveur en
     temps réel."""
-    return await service.request_cash_payment(
+    return await executer_puis_diffuser(
+        service.request_cash_payment,
         db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
     )
 
@@ -351,7 +361,7 @@ async def confirm_cash_payment(
     order_id: int, payment_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
 ):
     """Le serveur confirme avoir encaissé la part en espèces de ce convive."""
-    return await service.confirm_cash_payment(db, payment_id, staff)
+    return await executer_puis_diffuser(service.confirm_cash_payment, db, payment_id, staff)
 
 
 @router.post("/{order_id}/pay/card-terminal", response_model=schemas.OrderOut)
@@ -365,7 +375,8 @@ async def request_card_terminal_payment(
     terminal — même mécanique que le paiement en espèces (carte physique /
     en ligne / espèces, 2026-08-19).
     """
-    return await service.request_card_terminal_payment(
+    return await executer_puis_diffuser(
+        service.request_card_terminal_payment,
         db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
     )
 
@@ -375,7 +386,7 @@ async def confirm_card_terminal_payment(
     order_id: int, payment_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
 ):
     """Le serveur confirme avoir encaissé la carte physique de ce convive."""
-    return await service.confirm_card_terminal_payment(db, payment_id, staff)
+    return await executer_puis_diffuser(service.confirm_card_terminal_payment, db, payment_id, staff)
 
 
 @router.get(
@@ -389,7 +400,7 @@ async def list_pending_card_terminal_payments(
     encore encaissés."""
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
-    payments = await service.list_pending_card_terminal_payments(db, restaurant_id)
+    payments = await run_in_threadpool(service.list_pending_card_terminal_payments, db, restaurant_id)
     return [_serialize_pending_share(p) for p in payments]
 
 
@@ -413,37 +424,37 @@ async def get_order_invoice(order: Order = Depends(get_paid_order_by_query_token
 @router.post("/{order_id}/claim", response_model=schemas.OrderOutStaff)
 async def claim_order(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Un serveur prend en charge une commande en attente depuis le pool partagé."""
-    return await service.claim_order(db, order_id, staff)
+    return await executer_puis_diffuser(service.claim_order, db, order_id, staff)
 
 
 @router.post("/{order_id}/confirm", response_model=schemas.OrderOutStaff)
 async def confirm_order(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Le serveur confirme la commande APRÈS l'avoir vérifiée avec la table."""
-    return await service.transition_status(db, order_id, OrderStatus.CONFIRMED, staff)
+    return await executer_puis_diffuser(service.transition_status, db, order_id, OrderStatus.CONFIRMED, staff)
 
 
 @router.post("/{order_id}/send-to-kitchen", response_model=schemas.OrderOutStaff)
 async def send_to_kitchen(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
     """Validation finale du serveur -> part sur l'écran cuisine."""
-    return await service.transition_status(db, order_id, OrderStatus.SENT_TO_KITCHEN, staff)
+    return await executer_puis_diffuser(service.transition_status, db, order_id, OrderStatus.SENT_TO_KITCHEN, staff)
 
 
 @router.post("/{order_id}/cancel", response_model=schemas.OrderOutStaff)
 async def cancel_order(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
-    return await service.transition_status(db, order_id, OrderStatus.CANCELLED, staff)
+    return await executer_puis_diffuser(service.transition_status, db, order_id, OrderStatus.CANCELLED, staff)
 
 
 @router.post("/{order_id}/start-preparation", response_model=schemas.OrderOutStaff)
 async def start_preparation(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_KITCHEN_OR_MANAGER)):
     """Bouton côté écran cuisine."""
-    return await service.transition_status(db, order_id, OrderStatus.IN_PREPARATION, staff)
+    return await executer_puis_diffuser(service.transition_status, db, order_id, OrderStatus.IN_PREPARATION, staff)
 
 
 @router.post("/{order_id}/mark-ready", response_model=schemas.OrderOutStaff)
 async def mark_ready(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_KITCHEN_OR_MANAGER)):
-    return await service.transition_status(db, order_id, OrderStatus.READY, staff)
+    return await executer_puis_diffuser(service.transition_status, db, order_id, OrderStatus.READY, staff)
 
 
 @router.post("/{order_id}/mark-served", response_model=schemas.OrderOutStaff)
 async def mark_served(order_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)):
-    return await service.transition_status(db, order_id, OrderStatus.SERVED, staff)
+    return await executer_puis_diffuser(service.transition_status, db, order_id, OrderStatus.SERVED, staff)

@@ -68,9 +68,13 @@ def _setup_pending_stripe_order(client, restaurant: Restaurant, *, price: float 
     return order, payment_id
 
 
-def _make_async_settle_stub(result: str):
-    async def _stub(db, order_id, payment_id):
-        return result
+def _make_settle_stub(result: str):
+    """`settle_card_payment` est synchrone depuis §P1.1 et rend
+    `(resultat, diffusions)` — le routeur l'exécute dans un thread puis
+    diffuse ce qu'elle a décrit."""
+
+    def _stub(db, order_id, payment_id):
+        return result, []
 
     return _stub
 
@@ -102,7 +106,7 @@ def test_webhook_settles_a_pending_order_from_the_session_metadata(client, db_se
     monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
     monkeypatch.setattr(
         orders_router.service, "settle_card_payment",
-        _make_async_settle_stub("paid"),
+        _make_settle_stub("paid"),
     )
 
     res = client.post(
@@ -209,7 +213,7 @@ def test_webhook_settles_on_async_payment_succeeded_too(client, db_session, monk
         },
     )
     monkeypatch.setattr(orders_router.stripe_gateway, "construct_connect_webhook_event", lambda **kw: event)
-    monkeypatch.setattr(orders_router.service, "settle_card_payment", _make_async_settle_stub("paid"))
+    monkeypatch.setattr(orders_router.service, "settle_card_payment", _make_settle_stub("paid"))
 
     res = client.post(
         "/api/v1/orders/stripe-card-webhook", content=b"{}", headers={"stripe-signature": "whatever"}

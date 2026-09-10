@@ -61,7 +61,7 @@ def _weekly_signups(restaurants: list[Restaurant], now: datetime) -> list[schema
     return [schemas.WeeklyPoint(week_start=week, restaurants_created=counts[i]) for i, week in enumerate(weeks)]
 
 
-async def get_overview(db: Session) -> schemas.PlatformOverview:
+def get_overview(db: Session) -> schemas.PlatformOverview:
     """
     Les chiffres indispensables de l'opérateur, tous restaurants **réels**
     confondus (les démonstrations en sont exclues, voir plus bas) — échelle

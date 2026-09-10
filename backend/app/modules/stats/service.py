@@ -103,7 +103,7 @@ def _compute_timing(orders: list[Order]) -> schemas.TimingStats:
     )
 
 
-async def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> schemas.DashboardStats:
+def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> schemas.DashboardStats:
     # Instrumentation de rétention (ROADMAP.md Phase 24, voir stats/models.py)
     # — une ligne par appel, donc par ouverture de /dashboard ou
     # /dashboard/stats. Écrite en premier et indépendamment du reste : un
@@ -271,7 +271,7 @@ def _period_proof(db: Session, restaurant_id: int, start: date_type, end: date_t
     )
 
 
-async def get_proof_stats(
+def get_proof_stats(
     db: Session, restaurant_id: int, start: date_type, end: date_type
 ) -> schemas.ProofStats:
     """
@@ -289,7 +289,7 @@ async def get_proof_stats(
     )
 
 
-async def get_team_report(
+def get_team_report(
     db: Session, restaurant_id: int, start: date_type, end: date_type
 ) -> schemas.TeamReport:
     """
@@ -363,7 +363,7 @@ async def get_team_report(
     return schemas.TeamReport(start=start, end=end, staff=rows)
 
 
-async def get_kitchen_today_count(db: Session, restaurant_id: int, day: date_type) -> schemas.KitchenTodayCount:
+def get_kitchen_today_count(db: Session, restaurant_id: int, day: date_type) -> schemas.KitchenTodayCount:
     # Bornée par la journée de service (5h Tunis, Phase 19.5), pas par minuit
     # UTC : sinon une commande de sohour (2h Tunis) apparaît sous un jour
     # différent ici et sur les écrans de service (F-3, audit 2026-08-18).
@@ -383,7 +383,7 @@ async def get_kitchen_today_count(db: Session, restaurant_id: int, day: date_typ
     return schemas.KitchenTodayCount(date=day, count=count)
 
 
-async def get_my_shift(db: Session, staff: Staff, day: date_type) -> schemas.MyShift:
+def get_my_shift(db: Session, staff: Staff, day: date_type) -> schemas.MyShift:
     """
     La soirée du membre d'équipe connecté (Phase 17.3).
 

@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger, log_event
-from app.modules.notifications.manager import manager, table_channel
+from app.modules.notifications.manager import Diffusion, table_channel
 from app.modules.orders import table_cart
 from app.modules.orders.models import Order, OrderStatus, PaymentStatus
 from app.modules.staff.models import Staff
@@ -81,7 +81,7 @@ def _order_in_progress_status(db: Session, table_id: int) -> str | None:
     return None
 
 
-async def release_table(db: Session, table: Table, staff: Staff, note: str | None = None) -> Table:
+def release_table(db: Session, table: Table, staff: Staff, note: str | None = None) -> tuple[Table, list[Diffusion]]:
     """
     Le serveur ou le manager confirment que les clients sont partis — seul
     geste qui remet la table à zéro (2026-09-09). Plus aucun timer ni aucune
@@ -94,6 +94,7 @@ async def release_table(db: Session, table: Table, staff: Staff, note: str | Non
     été libérée en plein service, par qui, quand, à quelle étape, et
     pourquoi — jamais confiance au seul frontend pour l'exiger.
     """
+    diffusions: list[Diffusion] = []
     order_status = _order_in_progress_status(db, table.id)
     cleaned_note = (note or "").strip()
     if order_status is not None and not cleaned_note:
@@ -136,21 +137,21 @@ async def release_table(db: Session, table: Table, staff: Staff, note: str | Non
             restaurant_id=table.restaurant_id, table_id=table.id, staff_id=staff.id,
         )
 
-    await manager.broadcast(
+    diffusions.append(Diffusion(
         table.restaurant_id, channel="staff",
         message={"event": "table.released", "table_id": table.id},
-    )
+    ))
     # Un appareil client resté connecté (onglet ouvert) doit voir son panier
     # et ses convives repartir à zéro tout de suite — mêmes événements que
     # ceux diffusés à chaque changement (voir notifications/router.py).
     client_channel = table_channel(table.id)
-    await manager.broadcast(table.restaurant_id, client_channel, table_cart.snapshot_message(table.id))
-    await manager.broadcast(table.restaurant_id, client_channel, table_roster.roster_message(table.id))
+    diffusions.append(Diffusion(table.restaurant_id, client_channel, table_cart.snapshot_message(table.id)))
+    diffusions.append(Diffusion(table.restaurant_id, client_channel, table_roster.roster_message(table.id)))
 
-    return table
+    return table, diffusions
 
 
-async def list_forced_releases(db: Session, restaurant_id: int) -> list[ForcedTableRelease]:
+def list_forced_releases(db: Session, restaurant_id: int) -> list[ForcedTableRelease]:
     """Écran manager « Libérations forcées » — les plus récentes d'abord."""
     return (
         db.query(ForcedTableRelease)
