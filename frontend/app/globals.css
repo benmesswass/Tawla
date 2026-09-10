@@ -825,3 +825,33 @@
     transition: none;
   }
 }
+
+/* --- 5. Le panier plein cadre arrive comme une couche --------------------
+   Il remplaçait la carte d'un coup, sans rien dire du sens de la navigation :
+   on ne savait pas si on avait avancé d'un pas ou changé d'écran. Il monte
+   maintenant du bas, comme la barre qui l'a ouvert — c'est le même geste
+   poursuivi (principe 1).
+
+   Seule l'entrée est animée : la vue est démontée à la fermeture, et CSS ne
+   peut pas animer un nœud que React a retiré. Même renoncement que pour la
+   ligne de plat, et pour la même raison. */
+@keyframes couche-monte {
+  from {
+    opacity: 0;
+    transform: translateY(2.5%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.couche-monte {
+  animation: couche-monte var(--motion-normal) var(--ease-enter) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .couche-monte {
+    animation: none;
+  }
+}

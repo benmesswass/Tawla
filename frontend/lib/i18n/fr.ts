@@ -42,7 +42,7 @@ export const fr = {
   // de valider directement, pour que le client revoie tout avant de confirmer.
   viewCartButton: "Panier de table",
   cartSummaryTitle: "Panier de la table",
-  backToMenuButton: "← Retour à la carte",
+  backToMenuButton: "Retour à la carte",
 
   orderCancelledTitle: "Commande annulée",
   orderSentTitle: "Commande envoyée 🎉",

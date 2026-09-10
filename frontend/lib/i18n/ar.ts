@@ -35,7 +35,7 @@ export const ar = {
   cartItemsCount: (n) => `${n} حاجة`,
   viewCartButton: "قفة الطاولة",
   cartSummaryTitle: "قفة الطاولة",
-  backToMenuButton: "← ارجع للمينيو",
+  backToMenuButton: "ارجع للمينيو",
 
   orderCancelledTitle: "الطلبية تلغات",
   orderSentTitle: "الطلبية تبعثت 🎉",
