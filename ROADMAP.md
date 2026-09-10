@@ -448,6 +448,19 @@ de toute façon inexact tant que `convives` reste bloqué à sa valeur par défa
 de 2 (cf. `PartyPrompt`, tant que la taille réelle de la table n'est pas
 résolue).
 
+> **Mise à jour du 2026-09-10** — le paragraphe ci-dessus est daté sur deux
+> points, tous deux réglés par l'identité de table par personne (#186), qui
+> *est* la « résolution de la taille réelle de la table » qu'il attendait :
+> `PartyPrompt` n'existe plus (remplacé par `IdentityPrompt.tsx` +
+> `tables/roster.py`), et `convives` n'est plus un état à défaut 2 mais une
+> valeur dérivée du roster (`Math.max(1, Math.min(12, roster.length))`).
+> Le compteur manuel « Personnes à table » (`dinersLabel`) est supprimé :
+> redondant avec « + Ajouter » du roster, qui nomme les convives n'ayant pas
+> scanné au lieu de les compter anonymement — et il se faisait écraser par le
+> roster dès qu'un autre convive scannait. Le plancher à 2 qu'il portait
+> inventait un « Personne 2 » fantôme dans « Pour qui ? » sur une table où un
+> seul convive avait scanné (retour QA en direct).
+
 ## Hors périmètre, définitivement
 
 - **Expansion régionale** (Algérie, Maroc, Libye) — seul chemin compatible avec une levée, donc hors sujet depuis le cadrage « entreprise rentable et non diluée ». Trois conquêtes commerciales distinctes pour un fondateur seul. **La France fait exception, décidée explicitement** : Wassim a tranché le 2026-08-24 de mener les deux marchés en parallèle (scénario C de [`MARCHE_FRANCE.md`](./MARCHE_FRANCE.md)), sans attendre un jalon tunisien. Ça ne change rien à l'ordre des phases ci-dessus ni à la discipline de merge de ce fichier — voir `MARCHE_FRANCE.md` pour le chantier France lui-même

@@ -159,7 +159,6 @@ export const ar = {
   sharedWithLabel: "لمن؟",
   sharedWithEveryone: "ما تعيّنش لحد : يتقسم بالتساوي في الفاتورة.",
   sharedPerPersonAmount: (amount) => `${formatAmount(amount)} د.ت للشخص`,
-  dinersLabel: "قداش عباد عالطاولة",
   openOrdersTitle: (count, reste) =>
     count > 1
       ? `${count} طلبيات مازالوا — باقي ${formatAmount(reste)} د تتخلص`

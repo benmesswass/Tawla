@@ -182,7 +182,6 @@ export const fr = {
   sharedWithLabel: "Pour qui ?",
   sharedWithEveryone: "Non assigné : réparti équitablement à l'addition.",
   sharedPerPersonAmount: (amount: number) => `${formatMoney(amount)} par personne`,
-  dinersLabel: "Personnes à table",
   openOrdersTitle: (count: number, reste: number) =>
     count > 1
       ? `${count} commandes en cours — ${formatMoney(reste)} restent à régler`
