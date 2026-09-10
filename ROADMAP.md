@@ -19,8 +19,18 @@ digitalmenu.tn. Ce fichier-ci reste celui qui décide de la prochaine tâche de
 **code produit et de mise en ligne** ; `ROADMAP_DESIGN.md` se travaille à
 côté, sans réordonner les phases ci-dessous.
 
+⛔ **Depuis le 2026-09-10, une exception à cette règle** :
+[`ROADMAP_PRODUCTION.md`](./ROADMAP_PRODUCTION.md) est le seul document
+parallèle qui **réordonne celui-ci**. Son palier P1 est bloquant avant la
+Phase 20 — voir l'avertissement en tête de cette phase.
+
 Documents qui la fondent :
 
+- [`ROADMAP_PRODUCTION.md`](./ROADMAP_PRODUCTION.md) — roadmap de tenue en
+  production et de montée en charge, née le 2026-09-10 de l'audit technique
+  (charge réellement tirée, courses de concurrence reproduites). Trois paliers :
+  P1 pilote sûr, P2 multi-restaurants, P3 tenir 5 000. **Seul document
+  parallèle qui réordonne ce fichier** : P1 est bloquant avant la Phase 20.
 - [`AUDIT_PRE_LANCEMENT.md`](./AUDIT_PRE_LANCEMENT.md) — audit du 2026-08-18 :
   suites exécutées, parcours rejoués, attaques tentées avec leur code HTTP,
   vingt constats cités en `fichier:ligne`, grille recalculée à 5,4.
@@ -178,6 +188,16 @@ de l'audit et n'est comptée nulle part dans la grille.
 ---
 
 ## Phase 20 — Mettre en ligne, pour de vrai
+
+> ⛔ **Ne pas entamer cette phase avant que le palier P1 de
+> [`ROADMAP_PRODUCTION.md`](./ROADMAP_PRODUCTION.md) soit clos** (audit
+> technique du 2026-09-10). Mesuré sur le code actuel : 40 commandes
+> simultanées tuent le backend **définitivement** (1/40 aboutie, seul un
+> redémarrage le récupère), et le plafond est de **14 WebSockets tous
+> restaurants confondus**. Mettre en ligne avant P1, c'est garantir
+> exactement l'incident que cette phase existe pour éviter. Les lignes de
+> sauvegarde, monitoring et collecte d'erreurs ci-dessous sont reprises dans
+> P1.7 — correspondance complète en annexe C de ce fichier.
 
 **Mode d'emploi pas à pas : [`terrain/MISE_EN_LIGNE.md`](./terrain/MISE_EN_LIGNE.md)**
 **Budget chiffré et sourcé : [`AUDIT_COUTS_PRODUCTION.md`](./AUDIT_COUTS_PRODUCTION.md)**

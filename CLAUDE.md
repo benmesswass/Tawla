@@ -234,6 +234,15 @@ l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne. Depuis
 2026-09-01, le design du parcours client a sa propre roadmap parallèle,
 `ROADMAP_DESIGN.md` — voir plus bas.
 
+- `ROADMAP_PRODUCTION.md` — roadmap de **tenue en production et de montée en
+  charge** (2026-09-10), née de l'audit technique : charge réellement tirée
+  contre un Postgres réel, courses de concurrence reproduites. Trois paliers
+  (P1 pilote sûr, P2 multi-restaurants, P3 tenir 5 000), chacun clos par une
+  mesure. **C'est le seul document parallèle qui réordonne `ROADMAP.md`** :
+  son palier P1 est bloquant avant la Phase 20 (mesuré : 40 commandes
+  simultanées tuent le backend définitivement, plafond de 14 WebSockets tous
+  restaurants confondus). Une session qui travaille la concurrence, le pool de
+  connexions, le temps réel à l'échelle ou la scalabilité vient ici.
 - `AUDIT_COUTS_PRODUCTION.md` — audit du 2026-08-18 : ce que coûte réellement
   en argent la mise en production de Tawla (infrastructure, services tiers,
   domaine, conformité technique), chiffré et sourcé, obligatoire vs
