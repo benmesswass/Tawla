@@ -11,8 +11,8 @@ type Props = HTMLAttributes<HTMLSpanElement> & {
 // (connecté / connexion.../déconnecté / session expirée) — voir ConnectionBadge.
 const LIGHT_TONES: Record<Tone, string> = {
   neutral: "bg-[var(--creme)] text-[var(--ink-soft)]",
-  success: "bg-[rgba(31,107,79,.12)] text-[#1f6b4f]",
-  warning: "bg-[rgba(184,134,46,.12)] text-[#8a6420]",
+  success: "bg-[rgba(31,107,79,.12)] text-[var(--menthe)]",
+  warning: "bg-[rgba(184,134,46,.12)] text-[var(--laiton-text)]",
   danger: "bg-[rgba(214,64,30,.1)] text-[var(--harissa)]",
   info: "bg-[var(--espresso)] text-[var(--semoule)]",
 };

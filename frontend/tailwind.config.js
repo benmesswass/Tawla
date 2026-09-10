@@ -13,6 +13,10 @@ module.exports = {
         "harissa-dark": "var(--harissa-dark)",
         "harissa-pressed": "var(--harissa-pressed)",
         "on-harissa": "var(--on-harissa)",
+        // Réservés au texte — voir la note de globals.css : les accents en
+        // aplat ne passent pas le seuil AA une fois posés en texte.
+        "harissa-text": "var(--harissa-text)",
+        "laiton-text": "var(--laiton-text)",
         menthe: "var(--menthe)",
         laiton: "var(--laiton)",
         line: "var(--line)",
