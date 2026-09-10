@@ -37,9 +37,15 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
-def log_event(logger: logging.Logger, message: str, **context) -> None:
+def log_event(logger: logging.Logger, message: str, level: int = logging.INFO, **context) -> None:
     """
     Usage: log_event(logger, "order.confirmed", restaurant_id=1, order_id=42, table_id=5)
     -> toujours inclure les IDs métier pertinents (règle observabilité).
+
+    `level` reste INFO par défaut : la quasi-totalité des événements du projet
+    sont des faits métier, pas des anomalies. Le passer à WARNING sert aux
+    quelques signaux sur lesquels un log drain doit pouvoir filtrer pour
+    réveiller quelqu'un (ROADMAP_PRODUCTION.md §P1.7) — sans ça, une alerte
+    est noyée dans le flux normal du service.
     """
-    logger.info(message, extra={"context": context})
+    logger.log(level, message, extra={"context": context})

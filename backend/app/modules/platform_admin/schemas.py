@@ -184,3 +184,21 @@ class ProductAnalytics(BaseModel):
     demo_engagement: list[EventCount] | None
     paywall_hits_by_tier: list[TierCount] | None
     funnel: list[FunnelStep] | None
+
+
+class PoolOut(BaseModel):
+    """
+    L'état du pool de connexions (ROADMAP_PRODUCTION.md §P1.7).
+
+    `mesurable` distingue « tout va bien » de « je n'ai pas su regarder » :
+    sans lui, une base qui ne répond plus rendrait des zéros parfaitement
+    rassurants. Même raison pour `idle_in_transaction` nullable.
+    """
+    mesurable: bool
+    connexions_utilisees: int | None = None
+    capacite: int | None = None
+    taux_occupation: float | None = None
+    idle_in_transaction: int | None = None
+    seuil_alerte: float
+    sature: bool
+
