@@ -138,6 +138,7 @@ export const en = {
   rosterAddGuestPlaceholder: "First name (e.g. Yassine)",
   rosterAddGuestConfirm: "Add",
   rosterOwnItemsOnlyNote: "You can only remove your own dishes.",
+  cartForWhom: (names: string) => `For ${names}`,
 
   offlineQueuedTitle: "Connection lost",
   offlineQueuedMessage:
