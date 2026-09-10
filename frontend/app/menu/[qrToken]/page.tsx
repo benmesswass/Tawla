@@ -2459,13 +2459,26 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   <span className="text-[var(--ink-faint)]"> — {it.options.map((o) => o.option_name).join(", ")}</span>
                 )}
                 {it.notes && <span className="text-[var(--ink-faint)]"> — {it.notes}</span>}
-                {/* Assignation faite sur la carte, reportée jusqu'ici : c'est
-                    elle qui décide de la part de chacun au paiement
-                    (orders/split.py), donc la cacher au moment de payer est
-                    précisément le pire endroit pour la perdre. */}
-                {it.shared_with.length > 0 && (
+                {/* Qui a commandé le plat, et pour qui il est — les deux sur la
+                    même ligne. Le récap est collé à la section paiement
+                    (`paymentTitle`, ~70 lignes plus bas) : c'est l'écran où la
+                    table demande « c'est qui qui a pris le couscous ? », et
+                    `shared_with` y décide de la part de chacun
+                    (orders/split.py::compute_shares). Les cacher là est
+                    précisément le pire endroit pour les perdre.
+                    Prénom brut, sans « Vous · » comme au panier : le récap
+                    n'expose pas `added_by_key`, et comparer les prénoms se
+                    tromperait sur deux convives homonymes. */}
+                {(it.added_by_name || it.shared_with.length > 0) && (
                   <span className="block text-legende text-[var(--ink-soft)]">
-                    {t.cartForWhom(it.shared_with.map(personLabel).join(" · "))}
+                    {[
+                      it.added_by_name,
+                      it.shared_with.length > 0
+                        ? t.cartForWhom(it.shared_with.map(personLabel).join(" · "))
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 )}
               </li>
