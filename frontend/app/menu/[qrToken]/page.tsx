@@ -31,7 +31,6 @@ import { useReconnectingSocket } from "@/lib/useReconnectingSocket";
 import { localeSwitchLabel, useLocale } from "@/lib/i18n/useLocale";
 import { menuCategoryLabel } from "@/lib/menuCategories";
 import { duree, elapsedSeconds, useHorloge } from "@/lib/duree";
-import SplitBill from "@/components/SplitBill";
 import IdentityPrompt from "@/components/IdentityPrompt";
 import TawlaMark from "@/components/brand/TawlaMark";
 import VignetteCategorie from "@/components/VignetteCategorie";
@@ -313,12 +312,17 @@ function sameWireItem(a: OrderItemPayload, b: OrderItemPayload): boolean {
 // --- Paiement par personne (identité de table, ROADMAP.md §Override,
 // extension) ----------------------------------------------------------------
 // Prévisualisation cliente de la part de chacun — même algorithme que
-// SplitBill.tsx (mode "par plat") et orders/split.py::compute_shares côté
-// serveur, qui reste seul à faire foi au moment de payer : ce calcul-ci ne
-// sert qu'à AFFICHER un montant avant de cliquer, jamais à le facturer.
+// orders/split.py::compute_shares côté serveur, qui reste seul à faire foi au
+// moment de payer : ce calcul-ci ne sert qu'à AFFICHER un montant avant de
+// cliquer, jamais à le facturer.
 
-function computeSharesLocal(order: Order, names: string[]): number[] {
+export type SplitMode = "items" | "equal";
+
+function computeSharesLocal(order: Order, names: string[], mode: SplitMode = "items"): number[] {
   const n = names.length;
+  if (mode === "equal") {
+    return new Array(n).fill(order.total_amount / n);
+  }
   const totals = new Array(n).fill(0);
   for (const item of order.items) {
     const lineTotal = item.unit_price * item.quantity;
@@ -340,12 +344,12 @@ function computeSharesLocal(order: Order, names: string[]): number[] {
 // Le dernier convive encore non réglé absorbe l'arrondi — même règle que
 // côté serveur (orders/split.py::compute_payable_amount) : il paie
 // exactement ce qu'il reste, jamais sa part théorique.
-function myPayableAmount(order: Order, rosterNames: string[], myName: string): number {
+function myPayableAmount(order: Order, rosterNames: string[], myName: string, mode: SplitMode = "items"): number {
   const paidNames = new Set(order.payments.filter((p) => p.status === "paid").map((p) => p.payer_name));
   const names = rosterNames.includes(myName) ? rosterNames : [...rosterNames, myName];
   const remaining = names.filter((n) => !paidNames.has(n));
   if (remaining.length <= 1) return order.amount_remaining;
-  const totals = computeSharesLocal(order, names);
+  const totals = computeSharesLocal(order, names, mode);
   const myIndex = names.indexOf(myName);
   return myIndex >= 0 ? totals[myIndex] : order.amount_remaining;
 }
@@ -440,7 +444,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   // table ?" posé une fois pour toute la tablée. `roster` est dans l'ordre où
   // chacun a rejoint (voir tables/roster.py côté backend), ce qui lui laisse
   // jouer le même rôle que les anciennes places 1..N pour le sélecteur
-  // "Partagé entre" et le calculateur d'addition (SplitBill).
+  // "Partagé entre" et la répartition de l'addition au paiement.
   const [myIdentity, setMyIdentity] = useState<StoredIdentity | null>(null);
   const [showIdentityPrompt, setShowIdentityPrompt] = useState(false);
   // Une seule fois par visite : sans ça, une reconnexion du canal de la
@@ -453,6 +457,16 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [roster, setRoster] = useState<{ key: string; name: string }[]>([]);
   const [addingGuest, setAddingGuest] = useState(false);
   const [guestNameInput, setGuestNameInput] = useState("");
+  // Mode de répartition de l'addition ("par plat"/"équitable") — chantier
+  // hiérarchie du paiement, ADR 0006. Choix partagé par toute la table,
+  // diffusé sur le même canal que le roster ; par défaut "items" tant que
+  // personne ne l'a changé (voir tables/split_mode.py côté serveur, qui seul
+  // fait foi au moment de facturer).
+  const [splitMode, setSplitMode] = useState<SplitMode>("items");
+  // Replié tant que personne n'a demandé à répartir ET que le roster ne
+  // compte que vous — dès que l'un des deux devient vrai, reste déplié (pas
+  // de bouton pour re-replier : rien à cacher une fois que d'autres sont là).
+  const [shareOpen, setShareOpen] = useState(false);
   const myDeviceKey = myIdentity?.deviceKey ?? "";
   // Nombre de personnes à table : entièrement dérivé du roster, jamais un état
   // séparé. Le roster compte les convives réels — ceux qui ont scanné et ceux
@@ -493,6 +507,63 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   function loyaltyStampsFilled(status: LoyaltyMember): number {
     if (status.reward_available) return 10;
     return status.order_count % 10;
+  }
+
+  // Qui est à table + "+ Ajouter" — partagé entre le panier (avant validation)
+  // et le paiement (chantier hiérarchie du paiement) : un seul endroit à
+  // maintenir pour ce petit bout d'UI, chacun des deux garde sa propre carte
+  // englobante (titre, marges) autour de cet appel.
+  function renderRosterEditor() {
+    return (
+      <>
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+          {t.rosterSectionTitle}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {roster.map((p) => (
+            <span
+              key={p.key}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                p.key === myDeviceKey
+                  ? "bg-[var(--harissa)] border-[var(--harissa)] text-[var(--semoule)]"
+                  : "border-[var(--line)] bg-white text-[var(--encre)]"
+              }`}
+            >
+              {p.key === myDeviceKey ? t.rosterYouTag(p.name) : p.name}
+            </span>
+          ))}
+          {!addingGuest && (
+            <button
+              type="button"
+              onClick={() => setAddingGuest(true)}
+              className="rounded-full border border-dashed border-[var(--line-strong)] px-3 py-1 text-xs font-semibold text-[var(--ink-soft)]"
+            >
+              {t.rosterAddGuestChip}
+            </button>
+          )}
+        </div>
+        {addingGuest && (
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="text"
+              value={guestNameInput}
+              onChange={(e) => setGuestNameInput(e.target.value)}
+              placeholder={t.rosterAddGuestPlaceholder}
+              maxLength={30}
+              autoFocus
+              className="flex-1 bg-white border border-[var(--line)] rounded-[10px] px-3 py-1.5 text-sm text-[var(--encre)]"
+            />
+            <button
+              type="button"
+              onClick={addGuestToRoster}
+              className="rounded-[10px] px-3 py-1.5 text-xs font-bold bg-[var(--harissa)] text-[var(--semoule)] whitespace-nowrap"
+            >
+              {t.rosterAddGuestConfirm}
+            </button>
+          </div>
+        )}
+      </>
+    );
   }
 
   function renderLoyaltyCard(status: LoyaltyMember) {
@@ -1007,6 +1078,8 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
         api.getMenuByToken(qrToken).then(setMenu).catch(() => {});
       }
       setOrderError(toLocalizedMessage(new ApiError(msg.code, msg.message, msg), locale));
+    } else if (msg.event === "split_mode.updated") {
+      setSplitMode(msg.mode === "equal" ? "equal" : "items");
     }
   });
 
@@ -2582,7 +2655,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
               const paidNames = new Set(paidPayments.map((p) => p.payer_name));
               const remainingNames = rosterNames.filter((n) => !paidNames.has(n));
               const myPayment = trackedOrder.payments.find((p) => p.payer_key === myDeviceKey);
-              const myAmount = myPayableAmount(trackedOrder, rosterNames, myName);
+              const myAmount = myPayableAmount(trackedOrder, rosterNames, myName, splitMode);
+              const isSharedWithOthers = roster.length > 1;
+              const shareExpanded = shareOpen || isSharedWithOthers;
+              const namesForShares = rosterNames.includes(myName) ? rosterNames : [...rosterNames, myName];
+              const shares = computeSharesLocal(trackedOrder, namesForShares, splitMode);
               return (
                 <div className="space-y-3">
                   {paidPayments.length > 0 && (
@@ -2605,12 +2682,91 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                       {paymentError}
                     </div>
                   )}
-                  <SplitBill
-                    order={trackedOrder}
-                    t={t}
-                    partySize={roster.length || undefined}
-                    partyNames={rosterNames}
-                  />
+                  {/* COMBIEN : la part qu'on va réellement débiter est le
+                      chiffre dominant de tout l'écran de paiement — avant même
+                      de savoir si elle est partagée. */}
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--encre)]">{t.myShareTitle}</p>
+                    <p
+                      key={myAmount}
+                      className="animate-montant-change font-bold text-affiche text-[var(--encre)] leading-none mt-1"
+                    >
+                      {formatAmount(myAmount)}{" "}
+                      <span className="text-sm font-semibold text-[var(--ink-soft)]">{t.currency}</span>
+                    </p>
+                    {/* N'apparaît que si ça change concrètement quelque chose :
+                        seul·e à table, "Votre part" EST l'addition, la répéter
+                        n'apprend rien. */}
+                    {isSharedWithOthers && (
+                      <p className="text-[13px] text-[var(--ink-soft)] mt-1">
+                        {t.totalOrderAmountNote(trackedOrder.total_amount)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* COMMENT C'EST RÉPARTI : lecture directe du calcul qui
+                      facture réellement (orders/split.py), jamais une
+                      simulation à part — cf. ADR 0006. */}
+                  {isSharedWithOthers && (
+                    <div className="rounded-carte shadow-carte p-3 bg-[var(--semoule-raised)] border border-[var(--line)]">
+                      <p className="text-sm font-bold text-[var(--encre)]">{t.repartitionSectionTitle}</p>
+                      <div className="mt-2 flex gap-2">
+                        {(["items", "equal"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => sendTableAction({ action: "split_mode.set", mode })}
+                            className={`flex-1 rounded-[10px] py-1.5 text-[12.5px] font-bold text-center ${
+                              splitMode === mode
+                                ? "border border-[var(--harissa)] bg-[var(--creme)] text-[var(--harissa-text)]"
+                                : "border border-[var(--line)] bg-white text-[var(--encre)]"
+                            }`}
+                          >
+                            {mode === "items" ? t.splitModeByItem : t.splitModeEqual}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-3 space-y-1.5">
+                        {roster.map((p, i) => (
+                          <div key={p.key} className="flex items-center justify-between text-[13px]">
+                            <span className={p.key === myDeviceKey ? "font-semibold text-[var(--encre)]" : "text-[var(--ink-soft)]"}>
+                              {p.key === myDeviceKey ? t.rosterYouTag(p.name) : p.name}
+                            </span>
+                            <span
+                              key={`${p.key}-${shares[i] ?? 0}`}
+                              className="animate-montant-change font-bold tabular-nums text-[var(--encre)]"
+                            >
+                              {formatAmount(shares[i] ?? 0)} {t.currency}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-[var(--ink-faint)] mt-2">
+                        {splitMode === "equal" ? t.equalSplitNote : t.unassignedSharedNote}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* EST-CE QUE JE PARTAGE / AVEC COMBIEN DE PERSONNES : réutilise
+                      le même roster que le panier (renderRosterEditor), jamais un
+                      second mécanisme de saisie du nombre de convives. */}
+                  <div className="rounded-carte p-3 bg-[var(--semoule-raised)] border border-[var(--line)]">
+                    {shareExpanded ? (
+                      renderRosterEditor()
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-[var(--encre)]">{t.shareBillCardTitle}</p>
+                        <p className="text-sm text-[var(--ink-soft)] mt-1">{t.shareBillHelper}</p>
+                        <button
+                          type="button"
+                          onClick={() => setShareOpen(true)}
+                          className="mt-3 w-full text-[13px] font-semibold rounded-[10px] py-2.5 border border-[var(--line)] bg-white text-[var(--encre)]"
+                        >
+                          {t.shareBillCardTitle}
+                        </button>
+                      </>
+                    )}
+                  </div>
 
                   {myPayment?.status === "paid" ? (
                     <p className="text-sm font-semibold text-[var(--menthe)] bg-[rgba(31,107,79,.1)] border border-[rgba(31,107,79,.45)] rounded-xl p-3">
@@ -2624,7 +2780,6 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                     </p>
                   ) : (
                     <>
-                      <p className="text-sm font-semibold text-[var(--encre)]">{t.myShareTitle}</p>
                       <div>
                         <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
                         <div className="flex gap-2">
@@ -2770,7 +2925,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   }
 
   // Prénom déclaré à la place de "Personne N", quand donné — même repli que
-  // SplitBill.tsx. `roster` est dans l'ordre où chacun a rejoint la table,
+  // computeSharesLocal ci-dessus. `roster` est dans l'ordre où chacun a rejoint la table,
   // ce qui lui donne le même rôle que l'ancien `party.names` positionnel.
   function personLabel(place: number): string {
     return roster[place - 1]?.name || t.personLabel(place);
@@ -3024,9 +3179,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
             {/* Indépendant de la case "à partager" ci-dessus : assigner un
                 plat à un ou plusieurs convives reste facultatif et vaut pour
                 n'importe quel plat, pas seulement les plats à partager
-                (ROADMAP.md §Override 2026-09-08) — alimente directement
-                SplitBill au moment de payer plutôt que de reposer la
-                question. */}
+                (ROADMAP.md §Override 2026-09-08) — alimente directement la
+                répartition de l'addition au moment de payer plutôt que de
+                reposer la question. */}
             <div className="mt-2">
               <p className="text-legende text-ink-soft">{t.sharedWithLabel}</p>
               <div className="mt-1 flex flex-wrap gap-1.5">
@@ -3467,54 +3622,9 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                 {/* À table (identité de table, ROADMAP.md §Override) : qui a
                     déjà scanné, avec possibilité d'ajouter un convive qui ne
                     scanne pas — sert au tag sous chaque plat ci-dessous et à
-                    la répartition de l'addition (SplitBill). */}
+                    la répartition de l'addition au paiement (renderRosterEditor). */}
                 <div className="rounded-[14px] border border-[var(--line)] bg-[var(--semoule-raised)] p-3">
-                  <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-                    {t.rosterSectionTitle}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {roster.map((p) => (
-                      <span
-                        key={p.key}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                          p.key === myDeviceKey
-                            ? "bg-[var(--harissa)] border-[var(--harissa)] text-[var(--semoule)]"
-                            : "border-[var(--line)] bg-white text-[var(--encre)]"
-                        }`}
-                      >
-                        {p.key === myDeviceKey ? t.rosterYouTag(p.name) : p.name}
-                      </span>
-                    ))}
-                    {!addingGuest && (
-                      <button
-                        type="button"
-                        onClick={() => setAddingGuest(true)}
-                        className="rounded-full border border-dashed border-[var(--line-strong)] px-3 py-1 text-xs font-semibold text-[var(--ink-soft)]"
-                      >
-                        {t.rosterAddGuestChip}
-                      </button>
-                    )}
-                  </div>
-                  {addingGuest && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={guestNameInput}
-                        onChange={(e) => setGuestNameInput(e.target.value)}
-                        placeholder={t.rosterAddGuestPlaceholder}
-                        maxLength={30}
-                        autoFocus
-                        className="flex-1 bg-white border border-[var(--line)] rounded-[10px] px-3 py-1.5 text-sm text-[var(--encre)]"
-                      />
-                      <button
-                        type="button"
-                        onClick={addGuestToRoster}
-                        className="rounded-[10px] px-3 py-1.5 text-xs font-bold bg-[var(--harissa)] text-[var(--semoule)] whitespace-nowrap"
-                      >
-                        {t.rosterAddGuestConfirm}
-                      </button>
-                    </div>
-                  )}
+                  {renderRosterEditor()}
                 </div>
 
                 {cartLines.map((line) => {

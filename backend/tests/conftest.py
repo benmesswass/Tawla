@@ -14,6 +14,7 @@ from app.modules.orders import table_cart
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import create_access_token, hash_password
 from app.modules.tables import roster as table_roster
+from app.modules.tables import split_mode as table_split_mode
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 # Base SQLite en mémoire dédiée aux tests. StaticPool = une seule connexion
@@ -83,14 +84,16 @@ def _reset_shared_table_stores():
     déconnexion (2026-09-09, seul `release_table` le fait désormais) — sans
     cette remise à zéro entre tests, un test qui rouvre un canal de table
     hériterait du panier laissé par un test précédent, `table_cart_store`/
-    `table_roster_store` étant des dicts de module partagés par toute la
-    suite, comme `_rate_limit_hits` ci-dessous.
+    `table_roster_store`/`table_split_mode_store` étant des dicts de module
+    partagés par toute la suite, comme `_rate_limit_hits` ci-dessous.
     """
     table_cart.table_cart_store._carts.clear()
     table_roster.table_roster_store._rosters.clear()
+    table_split_mode.table_split_mode_store._modes.clear()
     yield
     table_cart.table_cart_store._carts.clear()
     table_roster.table_roster_store._rosters.clear()
+    table_split_mode.table_split_mode_store._modes.clear()
 
 
 @pytest.fixture(autouse=True)

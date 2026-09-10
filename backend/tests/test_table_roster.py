@@ -27,6 +27,12 @@ def _skip_cart_snapshot(ws):
     ws.receive_json()  # cart.updated, vide — pas l'objet de ce test
 
 
+def _skip_split_mode_snapshot(ws):
+    """Troisième message envoyé à la connexion (mode de répartition de
+    l'addition) — hors sujet de ce fichier, voir test_table_split_mode.py."""
+    ws.receive_json()
+
+
 def test_un_appareil_annonce_son_prenom_et_cest_diffuse_en_temps_reel(client):
     restaurant, table = _setup_restaurant_with_table(client, "roster-live")
 
@@ -35,6 +41,8 @@ def test_un_appareil_annonce_son_prenom_et_cest_diffuse_en_temps_reel(client):
         _skip_cart_snapshot(ws_b)
         assert ws_a.receive_json() == {"event": "roster.updated", "people": []}
         assert ws_b.receive_json() == {"event": "roster.updated", "people": []}
+        _skip_split_mode_snapshot(ws_a)
+        _skip_split_mode_snapshot(ws_b)
 
         ws_a.send_json({"action": "identity.set", "device_key": "device-a", "name": "Ahmed"})
         expected = {"event": "roster.updated", "people": [{"key": "device-a", "name": "Ahmed"}]}
@@ -53,6 +61,8 @@ def test_un_deuxieme_appareil_najoute_pas_ecrase_le_premier(client):
         _skip_cart_snapshot(ws_b)
         ws_a.receive_json()
         ws_b.receive_json()
+        _skip_split_mode_snapshot(ws_a)
+        _skip_split_mode_snapshot(ws_b)
 
         ws_a.send_json({"action": "identity.set", "device_key": "device-a", "name": "Ahmed"})
         ws_a.receive_json()
@@ -75,6 +85,8 @@ def test_prenom_laisse_vide_devient_perso_suivi_du_numero_de_place(client):
         _skip_cart_snapshot(ws_b)
         ws_a.receive_json()
         ws_b.receive_json()
+        _skip_split_mode_snapshot(ws_a)
+        _skip_split_mode_snapshot(ws_b)
 
         ws_a.send_json({"action": "identity.set", "device_key": "device-a", "name": "Ahmed"})
         ws_a.receive_json()
@@ -91,6 +103,7 @@ def test_reconnexion_avec_la_meme_cle_met_a_jour_sans_ajouter_une_place(client):
     with _connect(client, restaurant, table) as ws:
         _skip_cart_snapshot(ws)
         ws.receive_json()
+        _skip_split_mode_snapshot(ws)
         ws.send_json({"action": "identity.set", "device_key": "device-a", "name": "Ahmed"})
         ws.receive_json()
 
@@ -107,6 +120,7 @@ def test_ajouter_un_convive_qui_ne_scanne_pas(client):
     with _connect(client, restaurant, table) as ws:
         _skip_cart_snapshot(ws)
         ws.receive_json()
+        _skip_split_mode_snapshot(ws)
         ws.send_json({"action": "identity.set", "device_key": "device-a", "name": "Ahmed"})
         ws.receive_json()
 
@@ -123,6 +137,7 @@ def test_un_appareil_qui_rejoint_voit_le_roster_deja_declare(client):
     with _connect(client, restaurant, table) as ws_a:
         _skip_cart_snapshot(ws_a)
         ws_a.receive_json()  # roster.updated initial, vide
+        _skip_split_mode_snapshot(ws_a)
         ws_a.send_json({"action": "identity.set", "device_key": "device-a", "name": "Sami"})
         ws_a.receive_json()  # écho
 
@@ -147,6 +162,7 @@ def test_une_deconnexion_meme_longue_ne_purge_plus_le_roster(client):
     with _connect(client, restaurant, table) as ws:
         _skip_cart_snapshot(ws)
         ws.receive_json()
+        _skip_split_mode_snapshot(ws)
         ws.send_json({"action": "identity.set", "device_key": "device-a", "name": "Ahmed"})
         ws.receive_json()
 
@@ -168,6 +184,8 @@ def test_rosters_isoles_entre_deux_tables(client):
         _skip_cart_snapshot(ws_b)
         ws_a.receive_json()
         ws_b.receive_json()
+        _skip_split_mode_snapshot(ws_a)
+        _skip_split_mode_snapshot(ws_b)
 
         ws_a.send_json({"action": "identity.set", "device_key": "device-a", "name": "Ahmed"})
         ws_a.receive_json()
