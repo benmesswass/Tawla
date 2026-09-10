@@ -32,7 +32,9 @@ export const fr = {
   callWaiterButton: "Appeler le serveur",
   callWaiterSent: "✓ Serveur prévenu, il arrive",
   notePlaceholder: "Note pour la cuisine (facultatif, ex : sans oignons)",
-  sharedCheckboxLabel: "Plat à partager",
+  // "Plat à partager" décrivait mal la case depuis qu'elle sert aussi à donner
+  // un plat à un autre convive sans le partager (Wassim, 2026-09-10).
+  sharedCheckboxLabel: "Partager ou assigner",
   preorderCheckboxLabel: (time: string) => `Commander pour l'iftar (${time}) plutôt que maintenant`,
   sending: "Envoi...",
   validateOrder: "Valider la commande",
@@ -187,7 +189,12 @@ export const fr = {
   tableTotalNote:
     "Le paiement ci-dessous règle uniquement la commande affichée. Revenez sur les autres pour les régler à leur tour, ou demandez au serveur de tout encaisser en une fois.",
   sharedWithLabel: "Pour qui ?",
-  sharedWithEveryone: "Non assigné : réparti équitablement à l'addition.",
+  // Trois états d'une même ligne, toujours affichée sous la case : le plat est
+  // à moi (défaut du scan nominatif), à toute la table, ou aux convives cochés.
+  assignedToMe: "Pour vous",
+  assignMeLabel: "Vous",
+  assignReopenHint: "recochez pour modifier",
+  sharedWithEveryone: "Toute la table — réparti équitablement à l'addition.",
   sharedPerPersonAmount: (amount: number) => `${formatMoney(amount)} par personne`,
   openOrdersTitle: (count: number, reste: number) =>
     count > 1
