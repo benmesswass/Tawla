@@ -453,7 +453,7 @@ def create_order_from_table_cart(
 
     try:
         order_items = _build_order_items(db, table.restaurant_id, items)
-    except HTTPException:
+    except HTTPException as exc:
         # Un article devenu indisponible entre l'ajout et la validation ne
         # doit jamais faire disparaître le panier des AUTRES convives : on le
         # restaure tel quel et on informe toute la table, plutôt que de
@@ -461,9 +461,18 @@ def create_order_from_table_cart(
         # mutation — qu'il est resté ce qu'ils avaient sous les yeux.
         for item in items:
             table_cart.table_cart_store.set_line(table.id, item)
-        diffusions.append(Diffusion(
+        # Cette fonction lève : elle ne peut plus rien RENDRE, et une
+        # `Diffusion` construite ici partirait silencieusement avec
+        # l'exception — les autres appareils attendraient alors pour toujours
+        # un instantané qui n'arrive jamais (régression introduite puis
+        # rattrapée par `test_table_cart.py` en écrivant §P1.1). On l'attache
+        # donc à l'exception : la règle « le métier décrit, l'appelant
+        # diffuse » tient aussi sur le chemin d'erreur. Attaché ICI et nulle
+        # part ailleurs, parce que c'est le seul chemin qui modifie l'état
+        # partagé avant d'échouer — un panier vide, lui, n'a rien à rediffuser.
+        exc.diffusions = [Diffusion(
             table.restaurant_id, channel=table_channel(table.id), message=table_cart.snapshot_message(table.id)
-        ))
+        )]
         raise
 
     order, diffusions_creation = _finalize_order(db, table, order_items, client_order_id=client_order_id)

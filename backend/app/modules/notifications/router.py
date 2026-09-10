@@ -209,9 +209,19 @@ async def _pump_table(websocket: WebSocket, restaurant_id: int, table_id: int, d
                     await manager.broadcast(restaurant_id, channel, table_cart.snapshot_message(table_id))
                 elif action == "cart.validate":
                     client_order_id = raw.get("client_order_id")
-                    _commande, diffusions = await run_in_threadpool(
-                        _valider_le_panier_de_table, db, table_id, client_order_id
-                    )
+                    try:
+                        _commande, diffusions = await run_in_threadpool(
+                            _valider_le_panier_de_table, db, table_id, client_order_id
+                        )
+                    except HTTPException as exc:
+                        # Un échec qui a modifié l'état partagé attache ce
+                        # qu'il reste à dire à toute la table — typiquement le
+                        # panier restauré après un article devenu indisponible
+                        # (voir `create_order_from_table_cart`). La plupart des
+                        # échecs n'attachent rien, et n'envoient donc que le
+                        # `cart.error` du gestionnaire ci-dessous.
+                        await diffuser(getattr(exc, "diffusions", []))
+                        raise
                     await diffuser(diffusions)
                 elif action == "identity.set":
                     device_key = str(raw.get("device_key", ""))[:80]

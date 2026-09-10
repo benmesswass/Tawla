@@ -3,6 +3,7 @@ from hashlib import sha256
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.crypto import encrypt_field
@@ -825,7 +826,9 @@ async def stripe_subscription_webhook(request: Request, db: Session = Depends(ge
         log_event(logger, "stripe.subscription_webhook_bad_signature", error=str(err))
         raise HTTPException(status_code=401, detail={"code": "INVALID_SIGNATURE", "message": "invalid signature"}) from err
 
-    result = handle_stripe_subscription_event(db, event)
+    # Hors de la boucle (ROADMAP_PRODUCTION.md §P1.1) : Stripe peut rejouer
+    # ses évènements en rafale, et ce traitement écrit en base.
+    result = await run_in_threadpool(handle_stripe_subscription_event, db, event)
     log_event(logger, "stripe.subscription_webhook", event_type=event["type"], result=result)
     return {"received": True, "result": result}
 
