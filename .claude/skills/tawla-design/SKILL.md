@@ -156,9 +156,24 @@ déjà été travaillée par les phases D2 et D2bis.
 Une page n'est finie qu'après ces deux passes, dans l'ordre :
 
 1. **Cohérence avec le système.** Relire la zone reprise et remplacer ce qui
-   contourne les jetons (`text-[12.5px]`, `rounded-[10px]`, `gap-[7px]`, un
-   accent posé en texte). Le périmètre de la passe est la zone redessinée, pas
+   contourne les jetons. Le périmètre de la passe est la zone redessinée, pas
    le fichier entier — sinon le diff devient illisible.
+
+   La passe couvre **quatre** familles, et pas seulement la première :
+
+   | Famille | Ce qu'on cherche |
+   |---|---|
+   | Valeurs en dur | `text-[12.5px]`, `rounded-[10px]`, `gap-[7px]`, `py-[11px]` |
+   | **Couleurs** | un accent posé en texte, un prix en harissa à côté d'un bouton harissa, une hiérarchie faite à l'opacité sur un aplat saturé |
+   | **Tailles de cible** | le même geste doit avoir la même taille d'une vue à l'autre — 40 px pour un pas de quantité, 44 px pour une action d'en-tête |
+   | **Écarts avec les vues déjà reprises** | comparer avec la vue précédente du même parcours, pas seulement avec les jetons |
+
+   Les deux colonnes en gras viennent d'un échec réel : la reprise du panier
+   (2026-09-10) a laissé le prix de ligne en harissa à côté d'un « + » harissa,
+   et des cibles à 30 px là où la carte venait de passer à 40 — parce que la
+   passe avait porté sur les tailles de texte uniquement. Une incohérence entre
+   deux vues du même parcours ne se voit pas en revue de diff : elle se voit à
+   l'usage, et trop tard.
 2. **Critique de product designer senior.** Arrêter de raisonner en
    développeur et regarder l'écran comme s'il était présenté pour la première
    fois. Passer en revue : ce qui paraît cheap, générique ou « généré par IA » ;
