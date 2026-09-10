@@ -4,10 +4,18 @@ import SpinnerIcon from "@/components/icons/SpinnerIcon";
 
 type Variant = "primary" | "secondary" | "danger" | "success" | "laiton";
 type Size = "sm" | "md" | "lg";
+/**
+ * `controle` est la forme par défaut. `pilule` existe parce que le produit
+ * compte 80 boutons en `rounded-full` écrits à la main : sans cette forme, le
+ * composant partagé ne pouvait pas les remplacer, et ils restaient tous hors
+ * du système.
+ */
+type Shape = "controle" | "pilule";
 
 type Props = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   variant?: Variant;
   size?: Size;
+  shape?: Shape;
   dark?: boolean;
   children?: ReactNode;
   /**
@@ -66,9 +74,15 @@ const SIZES: Record<Size, string> = {
   lg: "text-etiquette px-4 py-2.5 min-h-11 gap-2",
 };
 
+const SHAPES: Record<Shape, string> = {
+  controle: "rounded-controle",
+  pilule: "rounded-full",
+};
+
 export default function Button({
   variant = "primary",
   size = "md",
+  shape = "controle",
   dark = false,
   loading = false,
   success = false,
@@ -89,7 +103,7 @@ export default function Button({
       {...rest}
       disabled={inerte}
       aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center font-medium rounded-controle whitespace-nowrap
+      className={`inline-flex items-center justify-center font-medium ${SHAPES[shape]} whitespace-nowrap
         transition-[background-color,border-color,color,box-shadow,transform,filter]
         duration-micro ease-deplacement
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--harissa)] focus-visible:ring-offset-2 ${offset}
