@@ -50,6 +50,15 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tawla_ci
 
+      # Scan des avis de sécurité (ROADMAP_PRODUCTION.md §P1.8). L'audit du
+      # 2026-09-10 a trouvé 42 avis accumulés sans que personne ne le sache :
+      # ce n'est pas la montée de version qui corrige ça durablement, c'est le
+      # scan. Bloquant, et volontairement : un nouvel avis publié demain doit
+      # arrêter la chaîne, sinon on réaccumule.
+      # `-r requirements.txt` et non l'environnement installé : on audite ce
+      # qui part en production, pas l'outillage de test.
+      - run: pip-audit -r requirements.txt
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -67,6 +76,13 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
+
+      # Pendant du `pip-audit` côté backend. Deux restrictions assumées :
+      # `--omit=dev` parce qu'un avis sur eslint ou vitest ne part jamais chez
+      # un client, et `--audit-level=high` pour qu'un avis modéré sur une
+      # dépendance de build n'arrête pas un correctif urgent. Une porte qu'on
+      # apprend à ignorer ne protège rien.
+      - run: npm audit --omit=dev --audit-level=high
 
       - run: npm run lint
 

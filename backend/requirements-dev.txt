@@ -1,2 +1,7 @@
 -r requirements.txt
 pytest==8.3.2
+# Scan des avis de sécurité des dépendances, lancé en CI (ROADMAP_PRODUCTION.md
+# §P1.8). Les 42 avis trouvés par l'audit du 2026-09-10 étaient invisibles faute
+# de scan : c'est le scan, pas la montée de version, qui est le correctif
+# durable.
+pip-audit==2.10.1
