@@ -15,6 +15,30 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/resto_qr"
     env: str = "development"
 
+    # Dimensionnement du pool de connexions (ROADMAP_PRODUCTION.md §P1.3).
+    # Laissés au défaut de SQLAlchemy (5 + 10, attente 30 s) jusqu'au
+    # 2026-09-10, ces réglages étaient devenus le plafond de capacité du
+    # produit entier : mesuré, 15 connexions saturées faisaient tomber TOUS
+    # les restaurants à la fois, et l'attente de 30 s à l'intérieur d'un
+    # handler `async def` gelait la boucle d'événements au lieu de faire
+    # échouer une seule requête.
+    #
+    # Configurables plutôt qu'en dur : le bon dimensionnement dépend du plan
+    # Postgres et du nombre d'instances backend, qui changeront (§P3.1). La
+    # règle à respecter en les changeant : `nb_instances × (pool_size +
+    # max_overflow)` doit rester sous le plafond de connexions du plan
+    # Postgres, sinon c'est la base qui refuse au lieu du pool.
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    # Volontairement COURT (5 s, contre 30 s par défaut) : une requête qui
+    # n'obtient pas de connexion doit échouer franchement plutôt que de
+    # pendre une demi-minute. Un 503 rapide est récupérable — un serveur qui
+    # ne répond plus ne l'est pas.
+    db_pool_timeout: int = 5
+    # Recycle les connexions inactives avant que l'hébergeur ne les coupe
+    # lui-même sans prévenir (comportement courant des Postgres managés).
+    db_pool_recycle: int = 1800
+
     # Marché servi par cette instance ("tn" | "fr") — un déploiement par
     # marché (MARCHE_FRANCE.md §4, option B retenue), jamais les deux dans le
     # même processus. Lu une fois au démarrage par app/core/markets.py.

@@ -11,6 +11,30 @@ jobs:
     defaults:
       run:
         working-directory: backend
+
+    # Postgres réel, en plus du SQLite en mémoire du reste de la suite
+    # (ROADMAP_PRODUCTION.md §P1.2). Le `StaticPool` de SQLite est une
+    # connexion unique partagée, sans plafond : les défauts de pool et de
+    # concurrence y sont structurellement invisibles — c'est ce qui a laissé
+    # passer le plafond de 14 WebSockets malgré 789 tests verts. Les tests qui
+    # en ont besoin le réclament par `TEST_DATABASE_URL` et se sautent
+    # d'eux-mêmes en local, où personne n'a à lancer un Postgres pour
+    # `pytest -q`.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tawla_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +47,8 @@ jobs:
       - run: pip install -r requirements-dev.txt
 
       - run: pytest -q
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tawla_ci
 
   frontend:
     runs-on: ubuntu-latest
