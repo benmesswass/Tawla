@@ -109,28 +109,33 @@ si P3 montre que le threadpool est le facteur limitant.
 
 ### P1.2 — Rendre la session base à la fin de l'authentification WebSocket (F2)
 
-- [ ] Les quatre canaux authentifiés déclarent `db: Session = Depends(get_db)`
+- [x] Les quatre canaux authentifiés déclarent `db: Session = Depends(get_db)`
       et gardent la connexion ouverte pour toute la durée de vie de la socket —
       des heures. Trois d'entre eux ne s'en resservent jamais. Authentifier,
       extraire ce qui est nécessaire, **fermer la session**, puis entrer dans la
       boucle de pompage. Rouvrir une session courte à la demande pour les
       mutations du panier de table (`/ws/table`), seul canal qui écrit ensuite.
-      *Fichier : `app/modules/notifications/router.py:45,61,86,190`*
-      *Validation : 500 WebSockets ouvertes → `pg_stat_activity` montre
-      ~0 connexion `idle in transaction`, et `/health` reste sous 50 ms.*
+      **Mesuré après correction : 500/500 WebSockets simultanées en 2,1 s,
+      `/health` à 4 ms, et 2 connexions Postgres au total (zéro
+      `idle in transaction`)** — contre 14 sockets et une API injoignable
+      avant. `Depends(get_db)` conservé à dessein : c'est le point d'injection
+      que `conftest.py` surcharge (PR #200)
+      *Fichier : `app/modules/notifications/router.py`*
 
 Le canal `/ws/menu` est déjà correct (aucune session déclarée) : c'est le
 modèle à suivre.
 
 ### P1.3 — Dimensionner le pool explicitement (F3)
 
-- [ ] `create_engine()` n'a ni `pool_size`, ni `max_overflow`, ni `pool_timeout`,
+- [x] `create_engine()` n'a ni `pool_size`, ni `max_overflow`, ni `pool_timeout`,
       ni `pool_recycle` : les défauts SQLAlchemy (5 + 10, 30 s) sont devenus le
       plafond de capacité du produit entier. Poser des valeurs explicites, avec
       un **`pool_timeout` court** (5 s plutôt que 30) : mieux vaut un 503 franc
-      qu'une requête qui pend une demi-minute.
-      *Fichier : `app/core/database.py:6`*
-      *Validation : plus aucun `QueuePool limit` dans les logs au niveau N1.*
+      qu'une requête qui pend une demi-minute. Valeurs **configurables par
+      environnement** (`DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT`,
+      `DB_POOL_RECYCLE`) plutôt qu'en dur : le bon dimensionnement dépend du
+      plan Postgres et du nombre d'instances, qui changeront en §P3.1 (PR #200)
+      *Fichier : `app/core/database.py`*
 
 ⚠️ **Ne corrige rien seul.** Mesuré : porter le pool de 15 à 50 ne change pas le
 débit (105,7 → 105,7 req/s à concurrence 10). C'est le troisième pied du
@@ -229,6 +234,10 @@ fois.
       vérification que `/health` répond après la rafale.
       *Échoue si l'interblocage revient. Sans lui, rien n'empêche un futur
       `async def` de le réintroduire.*
+      *Le service PostgreSQL nécessaire est déjà en CI depuis la PR #200, avec
+      un premier test de concurrence (`tests/test_pool_connexions.py`) : il
+      reste à écrire la rafale sur `POST /orders`, qui n'a de sens qu'avec
+      §P1.1.*
 
 ⚠️ `backend/tests/test_service_load.py` porte le nom de test de charge mais joue
 200 commandes **séquentielles** sur SQLite en mémoire, dans un seul thread : il
