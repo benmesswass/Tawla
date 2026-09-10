@@ -170,7 +170,6 @@ export const en = {
   sharedWithLabel: "For whom?",
   sharedWithEveryone: "Unassigned: split equally on the bill.",
   sharedPerPersonAmount: (amount) => `${formatMoney(amount)} per person`,
-  dinersLabel: "Number of guests",
   openOrdersTitle: (count, reste) =>
     count > 1
       ? `${count} orders in progress — ${formatMoney(reste)} left to pay`

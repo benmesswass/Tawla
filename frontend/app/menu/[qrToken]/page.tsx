@@ -370,10 +370,6 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [activeCategoryAnchor, setActiveCategoryAnchor] = useState<string | null>(null);
   // groupId -> ids des options choisies dans ce groupe, pendant la composition.
   const [chooserSelection, setChooserSelection] = useState<Record<number, number[]>>({});
-  // Nombre de personnes à table, demandé seulement quand un plat est marqué
-  // « à partager » — jamais à l'ouverture du menu, où la question n'a pas
-  // encore de raison d'être posée.
-  const [convives, setConvives] = useState(2);
   // Toutes les commandes encore ouvertes de cette table — celle qu'on suit à
   // l'écran, et celles qu'on a quittées sans les régler.
   const [openOrders, setOpenOrders] = useState<{ order: Order; token: string }[]>([]);
@@ -444,14 +440,14 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [addingGuest, setAddingGuest] = useState(false);
   const [guestNameInput, setGuestNameInput] = useState("");
   const myDeviceKey = myIdentity?.deviceKey ?? "";
-  // Dès que la table a un roster, il prime sur la valeur par défaut de
-  // `convives` : sinon le sélecteur "Partagé entre" d'un plat reste bloqué à
-  // 2 pastilles anonymes même pour une table de 4 qui a déjà scanné.
-  useEffect(() => {
-    if (roster.length > 0) {
-      setConvives(Math.max(2, Math.min(12, roster.length)));
-    }
-  }, [roster]);
+  // Nombre de personnes à table : entièrement dérivé du roster, jamais un état
+  // séparé. Le roster compte les convives réels — ceux qui ont scanné et ceux
+  // ajoutés à la main par « + Ajouter » — donc une table d'un seul convive
+  // affiche un seul convive. L'ancien compteur manuel (« Personnes à table »,
+  // hérité de `PartyPrompt` quand la taille était déclarée à la main) avait un
+  // plancher à 2 qui inventait un « Personne 2 » fantôme dans « Pour qui ? »,
+  // et se faisait de toute façon écraser dès qu'un autre convive scannait.
+  const convives = Math.max(1, Math.min(12, roster.length));
   const [offlineQueuedPayload, setOfflineQueuedPayload] = useState<CreateOrderPayload | null>(null);
   const [retryingOffline, setRetryingOffline] = useState(false);
   const [offlineRetryCountdown, setOfflineRetryCountdown] = useState(5);
@@ -3385,20 +3381,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   <p className="text-[11px] text-[var(--ink-faint)]">{t.rosterOwnItemsOnlyNote}</p>
                 )}
 
-                {/* Utile dès qu'un plat existe, plus seulement les plats
-                    "à partager" : le sélecteur de convive vaut pour toute
-                    ligne (ROADMAP.md §Override 2026-09-08). */}
-                <label className="flex items-center justify-between gap-2 text-sm text-[var(--encre)] pt-2">
-                  {t.dinersLabel}
-                  <input
-                    type="number"
-                    min={2}
-                    max={12}
-                    value={convives}
-                    onChange={(e) => setConvives(Math.max(2, Math.min(12, Number(e.target.value) || 2)))}
-                    className="w-16 bg-white border border-[var(--line)] rounded-lg px-2 py-1 text-center tabular-nums"
-                  />
-                </label>
+                {/* Plus de compteur « Personnes à table » ici : les convives se
+                    déclarent eux-mêmes en scannant, et « + Ajouter » (section
+                    « À table ») nomme ceux qui n'ont pas scanné — ce qui les
+                    fait apparaître sous leur prénom dans « Pour qui ? » plutôt
+                    qu'en « Personne N » anonyme. */}
                 {restaurant.ramadan_mode_enabled && restaurant.iftar_time && (
                   <label className="flex items-center gap-2 text-sm text-[var(--encre)] pt-2">
                     <input
