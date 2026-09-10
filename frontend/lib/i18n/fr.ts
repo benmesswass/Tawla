@@ -59,6 +59,15 @@ export const fr = {
   editOrderCancel: "Annuler",
   itemsUpdatedAt: (heure: string) => `Modifiée à ${heure}`,
 
+  // Ajouter d'autres plats en éditant une commande : rouvre la carte complète
+  // (mêmes fiches que le premier passage) plutôt qu'une liste repliée sur
+  // place — décision de Wassim, 2026-09-09 (ROADMAP_DESIGN.md).
+  myOrderTitle: "Ma commande",
+  orderPanelCount: (n: number) => `${n} plat${n > 1 ? "s" : ""}`,
+  browseCarteButton: "+ Ajouter d'autres plats",
+  browseCarteTitle: "La carte",
+  backToOrderButton: "Retour à ma commande",
+
   // Demande de modification (fenêtre 2, une fois la commande confirmée) —
   // voir orders/service.py::create_modification_request/resolve_modification_request.
   requestModificationButton: "Demander une modification",

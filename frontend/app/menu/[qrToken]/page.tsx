@@ -47,6 +47,7 @@ import {
   ChevronLeftIcon,
   ClockIcon,
   LockIcon,
+  BagIcon,
 } from "@/components/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
@@ -400,6 +401,11 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   const [editingOrder, setEditingOrder] = useState(false);
   const [editIntent, setEditIntent] = useState<"self" | "request">("self");
   const [editItems, setEditItems] = useState<Record<number, EditLine>>({});
+  // "Ajouter d'autres plats" rouvre la carte complète par-dessus le récap de
+  // la commande en cours d'édition, plutôt qu'une liste repliée sur place
+  // (décision de Wassim, 2026-09-09 — ROADMAP_DESIGN.md) : un seul état de
+  // navigation, `editIncrement`/`editDecrement` restent l'unique mutation.
+  const [browsingCarteInEdit, setBrowsingCarteInEdit] = useState(false);
   // Photo de la quantité au moment d'ouvrir l'écran d'édition — jamais
   // modifiée ensuite : sert uniquement à afficher "ancien → nouveau" quand le
   // client change une quantité (barré/nouveau), demandé explicitement pour
@@ -1396,6 +1402,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setEditItems(seeded);
     snapshotOriginalQuantities(seeded);
     setEditError(null);
+    setBrowsingCarteInEdit(false);
     setEditingOrder(true);
   }
 
@@ -1408,6 +1415,7 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
     setEditItems(seeded);
     snapshotOriginalQuantities(seeded);
     setEditError(null);
+    setBrowsingCarteInEdit(false);
     setEditingOrder(true);
   }
 
@@ -1853,6 +1861,139 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
   if (trackedOrder) {
     if (editingOrder) {
       const editCategories = Array.from(new Set(menu.map((m) => m.category)));
+      const editItemCount = Object.values(editItems).reduce((sum, l) => sum + l.quantity, 0);
+
+      function editCategoryAnchor(category: string): string {
+        return `edit-cat-${encodeURIComponent(category).replace(/%/g, "")}`;
+      }
+
+      // Fiche plat de la carte rouverte depuis l'édition — même contenu que
+      // `renderItem` (photo ou VignetteCategorie, description, prix) mais
+      // volontairement plus simple (pas de piment/halal/allergènes, pas de
+      // sélecteur d'options : `EditLine` n'a aucun champ pour ça aujourd'hui,
+      // chantier à part) et branchée sur `editIncrement`/`editDecrement`
+      // plutôt que sur le panier `cart` de la composition initiale.
+      function renderCarteItemForEdit(item: MenuItem) {
+        const photo = mediaUrl(item.image_url);
+        const quantity = editItems[item.id]?.quantity ?? 0;
+        return (
+          <div key={item.id} className="flex items-center gap-2.5 bg-white border border-[var(--line)] rounded-2xl p-2.5">
+            <div className="relative shrink-0 w-11 h-11 rounded-xl overflow-hidden">
+              {photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photo} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
+              ) : (
+                <VignetteCategorie category={item.category} />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13.5px] font-semibold truncate">{item.name}</div>
+              {item.description && (
+                <div className="text-[11px] text-[var(--ink-soft)] truncate mt-0.5">{item.description}</div>
+              )}
+              <div className="text-[12px] font-bold tabular-nums text-[var(--harissa)] mt-1">
+                {formatAmount(item.price)} {t.currency}
+              </div>
+            </div>
+            {quantity > 0 ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => editDecrement(item.id)}
+                  aria-label={t.removeFromCartAria(item.name)}
+                  className="w-[30px] h-[30px] rounded-full border border-[var(--line)] bg-white transition-transform active:scale-90"
+                >
+                  −
+                </button>
+                <span className="min-w-[16px] text-center text-[13.5px] font-bold tabular-nums">{quantity}</span>
+                <button
+                  onClick={() => editIncrement(item)}
+                  aria-label={t.addToCartAria(item.name)}
+                  className="w-[30px] h-[30px] rounded-full text-[16px] leading-none shrink-0 bg-[var(--harissa)] text-[var(--semoule)] transition-transform active:scale-90"
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => editIncrement(item)}
+                aria-label={t.addToCartAria(item.name)}
+                className="w-[30px] h-[30px] rounded-full text-[16px] leading-none shrink-0 bg-[var(--harissa)] text-[var(--semoule)] transition-transform active:scale-90"
+              >
+                +
+              </button>
+            )}
+          </div>
+        );
+      }
+
+      if (browsingCarteInEdit) {
+        return (
+          <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pb-[104px] ${wrapperClassName ?? ""}`}>
+            <div className="pt-[20px] px-[18px] max-w-md mx-auto">
+              <button
+                onClick={() => setBrowsingCarteInEdit(false)}
+                className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--ink-soft)] py-1.5"
+              >
+                <ChevronLeftIcon className="w-4 h-4 shrink-0" />
+                {t.backToOrderButton}
+              </button>
+              <h1 className={`${lalezar.className} mt-2 text-[22px] leading-tight text-center text-[var(--encre)]`}>
+                {t.browseCarteTitle}
+              </h1>
+              <p className="mt-1 text-[12.5px] text-center text-[var(--ink-soft)]">
+                {t.orderSubtitle(table.label, trackedOrder.id)}
+              </p>
+            </div>
+
+            <nav className="sticky top-0 z-10 mt-4 bg-[rgba(246,239,221,.95)] backdrop-blur border-y border-[var(--line)]">
+              <ul className="flex gap-2 overflow-x-auto px-[18px] py-2.5 max-w-md mx-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {editCategories.map((category) => (
+                  <li key={category}>
+                    <a
+                      href={`#${editCategoryAnchor(category)}`}
+                      className="inline-block whitespace-nowrap rounded-full border border-[var(--line)] bg-[var(--semoule-raised)] text-[var(--encre)] px-[13px] py-[6px] text-[12.5px] font-semibold"
+                    >
+                      {menuCategoryLabel(category, locale)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            <div className="px-[18px] pt-4 max-w-md mx-auto">
+              {editCategories.map((category) => (
+                <section key={category} id={editCategoryAnchor(category)} className="mb-6 scroll-mt-24">
+                  <p className="mb-2.5 text-[12px] font-semibold text-[var(--ink-soft)]">
+                    {menuCategoryLabel(category, locale)}
+                  </p>
+                  <div className="space-y-2">
+                    {menu
+                      .filter((m) => m.category === category && m.is_available)
+                      .map((item) => renderCarteItemForEdit(item))}
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            {editItemCount > 0 && (
+              <div className="fixed bottom-0 inset-x-0 z-20 px-[18px] pb-[18px] pt-3">
+                <div className="max-w-md mx-auto flex items-center justify-between gap-3 bg-[var(--encre)] text-[var(--semoule)] rounded-2xl px-4 py-3 shadow-[0_-10px_24px_-10px_rgba(0,0,0,.3)]">
+                  <span className="text-[12.5px] font-semibold text-[rgba(246,239,221,.8)]">
+                    {t.orderPanelCount(editItemCount)}
+                  </span>
+                  <button
+                    onClick={() => setBrowsingCarteInEdit(false)}
+                    className="text-[12.5px] font-bold bg-[var(--harissa)] text-[var(--semoule)] rounded-xl px-[14px] py-2.5 whitespace-nowrap"
+                  >
+                    {t.backToOrderButton} — {formatAmount(editTotal)} {t.currency}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
       return (
         <div dir={dir} className={`min-h-screen bg-[var(--semoule)] pt-[20px] px-[18px] pb-[26px] max-w-md mx-auto ${wrapperClassName ?? ""}`}>
           <button
@@ -1882,10 +2023,13 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
           )}
 
           {Object.keys(editItems).length > 0 && (
-            <>
-              <p className="mt-6 mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
-                {t.orderDetailsTitle}
-              </p>
+            <div className="mt-6 bg-[var(--semoule-raised)] border border-[var(--line-strong)] rounded-2xl p-3.5">
+              <div className="flex items-center gap-2 mb-3">
+                <BagIcon className="w-[15px] h-[15px] shrink-0 text-[var(--laiton)]" />
+                <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
+                  {t.myOrderTitle}
+                </p>
+              </div>
               <div className="space-y-2.5">
                 {Object.values(editItems).map((line) => (
                   <div key={line.menuItemId} className="bg-white border border-[var(--line)] rounded-xl p-3">
@@ -1957,52 +2101,21 @@ export default function MenuPage({ params }: { params: { qrToken: string } }) {
                   </div>
                 ))}
               </div>
-            </>
-          )}
-
-          <p className="mt-6 mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--laiton)]">
-            {t.suggestionAdd}
-          </p>
-          {editCategories.map((category) => {
-            const addable = menu.filter(
-              // Un article déjà dans la commande a déjà ses propres contrôles
-              // dans "Détail de la commande" ci-dessus : le montrer une
-              // seconde fois ici prêtait à confusion (deux "+" pour la même
-              // ligne, l'un des deux toujours de trop) — et une catégorie
-              // entièrement déjà ajoutée n'a plus rien à afficher.
-              (m) => m.category === category && m.is_available && !editItems[m.id]
-            );
-            if (addable.length === 0) return null;
-            return (
-            <div key={category} className="mb-3">
-              <p className="mb-1.5 text-[12px] font-semibold text-[var(--ink-soft)]">
-                {menuCategoryLabel(category, locale)}
-              </p>
-              <div className="space-y-2">
-                {addable.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-2.5 bg-white border border-[var(--line)] rounded-xl px-3 py-2.5"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[13.5px] font-semibold truncate">{item.name}</div>
-                        <div className="text-[12px] font-bold tabular-nums text-[var(--harissa)]">
-                          {formatAmount(item.price)} {t.currency}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => editIncrement(item)}
-                        aria-label={t.addToCartAria(item.name)}
-                        className="w-[30px] h-[30px] rounded-full text-[16px] leading-none shrink-0 bg-[var(--harissa)] text-[var(--semoule)]"
-                      >
-                        +
-                      </button>
-                    </div>
-                ))}
+              <div className="flex justify-between mt-3 pt-2.5 border-t border-[var(--line)] text-[12px] font-bold text-[var(--ink-soft)]">
+                <span>{t.orderPanelCount(editItemCount)}</span>
+                <span className="text-[var(--encre)] tabular-nums">
+                  {formatAmount(editTotal)} {t.currency}
+                </span>
               </div>
             </div>
-            );
-          })}
+          )}
+
+          <button
+            onClick={() => setBrowsingCarteInEdit(true)}
+            className="mt-4 w-full flex items-center justify-center gap-2 border-[1.5px] border-dashed border-[var(--line-strong)] bg-[var(--semoule)] rounded-xl py-3 text-[13.5px] font-bold text-[var(--ink-soft)] transition-colors active:bg-white"
+          >
+            {t.browseCarteButton}
+          </button>
 
           <div className="mt-6 bg-[var(--semoule-raised)] border border-[var(--line)] rounded-2xl p-3.5">
             <div className="flex justify-between items-baseline mb-0.5">

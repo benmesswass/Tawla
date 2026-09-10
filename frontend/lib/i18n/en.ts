@@ -52,6 +52,12 @@ export const en = {
   editOrderCancel: "Cancel",
   itemsUpdatedAt: (time) => `Edited at ${time}`,
 
+  myOrderTitle: "My order",
+  orderPanelCount: (n) => `${n} dish${n > 1 ? "es" : ""}`,
+  browseCarteButton: "+ Add more dishes",
+  browseCarteTitle: "Menu",
+  backToOrderButton: "Back to my order",
+
   // Modification request (window 2, once the order is confirmed) — see
   // orders/service.py::create_modification_request/resolve_modification_request.
   requestModificationButton: "Request a change",
