@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -23,7 +23,7 @@ logger = logging.getLogger("demo")
     # qui crée un établissement.
     dependencies=[Depends(rate_limit(max_requests=3))],
 )
-def create_demo_session(db: Session = Depends(get_db)):
+def create_demo_session(taches: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Monte un établissement de démonstration jetable et connecte le visiteur
     dessus, en manager.
@@ -55,7 +55,21 @@ def create_demo_session(db: Session = Depends(get_db)):
             },
         )
 
-    restaurant, comptes, table = service.creer_demo(db)
+    # Chemin rapide : un établissement déjà monté, réclamé par un seul UPDATE
+    # (ROADMAP_PRODUCTION.md §P2.6). Le chemin lent — 218 commandes et 604
+    # lignes, 1,4 s mesurées — ne subsiste que comme repli, pour que le pire
+    # cas ne soit jamais pire qu'avant ce changement.
+    reclamee = service.reclamer_du_vivier(db)
+    if reclamee is not None:
+        restaurant, comptes, table = reclamee
+    else:
+        log_event(logger, "demo.vivier_vide")
+        restaurant, comptes, table = service.creer_demo(db)
+
+    # Après la réponse, jamais pendant : c'est tout l'objet de P2.6. La tâche
+    # purge aussi les démos échues, second coût non borné qui vivait dans la
+    # requête.
+    taches.add_task(service.reapprovisionner_le_vivier)
     manager = comptes[StaffRole.MANAGER]
     waiter = comptes[StaffRole.WAITER]
     kitchen = comptes[StaffRole.KITCHEN]

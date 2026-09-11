@@ -633,13 +633,26 @@ la Phase 20 n'a pas commencé, il n'y a aucun utilisateur en ligne.
 
 ### P2.6 — Démo hors du chemin de requête (F14)
 
-- [ ] Chaque clic sur « Voir la démo » crée un restaurant complet avec deux
+- [x] Chaque clic sur « Voir la démo » crée un restaurant complet avec deux
       semaines d'historique — **218 commandes et 604 lignes mesurées, en 1,4 s**
       sur 4 vCPU (donc bien plus sur 0,5 CPU), en tenant une connexion du pool.
       C'est la seule route publique qui écrit en base. Les garde-fous existants
       sont bons (3/min/IP, plafond dur `PLAFOND_DEMOS`, purge à chaque
-      création) mais aucun ne borne la **concurrence**. Pré-générer un vivier
-      d'établissements de démonstration, ou créer la démo hors requête.
+      création) mais aucun ne borne la **concurrence**.
+      **Vivier retenu** : les établissements sont montés d'avance, le clic ne
+      fait plus qu'un `UPDATE` pour en réclamer un. La création synchrone reste
+      en repli, pour que le pire cas ne soit jamais pire qu'avant. **Aucune
+      migration** — `demo_expires_at IS NULL` signifie « pas encore réclamée »,
+      et les deux requêtes existantes excluaient déjà `NULL`.
+      *Trois choses que la lecture du code a imposées :* l'expiration court à
+      partir du clic et non de la pré-génération ; le vivier **se périme**
+      (`FRAICHEUR_VIVIER`), parce que `historique.py` ancre les deux semaines
+      sur « aujourd'hui » et qu'une entrée qui a dormi une nuit montrerait un
+      tableau de bord vide pour la journée en cours ; le réapprovisionnement
+      est borné **entre instances** par un verrou porté par `magasin`, sans
+      quoi la concurrence serait déplacée hors requête au lieu d'être fermée.
+      La purge des démos échues part aussi hors requête — c'était le second
+      coût non borné, invisible dans la mesure des 1,4 s.
 
 **Critère de sortie de P2** : deux instances servent le même restaurant sans
 que personne ne s'en aperçoive, un déploiement ne perd plus un seul panier, et
