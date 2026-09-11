@@ -597,7 +597,7 @@ la Phase 20 n'a pas commencé, il n'y a aucun utilisateur en ligne.
       leurs types, et le round-trip tourne sur le moteur de la production
       (`TEST_DATABASE_URL`, service Postgres déjà en CI) avec une assertion qui
       nomme les types survivants plutôt que de laisser un « already exists »
-      surgir des dizaines de révisions plus loin.
+      surgir des dizaines de révisions plus loin. (PR #216)
 
 ### P2.6 — Démo hors du chemin de requête (F14)
 
