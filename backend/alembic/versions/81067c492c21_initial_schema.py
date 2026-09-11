@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -165,3 +166,13 @@ def downgrade() -> None:
     op.drop_table('loyalty_members')
     op.drop_table('restaurants')
     # ### end Alembic commands ###
+
+    # DROP TABLE ne supprime pas les types Postgres créés pour les colonnes
+    # enum (contrairement à SQLite, où l'enum n'est qu'un VARCHAR + CHECK).
+    # Sans ce nettoyage, `downgrade base` laisse les quatre types derrière lui
+    # et la remontée échoue aussitôt sur « type staffrole already exists » —
+    # c'est-à-dire que le retour arrière est à sens unique, découvert le jour
+    # où il faut s'en servir. Même piège que dans c2e7b41f8a90 et 55a307a3bc86,
+    # ici à la racine de l'historique.
+    for type_enum in ("staffrole", "orderstatus", "paymentmethod", "paymentstatus"):
+        postgresql.ENUM(name=type_enum).drop(op.get_bind(), checkfirst=True)

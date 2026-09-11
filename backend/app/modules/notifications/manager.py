@@ -8,7 +8,7 @@ from fastapi import WebSocket
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
-from app.core.etat_partage import magasin
+from app.core.etat_partage import PREFIXE_MARCHE, magasin
 from app.core.logging import get_logger, log_event
 
 CANAL_DIFFUSION = "tawla:diffusion"
@@ -189,12 +189,20 @@ async def ecouter_les_diffusions() -> None:
     """
     import redis.asyncio as redis_async
 
+    # Le même préfixe de marché que celui appliqué par `MagasinRedis.publier`.
+    # Les deux côtés doivent rester d'accord : un écart ne lève rien, il rend
+    # juste cette instance sourde aux autres — exactement la panne silencieuse
+    # décrite au-dessus. C'est aussi ce qui permet à deux marchés de partager
+    # une instance Redis sans que les commandes de l'un s'affichent chez
+    # l'autre (voir `core/etat_partage.py::PREFIXE_MARCHE`).
+    canal_du_marche = f"{PREFIXE_MARCHE}{CANAL_DIFFUSION}"
+
     while True:
         client = redis_async.Redis.from_url(settings.redis_url, decode_responses=True)
         canal = client.pubsub(ignore_subscribe_messages=True)
         try:
-            await canal.subscribe(CANAL_DIFFUSION)
-            log_event(logger, "ws.ecoute_demarree", canal=CANAL_DIFFUSION)
+            await canal.subscribe(canal_du_marche)
+            log_event(logger, "ws.ecoute_demarree", canal=canal_du_marche)
             async for brut in canal.listen():
                 if brut.get("type") != "message":
                     continue

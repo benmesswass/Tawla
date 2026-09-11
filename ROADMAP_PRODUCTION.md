@@ -613,11 +613,23 @@ la Phase 20 n'a pas commencé, il n'y a aucun utilisateur en ligne.
 
 - [ ] Un environnement de staging avec une copie de la base 🧑 — il n'y en a pas
       aujourd'hui, et `ROADMAP.md` prévoit un rejeu complet du parcours dessus.
-- [ ] Tester `downgrade` en CI. 49 migrations sur 50 en ont un, mais aucun n'est
-      exercé. En instance unique, une migration qui échoue au démarrage est
-      **une indisponibilité totale** jusqu'à intervention manuelle : le
-      `alembic upgrade head && uvicorn` du Dockerfile est le bon choix, mais il
-      n'a pas de filet.
+- [x] Tester `downgrade` en CI. Le constat de l'audit était en fait à moitié
+      faux, et la moitié fausse cachait le défaut : les `downgrade` **étaient**
+      exercés (`test_every_migration_can_be_rolled_back`, PR #43), mais sur
+      SQLite. Or sur Postgres, `DROP TABLE` ne supprime pas le type enum nommé
+      créé pour la colonne — SQLite, lui, rend un VARCHAR + CHECK et n'a donc
+      rien à laisser derrière. **Vérifié sur un vrai Postgres : `downgrade base`
+      laissait six types (`staffrole`, `orderstatus`, `paymentmethod`,
+      `paymentstatus`, `modificationrequeststatus`, `modificationlinestatus`) et
+      la remontée mourait aussitôt sur « type staffrole already exists ».** Le
+      retour arrière était donc à sens unique depuis la migration initiale,
+      c'est-à-dire qu'il n'existait pas. Le piège avait déjà été rencontré deux
+      fois et corrigé migration par migration (`c2e7b41f8a90`, `55a307a3bc86`)
+      sans jamais être gardé. Les deux migrations fautives suppriment désormais
+      leurs types, et le round-trip tourne sur le moteur de la production
+      (`TEST_DATABASE_URL`, service Postgres déjà en CI) avec une assertion qui
+      nomme les types survivants plutôt que de laisser un « already exists »
+      surgir des dizaines de révisions plus loin. (PR #216)
 
 ### P2.6 — Démo hors du chemin de requête (F14)
 

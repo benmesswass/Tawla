@@ -13,7 +13,26 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://postgres:postgres@localhost:5432/resto_qr"
-    env: str = "development"
+
+    # Défaut **"production"**, et c'est délibérément l'inverse de l'intuition.
+    #
+    # Ce réglage n'étiquette pas un environnement : c'est lui qui arme le
+    # garde-fou du bas de ce fichier. Tant qu'il valait "development" par
+    # défaut, ce garde-fou ne s'armait que sur les déploiements qui pensaient à
+    # poser `ENV` — c'est-à-dire jamais sur celui qui l'avait oublié, le seul
+    # qu'il fallait protéger.
+    #
+    # Ce n'est pas théorique : découvert le 2026-09-11 sur `tawla-backend-fr`,
+    # en ligne avec six variables au lieu de douze. Sans `ENV`, sans
+    # `JWT_SECRET`, sans `ADMIN_CREATION_SECRET` — donc en train de signer les
+    # jetons du personnel avec `_DEV_JWT_SECRET`, une constante lisible par
+    # tous dans un dépôt public. Le garde-fou existait, il dormait.
+    #
+    # Avec ce défaut, une variable oubliée fait **échouer le démarrage** au
+    # lieu de faire tourner un service en mode dev sans que personne ne le
+    # voie. Le dev local et `docker compose` posent déjà `ENV=development`
+    # dans `backend/.env` ; la suite de tests le pose dans `conftest.py`.
+    env: str = "production"
 
     # Dimensionnement du pool de connexions (ROADMAP_PRODUCTION.md §P1.3).
     # Laissés au défaut de SQLAlchemy (5 + 10, attente 30 s) jusqu'au
@@ -126,13 +145,18 @@ class Settings(BaseSettings):
     posthog_project_id: str = "263083"
 
     # Étiquette `env` posée sur chaque événement émis par ce backend (voir
-    # analytics.py) — délibérément SÉPARÉE de `env` ci-dessus, qui contrôle
-    # les garde-fous de sécurité (JWT_SECRET, etc.) et vaut déjà "production"
-    # sur tawla-backend-fr/tawla-backend.onrender.com. Ces deux backends sont
-    # bien "production" au sens sécurité, mais pas encore le vrai site public
-    # (juste les URLs Vercel actuelles) — donc "staging" ici tant que le vrai
-    # domaine n'est pas branché. Défaut "development" : une instance qui ne
-    # pose jamais cette variable ne se fait jamais passer pour du trafic réel.
+    # analytics.py) — délibérément SÉPARÉE de `env` ci-dessus, qui contrôle les
+    # garde-fous de sécurité. Les deux backends sont "production" au sens
+    # sécurité, mais pas encore le vrai site public (juste les URLs Vercel
+    # actuelles) — donc "staging" ici tant que le vrai domaine n'est pas
+    # branché. Défaut "development" : une instance qui ne pose jamais cette
+    # variable ne se fait jamais passer pour du trafic réel.
+    #
+    # Ce commentaire affirmait jusqu'au 2026-09-11 que `ENV` valait « déjà
+    # production sur tawla-backend-fr/tawla-backend.onrender.com ». C'était
+    # vrai pour le tunisien, faux pour le français, et personne n'avait de
+    # raison d'aller vérifier : un commentaire avait tenu lieu de preuve. D'où
+    # le défaut inversé plus haut — désormais c'est le démarrage qui vérifie.
     posthog_env: str = "development"
 
     @property
