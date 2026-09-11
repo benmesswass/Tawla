@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -58,3 +59,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_order_modification_requests_order_id'), table_name='order_modification_requests')
     op.drop_table('order_modification_requests')
     # ### end Alembic commands ###
+
+    # Voir 81067c492c21 : côté Postgres, les types enum survivent au DROP TABLE
+    # et bloquent la remontée.
+    for type_enum in ("modificationrequeststatus", "modificationlinestatus"):
+        postgresql.ENUM(name=type_enum).drop(op.get_bind(), checkfirst=True)
