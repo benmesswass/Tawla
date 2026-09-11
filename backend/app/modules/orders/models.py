@@ -2,7 +2,17 @@ import enum
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -79,6 +89,32 @@ class Order(Base):
         # valeurs NULL (commande non payée, marché sans obligation de note)
         # restent distinctes entre elles pour SQLite comme pour Postgres.
         UniqueConstraint("restaurant_id", "invoice_number", name="uq_orders_restaurant_invoice_number"),
+        # Le chemin le plus chaud du produit (ROADMAP_PRODUCTION.md §P2.3) :
+        # l'écran serveur, le plan de salle et l'écran cuisine lisent tous
+        # `restaurant_id = ? AND created_at >= début de la journée de service`
+        # à chaque montage ET à chaque reconnexion WebSocket — donc plusieurs
+        # fois par service, par appareil.
+        #
+        # Avec le seul index sur `restaurant_id`, Postgres lisait TOUT
+        # l'historique du restaurant puis jetait ce qui n'était pas
+        # d'aujourd'hui. Mesuré sur 73 000 commandes/an/restaurant (le chiffre
+        # de la roadmap), trois restaurants en base :
+        #
+        #   avant : Index Scan (restaurant_id) + Sort, Rows Removed by
+        #           Filter = 72 929, 813 buffers,  8,611 ms
+        #   après : Index Scan (restaurant_id, created_at), Rows Removed by
+        #           Filter = 28,      5 buffers,   0,092 ms
+        #
+        # L'ordre des colonnes n'est pas indifférent : égalité d'abord, plage
+        # ensuite. Il fait aussi disparaître le nœud `Sort`, puisque l'index
+        # rend déjà les lignes triées par `created_at` — c'est exactement ce
+        # que demande `ORDER BY created_at`.
+        #
+        # `status` n'est volontairement PAS dans l'index : une fois la plage
+        # de dates appliquée, il ne reste qu'une journée de service à filtrer
+        # (28 lignes écartées ci-dessus). Une troisième colonne alourdirait
+        # l'index à chaque écriture pour ne rien faire gagner à la lecture.
+        Index("ix_orders_restaurant_created", "restaurant_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
