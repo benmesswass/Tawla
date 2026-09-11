@@ -516,24 +516,26 @@ autres invisibles.
       toujours : pas de facture, libération avec note obligatoire, et rien dans
       la recette. `POST /orders/{id}/pay/collect` + modale d'encaissement sur
       l'écran serveur, avec la trace de qui a encaissé
-      (`OrderPayment.collected_by_staff_id`)
+      (`OrderPayment.collected_by_staff_id`) (PR #212)
 - [x] **R-2** — aucun retour positif « réglée » sur `/staff`, quel que soit le
       moyen : le seul signal était la disparition du rouge, et il ne survivait
       pas à un rafraîchissement (une commande servie puis payée sort
       d'`ACTIVE_STATUSES`). `GET /orders/by-restaurant/{id}/table-settlement`
       (agrégat par table, fenêtré sur l'occupation en cours) + pastille sur la
       tuile, hors de l'échelle d'urgence pour ne jamais masquer un appel
+      (PR #212)
 - [x] **R-3** — la confirmation d'un encaissement n'était diffusée qu'au client
       (canal de la commande) : les autres écrans serveur gardaient la demande
       affichée et pouvaient aller réclamer une addition déjà encaissée.
       Diffusion `order.payment_settled` sur le canal `staff`, charge utile
-      unifiée pour les cinq chemins de paiement
+      unifiée pour les cinq chemins de paiement (PR #212)
 - [x] **R-4** — la recette du dashboard ignorait tout règlement partiel (une
       table de quatre dont trois avaient payé pesait 0 DT) et ne ventilait rien
       par moyen de paiement, alors que `CARD_TERMINAL` avait été créé pour ça.
       Recette = ce qui est réellement encaissé, « reste à encaisser » affiché à
       côté, ventilation agrégée part par part (jamais depuis
       `Order.payment_method`, qui ne porte que la dernière part réglée)
+      (PR #212)
 
 Reste ouvert, volontairement :
 
