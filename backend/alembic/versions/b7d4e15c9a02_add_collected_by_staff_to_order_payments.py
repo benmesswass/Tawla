@@ -1,7 +1,7 @@
 """add collected_by_staff_id to order_payments
 
 Revision ID: b7d4e15c9a02
-Revises: f97408ed1c1a
+Revises: d64562dcc42c
 Create Date: 2026-09-10 21:00:00.000000
 """
 from typing import Sequence, Union
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = 'b7d4e15c9a02'
-down_revision: Union[str, None] = 'f97408ed1c1a'
+down_revision: Union[str, None] = 'd64562dcc42c'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
