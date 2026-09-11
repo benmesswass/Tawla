@@ -32,6 +32,44 @@ def test_dev_secret_allowed_outside_production():
     )
 
 
+def test_env_vaut_production_quand_la_variable_nest_pas_posee(monkeypatch):
+    """
+    Le défaut qui arme le garde-fou même sur le déploiement qui a oublié
+    `ENV` — c'est-à-dire le seul qu'il fallait protéger.
+
+    Découvert le 2026-09-11 : `tawla-backend-fr` tournait avec six variables
+    au lieu de douze, donc sans `ENV`, donc en mode "development", donc en
+    signant les jetons du personnel avec `_DEV_JWT_SECRET` — une constante
+    lisible par tous dans un dépôt public. Les quatre tests ci-dessus
+    passaient, et passaient déjà à l'époque : ils vérifiaient que le garde-fou
+    fonctionne *quand on l'arme*, jamais qu'il s'arme tout seul.
+    """
+    monkeypatch.delenv("ENV", raising=False)
+
+    # De vrais secrets, pour que ce test ne mesure QUE le défaut de `env` :
+    # sans eux la construction lèverait, ce qui est le sujet du test suivant.
+    reglages = Settings(
+        _env_file=None,
+        jwt_secret="a-real-generated-secret",
+        admin_creation_secret="another-real-secret",
+    )
+
+    assert reglages.env == "production"
+
+
+def test_sans_ENV_un_secret_de_dev_empeche_le_demarrage(monkeypatch):
+    """
+    La conséquence utile du test précédent : oublier `ENV` ne donne plus un
+    service qui démarre en silence avec des secrets publics, mais un service
+    qui refuse de démarrer. Une panne visible vaut mieux qu'une faille muette.
+    """
+    for variable in ("ENV", "JWT_SECRET", "ADMIN_CREATION_SECRET"):
+        monkeypatch.delenv(variable, raising=False)
+
+    with pytest.raises(ValueError):
+        Settings(_env_file=None)
+
+
 def test_cors_origins_splits_and_strips_comma_separated_list():
     settings = Settings(frontend_origin="https://tawla.tn, https://www.tawla.tn ,")
     assert settings.cors_origins == ["https://tawla.tn", "https://www.tawla.tn"]
