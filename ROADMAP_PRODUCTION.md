@@ -440,17 +440,82 @@ L'atténuation actuelle est bonne et à conserver : l'URL porte l'empreinte du
 contenu, donc `Cache-Control: immutable` est sûr et Cloudflare absorbe les vues
 répétées.
 
+⛔ **Bloqué sur toi — deux documents de ce dépôt se contredisent, et je ne
+tranche pas seul** (relevé le 2026-09-11, en abordant la tâche).
+
+`AUDIT_COUTS_PRODUCTION.md` §4.4 a **déjà** instruit ce point, chiffres à
+l'appui, et conclu l'inverse : à 45 établissements comme à 450, les photos en
+`LargeBinary` coûtent **quelques dinars par mois** et ne forcent aucune mise à
+niveau de palier Postgres. Il met R2 en regard « **sans recommandation de
+migrer maintenant** — YAGNI, comme déjà tranché ».
+
+Les deux documents ne répondent pas à la même question, et c'est ce qui les
+rend tous les deux défendables :
+
+- l'audit des coûts mesure **l'argent** : verdict, ça ne coûte rien ;
+- P2.2 mesure **la ressource rare** que P1 vient de protéger : chaque
+  chargement d'image qui atteint l'origine occupe un thread et une connexion
+  du pool pendant le transfert de 150-300 Ko.
+
+**Mais l'atténuation en place affaiblit fortement le second argument** :
+l'URL portant l'empreinte du contenu, Cloudflare ne redemande l'image à
+l'origine qu'au défaut de cache, pas une fois par client. Le débit réel qui
+atteint l'origine pendant un service n'est **pas mesuré** — et c'est
+exactement ce que la campagne de charge P3.5 révélera.
+
+**Ma recommandation** : laisser P2.2 ouverte et **conditionnée à cette
+mesure**, plutôt que de migrer maintenant. Migrer ajoute un service payant,
+une clé d'API et un point de défaillance pour un problème dont on n'a, à ce
+jour, la preuve ni qu'il coûte de l'argent, ni qu'il consomme le pool.
+Déclencheur proposé : *si la campagne P3.5 montre que les requêtes d'image
+atteignant l'origine dépassent quelques pour cent du trafic backend, migrer
+vers R2*. Sinon, ne rien faire.
+
 ### P2.3 — Index du chemin le plus chaud (F13)
 
-- [ ] `orders` n'a qu'un index sur `restaurant_id`, alors que l'écran serveur et
+- [x] `orders` n'a qu'un index sur `restaurant_id`, alors que l'écran serveur et
       l'écran cuisine filtrent sur `(restaurant_id, status, created_at)` à
-      chaque montage et à chaque reconnexion. Le plan mesuré fait un *Bitmap
-      Heap Scan* puis filtre. Invisible aujourd'hui ; à ~73 000 commandes par an
-      et par restaurant, chaque montage d'écran devient un balayage complet de
-      l'historique. Index composite `(restaurant_id, created_at)` — une
-      migration.
-      *Validation : `EXPLAIN ANALYZE` montre un *Index Scan*, et
-      `Rows Removed by Filter` reste borné à la journée de service.*
+      chaque montage et à chaque reconnexion. Invisible aujourd'hui ; à ~73 000
+      commandes par an et par restaurant, chaque montage d'écran devient un
+      balayage complet de l'historique. Index composite
+      `(restaurant_id, created_at)` — une migration (PR #211)
+      **Mesuré sur 73 000 commandes/an/restaurant, trois restaurants en base :**
+
+      | | avant | après |
+      | --- | --- | --- |
+      | plan | Index Scan (`restaurant_id`) **+ Sort** | Index Scan (`restaurant_id, created_at`) |
+      | `Rows Removed by Filter` | **72 929** | **28** |
+      | buffers | 813 | 5 |
+      | temps | **8,611 ms** | **0,092 ms** |
+
+      *Fichiers : `app/modules/orders/models.py`,
+      `alembic/versions/d64562dcc42c_*.py`, `tests/test_plan_ecran_service.py`*
+
+**Trois points qui valaient d'être écrits :**
+
+1. **L'ordre des colonnes n'est pas indifférent** — égalité (`restaurant_id`)
+   d'abord, plage (`created_at`) ensuite. Il fait aussi **disparaître le nœud
+   `Sort`** : l'index rend déjà les lignes triées par `created_at`, ce que
+   demande précisément le `ORDER BY`.
+2. **`status` n'est volontairement pas dans l'index.** Une fois la plage de
+   dates appliquée, il ne reste qu'une journée de service à filtrer (28 lignes
+   écartées). Une troisième colonne alourdirait chaque écriture pour ne rien
+   gagner à la lecture.
+3. **`CREATE INDEX` simple, pas `CONCURRENTLY`** — une migration ne s'applique
+   qu'une fois, maintenant, sur une table de quelques milliers de lignes ; les
+   73 000 lignes/an sont l'état futur, celui où l'index existera déjà.
+   `CONCURRENTLY` protégerait d'un scénario impossible ici, au prix d'une
+   branche par dialecte (la suite rejoue les migrations sur SQLite) et d'un
+   risque d'index INVALID. **Indexer une table déjà volumineuse en production,
+   elle, exigera `CONCURRENTLY`** : la règle est écrite dans la migration.
+
+⚠️ **Le test de plan est le garde-fou, et il fallait qu'il le soit vraiment.**
+Un index peut être « utilisé » tout en laissant Postgres relire l'année
+entière — c'est exactement ce que faisait l'index sur `restaurant_id` seul.
+Le test vérifie donc que `created_at` est dans l'**`Index Cond`** et non dans
+le `Filter`. Vérifié dans les deux sens, au volume du test (6 000 lignes) :
+sans l'index composite, `Rows Removed by Filter` vaut **6 000** et un nœud
+`Sort` réapparaît — les deux assertions tombent.
 
 ### P2.4 — Jeton WebSocket de courte durée (F9)
 
