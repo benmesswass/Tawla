@@ -19,3 +19,6 @@ fpdf2==2.8.8
 uharfbuzz==0.56.0
 email-validator==2.3.0
 posthog==7.45.3
+# État partagé entre instances (ROADMAP_PRODUCTION.md §P2.1) — importé
+# uniquement quand REDIS_URL est renseignée.
+redis==8.1.0

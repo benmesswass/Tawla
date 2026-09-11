@@ -1,3 +1,4 @@
+from app.core.etat_partage import magasin
 from app.modules.orders.split import DEFAULT_SPLIT_MODE, SplitMode
 
 VALID_MODES: tuple[SplitMode, ...] = ("items", "equal")
@@ -6,8 +7,9 @@ VALID_MODES: tuple[SplitMode, ...] = ("items", "equal")
 class TableSplitModeStore:
     """
     Mode de répartition de l'addition choisi par la table (« par plat » ou
-    « équitable ») — en mémoire, par table, même principe que
-    `tables/roster.py::TableRosterStore` et `orders/table_cart.py::TableCartStore`.
+    « équitable ») — par table, même principe que
+    `tables/roster.py::TableRosterStore` et `orders/table_cart.py::TableCartStore`,
+    stocké dans `core/etat_partage.py::magasin` (P2.1).
 
     À la différence du roster (« purement déclaratif, jamais lu pour une
     règle métier »), CE choix est lu par `orders/split.py::compute_payable_amount`
@@ -19,18 +21,22 @@ class TableSplitModeStore:
     un roster qui change en cours de paiement.
     """
 
-    def __init__(self) -> None:
-        self._modes: dict[int, SplitMode] = {}
+    CHAMP = "mode"
+
+    @staticmethod
+    def _cle(table_id: int) -> str:
+        return f"repartition:{table_id}"
 
     def get(self, table_id: int) -> SplitMode:
-        return self._modes.get(table_id, DEFAULT_SPLIT_MODE)
+        stocke = magasin.lire(self._cle(table_id)).get(self.CHAMP)
+        return stocke if stocke in VALID_MODES else DEFAULT_SPLIT_MODE  # type: ignore[return-value]
 
     def set_mode(self, table_id: int, mode: str) -> None:
         if mode in VALID_MODES:
-            self._modes[table_id] = mode  # type: ignore[assignment]
+            magasin.ecrire(self._cle(table_id), self.CHAMP, mode)
 
     def clear(self, table_id: int) -> None:
-        self._modes.pop(table_id, None)
+        magasin.vider(self._cle(table_id))
 
 
 table_split_mode_store = TableSplitModeStore()

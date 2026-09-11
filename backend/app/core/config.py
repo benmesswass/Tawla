@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     # lui-même sans prévenir (comportement courant des Postgres managés).
     db_pool_recycle: int = 1800
 
+    # État partagé entre instances (ROADMAP_PRODUCTION.md §P2.1). Vide par
+    # défaut : le backend garde alors ses dicts en mémoire et se comporte
+    # exactement comme avant — aucune dépendance, aucun service à payer, rien à
+    # lancer pour `pytest`. La renseigner fait basculer le panier de table, le
+    # roster, le mode de répartition, le limiteur de débit et la diffusion
+    # temps réel sur Redis, ce qui est la condition pour faire tourner plus
+    # d'une instance backend. Un pilote à un restaurant n'en a pas besoin.
+    redis_url: str = ""
+
     # Marché servi par cette instance ("tn" | "fr") — un déploiement par
     # marché (MARCHE_FRANCE.md §4, option B retenue), jamais les deux dans le
     # même processus. Lu une fois au démarrage par app/core/markets.py.
