@@ -1476,12 +1476,31 @@ def settle_card_payment(db: Session, order_id: int, payment_id: int) -> tuple[Se
         )
         return "error", diffusions
 
-    # Mise à jour gardée par `payment_ref` (pas par id seul) : c'est la garde
-    # d'idempotence — un règlement concurrent pour la MÊME référence ne peut
-    # jamais s'appliquer deux fois.
+    # Garde d'idempotence, portée par le STATUT (ROADMAP_PRODUCTION.md §P1.4).
+    #
+    # `id` et `payment_ref` ne suffisent pas : ni l'un ni l'autre ne change au
+    # règlement, donc deux appelants concurrents — le webhook du fournisseur et
+    # la page de retour du client, exactement le cas que cette fonction existe
+    # pour couvrir — retrouvaient tous deux la ligne, obtenaient chacun
+    # `rowcount = 1`, se croyaient tous deux gagnants, et rejouaient
+    # `_after_share_paid`. Le pré-contrôle en mémoire plus haut ne protège pas :
+    # les deux sessions ont lu la ligne avant que l'une ne commite.
+    #
+    # Reproduit sur PostgreSQL : compteur de fidélité à 2, e-mail et facture PDF
+    # envoyés deux fois, et facture `F2026-00002` — le numéro `F2026-00001`
+    # consommé et rattaché à aucune facture, soit un trou dans la séquence
+    # continue que `core/invoice_number.py` existe précisément pour garantir.
+    # Jamais un double débit en revanche : le fournisseur n'encaisse qu'une fois.
+    #
+    # Avec `status == PENDING` dans le filtre, c'est PostgreSQL qui arbitre : le
+    # perdant voit `rowcount = 0` et n'entre pas dans `_after_share_paid`.
     updated = (
         db.query(OrderPayment)
-        .filter(OrderPayment.id == payment.id, OrderPayment.payment_ref == payment_ref)
+        .filter(
+            OrderPayment.id == payment.id,
+            OrderPayment.payment_ref == payment_ref,
+            OrderPayment.status == OrderPaymentStatus.PENDING,
+        )
         .update({"status": OrderPaymentStatus.PAID, "paid_at": datetime.now(timezone.utc)})
     )
     db.commit()

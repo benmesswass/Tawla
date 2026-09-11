@@ -28,7 +28,7 @@ export const en = {
   callWaiterButton: "Call the waiter",
   callWaiterSent: "✓ Waiter notified, on their way",
   notePlaceholder: "Note for the kitchen (optional, e.g. no onions)",
-  sharedCheckboxLabel: "Dish to share",
+  sharedCheckboxLabel: "Share or assign",
   preorderCheckboxLabel: (time) => `Order for iftar (${time}) instead of now`,
   sending: "Sending...",
   validateOrder: "Place order",
@@ -169,7 +169,10 @@ export const en = {
   tableTotalNote:
     "The payment below only settles the order shown. Come back to the others to pay them in turn, or ask the waiter to collect everything at once.",
   sharedWithLabel: "For whom?",
-  sharedWithEveryone: "Unassigned: split equally on the bill.",
+  assignedToMe: "For you",
+  assignMeLabel: "You",
+  assignReopenHint: "tick again to change",
+  sharedWithEveryone: "The whole table — split equally on the bill.",
   sharedPerPersonAmount: (amount) => `${formatMoney(amount)} per person`,
   openOrdersTitle: (count, reste) =>
     count > 1
