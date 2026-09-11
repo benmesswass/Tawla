@@ -10,7 +10,7 @@ un étage, ou qu'il a corrigé une table après coup.
 Conséquence en salle : le client voit « Table 3 » sur son téléphone, le serveur
 lit « Table 1 » sur le sien, et part au mauvais endroit avec le bon plat.
 """
-from tests.conftest import auth_headers, create_restaurant, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff, ws_billet
 
 from app.modules.menu.models import MenuItem
 from app.modules.staff.models import StaffRole
@@ -73,7 +73,7 @@ def test_the_label_travels_on_the_realtime_message_too(client, db_session):
     }).json()
 
     with client.websocket_connect(
-        f"/ws/kitchen/{restaurant.id}?token={auth_headers(kitchen)['Authorization'].split()[1]}"
+        f"/ws/kitchen/{restaurant.id}?billet={ws_billet(kitchen)}"
     ) as ws:
         client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(waiter))
         client.post(f"/api/v1/orders/{order['id']}/send-to-kitchen", headers=auth_headers(waiter))

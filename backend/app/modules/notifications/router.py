@@ -73,16 +73,20 @@ async def _pump(websocket: WebSocket, restaurant_id: int, channel: str) -> None:
 
 @router.websocket("/ws/staff/{restaurant_id}")
 async def ws_staff(
-    websocket: WebSocket, restaurant_id: int, token: str | None = None, db: Session = Depends(get_db)
+    websocket: WebSocket, restaurant_id: int, billet: str | None = None, db: Session = Depends(get_db)
 ):
     """
     Le serveur reçoit ici les nouvelles commandes à confirmer pour ses tables.
-    Réservé au personnel serveur/manager du restaurant (JWT en paramètre
-    `token` : la poignée de main WebSocket du navigateur ne permet pas
-    d'en-tête personnalisé).
+    Réservé au personnel serveur/manager du restaurant.
+
+    Autorisé par un **billet à usage unique** obtenu sur `POST
+    /api/v1/auth/ws-ticket`, jamais par le JWT (ROADMAP_PRODUCTION.md §P2.4) :
+    la poignée de main WebSocket du navigateur ne permet aucun en-tête
+    personnalisé, donc ce qui autorise la connexion voyage forcément dans
+    l'URL — et les URLs sont journalisées.
     """
     authentifie = await authenticate_staff_socket(
-        websocket, restaurant_id, token, db, StaffRole.WAITER, StaffRole.MANAGER
+        websocket, restaurant_id, billet, db, StaffRole.WAITER, StaffRole.MANAGER
     )
     # Ce canal ne relit jamais la base ensuite : la connexion repart au pool
     # immédiatement, refusé comme accepté.
@@ -95,12 +99,13 @@ async def ws_staff(
 
 @router.websocket("/ws/kitchen/{restaurant_id}")
 async def ws_kitchen(
-    websocket: WebSocket, restaurant_id: int, token: str | None = None, db: Session = Depends(get_db)
+    websocket: WebSocket, restaurant_id: int, billet: str | None = None, db: Session = Depends(get_db)
 ):
     """Le grand écran cuisine reçoit ici les commandes validées par le serveur.
-    Réservé au personnel cuisine/manager, comme les routes HTTP équivalentes."""
+    Réservé au personnel cuisine/manager, comme les routes HTTP équivalentes.
+    Même billet à usage unique que `/ws/staff` (§P2.4)."""
     authentifie = await authenticate_staff_socket(
-        websocket, restaurant_id, token, db, StaffRole.KITCHEN, StaffRole.MANAGER
+        websocket, restaurant_id, billet, db, StaffRole.KITCHEN, StaffRole.MANAGER
     )
     _release(db)
     if not authentifie:

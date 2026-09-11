@@ -519,16 +519,63 @@ sans l'index composite, `Rows Removed by Filter` vaut **6 000** et un nœud
 
 ### P2.4 — Jeton WebSocket de courte durée (F9)
 
-- [ ] Le JWT du personnel n'a pas de claim `exp` (choix produit assumé du
+- [x] Le JWT du personnel n'a pas de claim `exp` (choix produit assumé du
       2026-09-09 : ne pas éjecter un serveur en plein service) et transite en
       **query string** dans l'URL WebSocket — contrainte navigateur réelle, mais
       les URLs sont journalisées par Cloudflare et l'hébergeur. Un jeton
       éternel retrouvé dans un log d'accès reste valide indéfiniment.
       Conserver l'intention produit sans le risque : un jeton WebSocket court et
       à usage unique, échangé via une route authentifiée, pour que le JWT long
-      ne quitte jamais l'en-tête `Authorization`.
-      *Fichiers : `app/modules/staff/security.py:26`,
-      `app/modules/notifications/router.py:45`*
+      ne quitte jamais l'en-tête `Authorization` (PR #212)
+      *Fichiers : `app/modules/staff/ws_tickets.py` (neuf),
+      `app/modules/staff/router.py` (`POST /api/v1/auth/ws-ticket`),
+      `app/modules/notifications/dependencies.py`, `notifications/router.py`,
+      `frontend/lib/api.ts`, `frontend/lib/useReconnectingSocket.ts`,
+      `frontend/app/{staff,kitchen}/page.tsx`*
+      *Tests : `tests/test_billet_websocket.py` (9), plus tous les tests de
+      canal existants passés au billet.*
+
+**L'intention produit est intacte** : ce n'est **pas** la session du serveur en
+salle qui devient courte — elle ne change pas d'un iota, le bouton « Se
+déconnecter » reste la seule déconnexion. C'est le **jeton de transport** qui
+devient jetable. Billet opaque, **30 secondes**, **une seule connexion**.
+
+**Deux gardes, parce qu'elles couvrent deux fuites différentes :** l'usage
+unique contre le billet lu dans un log *avant* sa péremption ; la durée courte
+contre le billet demandé puis jamais utilisé, qui resterait sinon éternel — on
+aurait remplacé un jeton immortel par un autre.
+
+Le billet dit **qui**, jamais **à quoi on a droit** : le socket relit ensuite le
+rôle et le restaurant en base, exactement comme avant. Un billet de cuisine
+n'ouvre pas plus l'écran serveur que le JWT ne le permettait (S-4 inchangé).
+
+Stocké dans `core/etat_partage.py::magasin` — et c'est P2.1 qui rend la chose
+possible : le billet est délivré par l'instance qui sert la requête HTTP et
+consommé par celle qui reçoit la WebSocket, sans garantie que ce soit la même.
+`test_deux_instances.py` en fait la preuve gratuitement : il demande le billet
+à A et le présente à B.
+
+⚠️ **Le vrai risque n'était pas la sécurité, c'était la reconnexion.** Un billet
+à usage unique la rend fragile par construction : une URL calculée une fois ne
+sert qu'une fois, et l'écran ne reviendrait **jamais** après une coupure — panne
+d'autant plus vicieuse qu'elle ne se déclencherait qu'au pire moment.
+`useReconnectingSocket` prend donc désormais une **fabrique d'URL** appelée
+avant chaque tentative, et non une URL figée ; `cle` (l'identifiant du canal)
+est seule en dépendance de l'effet, sinon la socket se rebrancherait à chaque
+rendu.
+
+**Vérifié pour de vrai, navigateur réel, en coupant le backend :** écran passé
+à « Déconnecté », puis « Connecté » au redémarrage, avec la trace
+`WS fermée → POST ws-ticket ×4 → WS ouverte` — un billet neuf à chaque
+tentative. *Une première version de ce test ne prouvait rien (la coupure
+simulée ne fermait pas la socket, `0 nouvel échange`) : il a fallu arrêter le
+processus backend.*
+
+**Rupture de contrat assumée, sans transition** : l'ancien `?token=<JWT>` n'est
+plus accepté du tout — un test le verrouille. Accepter les deux le temps d'une
+version aurait laissé la faille ouverte et la suppression se serait oubliée. Le
+coût est un déploiement coordonné backend+frontend, et il est nul aujourd'hui :
+la Phase 20 n'a pas commencé, il n'y a aucun utilisateur en ligne.
 
 ### P2.5 — Staging et retour arrière (F19)
 

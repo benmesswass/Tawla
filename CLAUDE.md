@@ -79,6 +79,16 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
 - Routes staff/cuisine/manager protégées par `get_current_staff` (JWT) +
   vérification du rôle ; routes client (scan QR, création/suivi de
   commande) restent publiques par design.
+- **Le JWT du personnel ne va JAMAIS dans une URL** (ROADMAP_PRODUCTION.md
+  §P2.4). Il n'a pas de claim `exp` par choix produit : dans une URL — que
+  Cloudflare et l'hébergeur journalisent — il devient un sésame éternel et
+  irrévocable. Les canaux WebSocket du personnel s'autorisent donc par un
+  **billet à usage unique de 30 s** (`app/modules/staff/ws_tickets.py`),
+  échangé sur `POST /api/v1/auth/ws-ticket` où le jeton long reste dans
+  l'en-tête `Authorization`. Côté frontend, cela impose une **fabrique d'URL**
+  rappelée à chaque tentative de connexion (`useReconnectingSocket`) : une URL
+  figée ne servirait qu'une fois et l'écran ne reviendrait jamais après une
+  coupure.
 - **Plus jamais de devise, de fuseau ou de taux en dur** (MARCHE_FRANCE.md
   Phase F3, deux marchés tn/fr depuis un seul déploiement) : tout passe par
   `current_market`/`currentMarket` (`app/core/markets.py` / `lib/market.ts`).

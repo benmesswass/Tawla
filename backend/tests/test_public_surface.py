@@ -13,7 +13,7 @@ sa commande lui a renvoyé. « Public » ne veut pas dire « non lié ».
 """
 from starlette.websockets import WebSocketDisconnect
 
-from tests.conftest import auth_headers, create_restaurant, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff, ws_billet
 
 from app.modules.menu.models import MenuItem
 from app.modules.notifications.dependencies import WS_UNAUTHORIZED
@@ -230,7 +230,7 @@ def test_staff_websocket_refuses_a_token_of_another_restaurant(client, db_sessio
     intruder = create_staff(other.id, StaffRole.WAITER)
     token = _token_of(intruder)
 
-    with pytest_raises_ws(client, f"/ws/staff/{restaurant.id}?token={token}"):
+    with pytest_raises_ws(client, f"/ws/staff/{restaurant.id}?billet={token}"):
         pass
 
 
@@ -238,7 +238,7 @@ def test_staff_websocket_accepts_its_own_staff(client, db_session):
     restaurant, table, item = _setup(client, db_session)
     waiter = create_staff(restaurant.id, StaffRole.WAITER)
 
-    with client.websocket_connect(f"/ws/staff/{restaurant.id}?token={_token_of(waiter)}") as ws:
+    with client.websocket_connect(f"/ws/staff/{restaurant.id}?billet={_token_of(waiter)}") as ws:
         _create_order(client, table, item)
         message = ws.receive_json()
         assert message["event"] == "order.pending_confirmation"
@@ -254,7 +254,7 @@ def test_staff_websocket_refuses_a_kitchen_account(client, db_session):
     restaurant, _, _ = _setup(client, db_session)
     kitchen = create_staff(restaurant.id, StaffRole.KITCHEN)
 
-    with pytest_raises_ws(client, f"/ws/staff/{restaurant.id}?token={_token_of(kitchen)}"):
+    with pytest_raises_ws(client, f"/ws/staff/{restaurant.id}?billet={_token_of(kitchen)}"):
         pass
 
 
@@ -264,7 +264,7 @@ def test_kitchen_websocket_refuses_a_waiter_account(client, db_session):
     restaurant, _, _ = _setup(client, db_session)
     waiter = create_staff(restaurant.id, StaffRole.WAITER)
 
-    with pytest_raises_ws(client, f"/ws/kitchen/{restaurant.id}?token={_token_of(waiter)}"):
+    with pytest_raises_ws(client, f"/ws/kitchen/{restaurant.id}?billet={_token_of(waiter)}"):
         pass
 
 
@@ -272,7 +272,7 @@ def test_kitchen_websocket_accepts_its_own_kitchen_staff(client, db_session):
     restaurant, _, _ = _setup(client, db_session)
     kitchen = create_staff(restaurant.id, StaffRole.KITCHEN)
 
-    with client.websocket_connect(f"/ws/kitchen/{restaurant.id}?token={_token_of(kitchen)}") as ws:
+    with client.websocket_connect(f"/ws/kitchen/{restaurant.id}?billet={_token_of(kitchen)}") as ws:
         assert ws is not None
 
 
@@ -344,9 +344,13 @@ def test_push_subscription_requires_the_order_token(client, db_session):
 
 
 def _token_of(staff) -> str:
-    from app.modules.staff.security import create_access_token
-
-    return create_access_token(staff.id, staff.restaurant_id, staff.role.value)
+    """
+    Le billet à usage unique qui autorise un canal du personnel
+    (ROADMAP_PRODUCTION.md §P2.4) — ce n'est plus le JWT qui passe dans l'URL.
+    Les contrôles vérifiés ici (bon restaurant, bon rôle) n'ont pas changé :
+    le billet dit QUI, le socket décide de QUOI il a le droit.
+    """
+    return ws_billet(staff)
 
 
 class pytest_raises_ws:

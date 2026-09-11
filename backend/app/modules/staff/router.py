@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
 from app.core.subscription import SUBSCRIPTION_DURATION_DAYS, get_launch_campaign, launch_promo_grants_used
-from app.modules.staff import schemas, security, service
+from app.modules.staff import schemas, security, service, ws_tickets
 from app.modules.staff.dependencies import get_current_staff, require_role
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.tenants.models import Restaurant
@@ -171,6 +171,24 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=schemas.StaffOut)
 def me(staff: Staff = Depends(get_current_staff)):
     return staff
+
+
+@router.post("/ws-ticket", response_model=schemas.WsTicketOut)
+def creer_billet_websocket(staff: Staff = Depends(get_current_staff)):
+    """
+    Échange le JWT long (dans l'en-tête `Authorization`, où il est en
+    sécurité) contre un billet à usage unique valable 30 secondes, le seul à
+    voyager dans l'URL de la WebSocket — voir `staff/ws_tickets.py` pour le
+    pourquoi.
+
+    Une route par connexion, donc une par reconnexion : c'est voulu, le billet
+    ne serait plus à usage unique autrement. Le coût est un aller-retour HTTP
+    sur un chemin déjà emprunté à chaque montage d'écran.
+    """
+    return schemas.WsTicketOut(
+        ticket=ws_tickets.creer_billet(staff.id),
+        expire_dans=ws_tickets.DUREE_BILLET_SECONDES,
+    )
 
 
 @router.post("/push-subscription", status_code=204)
