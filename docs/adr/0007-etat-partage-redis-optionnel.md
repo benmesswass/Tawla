@@ -57,3 +57,25 @@ commandes des autres. Et les deux implémentations doivent rester
 interchangeables : `tests/test_etat_partage.py` fait tourner les **mêmes
 assertions** sur les deux, faute de quoi une suite qui tourne en mémoire ne
 prouverait plus rien sur une production qui tourne sur Redis.
+
+**Complément (2026-09-11) — toutes les clés et tous les canaux portent le code
+du marché.** Cette décision laissait un angle mort : les clés sont construites
+sur un `table_id` (`roster:5`), qui est une clé primaire *par base*, et
+l'ADR 0003 impose une base par marché. Deux marchés partageant une instance
+Redis voyaient donc la table 5 de Tunis et la table 5 de France écrire la même
+clé — rosters et paniers fusionnés entre deux clientèles, et, sur le canal de
+diffusion, une commande tunisienne affichée sur un écran cuisine français.
+
+Le cas n'est pas théorique : le palier gratuit de Render n'autorise **qu'une
+instance Key Value par workspace**, donc deux marchés qui la partagent dès
+qu'on branche Redis sans payer. Un index de base Redis distinct par marché
+aurait marché aussi, mais il dépend d'une permission de l'hébergeur ; le
+préfixe n'en dépend pas.
+
+Le préfixe est appliqué **dans `MagasinRedis` seul** — les cinq usages
+continuent de parler de `roster:5`, comme en mode mémoire. Il est capturé à la
+construction et non relu à chaque appel, pour que deux magasins de marchés
+différents puissent coexister dans un processus : sans ça l'isolement n'est pas
+testable, et ce qui n'est pas testable ici ne se constate qu'en mélangeant deux
+clientèles en production. Conséquence directe : `reinitialiser()` n'est plus un
+`FLUSHDB`, qui emporterait l'état de l'autre marché.
