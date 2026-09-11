@@ -240,11 +240,45 @@ fois.
 - [ ] Collecte des erreurs 🧑 — log drain de l'hébergeur ou Sentry. Les logs
       sortent déjà en JSON structuré avec le contexte métier : il manque
       uniquement une destination.
-- [ ] **Exposer les connexions du pool en métrique** — `engine.pool.checkedout()`
+- [x] **Exposer les connexions du pool en métrique** — `engine.pool.checkedout()`
       et le nombre de connexions `idle in transaction`, avec une alerte au-delà
       de 70 %. C'est le signal avancé unique de F1, F2 et F3 : les cinq
       effondrements provoqués pendant l'audit auraient tous été annoncés par
-      cette seule courbe, plusieurs secondes avant la panne.
+      cette seule courbe, plusieurs secondes avant la panne (PR #209)
+      *Fichiers : `app/core/pool_metrics.py` (mesure + seuil + journalisation),
+      `app/main.py` (greffe sur `/health`),
+      `app/modules/platform_admin/router.py` (`GET /api/v1/platform-admin/pool`),
+      `tests/test_metrique_pool.py`*
+
+  **Trois décisions**, pour que la suite ne les redécouvre pas :
+
+  1. **Greffée sur `/health`, sans ordonnanceur.** C'est la seule route que
+     quelque chose appelle à intervalle régulier — donc la seule qui donne une
+     **courbe** plutôt qu'un instantané, et une saturation de pool ne se voit
+     que sur une courbe. La réponse de `/health` ne bouge pas d'un caractère
+     (`{"status": "ok"}`) : un moniteur externe déclenche dessus.
+  2. **L'alerte est un log WARNING `pool.sature`, pas un appel réseau.** La
+     destination, c'est le log drain de la ligne « Collecte des erreurs »
+     ci-dessus. Appeler soi-même un service d'alerte, ce serait un service
+     payant de plus **et** une dépendance réseau dans le chemin de `/health` —
+     les deux sont exclus. `log_event()` accepte désormais un `level`
+     (INFO par défaut) : sans lui, une alerte est noyée dans le flux normal.
+  3. **Les chiffres se lisent sous le JWT admin plateforme**, jamais en public :
+     capacité et connexions ouvertes disent à un attaquant combien de requêtes
+     concurrentes suffisent à saturer le service.
+
+  **Deux défauts trouvés par leurs propres tests, et corrigés :**
+
+  - `/health` répondait **500** quand la mesure levait — c'est-à-dire une
+    fausse alerte de panne provoquée par l'outil censé les prévenir. La mesure
+    est désormais enveloppée : commodité d'un côté, contrat de l'autre.
+  - PostgreSQL met `pg_stat_activity` **en cache pour toute la durée de la
+    transaction** : deux lectures successives dans la même transaction rendent
+    le même chiffre, même si dix connexions se sont bloquées entre les deux.
+    En production la session de `/health` est neuve à chaque requête, donc le
+    piège reste invisible — mais il rendait aveugle tout appelant qui mesure en
+    boucle, exactement l'usage que cette métrique appelle.
+    `SELECT pg_stat_clear_snapshot()` avant chaque comptage.
 
 ### P1.8 — Dépendances (F10)
 

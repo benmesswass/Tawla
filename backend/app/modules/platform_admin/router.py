@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.dates import as_utc
 from app.core.logging import get_logger, log_event
+from app.core.pool_metrics import SEUIL_ALERTE_POOL, mesurer_le_pool
 from app.core.rate_limit import rate_limit
 from app.core.subscription import get_launch_campaign, launch_promo_grants_used
 from app.modules.platform_admin import schemas, security, service
@@ -121,6 +122,35 @@ async def overview(
 @router.get("/product-analytics", response_model=schemas.ProductAnalytics)
 def product_analytics(_admin: PlatformAdmin = Depends(get_current_platform_admin)):
     return service.get_product_analytics()
+
+
+@router.get("/pool", response_model=schemas.PoolOut)
+def pool(
+    db: Session = Depends(get_db),
+    _admin: PlatformAdmin = Depends(get_current_platform_admin),
+):
+    """
+    Les deux chiffres qui annoncent un effondrement (ROADMAP_PRODUCTION.md
+    §P1.7) : connexions sorties du pool, et connexions `idle in transaction`.
+
+    Sous le JWT admin plateforme, jamais en public : la capacité du pool et le
+    nombre de connexions ouvertes disent à un attaquant combien de requêtes
+    concurrentes suffisent à saturer le service. C'est aussi la raison pour
+    laquelle `/health`, qui est publique, ne rend toujours que `{"status":
+    "ok"}` — elle se contente de journaliser l'alerte.
+    """
+    mesure = mesurer_le_pool(db)
+    if mesure is None:
+        return schemas.PoolOut(mesurable=False, seuil_alerte=SEUIL_ALERTE_POOL, sature=False)
+    return schemas.PoolOut(
+        mesurable=True,
+        connexions_utilisees=mesure.connexions_utilisees,
+        capacite=mesure.capacite,
+        taux_occupation=round(mesure.taux_occupation, 3),
+        idle_in_transaction=mesure.idle_in_transaction,
+        seuil_alerte=SEUIL_ALERTE_POOL,
+        sature=mesure.taux_occupation >= SEUIL_ALERTE_POOL,
+    )
 
 
 @router.get("/launch-campaign", response_model=schemas.LaunchCampaignOut)
