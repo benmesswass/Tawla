@@ -179,10 +179,10 @@ class PayShareRequest(BaseModel):
     Base commune aux trois moyens de paiement — chaque appareil paie SA
     PART, jamais l'addition entière (identité de table, ROADMAP.md §Override,
     extension paiement par personne). `payer_key`/`payer_name` identifient qui
-    paie : le montant réellement facturé n'est JAMAIS lu ici, il est
-    recalculé côté serveur à partir du roster de la table et des plats de la
-    commande (voir orders/split.py) — un client ne peut donc jamais se
-    facturer moins que sa part réelle.
+    paie : le montant est recalculé côté serveur à partir du roster de la table
+    et des plats de la commande (voir orders/split.py), et `amount` ci-dessous
+    ne peut que le remplacer par une valeur plafonnée à ce qui reste dû — le
+    client ne fixe jamais lui-même ce qui est débité.
 
     Facultatifs (chaîne vide par défaut) : sans identité déclarée (table qui
     n'a pas activé le scan-identité, ou appel d'un client plus ancien), le
@@ -195,6 +195,17 @@ class PayShareRequest(BaseModel):
     payer_key: str = Field(default="", max_length=80)
     payer_name: str = Field(default="", max_length=40)
     tip_amount: float = Field(default=0, ge=0)
+    # Montant choisi par le convive (Wassim, 2026-09-11) : régler pour toute la
+    # table, ou un montant exact décidé à table, sans quoi les deux modes de
+    # répartition étaient les deux seules réponses possibles. Facultatif — non
+    # fourni, le montant reste celui que le serveur calcule.
+    #
+    # C'est une PROPOSITION, jamais le montant facturé : le serveur la plafonne
+    # à ce qui reste dû (`_get_payable_share`), donc personne ne peut payer plus
+    # que l'addition. Payer MOINS que sa part est en revanche le but même de la
+    # fonctionnalité : le reliquat reste visible en salle et sur la commande,
+    # qui ne passe "payée" que lorsque le total est atteint.
+    amount: float | None = Field(default=None, gt=0)
     # Facultatif : sert uniquement à envoyer la confirmation + facture PDF une
     # fois la commande entièrement payée. Jamais requis, un client qui ne le
     # laisse pas paie pareil.

@@ -199,7 +199,7 @@ async def pay_by_card(
     """
     order, pay_url, diffusions = await run_in_threadpool(
         service.start_card_payment,
-        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email,
+        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email, payload.amount,
     )
     await diffuser(diffusions)
     return schemas.serialize_order(order, pay_url)
@@ -352,7 +352,7 @@ async def request_cash_payment(
     temps réel."""
     return await executer_puis_diffuser(
         service.request_cash_payment,
-        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
+        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email, payload.amount
     )
 
 
@@ -377,7 +377,7 @@ async def request_card_terminal_payment(
     """
     return await executer_puis_diffuser(
         service.request_card_terminal_payment,
-        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email
+        db, order.id, payload.payer_key, payload.payer_name, payload.tip_amount, payload.customer_email, payload.amount
     )
 
 
