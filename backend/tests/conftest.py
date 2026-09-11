@@ -1,4 +1,14 @@
+import os
 import uuid
+
+# AVANT tout import de `app` : `settings` est construit au chargement de
+# `app/core/config.py`, et `env` vaut "production" par défaut depuis le
+# 2026-09-11 (voir le commentaire de `Settings.env`). Sans cette ligne, la
+# suite refuserait de démarrer en CI, où il n'y a pas de `backend/.env` pour
+# fournir les vrais secrets — et elle aurait raison : c'est exactement le
+# garde-fou qu'on vient d'armer. `setdefault` et non `[...]=` : un poste qui
+# pose déjà `ENV` garde sa valeur.
+os.environ.setdefault("ENV", "development")
 
 import pytest
 from fastapi.testclient import TestClient
