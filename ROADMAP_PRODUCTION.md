@@ -427,49 +427,81 @@ vide plus les paniers des clients attablés**.
 
 ### P2.2 — Photos hors de la base (F8)
 
-- [ ] Les photos de plats sont des `LargeBinary` **dans Postgres** (3 Mo max
+- [x] Les photos de plats sont des `LargeBinary` **dans Postgres** (3 Mo max
       chacune), servies par le processus applicatif : jusqu'à 120 Mo par
       restaurant dans un plan *Basic-256mb*, répliqués dans chaque sauvegarde,
       et chaque premier chargement client traverse le backend et son pool.
       Migrer vers un stockage objet + CDN. Le choix d'origine était assumé face
       aux disques éphémères de Render/Railway ; il ne tient plus à 100
-      restaurants, et `ROADMAP.md:176` le prévoyait déjà.
-      *Fichiers : `app/modules/menu/models.py:86`, `app/modules/menu/router.py:305,347`*
+      restaurants, et `ROADMAP.md:176` le prévoyait déjà (PR #214)
+      *Fichiers : `app/core/stockage_photos.py` (neuf),
+      `app/modules/menu/router.py`, `app/modules/tenants/router.py`,
+      `scripts/migrer_photos.py` (neuf), `tests/test_stockage_photos.py` (neuf)*
+
+**Périmètre élargi aux TROIS photos, pas seulement aux plats.** La roadmap ne
+nommait que `menu/models.py`, mais le schéma porte trois `LargeBinary` : le
+plat, la **bannière de couverture** et le logo. La bannière est l'image la plus
+lourde et la plus chargée du parcours client — elle s'ouvre sur le téléphone de
+chaque table. La laisser en base aurait laissé en place le plus gros
+contributeur au problème qu'on corrige.
+
+**Quatre décisions :**
+
+1. **Deux modes, stockage objet optionnel.** Sans les cinq variables
+   `PHOTOS_S3_*`, les photos restent en base et rien ne change : aucune
+   dépendance chargée, aucun compte à ouvrir, `pytest -q` sans prérequis. Un
+   pilote à un restaurant n'a aucune raison de payer un bucket.
+2. **URL absolue, pas de redirection.** `image_url` pointe directement sur le
+   CDN, donc le backend n'est plus appelé **du tout** — pas même pour un 302.
+   Zéro changement côté frontend : `mediaUrl()` sait déjà distinguer une URL
+   absolue d'un chemin relatif.
+3. **Clés adressées par contenu, préfixées par le propriétaire**
+   (`menu-items/42/<empreinte>.jpg`). L'empreinte garde `Cache-Control:
+   immutable` sûr ; le préfixe évite que deux plats portant la même photo
+   partagent un objet — sans lui, retirer la photo de l'un ferait disparaître
+   celle de l'autre.
+4. **Garde-fou de configuration au boot.** Quatre variables sur cinq et le
+   conteneur refuse de démarrer. Sans ça, une variable oubliée donnerait une
+   carte sans photos chez le client, sans erreur nulle part.
+
+**`scripts/migrer_photos.py` déplace l'existant** — sans lui, basculer la
+configuration ne déplacerait que les *nouvelles* photos et une carte déjà
+remplie resterait servie par le backend indéfiniment. Idempotent, simule par
+défaut, et les octets ne quittent la base qu'**après** un dépôt réussi.
+
+⚠️ **Ce qui n'est PAS vérifié** : rien n'a tourné contre un vrai Cloudflare R2
+— il n'y a pas de compte. Les 20 tests tournent contre un **vrai serveur S3 en
+mémoire** (`moto`), pas un bouchon maison, avec une seule concession :
+l'endpoint est celui d'AWS, parce que `moto` n'intercepte pas un `endpoint_url`
+personnalisé. R2 étant compatible S3, l'écart porte sur l'adresse, pas sur le
+protocole — mais **le premier dépôt sur le vrai bucket reste à faire par toi**,
+avec le script en simulation d'abord.
 
 L'atténuation actuelle est bonne et à conserver : l'URL porte l'empreinte du
 contenu, donc `Cache-Control: immutable` est sûr et Cloudflare absorbe les vues
 répétées.
 
-⛔ **Bloqué sur toi — deux documents de ce dépôt se contredisent, et je ne
-tranche pas seul** (relevé le 2026-09-11, en abordant la tâche).
+✅ **Arbitré par Wassim le 2026-09-11 : « `ROADMAP_PRODUCTION.md` source de
+vérité ».** On migre.
 
-`AUDIT_COUTS_PRODUCTION.md` §4.4 a **déjà** instruit ce point, chiffres à
-l'appui, et conclu l'inverse : à 45 établissements comme à 450, les photos en
-`LargeBinary` coûtent **quelques dinars par mois** et ne forcent aucune mise à
-niveau de palier Postgres. Il met R2 en regard « **sans recommandation de
-migrer maintenant** — YAGNI, comme déjà tranché ».
+Le conflit, pour mémoire — `AUDIT_COUTS_PRODUCTION.md` §4.4 avait instruit le
+même sujet le 2026-08-18 et conclu l'inverse, chiffres à l'appui : à 45 comme à
+450 établissements, les photos en `LargeBinary` coûtent quelques dinars par
+mois, et R2 y était mis en regard « sans recommandation de migrer maintenant —
+YAGNI, comme déjà tranché ».
 
-Les deux documents ne répondent pas à la même question, et c'est ce qui les
-rend tous les deux défendables :
+Les deux documents étaient défendables parce qu'ils ne mesuraient pas la même
+chose : l'audit des coûts mesure **l'argent** (verdict : ça ne coûte rien),
+P2.2 mesure **la ressource rare que P1 vient de protéger** — chaque photo
+servie occupe un thread et une connexion du pool le temps de transférer
+150-300 Ko. L'arbitrage tranche en faveur de la tenue en charge, et pose la
+règle générale : **en cas de contradiction, ce fichier fait autorité**
+(reportée dans `CLAUDE.md`).
 
-- l'audit des coûts mesure **l'argent** : verdict, ça ne coûte rien ;
-- P2.2 mesure **la ressource rare** que P1 vient de protéger : chaque
-  chargement d'image qui atteint l'origine occupe un thread et une connexion
-  du pool pendant le transfert de 150-300 Ko.
-
-**Mais l'atténuation en place affaiblit fortement le second argument** :
-l'URL portant l'empreinte du contenu, Cloudflare ne redemande l'image à
-l'origine qu'au défaut de cache, pas une fois par client. Le débit réel qui
-atteint l'origine pendant un service n'est **pas mesuré** — et c'est
-exactement ce que la campagne de charge P3.5 révélera.
-
-**Ma recommandation** : laisser P2.2 ouverte et **conditionnée à cette
-mesure**, plutôt que de migrer maintenant. Migrer ajoute un service payant,
-une clé d'API et un point de défaillance pour un problème dont on n'a, à ce
-jour, la preuve ni qu'il coûte de l'argent, ni qu'il consomme le pool.
-Déclencheur proposé : *si la campagne P3.5 montre que les requêtes d'image
-atteignant l'origine dépassent quelques pour cent du trafic backend, migrer
-vers R2*. Sinon, ne rien faire.
+Le choix de prestataire n'est pas inventé ici : **Cloudflare R2**, déjà chiffré
+et sourcé par l'audit des coûts lui-même (0,015 $/Go/mois, palier gratuit de
+10 Go, **pas de frais de sortie** — l'avantage structurel sur S3 pour un usage
+où les photos sont resservies en boucle).
 
 ### P2.3 — Index du chemin le plus chaud (F13)
 
