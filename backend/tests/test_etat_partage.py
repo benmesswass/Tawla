@@ -183,3 +183,46 @@ def test_le_mode_memoire_ne_diffuse_pas_entre_instances():
 @pytest.mark.skipif(not TEST_REDIS_URL, reason="TEST_REDIS_URL non posée")
 def test_le_mode_redis_diffuse_entre_instances():
     assert MagasinRedis(TEST_REDIS_URL).diffuse_entre_instances is True
+
+
+@pytest.mark.skipif(not TEST_REDIS_URL, reason="TEST_REDIS_URL non posée")
+def test_deux_marches_sur_la_meme_instance_redis_ne_se_voient_pas(monkeypatch):
+    """
+    Le cas que le palier gratuit de Render rend inévitable : **une seule
+    instance Key Value par workspace**, donc deux marchés qui la partagent.
+
+    Les clés sont construites sur un `table_id` (`roster:5`), qui est une clé
+    primaire *par base*, et l'ADR-0003 impose une base par marché. Sans
+    préfixe, la table 5 de Tunis et la table 5 de France écrivent la même clé :
+    les rosters fusionnent, et deux clientèles se voient. Le défaut ne lève
+    aucune erreur — il donne juste un résultat faux, ce qui est pire.
+    """
+    from app.core import etat_partage
+
+    monkeypatch.setattr(etat_partage, "PREFIXE_MARCHE", "tn:")
+    tunisie = MagasinRedis(TEST_REDIS_URL)
+    monkeypatch.setattr(etat_partage, "PREFIXE_MARCHE", "fr:")
+    france = MagasinRedis(TEST_REDIS_URL)
+
+    tunisie.reinitialiser()
+    france.reinitialiser()
+    try:
+        tunisie.ecrire("roster:5", "device-a", "Sami")
+        france.ecrire("roster:5", "device-b", "Camille")
+
+        assert tunisie.lire("roster:5") == {"device-a": "Sami"}
+        assert france.lire("roster:5") == {"device-b": "Camille"}
+
+        # `vider` d'un côté ne doit rien emporter de l'autre — c'est la fin de
+        # service d'un restaurant tunisien, pas celle d'un restaurant français.
+        tunisie.vider("roster:5")
+        assert tunisie.lire("roster:5") == {}
+        assert france.lire("roster:5") == {"device-b": "Camille"}
+
+        # Et `reinitialiser` ne doit plus être un `FLUSHDB` : il emporterait
+        # l'état de l'autre marché.
+        tunisie.reinitialiser()
+        assert france.lire("roster:5") == {"device-b": "Camille"}
+    finally:
+        tunisie.reinitialiser()
+        france.reinitialiser()
