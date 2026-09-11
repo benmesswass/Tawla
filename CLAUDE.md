@@ -67,6 +67,15 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
   reste INFO par défaut ; `level=logging.WARNING` est réservé aux signaux sur
   lesquels un log drain doit pouvoir filtrer pour réveiller quelqu'un
   (`pool.sature`).
+- **Les photos ne passent plus par le backend quand un stockage objet est
+  configuré** (ROADMAP_PRODUCTION.md §P2.2). Plats, bannière de couverture et
+  logo passent par `app/core/stockage_photos.py::stockage_photos` : colonnes
+  `LargeBinary` en base par défaut (rien à installer, rien à payer), stockage
+  objet compatible S3 — Cloudflare R2 — dès que les cinq `PHOTOS_S3_*` sont
+  renseignées. L'`image_url` devient alors **absolue** et le client va droit au
+  CDN, sans toucher le backend ni son pool. Toute nouvelle photo passe par ce
+  module, jamais par une écriture directe dans une colonne binaire ; et
+  `scripts/migrer_photos.py` déplace l'existant.
 - **Plus jamais d'état partagé dans un dict de module** (ROADMAP_PRODUCTION.md
   §P2.1, `docs/adr/0007`). Panier de table, roster, mode de répartition,
   compteurs de débit, diffusion temps réel : tout passe par
@@ -130,6 +139,11 @@ python backend/scripts/generate_table_qr.py --qr-token <token> --label "Table 5"
 # Purge de rétention des données personnelles (Phase 16) — à lancer à la main,
 # simule par défaut, n'efface qu'avec --appliquer.
 cd backend && python scripts/purge_donnees_personnelles.py [--appliquer]
+
+# Déplacer vers le stockage objet les photos déjà en base (§P2.2) — à lancer
+# UNE fois, après avoir renseigné les cinq PHOTOS_S3_*. Idempotent, simule par
+# défaut. Sans lui, seules les NOUVELLES photos partent sur le CDN.
+cd backend && python scripts/migrer_photos.py [--appliquer]
 
 # Migrations Alembic — seule voie d'évolution du schéma depuis la Phase 12.2.
 # L'app ne crée plus les tables au démarrage ; le CMD du Dockerfile lance
@@ -260,7 +274,11 @@ l'a livrée ; si le scope a été réduit, écrire pourquoi sur la ligne. Depuis
   charge** (2026-09-10), née de l'audit technique : charge réellement tirée
   contre un Postgres réel, courses de concurrence reproduites. Trois paliers
   (P1 pilote sûr, P2 multi-restaurants, P3 tenir 5 000), chacun clos par une
-  mesure. **C'est le seul document parallèle qui réordonne `ROADMAP.md`** :
+  mesure. **En cas de contradiction entre documents, c'est lui qui fait
+  autorité** (arbitrage de Wassim, 2026-09-11, rendu sur le conflit P2.2 ↔
+  `AUDIT_COUTS_PRODUCTION.md` §4.4 : les deux étaient défendables, l'un mesurant
+  l'argent et l'autre la tenue en charge — c'est la tenue en charge qui tranche).
+  **C'est aussi le seul document parallèle qui réordonne `ROADMAP.md`** :
   son palier P1 est bloquant avant la Phase 20 (mesuré : 40 commandes
   simultanées tuent le backend définitivement, plafond de 14 WebSockets tous
   restaurants confondus). Une session qui travaille la concurrence, le pool de

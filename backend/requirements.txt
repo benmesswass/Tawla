@@ -22,3 +22,8 @@ posthog==7.45.3
 # État partagé entre instances (ROADMAP_PRODUCTION.md §P2.1) — importé
 # uniquement quand REDIS_URL est renseignée.
 redis==8.1.0
+# Stockage objet des photos (ROADMAP_PRODUCTION.md §P2.2), compatible S3 —
+# Cloudflare R2 en production. Importé uniquement quand les variables
+# PHOTOS_S3_* sont renseignées : sans elles, les photos restent en base et ce
+# paquet n'est jamais chargé.
+boto3==1.43.92
