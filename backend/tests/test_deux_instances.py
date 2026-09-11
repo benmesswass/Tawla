@@ -160,6 +160,22 @@ def _ws(base: str, chemin: str) -> str:
     return base.replace("http://", "ws://") + chemin
 
 
+def _billet(base: str, jeton: str) -> str:
+    """
+    Demande un billet WebSocket à **une** instance, par la vraie route
+    (ROADMAP_PRODUCTION.md §P2.4).
+
+    Il sera présenté à l'AUTRE instance : c'est une seconde preuve, gratuite,
+    que le magasin partagé fonctionne — le billet est écrit par A et consommé
+    par B, ce qui serait impossible avec un dict de processus.
+    """
+    reponse = httpx.post(
+        f"{base}/api/v1/auth/ws-ticket", headers={"Authorization": f"Bearer {jeton}"}, timeout=30
+    )
+    reponse.raise_for_status()
+    return reponse.json()["ticket"]
+
+
 async def _attendre(socket_ws, evenement: str) -> dict:
     """Lit jusqu'à l'événement attendu — les canaux envoient aussi des
     rattrapages à la connexion, qui ne sont pas ce qu'on mesure."""
@@ -185,7 +201,8 @@ def test_une_commande_passee_sur_A_arrive_sur_lecran_connecte_a_B(deux_instances
     base_a, base_b, ctx = deux_instances
 
     async def scenario():
-        url = _ws(base_b, f"/ws/staff/{ctx['restaurant_id']}?token={ctx['jeton_serveur']}")
+        billet = _billet(base_a, ctx["jeton_serveur"])
+        url = _ws(base_b, f"/ws/staff/{ctx['restaurant_id']}?billet={billet}")
         async with websockets.connect(url) as ecran_serveur:
             async with httpx.AsyncClient(timeout=10) as client:
                 reponse = await client.post(
@@ -288,7 +305,14 @@ def test_temoin_sans_magasin_partage_la_commande_reste_sur_son_instance():
         raise
 
     async def scenario():
-        url = _ws(base_b, f"/ws/staff/{contexte['restaurant_id']}?token={contexte['jeton_serveur']}")
+        # Billet demandé à B, l'instance qui va le consommer : sans magasin
+        # partagé, un billet délivré par A lui serait inconnu et la socket
+        # serait refusée — on ne mesurerait alors plus la diffusion, mais
+        # l'authentification. Ce que ce témoin doit montrer, c'est que la
+        # socket s'ouvre parfaitement et que la commande n'arrive quand même
+        # jamais.
+        billet = _billet(base_b, contexte["jeton_serveur"])
+        url = _ws(base_b, f"/ws/staff/{contexte['restaurant_id']}?billet={billet}")
         async with websockets.connect(url) as ecran_serveur:
             async with httpx.AsyncClient(timeout=30) as client:
                 reponse = await client.post(

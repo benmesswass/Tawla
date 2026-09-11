@@ -30,7 +30,7 @@ from app.main import app
 from app.modules.notifications.dependencies import WS_UNAUTHORIZED
 from app.modules.staff.models import StaffRole
 from app.modules.staff.security import create_access_token
-from tests.conftest import create_restaurant, create_staff
+from tests.conftest import create_restaurant, create_staff, ws_billet
 from app.modules.tables.models import Table
 from tests.conftest import _TestingSessionLocal
 
@@ -60,7 +60,7 @@ def test_un_qr_inconnu_ferme_avec_le_code_qui_arrete_les_tentatives(client: Test
 
 
 def test_un_jeton_staff_absent_ferme_avec_le_meme_code(client: TestClient):
-    """Même règle sur le canal serveur : sans jeton, aucun espoir de réussir."""
+    """Même règle sur le canal serveur : sans billet, aucun espoir de réussir."""
     restaurant = create_restaurant(name="Refus", slug="refus-staff")
 
     with pytest.raises(WebSocketDisconnect) as refus:
@@ -76,10 +76,9 @@ def test_le_mauvais_role_ferme_avec_le_meme_code(client: TestClient):
     """
     restaurant = create_restaurant(name="Refus", slug="refus-role")
     cuisine = create_staff(restaurant.id, StaffRole.KITCHEN)
-    jeton = create_access_token(cuisine.id, restaurant.id, cuisine.role.value)
 
     with pytest.raises(WebSocketDisconnect) as refus:
-        with client.websocket_connect(f"/ws/staff/{restaurant.id}?token={jeton}") as ws:
+        with client.websocket_connect(f"/ws/staff/{restaurant.id}?billet={ws_billet(cuisine)}") as ws:
             ws.receive_text()
 
     assert refus.value.code == WS_UNAUTHORIZED

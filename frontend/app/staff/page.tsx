@@ -411,7 +411,14 @@ export default function StaffPage() {
     return () => clearInterval(tick);
   }, [restaurantId, loadPlan]);
 
-  const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
+  // Fabrique plutôt qu'URL figée (ROADMAP_PRODUCTION.md §P2.4) : le canal
+  // s'autorise par un billet à usage unique, il en faut donc un neuf à chaque
+  // reconnexion — sinon l'écran ne revient jamais après une coupure réseau.
+  const { status } = useReconnectingSocket(
+    restaurantId
+      ? { cle: `staff:${restaurantId}`, fabriquer: () => staffWsUrl(`/ws/staff/${restaurantId}`) }
+      : null,
+    (msg) => {
     if (msg.event === "order.pending_confirmation") {
       // Le message temps réel ne porte pas les articles (pensé léger, comme
       // les autres événements de ce canal) — la commande n'a rien à afficher

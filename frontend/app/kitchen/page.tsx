@@ -238,7 +238,14 @@ export default function KitchenPage() {
     }
   }, [restaurantId, loadActiveOrders, loadRestaurant, loadTodayCount, loadDoneOrders]);
 
-  const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/kitchen/${restaurantId}`) : null, (msg) => {
+  // Fabrique plutôt qu'URL figée (ROADMAP_PRODUCTION.md §P2.4) : le canal
+  // s'autorise par un billet à usage unique, il en faut donc un neuf à chaque
+  // reconnexion — sinon l'écran ne revient jamais après une coupure réseau.
+  const { status } = useReconnectingSocket(
+    restaurantId
+      ? { cle: `kitchen:${restaurantId}`, fabriquer: () => staffWsUrl(`/ws/kitchen/${restaurantId}`) }
+      : null,
+    (msg) => {
     if (msg.event === "order.sent_to_kitchen") {
       setOrders((prev) =>
         prev.some((o) => o.order_id === msg.order_id)
