@@ -63,7 +63,19 @@ Pas de microservices tant qu'il n'y a pas de preuve réelle de besoin
   pire que pas de politique. Même règle pour toute purge : elle vit dans le
   service du module concerné et passe par `scripts/purge_donnees_personnelles.py`.
 - Logs via `app/core/logging.py::log_event(logger, message, **context)` —
-  toujours avec `restaurant_id`/`order_id`/`table_id` en contexte.
+  toujours avec `restaurant_id`/`order_id`/`table_id` en contexte. Le niveau
+  reste INFO par défaut ; `level=logging.WARNING` est réservé aux signaux sur
+  lesquels un log drain doit pouvoir filtrer pour réveiller quelqu'un
+  (`pool.sature`).
+- **Plus jamais d'état partagé dans un dict de module** (ROADMAP_PRODUCTION.md
+  §P2.1, `docs/adr/0007`). Panier de table, roster, mode de répartition,
+  compteurs de débit, diffusion temps réel : tout passe par
+  `app/core/etat_partage.py::magasin` — dicts en mémoire par défaut, Redis dès
+  que `REDIS_URL` est renseignée. Un dict de module fonctionne parfaitement sur
+  une instance et **rend la deuxième impossible** : une commande passée sur
+  l'instance A n'arrive jamais sur l'écran connecté à l'instance B, sans erreur
+  nulle part. Toute nouvelle donnée hors base partagée entre requêtes va dans
+  le magasin, jamais dans une variable de module.
 - Routes staff/cuisine/manager protégées par `get_current_staff` (JWT) +
   vérification du rôle ; routes client (scan QR, création/suivi de
   commande) restent publiques par design.

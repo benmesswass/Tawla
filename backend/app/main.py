@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Response
@@ -8,11 +9,13 @@ from sqlalchemy.orm import Session
 from app.core import model_registry  # noqa: F401 — enregistre tous les modèles
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.etat_partage import magasin
 from app.core.logging import get_logger
 from app.core.pool_metrics import journaliser_si_sature, mesurer_le_pool
 from app.modules.demo.router import router as demo_router
 from app.modules.loyalty.router import router as loyalty_router
 from app.modules.menu.router import router as menu_router
+from app.modules.notifications.manager import ecouter_les_diffusions
 from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import router as orders_router
 from app.modules.platform_admin.router import router as platform_admin_router
@@ -40,8 +43,27 @@ async def lifespan(app: FastAPI):
     La suite de tests, elle, continue de construire son schéma avec
     `create_all()` sur SQLite en mémoire (voir tests/conftest.py) : c'est un
     schéma jetable recréé à chaque test, aucune migration n'a de sens là.
+
+    Ce qui démarre ici, en revanche, c'est **l'écoute des diffusions** entre
+    instances (ROADMAP_PRODUCTION.md §P2.1), et uniquement en mode Redis :
+    sans `REDIS_URL`, `broadcast` livre en direct aux sockets locales et il
+    n'y a rien à écouter.
     """
-    yield
+    ecoute = None
+    if magasin.diffuse_entre_instances:
+        ecoute = asyncio.create_task(ecouter_les_diffusions())
+    try:
+        yield
+    finally:
+        if ecoute is not None:
+            ecoute.cancel()
+            # Attendre l'annulation plutôt que la lancer et partir : sinon la
+            # tâche est détruite en plein `await` et asyncio le signale par un
+            # « Task was destroyed but it is pending » à chaque arrêt.
+            try:
+                await ecoute
+            except asyncio.CancelledError:
+                pass
 
 
 logger = get_logger("app")

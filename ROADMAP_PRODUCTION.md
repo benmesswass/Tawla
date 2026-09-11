@@ -373,24 +373,57 @@ plusieurs instances, aucun réglage ne fait passer 100 restaurants.
 
 ### P2.1 — Sortir l'état partagé de la mémoire du processus (F4, F17)
 
-- [ ] Aujourd'hui, le registre WebSocket, le panier de table, le roster des
+- [x] Aujourd'hui, le registre WebSocket, le panier de table, le roster des
       convives, le mode de partage et le limiteur de débit vivent dans des
       dicts de module. Deux instances ne se voient pas : une commande passée
       sur l'instance A n'apparaît jamais sur l'écran cuisine connecté à
       l'instance B. La contrainte « une seule instance backend » est explicite
-      dans `ROADMAP.md:191` — c'est elle qui tombe ici.
-      Pub/sub Redis derrière `ConnectionManager` : l'isolation de toute la
-      diffusion dans **une seule classe** a précisément été faite pour ça
-      (voir son docstring), les modules appelants ne changent pas.
-      *Fichiers : `app/modules/notifications/manager.py:26`,
-      `app/modules/orders/table_cart.py:36`, `app/modules/tables/roster.py:47`,
-      `app/modules/tables/split_mode.py`, `app/core/rate_limit.py:29`*
-      *Validation : deux instances derrière un répartiteur, une commande passée
-      sur l'une apparaît sur l'écran cuisine connecté à l'autre.*
+      dans `ROADMAP.md:191` — c'est elle qui tombe ici (PR #210)
+      **Mesuré, deux vrais `uvicorn` derrière le même Postgres et le même
+      Redis** : la commande passée sur A arrive sur l'écran connecté à B, le
+      panier de table est le même des deux côtés, et le limiteur de débit
+      refuse bien au 21ᵉ appel réparti moitié-moitié sur les deux.
+      *Fichiers : `app/core/etat_partage.py` (neuf),
+      `app/modules/notifications/manager.py`, `app/modules/orders/table_cart.py`,
+      `app/modules/tables/roster.py`, `app/modules/tables/split_mode.py`,
+      `app/core/rate_limit.py`, `app/main.py` (écoute de fond),
+      `docs/adr/0007-etat-partage-redis-optionnel.md`*
+      *Tests : `tests/test_etat_partage.py` (contrat, joué à l'identique sur
+      les DEUX implémentations), `tests/test_deux_instances.py` (validation
+      bout en bout + son témoin).*
 
-Effet de bord à traiter dans la même PR : aujourd'hui **chaque déploiement vide
-les paniers des clients attablés** (état en RAM). Une fois les magasins
-partagés, un déploiement ne les perd plus.
+**Trois décisions, pour que la suite ne les rejoue pas :**
+
+1. **Un magasin unique** (`core/etat_partage.py::magasin`) plutôt que cinq
+   portages séparés. Les cinq usages ont besoin des mêmes trois primitives ;
+   les écrire cinq fois, c'est cinq occasions de diverger.
+2. **Redis optionnel, mémoire par défaut.** Sans `REDIS_URL`, rien ne change :
+   aucune dépendance, aucun service à payer, rien à lancer pour `pytest -q`.
+   C'est ce qui permet à un pilote à un restaurant de ne pas payer un Redis
+   managé — que `AUDIT_COUTS_PRODUCTION.md` ne budgète d'ailleurs pas, 🧑 à
+   trancher avant P2.5.
+3. **Champs nommés, pas un blob JSON par table.** Deux téléphones qui ajoutent
+   un plat au même instant écrivent deux clés différentes ; avec un blob, le
+   second `lire → modifier → écrire` écrase le premier et **un plat disparaît
+   de la commande**. `HSET` conserve l'atomicité par ligne que le dict Python
+   donnait gratuitement.
+
+⚠️ **Deux propriétés qu'un hash Redis ne donne pas et qu'il a fallu
+reconstruire** — les deux étaient gratuites avec un dict Python, donc invisibles
+jusqu'à ce qu'un test les réclame : **l'ordre d'insertion** (le roster affiche
+les convives dans l'ordre où chacun a rejoint) et **le vider-et-lire atomique**
+(sans lui, deux appareils qui valident au même instant facturent la table deux
+fois). `MagasinRedis` range un rang devant chaque valeur pour la première, et
+passe par `MULTI/EXEC` pour la seconde.
+
+**Le témoin compte autant que les trois tests de validation**
+(`test_temoin_sans_magasin_partage_la_commande_reste_sur_son_instance`) : les
+deux mêmes instances démarrées **sans `REDIS_URL`** ne doivent PAS se voir. Sans
+lui, rien ne prouverait que les trois autres mesurent quoi que ce soit — c'est
+le faux négatif qui a coûté deux réécritures à `test_concurrence_commandes.py`.
+
+Effet de bord obtenu, comme prévu : avec Redis branché, **un déploiement ne
+vide plus les paniers des clients attablés**.
 
 ### P2.2 — Photos hors de la base (F8)
 

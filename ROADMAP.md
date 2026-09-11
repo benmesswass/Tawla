@@ -208,7 +208,7 @@ quartier — c'est le seul incident dont le coût dépasse celui du produit.
 
 Tout ici demande un compte ou une carte bancaire de Wassim.
 
-- [ ] Choisir et provisionner l'hébergement 🧑 — backend dockerisé sur Railway ou Render (WebSocket natif + Postgres managé), frontend sur Vercel. Contrainte à respecter : **une seule instance backend** (gestionnaire WebSocket et limiteur de débit en mémoire)
+- [ ] Choisir et provisionner l'hébergement 🧑 — backend dockerisé sur Railway ou Render (WebSocket natif + Postgres managé), frontend sur Vercel. ~~Contrainte à respecter : **une seule instance backend** (gestionnaire WebSocket et limiteur de débit en mémoire)~~ — **contrainte levée le 2026-09-11 par `ROADMAP_PRODUCTION.md` §P2.1 (PR #210)** : avec `REDIS_URL` renseignée, plusieurs instances partagent registre de diffusion, panier de table, roster, mode de répartition et compteurs de débit. Sans elle, la contrainte tient toujours — et c'est le bon réglage tant qu'une seule instance tourne
 - [ ] Réserver le domaine 🧑 (`tawla.tn` en priorité, `.com` en secours)
 - [ ] Générer les vraies clés en variables d'environnement 🧑 — **la liste fait foi dans [`backend/.env.example`](./backend/.env.example), pas ici** : cette ligne avait oublié `ADMIN_CREATION_SECRET`, et c'est exactement ce qui a fait échouer le déploiement du 2026-08-23 (voir ci-dessous)
   - `ENV=production` — c'est lui qui arme les garde-fous de `app/core/config.py`

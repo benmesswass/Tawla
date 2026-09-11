@@ -35,6 +35,22 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Redis réel, pour les mêmes raisons (ROADMAP_PRODUCTION.md §P2.1). Le
+      # mode mémoire reste le défaut et couvre toute la suite ; ce service sert
+      # aux tests qui vérifient que les DEUX implémentations du magasin
+      # partagé se comportent pareil, et surtout au test à deux instances —
+      # le seul qui puisse dire si une commande passée sur l'une arrive bien
+      # sur l'écran connecté à l'autre.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +65,7 @@ jobs:
       - run: pytest -q
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tawla_ci
+          TEST_REDIS_URL: redis://localhost:6379/9
 
       # Scan des avis de sécurité (ROADMAP_PRODUCTION.md §P1.8). L'audit du
       # 2026-09-10 a trouvé 42 avis accumulés sans que personne ne le sache :

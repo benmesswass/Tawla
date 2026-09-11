@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from uuid import uuid4
 
+from app.core.etat_partage import magasin
+
 # Même borne que l'ancien `party.py` qu'il remplace : au-delà, c'est une
 # saisie absurde (mauvais bouton, script) plutôt qu'une vraie tablée.
 MAX_ROSTER_SIZE = 20
@@ -15,8 +17,10 @@ class RosterEntry:
 class TableRosterStore:
     """
     Qui commande à une table, et sous quel prénom — même principe que
-    `orders/table_cart.py::TableCartStore` : en mémoire, par table, purement
-    déclaratif (n'affecte ni le prix ni le paiement).
+    `orders/table_cart.py::TableCartStore` : par table, purement déclaratif
+    (n'affecte ni le prix ni le paiement), stocké dans
+    `core/etat_partage.py::magasin` (mémoire par défaut, Redis dès que
+    `REDIS_URL` est renseignée — P2.1).
 
     Remplace l'ancien `party.py` (nombre de convives + prénoms positionnels,
     déclarés d'un coup par un seul appareil). Ici chaque appareil annonce son
@@ -28,14 +32,17 @@ class TableRosterStore:
     comme les anciennes places 1..N.
     """
 
-    def __init__(self) -> None:
-        self._rosters: dict[int, dict[str, str]] = {}
+    @staticmethod
+    def _cle(table_id: int) -> str:
+        return f"roster:{table_id}"
 
     def snapshot(self, table_id: int) -> list[RosterEntry]:
-        return [RosterEntry(key=key, name=name) for key, name in self._rosters.get(table_id, {}).items()]
+        roster = magasin.lire(self._cle(table_id))
+        return [RosterEntry(key=key, name=name) for key, name in roster.items()]
 
     def set_name(self, table_id: int, device_key: str, name: str) -> None:
-        roster = self._rosters.setdefault(table_id, {})
+        cle = self._cle(table_id)
+        roster = magasin.lire(cle)
         # Une reconnexion (rafraîchissement de page) réutilise la même clé
         # déjà connue : ne compte pas comme une nouvelle place, donc n'entre
         # pas dans la borne ci-dessous.
@@ -44,20 +51,21 @@ class TableRosterStore:
         cleaned = name.strip()[:30]
         # Prénom laissé vide (modale passée) : "PersoN", N = la place que ce
         # téléphone occupe (avant son propre ajout, donc 1 pour le premier).
-        roster[device_key] = cleaned or f"Perso{len(roster) + 1}"
+        magasin.ecrire(cle, device_key, cleaned or f"Perso{len(roster) + 1}")
 
     def add_guest(self, table_id: int, name: str) -> None:
         """Convive qui ne scanne pas — ajouté par un autre appareil de la
         table, sans clé d'appareil associée : il n'apparaîtra jamais comme
         auteur d'un plat, seulement dans la liste et la répartition."""
-        roster = self._rosters.setdefault(table_id, {})
-        if len(roster) >= MAX_ROSTER_SIZE:
+        cle = self._cle(table_id)
+        occupants = magasin.compter(cle)
+        if occupants >= MAX_ROSTER_SIZE:
             return
         cleaned = name.strip()[:30]
-        roster[f"guest:{uuid4()}"] = cleaned or f"Perso{len(roster) + 1}"
+        magasin.ecrire(cle, f"guest:{uuid4()}", cleaned or f"Perso{occupants + 1}")
 
     def clear(self, table_id: int) -> None:
-        self._rosters.pop(table_id, None)
+        magasin.vider(self._cle(table_id))
 
 
 table_roster_store = TableRosterStore()

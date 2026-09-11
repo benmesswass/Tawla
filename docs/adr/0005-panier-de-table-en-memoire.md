@@ -37,3 +37,12 @@ déploiement backend — attendu, pas un bug. Si le projet passe un jour à
 plusieurs instances backend (déclencheur déjà posé dans `ROADMAP.md`), cet
 état en mémoire devra être revu en même temps que le gestionnaire WebSocket et
 le limiteur de débit, pas isolément.
+
+**Suite (2026-09-11)** : ce passage a eu lieu, et exactement comme annoncé —
+tous ensemble, pas isolément. Voir
+[ADR 0007](./0007-etat-partage-redis-optionnel.md) : le panier vit désormais
+dans `core/etat_partage.py::magasin`, en mémoire par défaut (rien ne change),
+partagé dès que `REDIS_URL` est renseignée. Le choix « jamais en base, jamais
+de migration » tranché ici n'est pas revenu sur la table : le panier reste un
+état transitoire.
+
