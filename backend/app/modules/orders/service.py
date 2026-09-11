@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -277,6 +278,78 @@ def _build_order_items(
     return built
 
 
+def _diffusion_panier_valide(table: Table, order: Order) -> Diffusion:
+    """
+    Le « cart.validated » que TOUS les appareils de la table attendent.
+
+    Sans lui sur les chemins de rejeu, l'appareil qui réessaie n'a aucun
+    retour : la valeur de retour de `create_order_from_table_cart` est ignorée
+    par `_pump_table`, et il resterait bloqué sur « Valider... » indéfiniment.
+    Factorisé pour que le chemin normal, le rejeu séquentiel et le rattrapage
+    d'un rejeu concurrent ne puissent pas diverger.
+    """
+    return Diffusion(
+        order.restaurant_id, channel=table_channel(table.id),
+        message={"event": "cart.validated", "order_id": order.id, "public_token": order.public_token},
+    )
+
+
+def _diffusion_panier_valide_par_id(table_id: int, order: Order) -> Diffusion:
+    """Comme `_diffusion_panier_valide`, mais sans toucher à l'instance
+    `Table` — le chemin de rattrapage d'un rejeu concurrent tourne sur une
+    session qui vient d'échouer, où tout accès ORM lèverait."""
+    return Diffusion(
+        order.restaurant_id, channel=table_channel(table_id),
+        message={"event": "cart.validated", "order_id": order.id, "public_token": order.public_token},
+    )
+
+
+def _commande_deja_passee(db: Session, table_id: int, client_order_id: str | None) -> Order | None:
+    """
+    La commande que ce panier a déjà produite, s'il y en a une.
+
+    Le `client_order_id` est fabriqué par le navigateur et conservé dans sa
+    file hors ligne : c'est lui qui rend la création idempotente quand une
+    réponse se perd en plein service.
+    """
+    if not client_order_id:
+        return None
+    return (
+        db.query(Order)
+        .filter(Order.table_id == table_id, Order.client_order_id == client_order_id)
+        .first()
+    )
+
+
+def _rattraper_le_rejeu_concurrent(db: Session, table_id: int, client_order_id: str | None) -> Order:
+    """
+    Rattrape le perdant d'un rejeu vraiment simultané
+    (ROADMAP_PRODUCTION.md §P1.6).
+
+    Le contrôle de rejeu est un `SELECT` suivi d'un `INSERT`, sans verrou :
+    deux rejeux du même panier au même instant passent donc tous deux le
+    `SELECT`, et le second heurte `uq_orders_table_client_order`. La
+    contrainte fait bien son travail — aucun doublon n'entre en base — mais
+    sans ce rattrapage l'`IntegrityError` remontait telle quelle, et le
+    téléphone recevait un **500 alors que sa commande était passée**. Sa file
+    hors ligne réessayait, pour retomber sur le même 500.
+
+    Même motif que `core/invoice_number.py` pour les deux premiers paiements
+    concurrents de l'année : rattraper, refaire le `SELECT`, rendre la ligne
+    que l'autre vient de créer.
+    """
+    db.rollback()
+    rejouee = _commande_deja_passee(db, table_id, client_order_id)
+    if rejouee is None:
+        # L'unicité violée n'était pas celle du rejeu : ne rien masquer.
+        raise
+    log_event(
+        logger, "order.create_replayed_concurrent",
+        restaurant_id=rejouee.restaurant_id, order_id=rejouee.id, table_id=rejouee.table_id,
+    )
+    return rejouee
+
+
 def create_order(db: Session, payload: schemas.OrderCreate) -> tuple[Order, list[Diffusion]]:
     # La table est retrouvée par son token de QR code, et le restaurant en est
     # déduit : aucun identifiant numérique n'est accepté du client, donc rien
@@ -288,20 +361,15 @@ def create_order(db: Session, payload: schemas.OrderCreate) -> tuple[Order, list
     # pas sur une qu'il ne pourrait plus suivre. Retour avant toute écriture,
     # donc sans second broadcast : sinon la commande réapparaît sur l'écran
     # serveur alors qu'elle est déjà prise en charge.
-    if payload.client_order_id:
-        replayed = (
-            db.query(Order)
-            .filter(Order.table_id == table.id, Order.client_order_id == payload.client_order_id)
-            .first()
+    replayed = _commande_deja_passee(db, table.id, payload.client_order_id)
+    if replayed:
+        log_event(
+            logger, "order.create_replayed",
+            restaurant_id=replayed.restaurant_id, order_id=replayed.id, table_id=replayed.table_id,
         )
-        if replayed:
-            log_event(
-                logger, "order.create_replayed",
-                restaurant_id=replayed.restaurant_id, order_id=replayed.id, table_id=replayed.table_id,
-            )
-            # Rien à diffuser : la commande existe déjà et l'écran serveur la
-            # porte depuis sa création.
-            return replayed, []
+        # Rien à diffuser : la commande existe déjà et l'écran serveur la
+        # porte depuis sa création.
+        return replayed, []
 
     if not payload.items:
         raise HTTPException(
@@ -320,13 +388,24 @@ def create_order(db: Session, payload: schemas.OrderCreate) -> tuple[Order, list
         if restaurant and tier_includes(effective_tier(restaurant), SubscriptionTier.PRO)
         else None
     )
-    return _finalize_order(
-        db, table, _build_order_items(db, restaurant_id, payload.items),
-        client_order_id=payload.client_order_id,
-        scheduled_for=payload.scheduled_for,
-        loyalty_phone=loyalty_phone,
-        loyalty_birth_date=payload.loyalty_birth_date,
-    )
+    # Retenu AVANT le `try` : une fois le flush en échec, la session refuse
+    # tout accès (`PendingRollbackError`), et `table.id` sur une instance ORM
+    # expirée en déclencherait un — l'exception de rattrapage masquerait alors
+    # celle qu'on veut traiter.
+    table_id = table.id
+    try:
+        return _finalize_order(
+            db, table, _build_order_items(db, restaurant_id, payload.items),
+            client_order_id=payload.client_order_id,
+            scheduled_for=payload.scheduled_for,
+            loyalty_phone=loyalty_phone,
+            loyalty_birth_date=payload.loyalty_birth_date,
+        )
+    except IntegrityError:
+        # Rejeu concurrent : l'autre appelant a gagné, on rend SA commande —
+        # même `public_token`, donc le téléphone peut la suivre. Rien à
+        # diffuser : c'est lui qui a prévenu l'écran serveur.
+        return _rattraper_le_rejeu_concurrent(db, table_id, payload.client_order_id), []
 
 
 def _finalize_order(
@@ -416,26 +495,13 @@ def create_order_from_table_cart(
     # n'avoir jamais validé. Vérifié AVANT `pop_all` : si la commande existe
     # déjà, on la rend telle quelle, sans toucher au panier (qui peut déjà
     # porter les articles ajoutés par un autre convive depuis).
-    if client_order_id:
-        replayed = (
-            db.query(Order)
-            .filter(Order.table_id == table.id, Order.client_order_id == client_order_id)
-            .first()
+    replayed = _commande_deja_passee(db, table.id, client_order_id)
+    if replayed:
+        log_event(
+            logger, "order.create_replayed",
+            restaurant_id=replayed.restaurant_id, order_id=replayed.id, table_id=replayed.table_id,
         )
-        if replayed:
-            log_event(
-                logger, "order.create_replayed",
-                restaurant_id=replayed.restaurant_id, order_id=replayed.id, table_id=replayed.table_id,
-            )
-            # Sans ce broadcast, l'appareil qui réessaie n'a AUCUN retour : le
-            # chemin normal (plus bas) prévient le canal via "cart.validated",
-            # jamais la valeur de retour de cette fonction (`_pump_table` l'ignore) —
-            # sans le rejouer ici, il resterait bloqué sur "Valider..." indéfiniment.
-            diffusions.append(Diffusion(
-                replayed.restaurant_id, channel=table_channel(table.id),
-                message={"event": "cart.validated", "order_id": replayed.id, "public_token": replayed.public_token},
-            ))
-            return replayed, diffusions
+        return replayed, [_diffusion_panier_valide(table, replayed)]
 
     # Import différé : `table_cart` importe `resolve_selected_options` depuis
     # `menu_item_resolution`, jamais depuis ce module, pour éviter le cycle
@@ -475,13 +541,21 @@ def create_order_from_table_cart(
         )]
         raise
 
-    order, diffusions_creation = _finalize_order(db, table, order_items, client_order_id=client_order_id)
-    diffusions.extend(diffusions_creation)
+    # Même précaution que dans `create_order` : lu avant le `try`, parce
+    # qu'une session au flush en échec refuse de recharger un attribut ORM.
+    table_id = table.id
+    try:
+        order, diffusions_creation = _finalize_order(db, table, order_items, client_order_id=client_order_id)
+    except IntegrityError:
+        # Rejeu concurrent (§P1.6) : deux appareils de la table ont validé le
+        # même panier au même instant. L'autre a gagné ; on rend SA commande,
+        # et on prévient quand même le canal — sinon cet appareil-ci reste
+        # bloqué sur « Valider... ».
+        rejouee = _rattraper_le_rejeu_concurrent(db, table_id, client_order_id)
+        return rejouee, [_diffusion_panier_valide_par_id(table_id, rejouee)]
 
-    diffusions.append(Diffusion(
-        table.restaurant_id, channel=table_channel(table.id),
-        message={"event": "cart.validated", "order_id": order.id, "public_token": order.public_token},
-    ))
+    diffusions.extend(diffusions_creation)
+    diffusions.append(_diffusion_panier_valide(table, order))
     return order, diffusions
 
 

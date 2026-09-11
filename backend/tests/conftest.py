@@ -8,13 +8,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.core import model_registry  # noqa: F401 — enregistre tous les modèles
 from app.core.database import Base, get_db
-from app.core.rate_limit import _hits as _rate_limit_hits
+from app.core.etat_partage import magasin
 from app.main import app
-from app.modules.orders import table_cart
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.staff.security import create_access_token, hash_password
-from app.modules.tables import roster as table_roster
-from app.modules.tables import split_mode as table_split_mode
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
 # Base SQLite en mémoire dédiée aux tests. StaticPool = une seule connexion
@@ -62,38 +59,29 @@ def _fresh_schema():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_rate_limiter():
+def _magasin_partage_neuf():
     """
-    Le limiteur de débit de `/auth/login` et `/auth/register` compte les appels
-    dans un dict de module (20 req/60s par IP+route). Toute la suite tourne
-    dans le même processus, depuis la même « IP » TestClient : sans cette
-    remise à zéro, le nombre total d'appels d'authentification de la suite
-    finit par déclencher des 429, et les tests deviennent dépendants de leur
-    ordre et de leur nombre. Découvert en ajoutant les tests de la Phase 12.1.
-    """
-    _rate_limit_hits.clear()
-    yield
-    _rate_limit_hits.clear()
+    Tout l'état hors base vit dans `core/etat_partage.py::magasin` depuis P2.1
+    — panier de table, roster des convives, mode de répartition, compteurs du
+    limiteur de débit. Une seule remise à zéro les couvre donc tous, là où il
+    en fallait deux avant.
 
+    Les deux raisons d'origine tiennent toujours, et elles sont
+    indépendantes :
 
-@pytest.fixture(autouse=True)
-def _reset_shared_table_stores():
+    - **Le limiteur** (20 req/60 s par IP+route) : toute la suite tourne dans
+      le même processus depuis la même « IP » TestClient. Sans remise à zéro,
+      le nombre total d'appels d'authentification de la suite finit par
+      déclencher des 429 et les tests deviennent dépendants de leur ordre et
+      de leur nombre (découvert Phase 12.1).
+    - **Les magasins de table** : ils ne sont plus purgés sur simple
+      déconnexion (2026-09-09, seul `release_table` le fait). Sans remise à
+      zéro, un test qui rouvre un canal de table hériterait du panier laissé
+      par le test précédent.
     """
-    Le panier partagé et le roster d'une table (chantier « panier
-    synchronisé multi-appareils ») ne sont plus jamais purgés sur simple
-    déconnexion (2026-09-09, seul `release_table` le fait désormais) — sans
-    cette remise à zéro entre tests, un test qui rouvre un canal de table
-    hériterait du panier laissé par un test précédent, `table_cart_store`/
-    `table_roster_store`/`table_split_mode_store` étant des dicts de module
-    partagés par toute la suite, comme `_rate_limit_hits` ci-dessous.
-    """
-    table_cart.table_cart_store._carts.clear()
-    table_roster.table_roster_store._rosters.clear()
-    table_split_mode.table_split_mode_store._modes.clear()
+    magasin.reinitialiser()
     yield
-    table_cart.table_cart_store._carts.clear()
-    table_roster.table_roster_store._rosters.clear()
-    table_split_mode.table_split_mode_store._modes.clear()
+    magasin.reinitialiser()
 
 
 @pytest.fixture(autouse=True)
@@ -171,10 +159,19 @@ def create_restaurant(
 
 @pytest.fixture()
 def client():
-    # Volontairement PAS de "with TestClient(app) as c" : ça déclencherait
-    # le lifespan de l'app (donc create_all sur la VRAIE base Postgres,
-    # qui n'existe pas dans cet environnement de test).
-    return TestClient(app)
+    # `with` obligatoire depuis Starlette 1.x (ROADMAP_PRODUCTION.md §P1.8) :
+    # hors contexte, chaque `websocket_connect` ouvre SON PROPRE portail, donc
+    # sa propre boucle d'événements dans son propre thread. Les files d'attente
+    # de la session, autrefois des `queue.Queue` thread-safe, sont désormais des
+    # flux anyio liés à cette boucle : un `broadcast` déclenché par le socket B
+    # ne réveille jamais le socket A s'il attend déjà — le test se fige pour
+    # toujours (vu sur `test_table_cart.py`, hang à `ws_a.receive_json()`).
+    # Dans le contexte, toutes les sessions partagent un portail unique, comme
+    # un processus uvicorn réel n'a qu'une boucle. Le commentaire d'origine
+    # refusait le `with` à cause du `create_all()` du lifespan : celui-ci a
+    # disparu à la Phase 12.2 (`app/main.py::lifespan` ne fait plus que `yield`).
+    with TestClient(app) as c:
+        yield c
 
 
 def create_staff(restaurant_id: int, role: StaffRole = StaffRole.MANAGER, password: str = "test-pass-1234") -> Staff:

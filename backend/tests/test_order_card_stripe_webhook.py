@@ -12,7 +12,7 @@ c'est la logique de routage de l'évènement qui est sous test ici, pas le SDK
 Stripe lui-même (déjà couvert côté `construct_webhook_event`/abonnement).
 """
 from app.core import stripe_gateway
-from app.core.rate_limit import _hits
+from app.core.etat_partage import magasin
 from app.modules.orders import router as orders_router
 from app.modules.orders.models import Order, OrderPayment, OrderPaymentStatus, PaymentMethod, PaymentStatus
 from app.modules.staff.models import StaffRole
@@ -252,7 +252,7 @@ def test_webhook_is_rate_limited_like_its_konnect_sibling(client, monkeypatch):
     même fichier), ce endpoint n'avait aucun plafond — une signature
     invalide reste bon marché à vérifier, mais rien n'empêchait de la
     spammer sans limite."""
-    _hits.clear()
+    magasin.reinitialiser()
     try:
         def _boom(**kw):
             raise stripe_gateway.StripeGatewayError("signature invalide")
@@ -271,4 +271,4 @@ def test_webhook_is_rate_limited_like_its_konnect_sibling(client, monkeypatch):
         assert res.status_code == 429
         assert res.json()["detail"]["code"] == "RATE_LIMITED"
     finally:
-        _hits.clear()
+        magasin.reinitialiser()

@@ -1,13 +1,15 @@
-import time
-from collections import defaultdict
-
 from fastapi import HTTPException, Request
 
-# Limiteur en mémoire, par IP + route — cohérent avec le choix déjà fait
-# pour le gestionnaire de connexions WebSocket (mono-instance assumé, cf.
-# notifications/manager.py "en mono-instance, un dict en mémoire suffit").
-# But : ralentir un brute-force sur l'auth, pas une garantie absolue — pas
-# de dépendance externe (Redis...) pour un besoin aussi restreint.
+from app.core.etat_partage import magasin
+
+# Limiteur par IP + route. But : ralentir un brute-force sur l'auth, pas une
+# garantie absolue.
+#
+# Le compteur vit dans `core/etat_partage.py::magasin` depuis P2.1 : en mémoire
+# par défaut (exactement comme avant), partagé dès que `REDIS_URL` est
+# renseignée. Sans ça, N instances derrière un répartiteur donnent N fois le
+# plafond à qui tente un brute-force — un compteur par processus n'est pas un
+# plafond, c'est une suggestion.
 _WINDOW_SECONDS = 60
 _MAX_REQUESTS = 20
 
@@ -20,27 +22,6 @@ _MAX_REQUESTS = 20
 # service à absorber. Proposition, pas une vérité : à confronter au premier
 # service réel (Phase 23.3), comme SERVICE_DAY_START_HOUR.
 ORDER_VOLUME_MAX_REQUESTS = 120
-
-_hits: dict[tuple[str, str], list[float]] = defaultdict(list)
-
-# Balayage global périodique des clés (IP, route) devenues inactives (S-6,
-# audit 2026-08-18) : le trim par clé, dans `_dependency`, ne purge que la
-# clé de la requête en cours — une IP qui ne revient jamais (client mobile,
-# IP publique qui tourne) laisse sa clé en mémoire pour toujours. Fuite lente,
-# sans conséquence à l'échelle visée (quelques dizaines d'établissements),
-# mais réelle : un balayage périodique suffit, pas de structure plus lourde.
-_SWEEP_INTERVAL_SECONDS = _WINDOW_SECONDS
-_last_sweep = time.monotonic()
-
-
-def _sweep_expired(now: float) -> None:
-    global _last_sweep
-    if now - _last_sweep < _SWEEP_INTERVAL_SECONDS:
-        return
-    _last_sweep = now
-    expired = [key for key, hits in _hits.items() if not hits or now - hits[-1] > _WINDOW_SECONDS]
-    for key in expired:
-        del _hits[key]
 
 
 def client_ip(request: Request) -> str:
@@ -77,17 +58,15 @@ def rate_limit(max_requests: int = _MAX_REQUESTS):
     """
 
     def _dependency(request: Request) -> None:
-        key = (client_ip(request), request.url.path)
-        now = time.monotonic()
-        _sweep_expired(now)
-        hits = _hits[key]
-        while hits and now - hits[0] > _WINDOW_SECONDS:
-            hits.pop(0)
-        if len(hits) >= max_requests:
+        cle = f"debit:{client_ip(request)}:{request.url.path}"
+        # Le coup en cours est compté AVANT le test, comme avant : dépasser
+        # signifie « ce coup-ci est le coup de trop », pas « le précédent
+        # l'était ». Le plafond observable est donc inchangé (le 21ᵉ appel
+        # échoue avec un plafond de 20).
+        if magasin.incrementer(cle, _WINDOW_SECONDS) > max_requests:
             raise HTTPException(
                 status_code=429,
                 detail={"code": "RATE_LIMITED", "message": "too many attempts, try again later"},
             )
-        hits.append(now)
 
     return _dependency

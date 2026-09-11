@@ -1,5 +1,4 @@
-import app.core.rate_limit as rate_limit_module
-from app.core.rate_limit import _WINDOW_SECONDS, _hits, _sweep_expired
+from app.core.etat_partage import magasin
 from tests.conftest import auth_headers, create_restaurant, create_staff
 
 _LOGIN = {"email": "ratelimit@test.local", "password": "whatever123"}
@@ -11,7 +10,7 @@ def _login(client, cf_connecting_ip: str | None = None):
 
 
 def test_login_blocked_after_threshold(client):
-    _hits.clear()
+    magasin.reinitialiser()
     try:
         payload = {"email": "ratelimit@test.local", "password": "whatever123"}
         for _ in range(20):
@@ -22,11 +21,11 @@ def test_login_blocked_after_threshold(client):
         assert res.status_code == 429
         assert res.json()["detail"]["code"] == "RATE_LIMITED"
     finally:
-        _hits.clear()
+        magasin.reinitialiser()
 
 
 def test_login_and_register_are_limited_independently(client):
-    _hits.clear()
+    magasin.reinitialiser()
     try:
         for _ in range(20):
             client.post("/api/v1/auth/login", json={"email": "x@test.local", "password": "x"})
@@ -42,7 +41,7 @@ def test_login_and_register_are_limited_independently(client):
         )
         assert res.status_code == 201
     finally:
-        _hits.clear()
+        magasin.reinitialiser()
 
 
 def test_deux_clients_derriere_cloudflare_ne_partagent_pas_le_compteur(client):
@@ -54,7 +53,7 @@ def test_deux_clients_derriere_cloudflare_ne_partagent_pas_le_compteur(client):
     et rejeté en 403 à l'edge s'il est forgé par le client, est la seule
     valeur fiable.
     """
-    _hits.clear()
+    magasin.reinitialiser()
     try:
         for _ in range(20):
             assert _login(client, "41.226.0.1").status_code == 401
@@ -63,7 +62,7 @@ def test_deux_clients_derriere_cloudflare_ne_partagent_pas_le_compteur(client):
         # Le téléphone de la table d'à côté n'a rien fait : il passe.
         assert _login(client, "41.226.0.2").status_code == 401
     finally:
-        _hits.clear()
+        magasin.reinitialiser()
 
 
 def test_un_x_forwarded_for_force_ne_contourne_pas_le_compteur(client):
@@ -74,7 +73,7 @@ def test_un_x_forwarded_for_force_ne_contourne_pas_le_compteur(client):
     X-Forwarded-For envoyé par curl survit tel quel en tête de liste).
     CF-Connecting-IP prime toujours sur ce que le client envoie par ailleurs.
     """
-    _hits.clear()
+    magasin.reinitialiser()
     try:
         headers = {"CF-Connecting-IP": "41.226.0.5"}
         for i in range(20):
@@ -83,34 +82,7 @@ def test_un_x_forwarded_for_force_ne_contourne_pas_le_compteur(client):
         headers["X-Forwarded-For"] = "9.9.9.200"
         assert client.post("/api/v1/auth/login", json=_LOGIN, headers=headers).status_code == 429
     finally:
-        _hits.clear()
-
-
-def test_une_ip_qui_ne_revient_jamais_finit_par_etre_oubliee(client):
-    """
-    S-6 : `_hits` créait une clé par (IP, route) et ne la supprimait jamais,
-    même une fois toutes ses requêtes sorties de la fenêtre glissante — fuite
-    lente sur une IP qui ne revient jamais (client mobile, IP publique qui
-    tourne). Le balayage périodique doit purger une clé entièrement expirée.
-    """
-    _hits.clear()
-    original_last_sweep = rate_limit_module._last_sweep
-    try:
-        assert _login(client, "41.226.0.99").status_code == 401
-        key = ("41.226.0.99", "/api/v1/auth/login")
-        assert key in _hits
-
-        # Force le balayage (normalement retardé de _WINDOW_SECONDS) et
-        # simule le temps écoulé depuis la seule requête de cette IP —
-        # `time.monotonic()` ne repart pas de zéro, il faut donc avancer
-        # depuis le timestamp réel enregistré, pas depuis une valeur absolue.
-        rate_limit_module._last_sweep = 0.0
-        _sweep_expired(now=_hits[key][-1] + _WINDOW_SECONDS + 1)
-
-        assert key not in _hits
-    finally:
-        rate_limit_module._last_sweep = original_last_sweep
-        _hits.clear()
+        magasin.reinitialiser()
 
 
 def test_toute_la_salle_derriere_le_meme_wifi_peut_commander(client):
@@ -121,7 +93,7 @@ def test_toute_la_salle_derriere_le_meme_wifi_peut_commander(client):
     plusieurs tables commandent à la même minute. Vérifie que la salle peut
     dépasser ce plafond individuel sans être bloquée.
     """
-    _hits.clear()
+    magasin.reinitialiser()
     try:
         headers = {"CF-Connecting-IP": "41.226.0.10"}
 
@@ -144,4 +116,4 @@ def test_toute_la_salle_derriere_le_meme_wifi_peut_commander(client):
             )
             assert res.status_code == 201, res.text
     finally:
-        _hits.clear()
+        magasin.reinitialiser()

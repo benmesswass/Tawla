@@ -176,38 +176,56 @@ fois.
 
 ### P1.5 — Sortir les appels réseau de la boucle d'événements (F7)
 
-- [ ] `pywebpush` est appelé **à chaque création de commande**, une fois par
+- [x] `pywebpush` est appelé **à chaque création de commande**, une fois par
       membre du staff abonné, sans timeout : le défaut de la librairie vaut
-      `10000`, interprété par `requests` comme **10 000 secondes**. Un service
-      de push lent gèle Tawla entière. Poser un timeout court et explicite, et
-      sortir l'appel du chemin de requête.
-      *Fichiers : `app/core/push.py:28`, `app/modules/staff/service.py:167`*
-- [ ] Même traitement pour les appels `httpx` synchrones (15 s) vers le
-      prestataire de paiement et Resend.
-      *Fichiers : `app/core/konnect.py:191,209`, `app/core/email.py:45`*
-      *Validation : prestataire simulé à 30 s de latence → une seule requête
-      affectée, les autres continuent d'être servies.*
+      `10000`, interprété par `requests` comme **10 000 secondes**. Deux bornes
+      posées : `DELAI_PUSH_SECONDES = 5` par envoi, et
+      `BUDGET_PUSH_EQUIPE_SECONDES = 15` pour toute l'équipe — sans ce second
+      plafond, le premier se multiplie par la taille de la brigade. Vérifié
+      dans les deux sens : le test échoue sans le `timeout=` (`[None] == [5]`),
+      passe avec (PR #206)
+      *Fichiers : `app/core/push.py`, `app/modules/staff/service.py`*
+- [x] Appels `httpx` vers le prestataire de paiement et Resend : ils portaient
+      **déjà** un `timeout=15` explicite, et **§P1.1 les avait déjà sortis de
+      la boucle d'événements** en faisant tourner les fonctions de service dans
+      un thread. Rien à corriger donc — mais le critère de validation, lui,
+      n'avait jamais été vérifié : il l'est désormais par un test (un envoi qui
+      traîne pendant qu'une requête ordinaire passe en < 2 s), plus un
+      garde-fou de lecture qui échoue si un appel `httpx` repart un jour sans
+      `timeout` (PR #206)
+      *Fichier : `tests/test_appels_reseau_lents.py`*
 
 `run_in_threadpool` suffit à ce palier. Une vraie file d'attente est en P3.
 
 ### P1.6 — Rejeu concurrent et refus WebSocket (F11, F12)
 
-- [ ] Le contrôle de rejeu d'une commande est un `SELECT` suivi d'un `INSERT`
+- [x] Le contrôle de rejeu d'une commande est un `SELECT` suivi d'un `INSERT`
       sans verrou : deux rejeux simultanés du même `client_order_id` passent
       tous deux le `SELECT`, et le second heurte la contrainte d'unicité —
       `IntegrityError` non rattrapée, **500** au lieu de la réponse idempotente.
-      La file hors ligne du téléphone réessaie, et retombe sur le même 500.
-      Rattraper, refaire le `SELECT`, renvoyer la commande existante — le motif
-      est déjà écrit dans `core/invoice_number.py`.
-      *Fichiers : `app/modules/orders/service.py:291` et `:415`*
-- [ ] Un refus WebSocket `4401` arrête définitivement les tentatives côté
-      client. Or, pool saturé = authentification en échec = `4401` : un client
-      dont le QR est parfaitement valide voit son panier partagé mourir jusqu'à
-      rechargement manuel, même après rétablissement. Distinguer « refusé »
-      (jeton invalide, ne pas réessayer) de « indisponible » (ressource
-      saturée, réessayer avec backoff) par deux codes de fermeture distincts.
-      *Fichiers : `frontend/lib/useReconnectingSocket.ts:66`,
-      `app/modules/notifications/dependencies.py:14`*
+      Rattrapé sur les deux chemins de création (commande directe et panier de
+      table), même motif que `core/invoice_number.py`. Vérifié dans les deux
+      sens : le test échoue avant (`UniqueViolation` remontée au client), passe
+      après — une seule commande en base, un seul `public_token` rendu aux deux
+      appelants (PR #207)
+      *Piège rencontré : l'identifiant de table doit être lu AVANT le `try`.
+      Une session dont le flush a échoué refuse tout accès ORM, et `table.id`
+      dans le `except` levait un `PendingRollbackError` qui masquait
+      l'`IntegrityError` qu'on voulait traiter.*
+      *Fichier : `app/modules/orders/service.py`*
+- [x] ⚠️ **La prémisse de cette tâche était fausse, mesuré le 2026-09-10.**
+      L'audit supposait que « pool saturé = authentification en échec = 4401 ».
+      Vérifié sur un vrai `uvicorn`, base réellement arrêtée : une base
+      injoignable fait échouer la **poignée de main au niveau HTTP** (le
+      navigateur rapporte 1006, que le hook réessaie déjà avec backoff), et
+      n'émet **jamais** 4401. Ce dernier ne sort que de `_reject`, appelé
+      uniquement sur un vrai défaut d'autorisation. Rien à corriger, donc — et
+      surtout pas un second code de fermeture que rien ne pourrait émettre.
+      La bonne propriété tient toutefois par construction (l'erreur base
+      survient avant le `accept()`) et non par intention : quatre tests la
+      verrouillent désormais, pour qu'un remaniement de l'authentification ne
+      la renverse pas silencieusement (PR #207)
+      *Fichier : `tests/test_refus_websocket.py`*
 
 ### P1.7 — Voir les pannes (F5) — absorbe `ROADMAP.md` Phase 20
 
@@ -222,23 +240,103 @@ fois.
 - [ ] Collecte des erreurs 🧑 — log drain de l'hébergeur ou Sentry. Les logs
       sortent déjà en JSON structuré avec le contexte métier : il manque
       uniquement une destination.
-- [ ] **Exposer les connexions du pool en métrique** — `engine.pool.checkedout()`
+- [x] **Exposer les connexions du pool en métrique** — `engine.pool.checkedout()`
       et le nombre de connexions `idle in transaction`, avec une alerte au-delà
       de 70 %. C'est le signal avancé unique de F1, F2 et F3 : les cinq
       effondrements provoqués pendant l'audit auraient tous été annoncés par
-      cette seule courbe, plusieurs secondes avant la panne.
+      cette seule courbe, plusieurs secondes avant la panne (PR #209)
+      *Fichiers : `app/core/pool_metrics.py` (mesure + seuil + journalisation),
+      `app/main.py` (greffe sur `/health`),
+      `app/modules/platform_admin/router.py` (`GET /api/v1/platform-admin/pool`),
+      `tests/test_metrique_pool.py`*
+
+  **Trois décisions**, pour que la suite ne les redécouvre pas :
+
+  1. **Greffée sur `/health`, sans ordonnanceur.** C'est la seule route que
+     quelque chose appelle à intervalle régulier — donc la seule qui donne une
+     **courbe** plutôt qu'un instantané, et une saturation de pool ne se voit
+     que sur une courbe. La réponse de `/health` ne bouge pas d'un caractère
+     (`{"status": "ok"}`) : un moniteur externe déclenche dessus.
+  2. **L'alerte est un log WARNING `pool.sature`, pas un appel réseau.** La
+     destination, c'est le log drain de la ligne « Collecte des erreurs »
+     ci-dessus. Appeler soi-même un service d'alerte, ce serait un service
+     payant de plus **et** une dépendance réseau dans le chemin de `/health` —
+     les deux sont exclus. `log_event()` accepte désormais un `level`
+     (INFO par défaut) : sans lui, une alerte est noyée dans le flux normal.
+  3. **Les chiffres se lisent sous le JWT admin plateforme**, jamais en public :
+     capacité et connexions ouvertes disent à un attaquant combien de requêtes
+     concurrentes suffisent à saturer le service.
+
+  **Deux défauts trouvés par leurs propres tests, et corrigés :**
+
+  - `/health` répondait **500** quand la mesure levait — c'est-à-dire une
+    fausse alerte de panne provoquée par l'outil censé les prévenir. La mesure
+    est désormais enveloppée : commodité d'un côté, contrat de l'autre.
+  - PostgreSQL met `pg_stat_activity` **en cache pour toute la durée de la
+    transaction** : deux lectures successives dans la même transaction rendent
+    le même chiffre, même si dix connexions se sont bloquées entre les deux.
+    En production la session de `/health` est neuve à chaque requête, donc le
+    piège reste invisible — mais il rendait aveugle tout appelant qui mesure en
+    boucle, exactement l'usage que cette métrique appelle.
+    `SELECT pg_stat_clear_snapshot()` avant chaque comptage.
 
 ### P1.8 — Dépendances (F10)
 
-- [ ] Monter PyJWT (7 avis — c'est la bibliothèque qui valide toute
+- [x] Monter PyJWT (7 avis — c'est la bibliothèque qui valide toute
       l'authentification du personnel), Starlette + FastAPI, python-multipart,
       python-dotenv, et Next.js (avis **RCE critique** sur l'API d'optimisation
-      d'images).
-- [ ] **Ajouter `pip-audit` et `npm audit` à la CI** — c'est le correctif
-      durable. Les 43 avis étaient invisibles pour l'équipe faute de scan.
-      *Fichiers : `backend/requirements.txt`, `frontend/package.json`,
-      `.github/workflows/ci.yml`*
-      *Validation : 789 tests toujours verts, les deux scans propres.*
+      d'images). Mesuré avant/après : `pip-audit` passe de **42 avis sur 4
+      paquets à 0**, `npm audit` de **1 critique + 1 haut à 0** (PR #208)
+      *Versions : `fastapi` 0.115.0 → 0.141.1 (qui tire `starlette` 0.38.6 →
+      1.6.0), `pyjwt` 2.9.0 → 2.13.0, `python-multipart` 0.0.12 → 0.0.32,
+      `python-dotenv` 1.0.1 → 1.2.3, `next` 14.2.35 → 15.5.25.*
+- [x] **Ajouter `pip-audit` et `npm audit` à la CI** — c'est le correctif
+      durable. Les 42 avis étaient invisibles pour l'équipe faute de scan.
+      Bloquants tous les deux (PR #208)
+      *Fichiers : `backend/requirements.txt`, `backend/requirements-dev.txt`,
+      `frontend/package.json`, `.github/workflows/ci.yml`*
+      *Validation : 813 tests toujours verts, les deux scans propres.*
+
+**Trois décisions prises pendant la montée, à ne pas redécouvrir plus tard :**
+
+1. **Next 15.5.25 et non Next 16.** Les deux avis critiques (exécution de code
+   à distance sur l'API d'optimisation d'images, et sur un hôte Windows) sont
+   corrigés en **15.5.24** : `npm audit fix --force` proposait 16.3.4 parce que
+   c'est la dernière version, pas parce qu'il la faut. Une seule version
+   majeure franchie au lieu de deux, sur un frontend sans test de bout en bout.
+2. **`overrides: { postcss }`** dans `frontend/package.json` : Next 15 embarque
+   `postcss` 8.4.31, visé par quatre avis. Ils sont tous **au moment du build**
+   (lecture d'un `.map` désigné par un commentaire CSS) et Tawla ne compile que
+   son propre CSS — l'exposition réelle est nulle. L'`override` les ferme quand
+   même, parce que le critère de sortie est « scan propre » : une porte avec une
+   exception permanente n'est plus une porte. À retirer le jour où on passe à
+   Next 16, qui embarque un `postcss` corrigé.
+3. **Portée des deux scans.** `pip-audit -r requirements.txt` (et non
+   l'environnement installé) et `npm audit --omit=dev --audit-level=high` : on
+   bloque sur ce qui **part en production**. Un avis sur eslint ou vitest
+   n'atteint aucun client, et un avis modéré sur une dépendance de build ne doit
+   pas empêcher un correctif urgent — une porte qu'on apprend à contourner ne
+   protège plus rien.
+
+⚠️ **Piège rencontré, et le seul vrai changement de code de cette tâche.**
+Starlette 1.x réécrit son `TestClient` : hors `with`, chaque
+`websocket_connect` ouvre **son propre portail**, donc sa propre boucle
+d'événements dans son propre thread, et les files de la session — autrefois des
+`queue.Queue` thread-safe — sont désormais des flux anyio liés à cette boucle.
+Un `broadcast` déclenché par le socket B ne réveille alors jamais le socket A
+s'il attend déjà : `test_table_cart.py` se figeait **pour toujours** sur
+`ws_a.receive_json()` (diagnostiqué à la pile, `py-spy dump`, la suite étant
+muette). La correction tient en une ligne de `tests/conftest.py` — la fixture
+`client` entre enfin dans le contexte du `TestClient`, ce qui donne un portail
+unique à toutes les sessions, comme un processus uvicorn réel n'a qu'une
+boucle. Le commentaire qui refusait ce `with` invoquait le `create_all()` du
+lifespan : celui-ci a disparu à la Phase 12.2, le commentaire était périmé.
+
+Côté produit, une seule adaptation : `params` est une `Promise` depuis Next 15,
+y compris dans un composant client. `app/menu/[qrToken]/page.tsx` lit désormais
+le segment avec `useParams()` — la valeur directement, sans `use()` à dérouler.
+À noter, `npx tsc --noEmit` **ne voit pas** cette erreur (elle vient des types
+générés par Next) : c'est `npm run build` qui l'attrape, d'où son intérêt en CI.
 
 ### P1.9 — Le test qui empêche la rechute
 
@@ -275,24 +373,57 @@ plusieurs instances, aucun réglage ne fait passer 100 restaurants.
 
 ### P2.1 — Sortir l'état partagé de la mémoire du processus (F4, F17)
 
-- [ ] Aujourd'hui, le registre WebSocket, le panier de table, le roster des
+- [x] Aujourd'hui, le registre WebSocket, le panier de table, le roster des
       convives, le mode de partage et le limiteur de débit vivent dans des
       dicts de module. Deux instances ne se voient pas : une commande passée
       sur l'instance A n'apparaît jamais sur l'écran cuisine connecté à
       l'instance B. La contrainte « une seule instance backend » est explicite
-      dans `ROADMAP.md:191` — c'est elle qui tombe ici.
-      Pub/sub Redis derrière `ConnectionManager` : l'isolation de toute la
-      diffusion dans **une seule classe** a précisément été faite pour ça
-      (voir son docstring), les modules appelants ne changent pas.
-      *Fichiers : `app/modules/notifications/manager.py:26`,
-      `app/modules/orders/table_cart.py:36`, `app/modules/tables/roster.py:47`,
-      `app/modules/tables/split_mode.py`, `app/core/rate_limit.py:29`*
-      *Validation : deux instances derrière un répartiteur, une commande passée
-      sur l'une apparaît sur l'écran cuisine connecté à l'autre.*
+      dans `ROADMAP.md:191` — c'est elle qui tombe ici (PR #210)
+      **Mesuré, deux vrais `uvicorn` derrière le même Postgres et le même
+      Redis** : la commande passée sur A arrive sur l'écran connecté à B, le
+      panier de table est le même des deux côtés, et le limiteur de débit
+      refuse bien au 21ᵉ appel réparti moitié-moitié sur les deux.
+      *Fichiers : `app/core/etat_partage.py` (neuf),
+      `app/modules/notifications/manager.py`, `app/modules/orders/table_cart.py`,
+      `app/modules/tables/roster.py`, `app/modules/tables/split_mode.py`,
+      `app/core/rate_limit.py`, `app/main.py` (écoute de fond),
+      `docs/adr/0007-etat-partage-redis-optionnel.md`*
+      *Tests : `tests/test_etat_partage.py` (contrat, joué à l'identique sur
+      les DEUX implémentations), `tests/test_deux_instances.py` (validation
+      bout en bout + son témoin).*
 
-Effet de bord à traiter dans la même PR : aujourd'hui **chaque déploiement vide
-les paniers des clients attablés** (état en RAM). Une fois les magasins
-partagés, un déploiement ne les perd plus.
+**Trois décisions, pour que la suite ne les rejoue pas :**
+
+1. **Un magasin unique** (`core/etat_partage.py::magasin`) plutôt que cinq
+   portages séparés. Les cinq usages ont besoin des mêmes trois primitives ;
+   les écrire cinq fois, c'est cinq occasions de diverger.
+2. **Redis optionnel, mémoire par défaut.** Sans `REDIS_URL`, rien ne change :
+   aucune dépendance, aucun service à payer, rien à lancer pour `pytest -q`.
+   C'est ce qui permet à un pilote à un restaurant de ne pas payer un Redis
+   managé — que `AUDIT_COUTS_PRODUCTION.md` ne budgète d'ailleurs pas, 🧑 à
+   trancher avant P2.5.
+3. **Champs nommés, pas un blob JSON par table.** Deux téléphones qui ajoutent
+   un plat au même instant écrivent deux clés différentes ; avec un blob, le
+   second `lire → modifier → écrire` écrase le premier et **un plat disparaît
+   de la commande**. `HSET` conserve l'atomicité par ligne que le dict Python
+   donnait gratuitement.
+
+⚠️ **Deux propriétés qu'un hash Redis ne donne pas et qu'il a fallu
+reconstruire** — les deux étaient gratuites avec un dict Python, donc invisibles
+jusqu'à ce qu'un test les réclame : **l'ordre d'insertion** (le roster affiche
+les convives dans l'ordre où chacun a rejoint) et **le vider-et-lire atomique**
+(sans lui, deux appareils qui valident au même instant facturent la table deux
+fois). `MagasinRedis` range un rang devant chaque valeur pour la première, et
+passe par `MULTI/EXEC` pour la seconde.
+
+**Le témoin compte autant que les trois tests de validation**
+(`test_temoin_sans_magasin_partage_la_commande_reste_sur_son_instance`) : les
+deux mêmes instances démarrées **sans `REDIS_URL`** ne doivent PAS se voir. Sans
+lui, rien ne prouverait que les trois autres mesurent quoi que ce soit — c'est
+le faux négatif qui a coûté deux réécritures à `test_concurrence_commandes.py`.
+
+Effet de bord obtenu, comme prévu : avec Redis branché, **un déploiement ne
+vide plus les paniers des clients attablés**.
 
 ### P2.2 — Photos hors de la base (F8)
 
@@ -309,17 +440,82 @@ L'atténuation actuelle est bonne et à conserver : l'URL porte l'empreinte du
 contenu, donc `Cache-Control: immutable` est sûr et Cloudflare absorbe les vues
 répétées.
 
+⛔ **Bloqué sur toi — deux documents de ce dépôt se contredisent, et je ne
+tranche pas seul** (relevé le 2026-09-11, en abordant la tâche).
+
+`AUDIT_COUTS_PRODUCTION.md` §4.4 a **déjà** instruit ce point, chiffres à
+l'appui, et conclu l'inverse : à 45 établissements comme à 450, les photos en
+`LargeBinary` coûtent **quelques dinars par mois** et ne forcent aucune mise à
+niveau de palier Postgres. Il met R2 en regard « **sans recommandation de
+migrer maintenant** — YAGNI, comme déjà tranché ».
+
+Les deux documents ne répondent pas à la même question, et c'est ce qui les
+rend tous les deux défendables :
+
+- l'audit des coûts mesure **l'argent** : verdict, ça ne coûte rien ;
+- P2.2 mesure **la ressource rare** que P1 vient de protéger : chaque
+  chargement d'image qui atteint l'origine occupe un thread et une connexion
+  du pool pendant le transfert de 150-300 Ko.
+
+**Mais l'atténuation en place affaiblit fortement le second argument** :
+l'URL portant l'empreinte du contenu, Cloudflare ne redemande l'image à
+l'origine qu'au défaut de cache, pas une fois par client. Le débit réel qui
+atteint l'origine pendant un service n'est **pas mesuré** — et c'est
+exactement ce que la campagne de charge P3.5 révélera.
+
+**Ma recommandation** : laisser P2.2 ouverte et **conditionnée à cette
+mesure**, plutôt que de migrer maintenant. Migrer ajoute un service payant,
+une clé d'API et un point de défaillance pour un problème dont on n'a, à ce
+jour, la preuve ni qu'il coûte de l'argent, ni qu'il consomme le pool.
+Déclencheur proposé : *si la campagne P3.5 montre que les requêtes d'image
+atteignant l'origine dépassent quelques pour cent du trafic backend, migrer
+vers R2*. Sinon, ne rien faire.
+
 ### P2.3 — Index du chemin le plus chaud (F13)
 
-- [ ] `orders` n'a qu'un index sur `restaurant_id`, alors que l'écran serveur et
+- [x] `orders` n'a qu'un index sur `restaurant_id`, alors que l'écran serveur et
       l'écran cuisine filtrent sur `(restaurant_id, status, created_at)` à
-      chaque montage et à chaque reconnexion. Le plan mesuré fait un *Bitmap
-      Heap Scan* puis filtre. Invisible aujourd'hui ; à ~73 000 commandes par an
-      et par restaurant, chaque montage d'écran devient un balayage complet de
-      l'historique. Index composite `(restaurant_id, created_at)` — une
-      migration.
-      *Validation : `EXPLAIN ANALYZE` montre un *Index Scan*, et
-      `Rows Removed by Filter` reste borné à la journée de service.*
+      chaque montage et à chaque reconnexion. Invisible aujourd'hui ; à ~73 000
+      commandes par an et par restaurant, chaque montage d'écran devient un
+      balayage complet de l'historique. Index composite
+      `(restaurant_id, created_at)` — une migration (PR #211)
+      **Mesuré sur 73 000 commandes/an/restaurant, trois restaurants en base :**
+
+      | | avant | après |
+      | --- | --- | --- |
+      | plan | Index Scan (`restaurant_id`) **+ Sort** | Index Scan (`restaurant_id, created_at`) |
+      | `Rows Removed by Filter` | **72 929** | **28** |
+      | buffers | 813 | 5 |
+      | temps | **8,611 ms** | **0,092 ms** |
+
+      *Fichiers : `app/modules/orders/models.py`,
+      `alembic/versions/d64562dcc42c_*.py`, `tests/test_plan_ecran_service.py`*
+
+**Trois points qui valaient d'être écrits :**
+
+1. **L'ordre des colonnes n'est pas indifférent** — égalité (`restaurant_id`)
+   d'abord, plage (`created_at`) ensuite. Il fait aussi **disparaître le nœud
+   `Sort`** : l'index rend déjà les lignes triées par `created_at`, ce que
+   demande précisément le `ORDER BY`.
+2. **`status` n'est volontairement pas dans l'index.** Une fois la plage de
+   dates appliquée, il ne reste qu'une journée de service à filtrer (28 lignes
+   écartées). Une troisième colonne alourdirait chaque écriture pour ne rien
+   gagner à la lecture.
+3. **`CREATE INDEX` simple, pas `CONCURRENTLY`** — une migration ne s'applique
+   qu'une fois, maintenant, sur une table de quelques milliers de lignes ; les
+   73 000 lignes/an sont l'état futur, celui où l'index existera déjà.
+   `CONCURRENTLY` protégerait d'un scénario impossible ici, au prix d'une
+   branche par dialecte (la suite rejoue les migrations sur SQLite) et d'un
+   risque d'index INVALID. **Indexer une table déjà volumineuse en production,
+   elle, exigera `CONCURRENTLY`** : la règle est écrite dans la migration.
+
+⚠️ **Le test de plan est le garde-fou, et il fallait qu'il le soit vraiment.**
+Un index peut être « utilisé » tout en laissant Postgres relire l'année
+entière — c'est exactement ce que faisait l'index sur `restaurant_id` seul.
+Le test vérifie donc que `created_at` est dans l'**`Index Cond`** et non dans
+le `Filter`. Vérifié dans les deux sens, au volume du test (6 000 lignes) :
+sans l'index composite, `Rows Removed by Filter` vaut **6 000** et un nœud
+`Sort` réapparaît — les deux assertions tombent.
 
 ### P2.4 — Jeton WebSocket de courte durée (F9)
 
