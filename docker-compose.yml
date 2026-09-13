@@ -19,15 +19,32 @@ services:
       timeout: 3s
       retries: 10
 
+  # État partagé entre instances (ROADMAP_PRODUCTION.md §P2.1). Présent ici
+  # pour que `docker compose up` ressemble à la production multi-instances ;
+  # `pytest -q` n'en a toujours pas besoin, et une instance unique non plus —
+  # sans REDIS_URL le backend garde ses dicts en mémoire.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
     env_file: ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/resto_qr
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:

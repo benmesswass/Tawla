@@ -9,7 +9,8 @@ from app.modules.orders import table_cart
 from app.modules.orders.schemas import OrderItemCreate
 from app.modules.staff.models import StaffRole
 from app.modules.tables import roster as table_roster
-from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers
+from app.modules.tables import service as tables_service
+from tests.conftest import auth_headers, create_restaurant, create_staff, order_headers, ws_billet
 
 
 def _create_table(client, restaurant, manager):
@@ -59,6 +60,45 @@ def test_un_deuxieme_scan_ne_change_pas_lheure_doccupation(client):
 
     client.get(f"/api/v1/tables/by-token/{table['qr_token']}")
     assert _occupied_at(client, restaurant, manager, table["id"]) == premiere_heure
+
+
+def test_scanner_le_qr_diffuse_table_occupied_au_canal_staff(client):
+    """
+    Remplace le sondage du plan de salle toutes les 20 s côté écran serveur
+    (ROADMAP_PRODUCTION.md §P3.3, F18) : sans cette diffusion, une table tout
+    juste occupée n'apparaissait qu'au prochain sondage, jusqu'à 20 s plus tard.
+    """
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    table = _create_table(client, restaurant, manager)
+
+    billet = ws_billet(manager)
+    with client.websocket_connect(f"/ws/staff/{restaurant.id}?billet={billet}") as ws:
+        client.get(f"/api/v1/tables/by-token/{table['qr_token']}")
+        message = ws.receive_json()
+
+    assert message["event"] == "table.occupied"
+    assert message["table_id"] == table["id"]
+    assert message["occupied_at"] is not None
+
+
+def test_un_deuxieme_scan_ne_diffuse_rien(client, db_session):
+    """
+    Sans cette garde, chaque rafraîchissement du menu par un client déjà
+    installé rediffuserait `table.occupied` au canal staff — exactement la
+    charge de fond que F18 doit faire disparaître, déplacée d'un sondage
+    toutes les 20 s vers une diffusion à chaque requête.
+    """
+    restaurant = create_restaurant()
+    manager = create_staff(restaurant.id, StaffRole.MANAGER)
+    table = _create_table(client, restaurant, manager)
+
+    _, first = tables_service.get_table_by_qr_token_diffusing(db_session, table["qr_token"])
+    assert len(first) == 1
+    assert first[0].message["event"] == "table.occupied"
+
+    _, second = tables_service.get_table_by_qr_token_diffusing(db_session, table["qr_token"])
+    assert second == []
 
 
 def test_le_serveur_peut_liberer_la_table(client):

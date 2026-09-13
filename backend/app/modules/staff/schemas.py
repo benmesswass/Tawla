@@ -89,3 +89,16 @@ class StaffCreatedOut(BaseModel):
 
     staff: StaffOut
     temporary_password: str | None = None
+
+
+class WsTicketOut(BaseModel):
+    """
+    Billet d'entrée d'un canal WebSocket du personnel
+    (ROADMAP_PRODUCTION.md §P2.4, voir `staff/ws_tickets.py`).
+
+    `expire_dans` est renvoyé pour que le frontend n'ait pas à recopier la
+    durée : elle est décidée côté serveur et peut changer sans le casser.
+    """
+    ticket: str
+    expire_dans: int
+

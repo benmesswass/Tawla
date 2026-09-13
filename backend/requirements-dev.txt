@@ -1,2 +1,13 @@
 -r requirements.txt
 pytest==8.3.2
+# Scan des avis de sécurité des dépendances, lancé en CI (ROADMAP_PRODUCTION.md
+# §P1.8). Les 42 avis trouvés par l'audit du 2026-09-10 étaient invisibles faute
+# de scan : c'est le scan, pas la montée de version, qui est le correctif
+# durable.
+pip-audit==2.10.1
+# Serveur S3 en mémoire, pour tester le stockage objet des photos POUR DE VRAI
+# (ROADMAP_PRODUCTION.md §P2.2) plutôt que contre un bouchon maison : un
+# bouchon vérifie qu'on appelle boto3 comme on croit devoir l'appeler, pas que
+# boto3 fait ce qu'on croit.
+moto[s3]==5.2.3
+

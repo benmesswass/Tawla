@@ -1,8 +1,7 @@
-from collections import defaultdict
-
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.etat_partage import decoder, encoder, magasin
 from app.modules.menu.models import MenuItem
 from app.modules.orders import schemas
 from app.modules.orders.menu_item_resolution import resolve_selected_options
@@ -10,11 +9,16 @@ from app.modules.orders.menu_item_resolution import resolve_selected_options
 
 class TableCartStore:
     """
-    Panier partagé d'une table, tenu EN MÉMOIRE — jamais en base, jamais de
-    migration (voir `docs/adr/0005-panier-de-table-en-memoire.md`). Même
-    logique que `notifications/manager.py::ConnectionManager` : un dict en
-    mémoire suffit en mono-instance, remplacé par un pub/sub le jour où ça ne
-    suffit plus, sans toucher aux appelants.
+    Panier partagé d'une table — jamais en base, jamais de migration (voir
+    `docs/adr/0005-panier-de-table-en-memoire.md`, toujours valable : rien de
+    ceci n'est durable, et c'est voulu).
+
+    Depuis P2.1 le stockage passe par `core/etat_partage.py::magasin` : dicts
+    en mémoire par défaut (comportement identique à avant), Redis dès que
+    `REDIS_URL` est renseignée — c'est ce qui permet à deux téléphones de la
+    même table de tomber sur le même panier même s'ils sont servis par deux
+    instances backend différentes. Effet de bord gagné au passage : un
+    déploiement ne vide plus les paniers des clients attablés.
 
     Une ligne par (`menu_item_id`, `added_by_key`), jamais deux pour la même
     paire — même limitation déjà assumée par le panier local d'un seul
@@ -27,29 +31,38 @@ class TableCartStore:
     déclarée).
     """
 
-    def __init__(self) -> None:
-        self._carts: dict[int, dict[tuple[int, str], schemas.OrderItemCreate]] = defaultdict(dict)
+    @staticmethod
+    def _cle(table_id: int) -> str:
+        return f"panier:{table_id}"
+
+    @staticmethod
+    def _champ(item: schemas.OrderItemCreate) -> str:
+        return f"{item.menu_item_id}|{item.added_by_key or ''}"
 
     def snapshot(self, table_id: int) -> list[schemas.OrderItemCreate]:
-        return list(self._carts.get(table_id, {}).values())
+        return _relire(magasin.lire(self._cle(table_id)))
 
     def set_line(self, table_id: int, item: schemas.OrderItemCreate) -> None:
         """Quantité à 0 retire la ligne — même convention qu'un panier local
         où décrémenter sous 1 fait disparaître l'article."""
-        key = (item.menu_item_id, item.added_by_key or "")
+        cle, champ = self._cle(table_id), self._champ(item)
         if item.quantity <= 0:
-            self._carts[table_id].pop(key, None)
+            magasin.retirer(cle, champ)
         else:
-            self._carts[table_id][key] = item
+            magasin.ecrire(cle, champ, encoder(item.model_dump()))
 
     def pop_all(self, table_id: int) -> list[schemas.OrderItemCreate]:
-        """Lit et vide le panier en une seule opération synchrone (aucun
-        `await` entre les deux) : deux appareils qui valident au même
-        instant ne peuvent jamais transformer deux fois le même panier en
-        deux commandes, l'un des deux tombe forcément sur un panier déjà vidé."""
-        lines = list(self._carts.get(table_id, {}).values())
-        self._carts.pop(table_id, None)
-        return lines
+        """Lit et vide le panier en UNE seule opération atomique : deux
+        appareils qui valident au même instant ne peuvent jamais transformer
+        deux fois le même panier en deux commandes, l'un des deux tombe
+        forcément sur un panier déjà vidé. La garantie tenait à l'absence
+        d'`await` entre la lecture et le vidage en mono-instance ; elle tient
+        désormais au `MULTI/EXEC` du magasin, qui la préserve entre instances."""
+        return _relire(magasin.vider_et_lire(self._cle(table_id)))
+
+
+def _relire(champs: dict[str, str]) -> list[schemas.OrderItemCreate]:
+    return [schemas.OrderItemCreate(**decoder(valeur)) for valeur in champs.values()]
 
 
 table_cart_store = TableCartStore()

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { cairo, lalezar } from "@/lib/fonts";
 import {
   api,
@@ -404,8 +405,12 @@ function myPayableAmount(order: Order, rosterNames: string[], myName: string, mo
   return myIndex >= 0 ? totals[myIndex] : order.amount_remaining;
 }
 
-export default function MenuPage({ params }: { params: { qrToken: string } }) {
-  const { qrToken } = params;
+export default function MenuPage() {
+  // `useParams()` plutôt que la prop `params` : depuis Next 15 celle-ci est une
+  // Promise, y compris dans un composant client, et il faudrait la dérouler
+  // avec `use()`. Le hook rend directement la valeur — c'est le même segment
+  // d'URL, sans étape intermédiaire.
+  const { qrToken } = useParams<{ qrToken: string }>();
   const { t, locale, toggleLocale } = useLocale();
 
   const [table, setTable] = useState<Table | null>(null);

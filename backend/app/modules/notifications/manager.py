@@ -1,3 +1,5 @@
+import asyncio
+import json
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable
@@ -5,7 +7,11 @@ from typing import Iterable
 from fastapi import WebSocket
 from starlette.concurrency import run_in_threadpool
 
+from app.core.config import settings
+from app.core.etat_partage import PREFIXE_MARCHE, magasin
 from app.core.logging import get_logger, log_event
+
+CANAL_DIFFUSION = "tawla:diffusion"
 
 logger = get_logger("notifications")
 
@@ -40,11 +46,24 @@ class ConnectionManager:
     Le point le plus sensible du système : c'est ce qui garantit qu'une
     commande arrive bien en cuisine / chez le bon serveur en temps réel.
 
-    Connexions groupées par (restaurant_id, channel) où channel = "staff" ou "kitchen".
-    En mono-instance, un dict en mémoire suffit (KISS). Le jour où on
-    scale sur plusieurs instances backend, on remplace ce manager par un
-    pub/sub Redis SANS toucher aux modules appelants (c'est tout l'intérêt
-    d'isoler ça dans une seule classe).
+    Connexions groupées par (restaurant_id, channel) où channel = "staff" ou
+    "kitchen".
+
+    **Le registre des sockets reste local, et c'est obligatoire** : une
+    WebSocket est une connexion TCP détenue par un seul processus, aucun
+    magasin partagé ne peut la détenir à sa place. Ce qui voyage entre
+    instances depuis P2.1, c'est le **message**, pas la connexion.
+
+    Deux chemins, selon `magasin.diffuse_entre_instances` :
+
+    - **mémoire** (défaut, aucune `REDIS_URL`) — `broadcast` écrit directement
+      sur les sockets locales. Comportement identique à avant P2.1.
+    - **Redis** — `broadcast` se contente de **publier** ; c'est l'écoute de
+      fond (`ecouter_les_diffusions`, lancée au démarrage de l'app) qui livre
+      aux sockets locales, sur chaque instance, **y compris celle qui a
+      publié**. Publier *et* livrer localement enverrait deux fois le même
+      message aux clients de l'instance émettrice — d'où les deux chemins
+      exclusifs plutôt qu'un seul chemin auquel on ajoute une publication.
     """
 
     def __init__(self) -> None:
@@ -65,7 +84,25 @@ class ConnectionManager:
         return bool(self._connections.get((restaurant_id, channel)))
 
     async def broadcast(self, restaurant_id: int, channel: str, message: dict) -> None:
-        conns = self._connections.get((restaurant_id, channel), [])
+        if magasin.diffuse_entre_instances:
+            await run_in_threadpool(
+                magasin.publier,
+                CANAL_DIFFUSION,
+                json.dumps(
+                    {"restaurant_id": restaurant_id, "channel": channel, "message": message},
+                    ensure_ascii=False,
+                ),
+            )
+            return
+        await self.livrer_en_local(restaurant_id, channel, message)
+
+    async def livrer_en_local(self, restaurant_id: int, channel: str, message: dict) -> None:
+        """
+        L'écriture réelle sur les sockets de CE processus. Seul point d'où
+        l'on écrit sur une WebSocket, appelé soit directement (mode mémoire),
+        soit par l'écoute de fond (mode Redis).
+        """
+        conns = list(self._connections.get((restaurant_id, channel), []))
         dead: list[WebSocket] = []
         for ws in conns:
             try:
@@ -131,3 +168,70 @@ def table_channel(table_id: int) -> str:
     jamais, sans erreur nulle part.
     """
     return f"table-{table_id}"
+
+
+DELAI_RECONNEXION_SECONDES = 1.0
+
+
+async def ecouter_les_diffusions() -> None:
+    """
+    L'écoute de fond qui livre aux sockets de CE processus les messages
+    publiés par n'importe quelle instance (ROADMAP_PRODUCTION.md §P2.1).
+
+    Lancée au démarrage de l'app et **seulement en mode Redis** ; sans
+    `REDIS_URL`, `broadcast` livre en direct et il n'y a rien à écouter.
+
+    Boucle de reconnexion volontaire : si Redis devient injoignable une
+    minute, l'instance doit se rabrancher toute seule quand il revient. Sans
+    elle, la tâche mourrait au premier hoquet réseau et cette instance
+    cesserait **silencieusement** de recevoir les commandes des autres — la
+    panne la plus coûteuse du système, et la plus difficile à voir.
+    """
+    import redis.asyncio as redis_async
+
+    # Le même préfixe de marché que celui appliqué par `MagasinRedis.publier`.
+    # Les deux côtés doivent rester d'accord : un écart ne lève rien, il rend
+    # juste cette instance sourde aux autres — exactement la panne silencieuse
+    # décrite au-dessus. C'est aussi ce qui permet à deux marchés de partager
+    # une instance Redis sans que les commandes de l'un s'affichent chez
+    # l'autre (voir `core/etat_partage.py::PREFIXE_MARCHE`).
+    canal_du_marche = f"{PREFIXE_MARCHE}{CANAL_DIFFUSION}"
+
+    while True:
+        client = redis_async.Redis.from_url(settings.redis_url, decode_responses=True)
+        canal = client.pubsub(ignore_subscribe_messages=True)
+        try:
+            await canal.subscribe(canal_du_marche)
+            log_event(logger, "ws.ecoute_demarree", canal=canal_du_marche)
+            async for brut in canal.listen():
+                if brut.get("type") != "message":
+                    continue
+                await _livrer(brut["data"])
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("ws.ecoute_interrompue")
+            await asyncio.sleep(DELAI_RECONNEXION_SECONDES)
+        finally:
+            await _fermer(canal)
+            await _fermer(client)
+
+
+async def _livrer(charge_brute: str) -> None:
+    try:
+        charge = json.loads(charge_brute)
+    except (ValueError, TypeError):
+        # Message illisible sur le canal : on le jette et on continue. Un
+        # `raise` ici tuerait l'écoute de toute l'instance pour un octet de
+        # travers.
+        logger.exception("ws.diffusion_illisible")
+        return
+    await manager.livrer_en_local(charge["restaurant_id"], charge["channel"], charge["message"])
+
+
+async def _fermer(ressource) -> None:
+    try:
+        await ressource.aclose()
+    except Exception:
+        pass
+

@@ -20,7 +20,7 @@ valeur au-delà de la démonstration.
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.dates import as_utc
@@ -65,6 +65,36 @@ DUREE_DEMO = timedelta(hours=2)
 # suffit à remplir la base. 100 démos = bien plus que ce qu'un lancement
 # tunisien produira, et 100 lignes `restaurants` ne coûtent rien.
 PLAFOND_DEMOS = 100
+
+# Nombre d'établissements montés d'avance (ROADMAP_PRODUCTION.md §P2.6). Le
+# clic sur « Voir la démo » créait jusqu'ici un restaurant complet **dans la
+# requête** : 218 commandes et 604 lignes, 1,4 s mesurées sur 4 vCPU, donc bien
+# plus sur les 0,5 CPU du plan visé, en tenant une connexion du pool pendant
+# tout ce temps. C'était la seule route publique qui écrit en base, et rien ne
+# bornait sa concurrence.
+#
+# Trois et pas trente : le vivier absorbe une rafale de visiteurs, il ne
+# préfinance pas un lancement. Chaque entrée coûte les mêmes 600 lignes, et
+# elles se périment (voir `FRAICHEUR_VIVIER`).
+TAILLE_VIVIER = 3
+
+# Au-delà, une démo du vivier n'est plus servie.
+#
+# L'historique est ancré sur « aujourd'hui » au moment où il est posé
+# (`historique.py`) : deux semaines de service qui se terminent maintenant.
+# Une entrée qui dort une nuit servirait donc un tableau de bord manager vide
+# pour la journée en cours — exactement l'écran que la démo doit montrer. Le
+# vivier périmé n'est pas servi : on retombe sur la création synchrone, et le
+# réapprovisionnement le reconstruit derrière.
+FRAICHEUR_VIVIER = timedelta(hours=6)
+
+# Verrou de réapprovisionnement, porté par le magasin partagé
+# (`core/etat_partage.py`) et donc partagé ENTRE instances dès que Redis est
+# branché. Sans lui, dix clics simultanés sur un vivier vide lanceraient dix
+# reconstructions complètes en parallèle — le défaut de concurrence que P2.6
+# ferme, déplacé hors requête au lieu d'être supprimé.
+CLE_VERROU_VIVIER = "demo:reapprovisionnement"
+FENETRE_VERROU_SECONDES = 120
 
 # La carte de démonstration, alignée sur `scripts/seed_demo.py` : un
 # restaurateur qui voit la démo en ligne puis en rendez-vous doit reconnaître
@@ -224,7 +254,135 @@ def purger_demos_expirees(db: Session) -> int:
     return len(expirees)
 
 
-def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
+def _limite_de_fraicheur() -> datetime:
+    return datetime.now(timezone.utc) - FRAICHEUR_VIVIER
+
+
+def _vivier_disponible():
+    """Le filtre commun à la réclamation et au comptage — écrit une seule fois."""
+    return (
+        Restaurant.is_demo.is_(True),
+        Restaurant.demo_expires_at.is_(None),
+        Restaurant.created_at > _limite_de_fraicheur(),
+    )
+
+
+def taille_du_vivier(db: Session) -> int:
+    return db.scalar(select(func.count()).select_from(Restaurant).where(*_vivier_disponible())) or 0
+
+
+def reclamer_du_vivier(db: Session) -> tuple[Restaurant, dict[StaffRole, Staff], Table] | None:
+    """
+    Prend un établissement déjà monté et le donne au visiteur, ou `None` si le
+    vivier est vide ou périmé — l'appelant retombe alors sur `creer_demo`.
+
+    `FOR UPDATE SKIP LOCKED` et pas un simple `SELECT` : deux visiteurs qui
+    cliquent dans la même milliseconde doivent repartir avec **deux**
+    établissements. Sans `SKIP LOCKED`, le second attendrait le premier puis
+    lirait une ligne déjà réclamée ; avec, il saute directement à la suivante.
+
+    ⚠️ SQLite ignore `FOR UPDATE` en silence. Ce que ce code a de vraiment
+    concurrent n'est donc PAS prouvé par la suite qui tourne en mémoire — d'où
+    le test qui réclame Postgres (`test_vivier_demos.py`). C'est exactement le
+    piège qui avait rendu les `downgrade` faussement verts (§P2.5).
+
+    Le plus récent d'abord (`created_at DESC`) : à vivier partiellement
+    périmé, autant servir l'historique le plus proche d'aujourd'hui.
+    """
+    identifiant = db.execute(
+        select(Restaurant.id)
+        .where(*_vivier_disponible())
+        .order_by(Restaurant.created_at.desc())
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    ).scalar_one_or_none()
+
+    if identifiant is None:
+        # Referme la transaction ouverte par le SELECT ... FOR UPDATE, sans
+        # quoi la connexion repart dans le pool en `idle in transaction` —
+        # le défaut que §P1.2 a fermé, à ne pas rouvrir ici.
+        db.rollback()
+        return None
+
+    restaurant = db.get(Restaurant, identifiant)
+    expiration = datetime.now(timezone.utc) + DUREE_DEMO
+    restaurant.demo_expires_at = expiration
+    restaurant.subscription_period_end = expiration
+    db.commit()
+    db.refresh(restaurant)
+
+    comptes = list(db.scalars(select(Staff).where(Staff.restaurant_id == restaurant.id).order_by(Staff.id)))
+    table = db.scalars(
+        select(Table).where(Table.restaurant_id == restaurant.id).order_by(Table.id)
+    ).first()
+
+    par_role: dict[StaffRole, Staff] = {}
+    for compte in comptes:
+        par_role.setdefault(compte.role, compte)
+
+    log_event(logger, "demo.reclamee_du_vivier", restaurant_id=restaurant.id, table_id=table.id)
+    return restaurant, par_role, table
+
+
+def reapprovisionner_le_vivier(fabrique_de_session=None, market: Market = current_market) -> int:
+    """
+    Remonte le vivier à `TAILLE_VIVIER`, **hors du chemin de requête**
+    (`router.py` la passe en tâche de fond, après la réponse).
+
+    Le verrou passe par `magasin` et non par une variable de module : avec
+    plusieurs instances, une variable de module ne borne que son propre
+    processus, et c'est la concurrence *entre* instances que P2.6 doit fermer.
+    `incrementer` sert de verrou plutôt qu'une primitive dédiée — il donne
+    exactement la sémantique voulue (« au plus un passage par fenêtre, toutes
+    instances confondues ») sans élargir le contrat du magasin, que l'ADR-0007
+    garde volontairement minimal.
+
+    Renvoie le nombre d'établissements créés. Ne lève jamais : une tâche de
+    fond qui échoue ne doit pas laisser de trace côté visiteur, qui a déjà sa
+    démo — mais elle doit se voir dans les logs.
+
+    `fabrique_de_session` est injectable parce que cette fonction tourne après
+    la réponse, donc en dehors de la session de la requête : sans cette
+    couture, la suite de tests ne pourrait pas l'exercer sur sa base jetable.
+    """
+    from app.core.database import SessionLocal
+    from app.core.etat_partage import magasin
+
+    if magasin.incrementer(CLE_VERROU_VIVIER, FENETRE_VERROU_SECONDES) > 1:
+        log_event(logger, "demo.reapprovisionnement_deja_en_cours")
+        return 0
+
+    db = (fabrique_de_session or SessionLocal)()
+    crees = 0
+    try:
+        # La purge vit ici désormais pour le chemin rapide : elle restait le
+        # second coût non borné de la requête (une douzaine de DELETE et un
+        # commit par démo échue), invisible dans la mesure des 1,4 s.
+        purger_demos_expirees(db)
+
+        manquants = TAILLE_VIVIER - taille_du_vivier(db)
+        for _ in range(max(0, manquants)):
+            if demos_vivantes(db) + taille_du_vivier(db) >= PLAFOND_DEMOS:
+                # Le plafond dur vaut aussi pour le vivier : il borne la base,
+                # pas seulement les démos réclamées.
+                log_event(logger, "demo.vivier_plafonne", plafond=PLAFOND_DEMOS)
+                break
+            creer_demo(db, market, en_vivier=True)
+            crees += 1
+    except Exception as err:  # noqa: BLE001 — tâche de fond, voir docstring
+        db.rollback()
+        log_event(logger, "demo.reapprovisionnement_echoue", error=str(err))
+    finally:
+        db.close()
+
+    if crees:
+        log_event(logger, "demo.vivier_reapprovisionne", crees=crees)
+    return crees
+
+
+def creer_demo(
+    db: Session, market: Market = current_market, *, en_vivier: bool = False,
+) -> tuple[Restaurant, dict[StaffRole, Staff], Table]:
     """
     Monte un établissement complet : l'équipe, trois tables, une carte, et
     deux semaines de service déjà passées (`historique.py`) — sans elles, tous
@@ -250,7 +408,13 @@ def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant
     purger_demos_expirees(db)
 
     suffixe = secrets.token_urlsafe(8).lower().replace("_", "").replace("-", "")
-    expiration = datetime.now(timezone.utc) + DUREE_DEMO
+    # `en_vivier` : l'établissement est monté d'avance, sans propriétaire. Son
+    # expiration reste **nulle** jusqu'à ce qu'un visiteur le réclame — c'est
+    # cette nullité, et rien d'autre, qui le distingue d'une démo en cours
+    # (`reclamer_du_vivier`). Les deux heures doivent courir à partir du clic,
+    # pas à partir de la pré-génération, sinon un visiteur hériterait d'une
+    # démo déjà à moitié écoulée.
+    expiration = None if en_vivier else datetime.now(timezone.utc) + DUREE_DEMO
     carte = CARTE_FR if market.code == "fr" else CARTE
     equipe = EQUIPE_FR if market.code == "fr" else EQUIPE
 
@@ -337,7 +501,10 @@ def creer_demo(db: Session, market: Market = current_market) -> tuple[Restaurant
     par_role: dict[StaffRole, Staff] = {}
     for compte in comptes:
         par_role.setdefault(compte.role, compte)
-    log_event(logger, "demo.creee", restaurant_id=restaurant.id, table_id=tables[0].id)
+    log_event(
+        logger, "demo.creee",
+        restaurant_id=restaurant.id, table_id=tables[0].id, en_vivier=en_vivier,
+    )
     return restaurant, par_role, tables[0]
 
 

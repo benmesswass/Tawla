@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.crypto import encrypt_field
 from app.core.database import get_db
 from app.core.dates import as_utc
+from app.core.stockage_photos import stockage_photos
 from app.core.konnect import (
     KonnectError,
     init_konnect_payment,
@@ -320,11 +321,19 @@ async def upload_restaurant_cover_photo(
             detail={"code": "IMAGE_TOO_LARGE", "message": "image exceeds 3 MB"},
         )
 
-    restaurant.cover_photo_data = contenu
-    restaurant.cover_photo_content_type = file.content_type
-    restaurant.cover_photo_url = (
-        f"/api/v1/restaurants/{restaurant.id}/cover-photo?v={sha256(contenu).hexdigest()[:12]}"
+    url_backend = f"/api/v1/restaurants/{restaurant.id}/cover-photo?v={sha256(contenu).hexdigest()[:12]}"
+    # La bannière est l'image la plus lourde et la plus chargée du parcours
+    # client : elle s'ouvre sur chaque téléphone de chaque table, donc c'est
+    # elle qui pèse le plus sur le pool tant qu'elle sort du backend
+    # (ROADMAP_PRODUCTION.md §P2.2).
+    stockage_photos.retirer(restaurant.cover_photo_url)
+    depot = await run_in_threadpool(
+        stockage_photos.deposer,
+        f"restaurants/{restaurant.id}/couverture", contenu, file.content_type, url_backend,
     )
+    restaurant.cover_photo_data = depot.octets
+    restaurant.cover_photo_content_type = depot.type_mime
+    restaurant.cover_photo_url = depot.url
     db.commit()
     db.refresh(restaurant)
     log_event(logger, "restaurant.cover_photo_uploaded", restaurant_id=restaurant.id)
@@ -351,6 +360,7 @@ def delete_restaurant_cover_photo(
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     restaurant = _restaurant_or_404(db, restaurant_id)
+    stockage_photos.retirer(restaurant.cover_photo_url)
     restaurant.cover_photo_data = None
     restaurant.cover_photo_content_type = None
     restaurant.cover_photo_url = None
@@ -382,9 +392,15 @@ async def upload_restaurant_logo(
             detail={"code": "IMAGE_TOO_LARGE", "message": "image exceeds 3 MB"},
         )
 
-    restaurant.logo_data = contenu
-    restaurant.logo_content_type = file.content_type
-    restaurant.logo_url = f"/api/v1/restaurants/{restaurant.id}/logo?v={sha256(contenu).hexdigest()[:12]}"
+    url_backend = f"/api/v1/restaurants/{restaurant.id}/logo?v={sha256(contenu).hexdigest()[:12]}"
+    stockage_photos.retirer(restaurant.logo_url)
+    depot = await run_in_threadpool(
+        stockage_photos.deposer,
+        f"restaurants/{restaurant.id}/logo", contenu, file.content_type, url_backend,
+    )
+    restaurant.logo_data = depot.octets
+    restaurant.logo_content_type = depot.type_mime
+    restaurant.logo_url = depot.url
     db.commit()
     db.refresh(restaurant)
     log_event(logger, "restaurant.logo_uploaded", restaurant_id=restaurant.id)
@@ -409,6 +425,7 @@ def delete_restaurant_logo(restaurant_id: int, db: Session = Depends(get_db), st
     if staff.restaurant_id != restaurant_id:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
     restaurant = _restaurant_or_404(db, restaurant_id)
+    stockage_photos.retirer(restaurant.logo_url)
     restaurant.logo_data = None
     restaurant.logo_content_type = None
     restaurant.logo_url = None

@@ -8,7 +8,7 @@ Suit le gabarit de test_menu_suggestions.py : gestion manager (remplacement en
 bloc), puis effet réel sur une commande (validation, prix figé, diffusion
 cuisine).
 """
-from tests.conftest import auth_headers, create_restaurant, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff, ws_billet
 
 from app.modules.menu.models import MenuItem, MenuItemOption
 from app.modules.staff.models import StaffRole
@@ -272,13 +272,13 @@ def test_kitchen_broadcast_carries_the_selected_options(client, db_session):
     saignant_id = next(o["id"] for o in saved["option_groups"][0]["options"] if o["name"] == "Saignant")
     waiter = create_staff(restaurant.id, StaffRole.WAITER)
     kitchen = create_staff(restaurant.id, StaffRole.KITCHEN)
-    kitchen_token = auth_headers(kitchen)["Authorization"].split()[1]
+    kitchen_billet = ws_billet(kitchen)
 
     order = client.post("/api/v1/orders", json=_order_payload(table, steak, [saignant_id])).json()
     client.post(f"/api/v1/orders/{order['id']}/claim", headers=auth_headers(waiter))
     client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(waiter))
 
-    with client.websocket_connect(f"/ws/kitchen/{restaurant.id}?token={kitchen_token}") as ws:
+    with client.websocket_connect(f"/ws/kitchen/{restaurant.id}?billet={kitchen_billet}") as ws:
         client.post(f"/api/v1/orders/{order['id']}/send-to-kitchen", headers=auth_headers(waiter))
         msg = ws.receive_json()
         assert msg["event"] == "order.sent_to_kitchen"
