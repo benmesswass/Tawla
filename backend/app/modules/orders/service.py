@@ -1168,7 +1168,7 @@ def _paid_names(order: Order) -> set[str]:
 
 
 def _get_payable_share(
-    db: Session, order_id: int, payer_key: str, payer_name: str
+    db: Session, order_id: int, payer_key: str, payer_name: str, requested_amount: float | None = None
 ) -> tuple[Order, OrderPayment | None, float]:
     """
     Garde-fous + montant pour UNE part de commande. `payer_key` vide (aucune
@@ -1179,6 +1179,13 @@ def _get_payable_share(
     PENDING existe déjà pour cette clé (rejeu d'un double clic, ou retour sur
     un paiement carte non encore réglé), elle est renvoyée telle quelle —
     l'appelant ne doit jamais en créer une seconde pour la même personne.
+
+    `requested_amount` : montant choisi par le convive (payer pour toute la
+    table, ou un montant exact). Plafonné à ce qui reste dû — c'est le seul
+    garde-fou nécessaire, et il est ici plutôt que dans le schéma parce que
+    lui seul connaît l'état de la commande. En dessous, tout est permis : le
+    reliquat reste dû par la table et la commande ne passe "payée" que
+    lorsqu'il tombe à zéro (`_after_share_paid`).
     """
     order = _get_payable_order(db, order_id)
 
@@ -1189,6 +1196,10 @@ def _get_payable_share(
                     status_code=409, detail={"code": "SHARE_ALREADY_PAID", "message": "your share is already paid"}
                 )
             return order, payment, float(payment.amount)
+
+    reste = round(float(order.amount_remaining), 2)
+    if requested_amount is not None:
+        return order, None, min(round(float(requested_amount), 2), reste)
 
     names = _roster_names(order.table_id)
     amount = split.compute_payable_amount(order, names, payer_name, _paid_names(order), _split_mode(order.table_id))
@@ -1287,7 +1298,7 @@ def _send_payment_confirmation(order: Order, restaurant: Restaurant | None) -> N
 
 def pay_by_card_simulated(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float,
-    customer_email: str | None = None,
+    customer_email: str | None = None, requested_amount: float | None = None,
 ) -> tuple[Order, list[Diffusion]]:
     """
     Paiement carte — mode simulé (Konnect/Stripe choisis comme prestataires,
@@ -1301,7 +1312,7 @@ def pay_by_card_simulated(
     Essentiel, seul l'encaissement en espèces est proposé.
     """
     diffusions: list[Diffusion] = []
-    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name, requested_amount)
 
     restaurant = db.get(Restaurant, order.restaurant_id)
     if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
@@ -1339,7 +1350,7 @@ def pay_by_card_simulated(
 
 def start_card_payment(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float,
-    customer_email: str | None = None,
+    customer_email: str | None = None, requested_amount: float | None = None,
 ) -> tuple[Order, str | None, list[Diffusion]]:
     """
     Paiement carte du client — modèle direct (connexion Konnect/Stripe au
@@ -1355,7 +1366,7 @@ def start_card_payment(
     PENDING, le client doit être redirigé pour payer.
     """
     diffusions: list[Diffusion] = []
-    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name, requested_amount)
 
     restaurant = db.get(Restaurant, order.restaurant_id)
     if not restaurant or not tier_includes(effective_tier(restaurant), SubscriptionTier.PRO):
@@ -1365,7 +1376,7 @@ def start_card_payment(
     provider = get_payment_provider(credentials)
     if not provider.is_available():
         order, diffusions_simule = pay_by_card_simulated(
-            db, order_id, payer_key, payer_name, tip_amount, customer_email
+            db, order_id, payer_key, payer_name, tip_amount, customer_email, requested_amount
         )
         return order, None, diffusions_simule
 
@@ -1556,14 +1567,14 @@ def settle_card_payment(db: Session, order_id: int, payment_id: int) -> tuple[Se
 
 def request_cash_payment(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float = 0,
-    customer_email: str | None = None,
+    customer_email: str | None = None, requested_amount: float | None = None,
 ) -> tuple[Order, list[Diffusion]]:
     """Le client demande à payer sa part en espèces — prévient le serveur
     assigné (identité de table, ROADMAP.md §Override, extension paiement par
     personne : plusieurs demandes peuvent être en attente pour la même
     commande, une par convive)."""
     diffusions: list[Diffusion] = []
-    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name, requested_amount)
 
     payment = existing or OrderPayment(order_id=order.id, payer_key=payer_key, payer_name=payer_name, method=PaymentMethod.CASH)
     payment.amount = amount
@@ -1653,7 +1664,7 @@ def confirm_cash_payment(db: Session, payment_id: int, staff: Staff) -> tuple[Or
 
 def request_card_terminal_payment(
     db: Session, order_id: int, payer_key: str, payer_name: str, tip_amount: float = 0,
-    customer_email: str | None = None,
+    customer_email: str | None = None, requested_amount: float | None = None,
 ) -> tuple[Order, list[Diffusion]]:
     """
     Le client demande à payer sa part par carte physique — un serveur
@@ -1662,7 +1673,7 @@ def request_card_terminal_payment(
     mélanger les deux dans les stats de moyen de paiement.
     """
     diffusions: list[Diffusion] = []
-    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name)
+    order, existing, amount = _get_payable_share(db, order_id, payer_key, payer_name, requested_amount)
 
     payment = existing or OrderPayment(
         order_id=order.id, payer_key=payer_key, payer_name=payer_name, method=PaymentMethod.CARD_TERMINAL

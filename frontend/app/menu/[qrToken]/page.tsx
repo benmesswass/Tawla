@@ -96,6 +96,15 @@ type EditLine = {
   quantity: number;
   notes: string;
   isShared: boolean;
+  // `PUT /orders/{id}/items` REMPLACE la commande par ce que porte cette
+  // liste (service.py::update_order_items vide `order.items` et le
+  // reconstruit) : tout ce qui n'est pas renvoyé est perdu. Ces deux champs
+  // ne s'éditent pas ici, ils se transportent — sans eux, modifier une
+  // commande effaçait l'assignation ET le prénom de qui avait ajouté chaque
+  // plat, ce qui déplaçait l'argent : un plat sans auteur ni assignation est
+  // réparti sur toute la table par `split.py::compute_shares`.
+  sharedWith: number[];
+  addedByName: string;
 };
 
 type SelectedOption = { optionId: number; groupName: string; optionName: string; priceDelta: number };
@@ -250,18 +259,41 @@ function cartKey(menuItemId: number, addedByKey: string): string {
   return `${menuItemId}:${addedByKey}`;
 }
 
+// `is_shared` n'est pas l'état de la case, mais le NOMBRE de destinataires :
+// c'est ce que la cuisine lit ("à partager · N couverts") et ce qui, faute
+// d'assignation, envoie le plat sur toute la table. Un plat pour une seule
+// personne n'est donc pas un partage, même s'il a été assigné depuis la liste —
+// sans quoi le ticket cuisine annonçait "à partager · 1 couverts" sur un plat
+// destiné à un seul convive.
+//
+// Une seule fonction pour les DEUX chemins qui envoient des lignes au serveur
+// (panier de la carte, et écran de modification) : quand la règle n'existait
+// que dans `cartLineToWireItem`, l'écran de modification renvoyait la case
+// brute et les deux écrans ne disaient plus la même chose de la même commande.
+function wireIsShared(shared: boolean, sharedWith: number[]): boolean {
+  return sharedWith.length === 0 ? shared : sharedWith.length > 1;
+}
+
+// Pendant de `cartLineToWireItem` pour l'écran de modification. `added_by_key`
+// n'est pas reconduit : `OrderItemOut` ne l'expose pas (il n'est jamais relu
+// côté serveur, contrairement à `added_by_name` dont dépend la répartition).
+function editLineToWireItem(line: EditLine): OrderItemPayload {
+  return {
+    menu_item_id: line.menuItemId,
+    quantity: line.quantity,
+    notes: line.notes || null,
+    is_shared: wireIsShared(line.isShared, line.sharedWith),
+    shared_with: line.sharedWith,
+    added_by_name: line.addedByName || null,
+  };
+}
+
 function cartLineToWireItem(itemId: number, line: CartLine): OrderItemPayload {
   return {
     menu_item_id: itemId,
     quantity: line.quantity,
     notes: line.note || null,
-    // `is_shared` n'est plus l'état de la case, mais le NOMBRE de destinataires
-    // : c'est ce que la cuisine lit ("à partager · N couverts") et ce qui, faute
-    // d'assignation, envoie le plat sur toute la table. Un plat pour une seule
-    // personne n'est donc pas un partage, même s'il a été assigné depuis la
-    // liste — sans quoi le ticket cuisine annonçait "à partager · 1 couverts"
-    // sur un plat destiné à un seul convive.
-    is_shared: line.sharedWith.length === 0 ? line.shared : line.sharedWith.length > 1,
+    is_shared: wireIsShared(line.shared, line.sharedWith),
     // Envoyé indépendamment de `shared` : assigner un plat à un convive reste
     // possible même pour un plat non coché "à partager" (ROADMAP.md §Override
     // 2026-09-08) — les deux réglages ne se conditionnent plus l'un l'autre.
@@ -292,7 +324,16 @@ function wireItemToCartLine(wireItem: OrderItemPayload, menu: MenuItem[]): CartL
     item,
     quantity: wireItem.quantity,
     note: wireItem.notes ?? "",
-    shared: wireItem.is_shared ?? false,
+    // La case est cochée dès qu'il y a un partage OU une assignation, et pas
+    // seulement quand `is_shared` est vrai : depuis #204 ce drapeau porte le
+    // NOMBRE de destinataires, donc un plat assigné à une seule personne part
+    // avec `is_shared: false`. Le relire tel quel rendait l'aller-retour
+    // asymétrique — le serveur rediffusait la ligne (`cart.updated`), la case
+    // se décochait toute seule, et le premier clic ne faisait que replier la
+    // liste aussitôt dépliée. Le deuxième semblait fonctionner parce que le
+    // payload encodé n'avait alors plus changé : plus d'envoi, donc plus
+    // d'écho pour écraser l'état local.
+    shared: (wireItem.is_shared ?? false) || (wireItem.shared_with ?? []).length > 0,
     sharedWith: wireItem.shared_with ?? [],
     fromSuggestion: wireItem.from_suggestion ?? false,
     selectedOptions,
@@ -450,6 +491,12 @@ export default function MenuPage() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // Combien je paie (Wassim, 2026-09-11). Les deux modes de répartition sont un
+  // choix de TABLE, diffusé à tout le monde (ADR 0006) ; celui-ci est personnel
+  // et ne quitte pas cet appareil — payer pour toute la table, ou un montant
+  // exact convenu de vive voix, sans imposer quoi que ce soit aux autres.
+  const [montantMode, setMontantMode] = useState<"part" | "table" | "libre">("part");
+  const [montantLibreInput, setMontantLibreInput] = useState("");
   const [preOrderForIftar, setPreOrderForIftar] = useState(false);
   const [waiterCallState, setWaiterCallState] = useState<"idle" | "calling" | "called">("idle");
   const [waiterCallError, setWaiterCallError] = useState<string | null>(null);
@@ -1307,15 +1354,35 @@ export default function MenuPage() {
   // `myIdentity.name` identifient qui paie, le montant réel est recalculé et
   // figé côté serveur (orders/split.py), jamais celui affiché ici qui n'est
   // qu'une prévisualisation (voir `myPayableAmount`).
+  // `null` = ne rien envoyer, le serveur calcule la part comme avant cette
+  // option. Le montant libre n'est proposé qu'une fois valide ; le serveur le
+  // replafonne de toute façon à ce qui reste dû, cette vérification-ci n'est
+  // là que pour répondre tout de suite plutôt qu'après un aller-retour.
+  const resteDeCetteCommande = trackedOrder ? trackedOrder.amount_remaining : 0;
+  const montantLibre = parseAmountInput(montantLibreInput);
+  const montantLibreValide = montantLibre > 0 && montantLibre <= resteDeCetteCommande;
+  const montantChoisi =
+    montantMode === "table" ? resteDeCetteCommande : montantMode === "libre" && montantLibreValide ? montantLibre : null;
+
+  function montantChoisiRefuse(): boolean {
+    if (montantMode === "libre" && !montantLibreValide) {
+      setPaymentError(t.customAmountInvalid(resteDeCetteCommande));
+      return true;
+    }
+    return false;
+  }
+
   async function payByCard() {
     if (!trackedOrder) return;
+    if (montantChoisiRefuse()) return;
     setPaying(true);
     setPaymentError(null);
     const tip = parseAmountInput(tipInput);
     try {
       if (!orderToken) return;
       const updated = await api.payByCard(
-        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined
+        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined,
+        montantChoisi ?? undefined
       );
       // Restaurant ayant connecté son propre Konnect/Stripe (modèle direct,
       // 2026-08-19) : rediriger pour régler, cette part reste "pending"
@@ -1335,6 +1402,7 @@ export default function MenuPage() {
 
   async function payByCash() {
     if (!trackedOrder) return;
+    if (montantChoisiRefuse()) return;
     setPaying(true);
     setPaymentError(null);
     try {
@@ -1343,7 +1411,8 @@ export default function MenuPage() {
       // et le serveur venait encaisser le total sans lui.
       const tip = parseAmountInput(tipInput);
       const updated = await api.requestCashPayment(
-        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined
+        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined,
+        montantChoisi ?? undefined
       );
       setTrackedOrder(updated);
     } catch (e) {
@@ -1355,13 +1424,15 @@ export default function MenuPage() {
 
   async function payByCardTerminal() {
     if (!trackedOrder) return;
+    if (montantChoisiRefuse()) return;
     setPaying(true);
     setPaymentError(null);
     try {
       if (!orderToken) return;
       const tip = parseAmountInput(tipInput);
       const updated = await api.requestCardTerminalPayment(
-        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined
+        trackedOrder.id, myDeviceKey, myIdentity?.name ?? "", tip, orderToken, customerEmail.trim() || undefined,
+        montantChoisi ?? undefined
       );
       setTrackedOrder(updated);
     } catch (e) {
@@ -1516,7 +1587,12 @@ export default function MenuPage() {
         unitPrice: item.unit_price,
         quantity: item.quantity,
         notes: item.notes ?? "",
-        isShared: item.is_shared,
+        // Même règle qu'au retour du panier de table : la case est cochée dès
+        // qu'il y a un partage OU une assignation, `is_shared` seul ne suffit
+        // plus à la déduire.
+        isShared: item.is_shared || (item.shared_with ?? []).length > 0,
+        sharedWith: item.shared_with ?? [],
+        addedByName: item.added_by_name ?? "",
       };
     }
     return seeded;
@@ -1566,6 +1642,11 @@ export default function MenuPage() {
           quantity: (existing?.quantity ?? 0) + 1,
           notes: existing?.notes ?? "",
           isShared: existing?.isShared ?? false,
+          sharedWith: existing?.sharedWith ?? [],
+          // Un plat ajouté pendant la modification est le mien, comme sur la
+          // carte — sans ça il partirait sans auteur, donc réparti sur toute
+          // la table au moment de payer.
+          addedByName: existing?.addedByName || (myIdentity?.name ?? ""),
         },
       };
     });
@@ -1588,22 +1669,35 @@ export default function MenuPage() {
     setEditItems((prev) => (prev[menuItemId] ? { ...prev, [menuItemId]: { ...prev[menuItemId], notes } } : prev));
   }
 
+  // Mêmes deux gestes que sur la carte (`setShared`/`toggleConvive`) : cocher
+  // pré-sélectionne sa propre place quand rien n'est encore désigné, et
+  // décocher ne perd jamais l'assignation déjà faite.
   function editSetShared(menuItemId: number, isShared: boolean) {
-    setEditItems((prev) =>
-      prev[menuItemId] ? { ...prev, [menuItemId]: { ...prev[menuItemId], isShared } } : prev
-    );
+    setEditItems((prev) => {
+      const ligne = prev[menuItemId];
+      if (!ligne) return prev;
+      const sharedWith =
+        isShared && ligne.sharedWith.length === 0 && myPlace > 0 ? [myPlace] : ligne.sharedWith;
+      return { ...prev, [menuItemId]: { ...ligne, isShared, sharedWith } };
+    });
+  }
+
+  function editToggleConvive(menuItemId: number, place: number) {
+    setEditItems((prev) => {
+      const ligne = prev[menuItemId];
+      if (!ligne) return prev;
+      const sharedWith = ligne.sharedWith.includes(place)
+        ? ligne.sharedWith.filter((p) => p !== place)
+        : [...ligne.sharedWith, place].sort((a, b) => a - b);
+      return { ...prev, [menuItemId]: { ...ligne, sharedWith } };
+    });
   }
 
   const editTotal = Object.values(editItems).reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
 
   async function saveOrderEdits() {
     if (!trackedOrder || !orderToken) return;
-    const items = Object.values(editItems).map((l) => ({
-      menu_item_id: l.menuItemId,
-      quantity: l.quantity,
-      notes: l.notes || null,
-      is_shared: l.isShared,
-    }));
+    const items = Object.values(editItems).map(editLineToWireItem);
     setSavingEdit(true);
     setEditError(null);
     try {
@@ -1628,14 +1722,7 @@ export default function MenuPage() {
 
   async function sendModificationRequest(itemsOverride?: OrderItemPayload[]) {
     if (!trackedOrder || !orderToken) return;
-    const items =
-      itemsOverride ??
-      Object.values(editItems).map((l) => ({
-        menu_item_id: l.menuItemId,
-        quantity: l.quantity,
-        notes: l.notes || null,
-        is_shared: l.isShared,
-      }));
+    const items = itemsOverride ?? Object.values(editItems).map(editLineToWireItem);
     setSavingEdit(true);
     setEditError(null);
     try {
@@ -2236,6 +2323,12 @@ export default function MenuPage() {
                       <UtensilsIcon className="w-4 h-4 shrink-0 text-[var(--ink-soft)]" />
                       <span className="text-[var(--encre)]">{t.sharedCheckboxLabel}</span>
                     </label>
+                    {/* Le même bloc que sur la carte : la case y promettait
+                        d'assigner un plat sur un écran qui n'en offrait aucun
+                        moyen — cocher ne faisait donc rien de visible. */}
+                    {assignationBloc(line.isShared, line.sharedWith, line.unitPrice * line.quantity, (place) =>
+                      editToggleConvive(line.menuItemId, place)
+                    )}
                   </div>
                 ))}
               </div>
@@ -2677,6 +2770,11 @@ export default function MenuPage() {
               const remainingNames = rosterNames.filter((n) => !paidNames.has(n));
               const myPayment = trackedOrder.payments.find((p) => p.payer_key === myDeviceKey);
               const myAmount = myPayableAmount(trackedOrder, rosterNames, myName, splitMode);
+              // Ce qui sera réellement débité : sa part calculée, ou le montant
+              // que le convive a choisi lui-même. Un montant libre encore
+              // invalide n'écrase pas le chiffre affiché — sinon le total
+              // passerait à 0 pendant qu'on tape.
+              const aPayer = montantChoisi ?? myAmount;
               const isSharedWithOthers = roster.length > 1;
               const shareExpanded = shareOpen || isSharedWithOthers;
               const namesForShares = rosterNames.includes(myName) ? rosterNames : [...rosterNames, myName];
@@ -2707,12 +2805,14 @@ export default function MenuPage() {
                       chiffre dominant de tout l'écran de paiement — avant même
                       de savoir si elle est partagée. */}
                   <div>
-                    <p className="text-sm font-semibold text-[var(--encre)]">{t.myShareTitle}</p>
+                    <p className="text-sm font-semibold text-[var(--encre)]">
+                      {montantMode === "part" ? t.myShareTitle : t.customAmountTitle}
+                    </p>
                     <p
-                      key={myAmount}
+                      key={aPayer}
                       className="animate-montant-change font-bold text-affiche text-[var(--encre)] leading-none mt-1"
                     >
-                      {formatAmount(myAmount)}{" "}
+                      {formatAmount(aPayer)}{" "}
                       <span className="text-sm font-semibold text-[var(--ink-soft)]">{t.currency}</span>
                     </p>
                     {/* N'apparaît que si ça change concrètement quelque chose :
@@ -2722,6 +2822,67 @@ export default function MenuPage() {
                       <p className="text-[13px] text-[var(--ink-soft)] mt-1">
                         {t.totalOrderAmountNote(trackedOrder.total_amount)}
                       </p>
+                    )}
+                    {/* Le montant reste modifiable (Wassim, 2026-09-11) :
+                        "équitable" et "par plat" répondaient tous les deux à la
+                        place du convive. Régler pour toute la table, ou un
+                        montant convenu de vive voix, n'avait aucun chemin — et
+                        c'est un choix personnel, pas un mode de table (ADR
+                        0006), donc rien n'est diffusé aux autres appareils. */}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(
+                        [
+                          ["part", t.amountModeMyShare],
+                          ["table", t.amountModeWholeTable],
+                          ["libre", t.amountModeCustom],
+                        ] as const
+                      ).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => {
+                            setMontantMode(mode);
+                            setPaymentError(null);
+                          }}
+                          aria-pressed={montantMode === mode}
+                          className={`rounded-full border px-3 py-1.5 text-etiquette transition-colors duration-rapide ease-deplacement ${
+                            montantMode === mode
+                              ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
+                              : "border-[var(--line)] bg-white text-[var(--encre)]"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {montantMode === "libre" && (
+                      <div className="plat-detail">
+                        <div className="min-h-0">
+                          <div className="mt-2">
+                            <label className="text-legende text-ink-soft" htmlFor="montant-libre">
+                              {t.customAmountLabel(resteDeCetteCommande)}
+                            </label>
+                            <input
+                              id="montant-libre"
+                              type="text"
+                              inputMode="decimal"
+                              value={montantLibreInput}
+                              onChange={(e) => {
+                                setMontantLibreInput(e.target.value);
+                                setPaymentError(null);
+                              }}
+                              placeholder={formatAmount(resteDeCetteCommande)}
+                              className="mt-1 w-full text-etiquette bg-white border border-[var(--line)] rounded-controle px-2.5 py-2 placeholder:text-[var(--ink-soft)]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Le serveur replafonne de toute façon : ce rappel évite
+                        seulement de taper un montant qui sera rogné sans
+                        explication. */}
+                    {montantMode !== "part" && (
+                      <p className="mt-1 text-legende text-ink-soft">{t.customAmountRemainingNote(resteDeCetteCommande)}</p>
                     )}
                   </div>
 
@@ -2805,7 +2966,7 @@ export default function MenuPage() {
                         <p className="text-sm text-[var(--ink-soft)] mb-1.5">{t.tipLabel}</p>
                         <div className="flex gap-2">
                           {[0, 0.05, 0.1].map((pct) => {
-                            const amount = Number((myAmount * pct).toFixed(currentMarket.currency.decimals));
+                            const amount = Number((aPayer * pct).toFixed(currentMarket.currency.decimals));
                             const selected = (tipInput === "" && pct === 0) || Number(tipInput) === amount;
                             return (
                               <button
@@ -2836,7 +2997,7 @@ export default function MenuPage() {
                       <div className="flex justify-between text-[15px] font-bold text-[var(--encre)] pt-2 border-t border-[var(--line)]">
                         <span>{t.totalToPayLabel}</span>
                         <span className="tabular-nums">
-                          {formatAmount(myAmount + parseAmountInput(tipInput))} {t.currency}
+                          {formatAmount(aPayer + parseAmountInput(tipInput))} {t.currency}
                         </span>
                       </div>
                       <div>
@@ -2962,14 +3123,67 @@ export default function MenuPage() {
   // personne de désigné et rien de coché = pour moi (le défaut, le scan du QR
   // le sait déjà) ; rien de désigné mais la case cochée = toute la table ;
   // sinon les convives choisis, moi inclus ou non.
-  function assignationLabel(ligne: CartLine, perPerson: number): string {
-    if (ligne.sharedWith.length === 0) {
-      return ligne.shared ? t.sharedWithEveryone : t.assignedToMe;
+  function assignationLabel(shared: boolean, sharedWith: number[], perPerson: number): string {
+    if (sharedWith.length === 0) {
+      return shared ? t.sharedWithEveryone : t.assignedToMe;
     }
-    if (ligne.sharedWith.length === 1) {
-      return ligne.sharedWith[0] === myPlace ? t.assignedToMe : t.cartForWhom(convivLabel(ligne.sharedWith[0]));
+    if (sharedWith.length === 1) {
+      return sharedWith[0] === myPlace ? t.assignedToMe : t.cartForWhom(convivLabel(sharedWith[0]));
     }
-    return `${t.cartForWhom(ligne.sharedWith.map(convivLabel).join(" · "))} — ${t.sharedPerPersonAmount(perPerson)}`;
+    return `${t.cartForWhom(sharedWith.map(convivLabel).join(" · "))} — ${t.sharedPerPersonAmount(perPerson)}`;
+  }
+
+  // Les jetons de convives et la ligne qui dit à qui va le plat, partagés par
+  // la carte et l'écran de modification — deux écrans qui doivent répondre la
+  // même chose à la même question (« pour qui ? ») sur la même commande.
+  function assignationBloc(
+    shared: boolean,
+    sharedWith: number[],
+    lineTotal: number,
+    onToggle: (place: number) => void
+  ) {
+    const perPerson = lineTotal / (sharedWith.length > 0 ? sharedWith.length : convives);
+    return (
+      <>
+        {shared && (
+          <div className="plat-detail">
+            <div className="min-h-0">
+              <div className="mt-2">
+                <p className="text-legende text-ink-soft">{t.sharedWithLabel}</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
+                    const choisi = sharedWith.includes(place);
+                    return (
+                      <button
+                        key={place}
+                        type="button"
+                        onClick={() => onToggle(place)}
+                        aria-pressed={choisi}
+                        className={`rounded-full border px-3 py-1.5 text-etiquette transition-colors duration-rapide ease-deplacement ${
+                          choisi
+                            ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
+                            : "border-[var(--line)] bg-white text-[var(--encre)]"
+                        }`}
+                      >
+                        {convivLabel(place)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Toujours affichée, liste ouverte ou non : c'est elle qui empêche
+            qu'une assignation faite puis refermée passe pour perdue. */}
+        <p className="mt-2 text-legende text-ink-soft">
+          {assignationLabel(shared, sharedWith, perPerson)}
+          {!shared && sharedWith.length > 0 && (
+            <span className="text-[var(--ink-faint)]"> · {t.assignReopenHint}</span>
+          )}
+        </p>
+      </>
+    );
   }
 
   function renderItem(item: MenuItem, index = 0) {
@@ -2983,9 +3197,6 @@ export default function MenuPage() {
     // refléter que ce que CE téléphone a lui-même ajouté, jamais ce que les
     // autres convives ont commandé depuis le leur.
     const ligne = cart[cartKey(item.id, myDeviceKey)];
-    const perPerson = ligne
-      ? (lineUnitPrice(ligne) * ligne.quantity) / (ligne.sharedWith.length > 0 ? ligne.sharedWith.length : convives)
-      : 0;
     const hasOptionGroups = item.option_groups.length > 0;
     return (
       <div
@@ -3217,43 +3428,9 @@ export default function MenuPage() {
                 Même dépliement que le panneau qui la contient, et la même
                 classe : ce n'est pas un mouvement nouveau (`.plat-detail`,
                 globals.css — déjà couvert par prefers-reduced-motion). */}
-            {ligne.shared && (
-              <div className="plat-detail">
-                <div className="min-h-0">
-                  <div className="mt-2">
-                    <p className="text-legende text-ink-soft">{t.sharedWithLabel}</p>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {Array.from({ length: convives }, (_, i) => i + 1).map((place) => {
-                        const choisi = ligne.sharedWith.includes(place);
-                        return (
-                          <button
-                            key={place}
-                            type="button"
-                            onClick={() => toggleConvive(cartKey(item.id, myDeviceKey), place)}
-                            aria-pressed={choisi}
-                            className={`rounded-full border px-3 py-1.5 text-etiquette transition-colors duration-rapide ease-deplacement ${
-                              choisi
-                                ? "bg-[var(--harissa)] text-[var(--semoule)] border-[var(--harissa)]"
-                                : "border-[var(--line)] bg-white text-[var(--encre)]"
-                            }`}
-                          >
-                            {convivLabel(place)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {assignationBloc(ligne.shared, ligne.sharedWith, lineUnitPrice(ligne) * ligne.quantity, (place) =>
+              toggleConvive(cartKey(item.id, myDeviceKey), place)
             )}
-            {/* Toujours affichée, liste ouverte ou non : c'est elle qui empêche
-                qu'une assignation faite puis refermée passe pour perdue. */}
-            <p className="mt-2 text-legende text-ink-soft">
-              {assignationLabel(ligne, perPerson)}
-              {!ligne.shared && ligne.sharedWith.length > 0 && (
-                <span className="text-[var(--ink-faint)]"> · {t.assignReopenHint}</span>
-              )}
-            </p>
           </div>
             </div>
           </div>

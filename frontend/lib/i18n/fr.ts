@@ -121,6 +121,15 @@ export const fr = {
   paidByPerson: (name: string) => `${name} a payé sa part`,
   remainingAmountLabel: "Reste à payer :",
   myShareTitle: "Votre part",
+  // Montant choisi par le convive (Wassim, 2026-09-11) : les deux modes de
+  // répartition répondaient à sa place à « combien je paie ? ».
+  customAmountTitle: "Vous payez",
+  amountModeMyShare: "Ma part",
+  amountModeWholeTable: "Toute la table",
+  amountModeCustom: "Autre montant",
+  customAmountLabel: (max: number) => `Montant à payer (jusqu'à ${formatMoney(max)})`,
+  customAmountRemainingNote: (reste: number) => `Il reste ${formatMoney(reste)} à régler sur cette commande.`,
+  customAmountInvalid: (max: number) => `Saisissez un montant entre 0 et ${formatMoney(max)}.`,
   myShareAlreadyPaidMessage: "Vous avez réglé votre part — merci !",
   invoiceDownload: "Télécharger la facture (PDF)",
   invoiceQrCaption: "Scannez pour la retrouver sur un autre appareil",

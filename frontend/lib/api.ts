@@ -934,29 +934,37 @@ export const api = {
     request<KitchenTodayCount>(`/api/v1/stats/kitchen-today-count/${restaurantId}`),
   // Chacun paie SA PART, jamais l'addition entière (identité de table,
   // ROADMAP.md §Override, extension paiement par personne) — `payerKey`/
-  // `payerName` identifient qui paie ; le montant réel est recalculé et figé
-  // côté serveur, jamais fourni par le client.
+  // `payerName` identifient qui paie. `amount` est le montant CHOISI par le
+  // convive (régler pour toute la table, ou un montant exact) : facultatif, et
+  // plafonné côté serveur à ce qui reste dû — le client propose, le serveur
+  // fige (voir orders/service.py::_get_payable_share).
   payByCard: (
     orderId: number, payerKey: string, payerName: string, tipAmount: number, orderToken: string,
-    customerEmail?: string
+    customerEmail?: string, amount?: number
   ) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/card`, {
       method: "POST",
       body: JSON.stringify({
         payer_key: payerKey, payer_name: payerName, tip_amount: tipAmount,
         customer_email: customerEmail || undefined,
+        // Omis quand le convive n'a rien choisi : le serveur calcule alors sa
+        // part comme avant cette option.
+        amount,
       }),
       headers: orderHeaders(orderToken),
     }),
   requestCashPayment: (
     orderId: number, payerKey: string, payerName: string, tipAmount: number, orderToken: string,
-    customerEmail?: string
+    customerEmail?: string, amount?: number
   ) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/cash`, {
       method: "POST",
       body: JSON.stringify({
         payer_key: payerKey, payer_name: payerName, tip_amount: tipAmount,
         customer_email: customerEmail || undefined,
+        // Omis quand le convive n'a rien choisi : le serveur calcule alors sa
+        // part comme avant cette option.
+        amount,
       }),
       headers: orderHeaders(orderToken),
     }),
@@ -966,13 +974,16 @@ export const api = {
   // même mécanique que les espèces, moyen distinct (2026-08-19).
   requestCardTerminalPayment: (
     orderId: number, payerKey: string, payerName: string, tipAmount: number, orderToken: string,
-    customerEmail?: string
+    customerEmail?: string, amount?: number
   ) =>
     request<Order>(`/api/v1/orders/${orderId}/pay/card-terminal`, {
       method: "POST",
       body: JSON.stringify({
         payer_key: payerKey, payer_name: payerName, tip_amount: tipAmount,
         customer_email: customerEmail || undefined,
+        // Omis quand le convive n'a rien choisi : le serveur calcule alors sa
+        // part comme avant cette option.
+        amount,
       }),
       headers: orderHeaders(orderToken),
     }),
