@@ -5,7 +5,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.dates import as_utc, service_day_bounds, service_day_start
-from app.modules.orders.models import Order, OrderStatus, PaymentStatus
+from app.modules.orders.models import Order, OrderPaymentStatus, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.reglement import montant_encaisse, reste_a_encaisser
 from app.modules.orders.service import ACTIVE_STATUSES
 from app.modules.staff.models import Staff, StaffRole
 from app.modules.stats import schemas
@@ -75,6 +76,53 @@ def _average(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
+def _encaissable(orders: list[Order]) -> list[Order]:
+    """Les commandes dont l'argent peut être rentré : tout sauf les annulées.
+    Volontairement PAS `paid_orders` — une commande partiellement réglée n'est
+    pas « payée », mais son argent est bien en caisse."""
+    return [o for o in orders if o.status != OrderStatus.CANCELLED]
+
+
+def revenue_by_method(orders: list[Order]) -> list[schemas.RevenueByMethod]:
+    """
+    Ce qui est rentré, par moyen de paiement — agrégé depuis les parts
+    (`OrderPayment`), jamais depuis `Order.payment_method`, qui ne porte que
+    la méthode de la DERNIÈRE part réglée (voir
+    `orders/service.py::_after_share_paid`) et compterait une table moitié
+    espèces moitié carte entièrement dans un seul moyen.
+
+    `CARD_TERMINAL` existait depuis le 2026-08-19 « pour que les stats de
+    moyen de paiement ne mélangent pas espèces et carte en salle », mais
+    aucune statistique ne le lisait : c'est cette fonction-là qui manquait.
+
+    Repli sur `Order.payment_method` pour les commandes payées sans aucune
+    part enregistrée (jeu de démonstration, commandes d'avant le paiement par
+    personne) : sans lui, leur argent disparaîtrait de la ventilation alors
+    qu'il compte dans la recette. `method` nul = moyen inconnu, jamais deviné.
+    """
+    totaux: dict[PaymentMethod | None, list[float]] = {}
+
+    def ajouter(method: PaymentMethod | None, montant: float) -> None:
+        ligne = totaux.setdefault(method, [0.0, 0.0])
+        ligne[0] += montant
+        ligne[1] += 1
+
+    for order in _encaissable(orders):
+        parts = [p for p in order.payments if p.status == OrderPaymentStatus.PAID]
+        if parts:
+            for part in parts:
+                ajouter(part.method, float(part.amount))
+        elif montant_encaisse(order) > 0:
+            ajouter(order.payment_method, montant_encaisse(order))
+
+    lignes = [
+        schemas.RevenueByMethod(method=method, amount=round(montant, 2), count=int(nombre))
+        for method, (montant, nombre) in totaux.items()
+        if montant > 0
+    ]
+    return sorted(lignes, key=lambda ligne: -ligne.amount)
+
+
 def _compute_timing(orders: list[Order]) -> schemas.TimingStats:
     """
     Délai moyen par étape sur un lot de commandes — factorisé pour être
@@ -118,7 +166,10 @@ def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> sche
 
     orders_today = (
         db.query(Order)
-        .options(selectinload(Order.items))
+        # `payments` chargée en une fois : la recette et la ventilation par
+        # moyen les lisent pour chaque commande, et ce dashboard se recharge à
+        # chaque ouverture — une requête par commande n'y a pas sa place.
+        .options(selectinload(Order.items), selectinload(Order.payments))
         .filter(Order.restaurant_id == restaurant_id, Order.created_at >= day_start, Order.created_at < day_end)
         .all()
     )
@@ -207,14 +258,20 @@ def get_dashboard_stats(db: Session, restaurant_id: int, day: date_type) -> sche
                     schemas.StaffActiveLoad(staff_id=s.id, staff_name=s.name, role=s.role, tables_count=count)
                 )
 
-    # Le chiffre que le patron vient chercher (Phase 17.1). Calculé avec les
-    # mêmes règles que la page de preuve : les deux écrans parlent du même
-    # jour au même homme, ils doivent dire la même chose.
-    revenue_today = sum(o.total_amount for o in paid_orders(orders_today))
+    # Le chiffre que le patron vient chercher (Phase 17.1) — ce qui est
+    # RÉELLEMENT rentré, pas ce qui est entièrement soldé. Jusqu'ici une table
+    # de quatre dont trois convives avaient réglé pesait 0 DT : l'argent était
+    # en caisse et la recette n'en disait rien. Le pendant est affiché juste à
+    # côté (`reste_a_encaisser_today`) : l'écart entre le service et la caisse
+    # doit être lisible, pas caché.
+    revenue_today = sum(montant_encaisse(o) for o in _encaissable(orders_today))
+    reste_a_encaisser_today = sum(reste_a_encaisser(o) for o in _encaissable(orders_today))
 
     return schemas.DashboardStats(
         date=day,
         revenue_today=revenue_today,
+        reste_a_encaisser_today=reste_a_encaisser_today,
+        revenue_by_method=revenue_by_method(orders_today),
         active_orders_count=active_orders_count,
         timing=timing,
         staff_performance=staff_performance,

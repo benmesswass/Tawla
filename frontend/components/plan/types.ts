@@ -74,6 +74,26 @@ export function demandeUnServeur(urgence: Urgence): boolean {
   return urgence !== "libre" && urgence !== "occupee" && urgence !== "en_cuisine";
 }
 
+/**
+ * Ce que la table a réglé — délibérément HORS de `URGENCES`.
+ *
+ * Un règlement ne demande rien à personne : le ranger dans l'échelle
+ * d'urgence aurait fait disparaître l'appel d'une table qui vient de payer,
+ * puisqu'une tuile ne montre que son état le plus urgent (voir `etats.ts`).
+ * C'est donc un second canal visuel, comme le rang d'arrivée et « ma table ».
+ *
+ * `aucun` couvre les deux cas où il n'y a rien à dire : personne n'a encore
+ * payé, ou la table n'a pas de commande du tout.
+ */
+export const REGLEMENTS = ["aucun", "partiel", "total"] as const;
+export type Reglement = (typeof REGLEMENTS)[number];
+
+export const LIBELLE_REGLEMENT: Record<Reglement, string> = {
+  aucun: "",
+  partiel: "partiellement réglée",
+  total: "entièrement réglée",
+};
+
 export type EtatTable = {
   urgence: Urgence;
   /** Depuis quand cet état dure — la base du compte à rebours. */

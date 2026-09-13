@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order } from "@/lib/api";
+import { Order, TableSettlement } from "@/lib/api";
+import { formatMoney } from "@/lib/currency";
+import { LIBELLE_MOYEN } from "@/lib/moyenDePaiement";
 import {
   EtatTable,
   LIBELLE_URGENCE,
@@ -27,6 +29,11 @@ export type ActionsTable = {
   envoyerEnCuisine?: () => void;
   servir?: () => void;
   encaisser?: () => void;
+  /** Encaisser ce qu'il reste dû SANS que la table l'ait demandé depuis son
+   *  téléphone — le règlement en espèces au comptoir, qui n'avait aucun
+   *  chemin jusqu'ici. Distinct d'`encaisser`, qui close une demande déjà
+   *  affichée. */
+  encaisserLeRestant?: () => void;
   resoudreAppel?: () => void;
   /** Présent uniquement si la table est occupée — jamais gêné par une
    *  urgence en cours (voir CLAUDE.md, 2026-09-09) : libérer ne fait
@@ -41,6 +48,7 @@ export default function ActionTable({
   rang = null,
   actions,
   commandeItems,
+  reglement = null,
   onFermer,
 }: {
   table: PlanTable;
@@ -48,6 +56,9 @@ export default function ActionTable({
   /** Rang d'arrivée parmi les tables qui attendent d'être prises en charge. */
   rang?: number | null;
   actions: ActionsTable;
+  /** Ce que la table a réglé aujourd'hui, toutes ses commandes confondues —
+   *  null quand elle n'a aucune commande dans l'occupation en cours. */
+  reglement?: TableSettlement | null;
   /** Articles de la commande en attente de confirmation — affichés pour que
    *  le serveur les relise avec la table avant de cliquer "Confirmé → cuisine". */
   commandeItems?: Order["items"];
@@ -101,6 +112,34 @@ export default function ActionTable({
   // c'est le seul moment où le serveur doit la relire avec la table.
   const aRelire = principale?.texte === "Confirmé → cuisine" && commandeItems && commandeItems.length > 0;
 
+  // Ce que la table a réglé. Une ligne, toujours au même endroit : c'est la
+  // seule réponse à « est-ce que je peux libérer cette table ». Jusqu'ici la
+  // seule information disponible était l'ABSENCE de rouge sur le plan.
+  const aRegler = reglement && reglement.orders_count > 0;
+  const reste = reglement ? reglement.amount_remaining : 0;
+  const etatDuReglement = !aRegler
+    ? null
+    : reglement.fully_paid
+      ? { texte: `Entièrement réglée — ${formatMoney(reglement.amount_paid)}`, tone: "menthe" as const }
+      : reglement.amount_paid > 0
+        ? {
+            texte: `Reste ${formatMoney(reste)} sur ${formatMoney(reglement.total_amount)}`,
+            tone: "laiton" as const,
+          }
+        : { texte: `À encaisser — ${formatMoney(reste)}`, tone: "laiton" as const };
+
+  // Proposé quand la table n'attend rien de plus pressé : un serveur qui doit
+  // encore confirmer une commande ou apporter un plat n'encaisse pas d'abord,
+  // et trois boutons côte à côte ne se lisent pas en dix secondes. Le cas
+  // visé est la table installée qui a fini de manger — celle, précisément,
+  // qui n'apparaissait nulle part.
+  //
+  // Le bouton annonce ce que CE clic encaisse, c'est-à-dire l'addition la plus
+  // ancienne encore due — pas le total de la table, qui peut porter deux
+  // commandes (la ligne au-dessus, elle, dit bien le total).
+  const aEncaisser = reglement?.dues[0];
+  const peutEncaisser = !principale && actions.encaisserLeRestant && aEncaisser;
+
   return (
     <div className="plan-action">
       <span className="quoi">
@@ -112,6 +151,22 @@ export default function ActionTable({
         {ordre}
         {etat.parQui && !etat.aMoi ? ` · pris par ${etat.parQui}` : ""}
       </span>
+      {etatDuReglement && (
+        <span className="plan-action-reglement" data-tone={etatDuReglement.tone}>
+          {etatDuReglement.texte}
+          {aRegler && reglement.parts.length > 0 && (
+            <span className="plan-action-parts">
+              {reglement.parts.slice(0, 3).map((part) => (
+                <span key={part.payment_id}>
+                  {LIBELLE_MOYEN[part.method]} · {formatMoney(part.amount)}
+                  {part.payer_name ? ` · ${part.payer_name}` : ""}
+                  {part.collected_by_name ? ` · encaissé par ${part.collected_by_name}` : ""}
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
+      )}
       {aRelire && (
         <div className="plan-action-commande">
           {commandeItems.map((item) => (
@@ -145,6 +200,15 @@ export default function ActionTable({
             }}
           >
             {principale.texte}
+          </button>
+        )}
+        {peutEncaisser && (
+          <button
+            type="button"
+            onClick={actions.encaisserLeRestant}
+            style={{ background: "var(--laiton)", color: "var(--espresso)" }}
+          >
+            Encaisser {formatMoney(aEncaisser.amount_remaining)}
           </button>
         )}
         {actions.libererTable && (

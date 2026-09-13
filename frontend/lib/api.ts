@@ -266,6 +266,43 @@ export type PendingSharePayment = {
   loyalty_phone: string | null;
 };
 
+/** Une part effectivement encaissée. `collected_by_name` est nul pour un
+ *  paiement en ligne, que personne n'encaisse. */
+export type SettledShare = {
+  payment_id: number;
+  order_id: number;
+  method: PaymentMethod;
+  payer_name: string;
+  amount: number;
+  tip_amount: number;
+  paid_at: string | null;
+  collected_by_name: string | null;
+};
+
+/**
+ * Le règlement d'une TABLE, agrégé sur les commandes de l'occupation en cours.
+ *
+ * `payment_status` vit sur la commande, et une table qui commande en deux
+ * temps en porte plusieurs : le serveur, lui, ne raisonne qu'en tables. Une
+ * table libérée puis réoccupée repart à zéro.
+ */
+export type TableSettlement = {
+  table_id: number;
+  table_label: string;
+  total_amount: number;
+  amount_paid: number;
+  amount_remaining: number;
+  fully_paid: boolean;
+  orders_count: number;
+  last_paid_at: string | null;
+  parts: SettledShare[];
+  /** Les commandes de la table où il reste à encaisser, la plus ancienne
+   *  d'abord : un encaissement s'applique à UNE commande (c'est là que vivent
+   *  le statut de paiement et la facture) alors que le serveur encaisse une
+   *  table. Vide quand tout est réglé. */
+  dues: { order_id: number; amount_remaining: number }[];
+};
+
 /**
  * Une ligne de panier telle qu'envoyée au backend — forme commune à la
  * création d'une commande, son édition directe (fenêtre 1) et une demande de
@@ -435,6 +472,15 @@ export type DashboardStats = {
    *  le patron vient chercher chaque soir, et le temps d'attente moyen posé
    *  juste à côté — un signal opérationnel du jour même. */
   revenue_today: number;
+  /** Servi mais pas encore encaissé, à la même heure. Posé à côté de la
+   *  recette et jamais fondu dedans : l'une dit ce qui est en caisse, l'autre
+   *  ce qu'il reste à aller chercher. */
+  reste_a_encaisser_today: number;
+  /** D'où vient l'argent. Agrégé part par part côté backend, jamais depuis
+   *  `Order.payment_method` — celui-ci ne porte que la méthode de la dernière
+   *  part réglée. Les moyens à zéro sont absents ; `method` nul = moyen non
+   *  enregistré (commandes d'avant le paiement par personne, jeu de démo). */
+  revenue_by_method: { method: PaymentMethod | null; amount: number; count: number }[];
   active_orders_count: number;
   timing: TimingStats;
   staff_performance: StaffPerformance[];
@@ -990,6 +1036,23 @@ export const api = {
     }),
   listPendingCashPayments: (restaurantId: number) =>
     request<PendingSharePayment[]>(`/api/v1/orders/by-restaurant/${restaurantId}/pending-cash-payments`),
+  /** Encaissement à l'initiative du SERVEUR, sans demande du client — le cas
+   *  ordinaire d'un règlement en espèces au comptoir. Distinct de
+   *  `confirmCashPayment`, qui close une demande faite par un convive.
+   *  `amount` absent = tout le restant dû. */
+  collectPayment: (
+    orderId: number, method: "cash" | "card_terminal", amount?: number, tipAmount = 0
+  ) =>
+    request<Order>(`/api/v1/orders/${orderId}/pay/collect`, {
+      method: "POST",
+      body: JSON.stringify({ method, amount, tip_amount: tipAmount }),
+    }),
+  /** Ce que chaque table a déjà réglé aujourd'hui. Indispensable au
+   *  rechargement de l'écran serveur : une commande servie puis payée sort de
+   *  `listActiveOrders`, donc rien d'autre ne peut dire, après un F5, que la
+   *  table a payé. */
+  listTableSettlements: (restaurantId: number) =>
+    request<TableSettlement[]>(`/api/v1/orders/by-restaurant/${restaurantId}/table-settlement`),
   setRamadanMode: (restaurantId: number, enabled: boolean, iftarTime: string | null) =>
     request<Restaurant>(`/api/v1/restaurants/${restaurantId}/ramadan-mode`, {
       method: "PATCH",

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { OrderInProgressStatus } from "@/lib/api";
+import { OrderInProgressStatus, TableSettlement } from "@/lib/api";
+import { formatMoney } from "@/lib/currency";
 import Button from "@/components/ui/Button";
 
 /**
@@ -29,12 +30,17 @@ const NOTE_MAX_LENGTH = 500;
 export default function ModaleLibererTable({
   tableLabel,
   commandeEnCours,
+  reglement = null,
   onConfirm,
   onClose,
 }: {
   tableLabel: string;
   /** `null` = rien en cours (ou déjà terminée et payée) : modale "safe". */
   commandeEnCours: OrderInProgressStatus | null;
+  /** Ce que la table a réglé — sert à le DIRE quand tout est encaissé, plutôt
+   *  que de laisser le serveur déduire d'un « ou déjà servie et payée » qu'il
+   *  ne reste rien à aller chercher. */
+  reglement?: TableSettlement | null;
   onConfirm: (note?: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -92,13 +98,17 @@ export default function ModaleLibererTable({
           </>
         ) : (
           <>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--menthe)]">Table libre</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--menthe)]">
+              {reglement?.fully_paid ? "Entièrement réglée" : "Table libre"}
+            </p>
             <h2 className="mt-1 text-lg font-semibold text-[var(--encre)]">
               Libérer {tableLabel} ?
             </h2>
             <p className="mt-2 text-sm text-[var(--ink-soft)]">
-              Aucune commande en cours — ou déjà servie et payée. Le panier et les convives déclarés seront
-              remis à zéro pour la prochaine tablée.
+              {reglement?.fully_paid
+                ? `${formatMoney(reglement.amount_paid)} encaissés, rien à aller chercher. `
+                : "Aucune commande en cours — ou déjà servie et payée. "}
+              Le panier et les convives déclarés seront remis à zéro pour la prochaine tablée.
             </p>
           </>
         )}

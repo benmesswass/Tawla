@@ -9,7 +9,7 @@ from app.core.invoice import generate_invoice_pdf
 from app.core.konnect import is_konnect_enabled, verify_konnect_order_webhook
 from app.core.logging import get_logger, log_event
 from app.core.rate_limit import ORDER_VOLUME_MAX_REQUESTS, rate_limit
-from app.modules.orders import schemas, service
+from app.modules.orders import reglement, schemas, service
 from app.modules.notifications.manager import diffuser, executer_puis_diffuser
 from app.modules.orders.dependencies import get_order_by_token, get_paid_order_by_query_token
 from app.modules.orders.models import Order, OrderStatus
@@ -387,6 +387,45 @@ async def confirm_card_terminal_payment(
 ):
     """Le serveur confirme avoir encaissé la carte physique de ce convive."""
     return await executer_puis_diffuser(service.confirm_card_terminal_payment, db, payment_id, staff)
+
+
+@router.post("/{order_id}/pay/collect", response_model=schemas.OrderOutStaff)
+async def collect_payment(
+    order_id: int,
+    payload: schemas.CollectPaymentRequest,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(_WAITER_OR_MANAGER),
+):
+    """
+    Le serveur encaisse lui-même une table qui n'a rien demandé depuis son
+    téléphone — le cas ordinaire d'un règlement en espèces au comptoir, qui
+    n'avait jusqu'ici aucun chemin pour être enregistré (voir
+    `service.collect_payment`). Distinct des deux routes `confirm/{payment_id}`
+    juste au-dessus, qui closent une demande faite par un convive.
+    """
+    return await executer_puis_diffuser(
+        service.collect_payment,
+        db, order_id, staff, payload.method, payload.amount, payload.tip_amount,
+    )
+
+
+@router.get(
+    "/by-restaurant/{restaurant_id}/table-settlement",
+    response_model=list[schemas.TableSettlementOut],
+)
+async def list_table_settlements(
+    restaurant_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_WAITER_OR_MANAGER)
+):
+    """
+    Ce que chaque table a déjà réglé aujourd'hui — rechargement de l'écran
+    serveur au montage, comme `/active` pour les commandes. Indispensable et
+    pas confortable : une commande servie puis payée sort de
+    `ACTIVE_STATUSES`, donc rien d'autre ne peut dire au serveur, après un
+    rafraîchissement, que la table a payé.
+    """
+    if staff.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "not your restaurant"})
+    return await run_in_threadpool(reglement.reglements_du_restaurant, db, restaurant_id)
 
 
 @router.get(

@@ -1,4 +1,4 @@
-import { ETAT_LIBRE, EtatTable, URGENCES, Urgence } from "./types";
+import { ETAT_LIBRE, EtatTable, Reglement, URGENCES, Urgence } from "./types";
 
 /**
  * Traduit ce que l'écran serveur sait déjà en un état par table.
@@ -61,4 +61,23 @@ export function construireEtats(source: SourceEtats): Record<number, EtatTable> 
   }
 
   return etats;
+}
+
+/**
+ * Ce que chaque table a réglé, par table — un second canal, jamais mélangé
+ * aux urgences ci-dessus (voir `Reglement` dans types.ts).
+ *
+ * Dérivé de l'agrégat du backend et non recalculé ici : `fully_paid` tient
+ * compte de TOUTES les commandes de l'occupation en cours, ce que l'écran
+ * serveur ne peut pas savoir seul — une commande servie puis payée ne fait
+ * plus partie des commandes actives qu'il connaît.
+ */
+export function construireReglements(
+  reglements: { table_id: number; amount_paid: number; fully_paid: boolean }[]
+): Record<number, Reglement> {
+  const par: Record<number, Reglement> = {};
+  for (const reglement of reglements) {
+    par[reglement.table_id] = reglement.fully_paid ? "total" : reglement.amount_paid > 0 ? "partiel" : "aucun";
+  }
+  return par;
 }

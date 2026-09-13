@@ -9,6 +9,7 @@ import {
   EtatTable,
   PlanLandmark,
   PlanTable,
+  Reglement,
   URGENCES,
   demandeUnServeur,
   ordreDArrivee,
@@ -35,6 +36,10 @@ type Props = {
   /** Repères fixes (bar, entrée) — purement visuels côté service. */
   landmarks?: PlanLandmark[];
   etats?: Record<number, EtatTable>;
+  /** Ce que chaque table a réglé — second canal visuel, jamais fondu dans
+   *  `etats` : un règlement ne demande rien, il ne doit donc jamais masquer
+   *  l'urgence d'une table qui a payé ET qui appelle. */
+  reglements?: Record<number, Reglement>;
   onTableActivee?: (table: PlanTable) => void;
   tableSelectionnee?: number | null;
   /** Mode éditeur : les tables se déplacent à la souris ou au doigt. */
@@ -88,6 +93,7 @@ export default function PlanDeSalle({
   tables,
   landmarks = [],
   etats = {},
+  reglements = {},
   onTableActivee,
   tableSelectionnee = null,
   editable = false,
@@ -213,6 +219,7 @@ export default function PlanDeSalle({
               etat={etats[table.id] ?? ETAT_LIBRE}
               maintenant={maintenant}
               rang={rangs[table.id] ?? null}
+              reglement={reglements[table.id] ?? "aucun"}
               laPlusUrgente={table.id === laPlusUrgente}
               selectionnee={table.id === tableSelectionnee}
               enDeplacement={attrapee?.type === "table" && attrapee.id === table.id}

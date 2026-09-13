@@ -1,6 +1,15 @@
 "use client";
 
-import { EtatTable, LIBELLE_URGENCE, PlanTable, demandeUnServeur, libelleAttente, secondesDepuis } from "./types";
+import {
+  EtatTable,
+  LIBELLE_REGLEMENT,
+  LIBELLE_URGENCE,
+  PlanTable,
+  Reglement,
+  demandeUnServeur,
+  libelleAttente,
+  secondesDepuis,
+} from "./types";
 
 /**
  * Une table dessinée sur le plan.
@@ -75,6 +84,7 @@ export default function PieceTable({
   etat,
   maintenant,
   rang = null,
+  reglement = "aucun",
   laPlusUrgente = false,
   selectionnee = false,
   onActiver,
@@ -85,6 +95,9 @@ export default function PieceTable({
   maintenant: number;
   /** Rang d'arrivée parmi les tables qui attendent d'être prises en charge. */
   rang?: number | null;
+  /** Ce que la table a réglé. Deuxième canal visuel : il ne remplace jamais
+   *  la couleur d'urgence — une table réglée qui appelle reste harissa. */
+  reglement?: Reglement;
   laPlusUrgente?: boolean;
   selectionnee?: boolean;
   onActiver?: () => void;
@@ -127,10 +140,13 @@ export default function PieceTable({
       className="piece"
       style={{ width: W, height: H }}
       aria-label={
-        appelle
+        (appelle
           ? `${table.label}, ${table.seats} couverts — ${LIBELLE_URGENCE[etat.urgence]} ${attente}` +
             (rang ? `, ${rang}${rang === 1 ? "re" : "e"} à avoir commandé` : "")
-          : `${table.label}, ${table.seats} couverts — ${LIBELLE_URGENCE[etat.urgence] || "rien à faire"}`
+          : `${table.label}, ${table.seats} couverts — ${LIBELLE_URGENCE[etat.urgence] || "rien à faire"}`) +
+        // Le règlement s'AJOUTE à l'énoncé au lieu de le remplacer, comme la
+        // pastille s'ajoute à la couleur : « vous appelle, entièrement réglée ».
+        (reglement === "aucun" ? "" : `, ${LIBELLE_REGLEMENT[reglement]}`)
       }
     >
       <svg className="dessin" viewBox={`${-W / 2} ${-H / 2} ${W} ${H}`} aria-hidden="true">
@@ -164,6 +180,15 @@ export default function PieceTable({
         </span>
       )}
       {etat.aMoi && <span className="mienne" aria-hidden="true" />}
+
+      {/* Le règlement, dans le coin opposé au rang : la couleur du plateau
+          continue de dire ce que la table attend, la pastille dit seulement
+          qu'il n'y a plus (ou plus tout) à encaisser. */}
+      {reglement !== "aucun" && (
+        <span className="reglement" data-partiel={reglement === "partiel" ? "" : undefined} aria-hidden="true">
+          {reglement === "total" ? "✓" : "½"}
+        </span>
+      )}
     </button>
   );
 }

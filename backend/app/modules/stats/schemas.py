@@ -2,6 +2,7 @@ from datetime import date as date_type
 
 from pydantic import BaseModel
 
+from app.modules.orders.models import PaymentMethod
 from app.modules.staff.models import StaffRole
 
 
@@ -48,6 +49,24 @@ class HourlyCount(BaseModel):
     count: int
 
 
+class RevenueByMethod(BaseModel):
+    """
+    Ce qui est rentré par moyen de paiement. Les moyens à zéro sont absents de
+    la liste : un dashboard qui affiche « carte en ligne — 0.000 DT » tous les
+    soirs dans un resto qui n'encaisse qu'en espèces occupe de la place sans
+    rien dire.
+
+    `method` nul = argent encaissé dont le moyen n'a pas été enregistré
+    (commandes d'avant le paiement par personne, jeu de démonstration) — le
+    montant compte quand même dans la recette, il n'est simplement pas
+    attribuable.
+    """
+
+    method: PaymentMethod | None
+    amount: float
+    count: int
+
+
 class DashboardStats(BaseModel):
     date: date_type
     # Les deux chiffres de tête (Phase 17.1, remaniés le 2026-08-28). La
@@ -56,6 +75,13 @@ class DashboardStats(BaseModel):
     # signal opérationnel du jour même, mesuré sans qu'aucun serveur ait à
     # cliquer quoi que ce soit.
     revenue_today: float
+    # Ce qui a été servi mais pas encore encaissé, à la même heure. Posé à
+    # côté de la recette et jamais fondu dedans : la recette dit ce qui est en
+    # caisse, celui-ci dit ce qu'il reste à aller chercher.
+    reste_a_encaisser_today: float = 0
+    # Ventilation de la recette par moyen de paiement (espèces / carte
+    # terminal / carte en ligne) — les moyens à zéro sont absents.
+    revenue_by_method: list[RevenueByMethod] = []
     active_orders_count: int
     timing: TimingStats
     staff_performance: list[StaffPerformance]
