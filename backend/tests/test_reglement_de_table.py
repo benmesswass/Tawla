@@ -14,7 +14,7 @@ from app.modules.orders.models import Order, OrderPayment, OrderPaymentStatus, P
 from app.modules.orders.reglement import montant_encaisse, reglements_du_restaurant, reste_a_encaisser
 from app.modules.staff.models import StaffRole
 from app.modules.stats.service import revenue_by_method
-from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff, order_headers
+from tests.conftest import _TestingSessionLocal, auth_headers, create_restaurant, create_staff, order_headers, ws_billet
 
 
 def _salle(nom="Café Règlement", slug="cafe-reglement", prix=20):
@@ -341,9 +341,9 @@ def test_un_paiement_en_ligne_previent_la_salle(client):
     """Il ne partait que sur le canal du client : le serveur n'apprenait
     jamais qu'une table venait de payer depuis son téléphone."""
     restaurant, headers, table, _item, order = _decor(client)
-    token = headers["Authorization"].split()[1]
+    billet = ws_billet(create_staff(restaurant.id))
 
-    with client.websocket_connect(f"/ws/staff/{restaurant.id}?token={token}") as ws:
+    with client.websocket_connect(f"/ws/staff/{restaurant.id}?billet={billet}") as ws:
         res = client.post(f"/api/v1/orders/{order['id']}/pay/card", json={}, headers=order_headers(order))
         assert res.status_code == 200
 
@@ -361,7 +361,6 @@ def test_lencaissement_dun_collegue_fait_disparaitre_la_demande_des_autres_ecran
     """Le défaut symétrique : la demande restait affichée chez les autres
     serveurs, qui pouvaient aller réclamer une addition déjà encaissée."""
     restaurant, headers, table, _item, order = _decor(client)
-    token = headers["Authorization"].split()[1]
     demande = client.post(
         f"/api/v1/orders/{order['id']}/pay/cash", json={"payer_name": "Salma"}, headers=order_headers(order)
     )
@@ -369,7 +368,8 @@ def test_lencaissement_dun_collegue_fait_disparaitre_la_demande_des_autres_ecran
     with _TestingSessionLocal() as db:
         payment_id = db.query(OrderPayment).filter(OrderPayment.order_id == order["id"]).one().id
 
-    with client.websocket_connect(f"/ws/staff/{restaurant.id}?token={token}") as ws:
+    billet = ws_billet(create_staff(restaurant.id))
+    with client.websocket_connect(f"/ws/staff/{restaurant.id}?billet={billet}") as ws:
         res = client.post(
             f"/api/v1/orders/{order['id']}/pay/cash/confirm/{payment_id}", headers=headers
         )
