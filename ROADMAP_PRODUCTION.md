@@ -701,12 +701,30 @@ Tout ce qui suit repose sur des estimations explicitement marquées comme telles
       ~100 req/s est celui d'**un processus Python** sur 4 vCPU — GIL et
       threadpool de 40 — pas celui de la base. Il ne se lève qu'en ajoutant des
       processus, donc par P2.1.
-- [ ] Charge de fond à réduire avant d'ajouter des instances (F18) : l'écran
+- [x] Charge de fond à réduire avant d'ajouter des instances (F18) : l'écran
       serveur interroge le plan de salle toutes les 20 s
       (`frontend/app/staff/page.tsx:410`). À 100 restaurants × ~3 écrans, c'est
       **15 req/s en permanence**, avant le premier client — environ 15 % du
       débit d'une instance. Diffuser les changements de plan sur le canal
-      `staff` déjà ouvert plutôt que d'interroger.
+      `staff` déjà ouvert plutôt que d'interroger (PR #220)
+      *Fichiers : `app/modules/tables/service.py` (`get_table_by_qr_token_diffusing`,
+      nouvelle), `app/modules/tables/router.py`, `frontend/app/staff/page.tsx`,
+      `tests/test_tables_release.py`*
+
+      **Un seul point d'entrée diffuse** : `GET /tables/by-token/{qr_token}`
+      est le seul appel que le frontend garantit avant tout autre au scan du
+      QR (`menu/[qrToken]/page.tsx::load`) — les six autres appelants de
+      `get_table_by_qr_token` (menu, commande, appel serveur, fiche
+      restaurant, fidélité) n'ont pas besoin de rejouer l'événement
+      `table.occupied`, qui ne se produit qu'une fois par service quel que
+      soit l'appel qui la déclenche. `get_table_by_qr_token` reste donc
+      inchangée pour eux ; seule `get_table_by_qr_token_diffusing` ajoute la
+      diffusion, en plus de la résolution partagée.
+
+      Vérifié dans les deux sens : un test reçoit `table.occupied` sur le
+      canal `staff` au premier scan, un autre confirme qu'un second scan ne
+      diffuse rien — sans cette garde, le sondage 20 s aurait été remplacé par
+      une diffusion à chaque requête client, pire que le problème d'origine.
 
 ### P3.4 — Une vraie file d'attente
 

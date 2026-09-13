@@ -132,12 +132,16 @@ def get_table_poster(table_id: int, db: Session = Depends(get_db), staff: Staff 
 
 
 @router.get("/by-token/{qr_token}", response_model=schemas.TableOut)
-def get_table_by_token(qr_token: str, db: Session = Depends(get_db)):
+async def get_table_by_token(qr_token: str, db: Session = Depends(get_db)):
     """
     Endpoint appelé quand le client scanne le QR code — public, pas d'auth.
     Le token est opaque : impossible de deviner une autre table.
+
+    Diffuse `table.occupied` au canal staff à la première occupation
+    (ROADMAP_PRODUCTION.md §P3.3, F18) — c'est ce qui remplace le sondage du
+    plan de salle côté écran serveur.
     """
-    return service.get_table_by_qr_token(db, qr_token)
+    return await executer_puis_diffuser(service.get_table_by_qr_token_diffusing, db, qr_token)
 
 
 @router.post("/{table_id}/release", response_model=schemas.TableOut)
