@@ -30,6 +30,39 @@ def get_table_by_qr_token(db: Session, qr_token: str) -> Table:
     sinon la réponse elle-même dirait aux clients qu'un établissement existe
     mais n'a pas payé.
     """
+    table, _ = _resolve_and_occupy(db, qr_token)
+    return table
+
+
+def get_table_by_qr_token_diffusing(db: Session, qr_token: str) -> tuple[Table, list[Diffusion]]:
+    """
+    Même résolution que `get_table_by_qr_token`, plus l'événement temps réel
+    de première occupation (ROADMAP_PRODUCTION.md §P3.3, F18) — réservé à
+    `GET /tables/by-token/{qr_token}`, seul appel que le frontend garantit
+    avant tout autre au chargement de `/menu/[qrToken]`. Les six autres
+    appelants de `get_table_by_qr_token` n'ont pas besoin de rejouer cette
+    diffusion : la transition `occupied_at` n'a lieu qu'une fois par service,
+    quel que soit l'appel qui la déclenche en pratique.
+
+    Avant cet événement, l'écran serveur n'avait qu'un sondage du plan de
+    salle toutes les 20 s pour détecter une table occupée — 15 req/s en
+    permanence à 100 restaurants, avant même le premier client.
+    """
+    table, just_occupied = _resolve_and_occupy(db, qr_token)
+    diffusions: list[Diffusion] = []
+    if just_occupied:
+        diffusions.append(Diffusion(
+            table.restaurant_id, channel="staff",
+            message={
+                "event": "table.occupied",
+                "table_id": table.id,
+                "occupied_at": table.occupied_at.isoformat(),
+            },
+        ))
+    return table, diffusions
+
+
+def _resolve_and_occupy(db: Session, qr_token: str) -> tuple[Table, bool]:
     table = db.query(Table).filter(Table.qr_token == qr_token).first()
     if not table:
         raise HTTPException(
@@ -47,11 +80,12 @@ def get_table_by_qr_token(db: Session, qr_token: str) -> Table:
     # tant que la table n'a pas été explicitement libérée (`release_table`).
     # Un deuxième scan (rafraîchissement, deuxième convive) ne fait rien de
     # plus qu'une lecture.
-    if table.occupied_at is None:
+    just_occupied = table.occupied_at is None
+    if just_occupied:
         table.occupied_at = datetime.now(timezone.utc)
         db.commit()
 
-    return table
+    return table, just_occupied
 
 
 # Une commande SERVED-et-payée ou CANCELLED est terminée au sens de cette

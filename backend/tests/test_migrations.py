@@ -10,6 +10,11 @@ en plein service.
 
 D'où ces tests, qui font ce que fait la production : lancer les migrations,
 puis comparer le schéma obtenu aux modèles.
+
+Le retour arrière, lui, est vérifié **deux fois** : sur SQLite (partout) et sur
+Postgres (en CI, voir `test_le_retour_arriere_tient_aussi_sur_postgres`). Ce
+n'est pas de la redondance — les deux moteurs ne rendent pas les enums pareil,
+et c'est précisément là que le retour arrière se casse sans qu'on le voie.
 """
 import os
 import subprocess
@@ -19,12 +24,19 @@ from pathlib import Path
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from app.core import model_registry  # noqa: F401 — enregistre tous les modèles
 from app.core.database import Base
 
 BACKEND = Path(__file__).resolve().parent.parent
+
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+
+besoin_de_postgres = pytest.mark.skipif(
+    not TEST_DATABASE_URL,
+    reason="TEST_DATABASE_URL non posée — round-trip Postgres ignoré (voir docstring du module)",
+)
 
 
 def _run_alembic(*args: str, database_url: str) -> subprocess.CompletedProcess:
@@ -98,3 +110,65 @@ def test_every_migration_can_be_rolled_back(migrated_url):
 
     up = _run_alembic("upgrade", "head", database_url=migrated_url)
     assert up.returncode == 0, f"remontée impossible après downgrade :\n{up.stderr}"
+
+
+@besoin_de_postgres
+def test_le_retour_arriere_tient_aussi_sur_postgres():
+    """
+    Le même aller-retour, sur le moteur de la production (ROADMAP_PRODUCTION.md
+    §P2.5).
+
+    Le test ci-dessus tourne sur SQLite et passait au vert alors que la
+    remontée était **cassée depuis la migration initiale** : sur Postgres,
+    `DROP TABLE` ne supprime pas le type enum nommé créé pour la colonne, si
+    bien que `downgrade base` laissait six types derrière lui et que le
+    `upgrade` suivant mourait sur « type staffrole already exists ». SQLite
+    n'a pas d'enum natif — il rend un VARCHAR + CHECK — donc le défaut y est
+    structurellement invisible. Le piège avait déjà été rencontré deux fois et
+    corrigé migration par migration (c2e7b41f8a90, 55a307a3bc86) sans jamais
+    être gardé : c'est ce test qui le garde.
+
+    L'enjeu n'est pas théorique. Le conteneur démarre sur
+    `alembic upgrade head && uvicorn` : en instance unique, une migration qui
+    échoue au démarrage est une indisponibilité totale, et le retour arrière
+    est le seul filet. Un filet à sens unique n'en est pas un.
+
+    Le schéma est remis à zéro d'abord : `TEST_DATABASE_URL` est une base de
+    travail que les autres tests Postgres construisent avec `create_all()`, et
+    un `downgrade` partant d'une base sans `alembic_version` ne prouverait
+    rien.
+    """
+    engine = create_engine(TEST_DATABASE_URL, isolation_level="AUTOCOMMIT")
+    with engine.connect() as connection:
+        connection.execute(text("DROP SCHEMA public CASCADE"))
+        connection.execute(text("CREATE SCHEMA public"))
+
+    monte = _run_alembic("upgrade", "head", database_url=TEST_DATABASE_URL)
+    assert monte.returncode == 0, f"`alembic upgrade head` a échoué :\n{monte.stderr}"
+
+    descend = _run_alembic("downgrade", "base", database_url=TEST_DATABASE_URL)
+    assert descend.returncode == 0, f"`alembic downgrade base` a échoué :\n{descend.stderr}"
+
+    # Assertion volontairement plus précise que « la remontée repasse » : elle
+    # nomme le coupable. Sans elle, une migration qui oublie son type enum se
+    # signale par un « already exists » à des dizaines de révisions de là.
+    with engine.connect() as connection:
+        survivants = sorted(
+            ligne[0]
+            for ligne in connection.execute(
+                text("SELECT typname FROM pg_type WHERE typtype = 'e'")
+            )
+        )
+
+    assert survivants == [], (
+        "Des types enum Postgres survivent à `downgrade base` : "
+        + ", ".join(survivants)
+        + ".\nLa migration qui crée chacun doit le supprimer dans son "
+        "`downgrade()` :\n"
+        '  postgresql.ENUM(name="<type>").drop(op.get_bind(), checkfirst=True)'
+    )
+
+    remonte = _run_alembic("upgrade", "head", database_url=TEST_DATABASE_URL)
+    assert remonte.returncode == 0, f"remontée impossible après downgrade :\n{remonte.stderr}"
+
+    engine.dispose()

@@ -11,7 +11,7 @@ regarde sur un téléphone de 360 px et sur l'écran du bureau.
 """
 import pytest
 
-from tests.conftest import auth_headers, create_restaurant, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff, ws_billet
 
 from app.modules.staff.models import StaffRole
 from app.modules.tables.models import Table, TableShape
@@ -234,8 +234,8 @@ def test_the_waiters_learn_that_a_table_went_to_the_kitchen(client, db_session, 
     }).json()
     client.post(f"/api/v1/orders/{order['id']}/confirm", headers=auth_headers(waiter))
 
-    token = auth_headers(waiter)["Authorization"].split()[1]
-    with client.websocket_connect(f"/ws/staff/{restaurant.id}?token={token}") as ws:
+    billet = ws_billet(waiter)
+    with client.websocket_connect(f"/ws/staff/{restaurant.id}?billet={billet}") as ws:
         client.post(f"/api/v1/orders/{order['id']}/send-to-kitchen", headers=auth_headers(waiter))
         message = ws.receive_json()
 

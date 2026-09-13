@@ -426,17 +426,14 @@ export default function StaffPage() {
     }
   }, [restaurantId, loadActiveOrders, loadCashRequests, loadCardTerminalRequests, loadWaiterCalls, loadModificationRequests, loadMyShift, loadPlan, loadReperes, loadReglements]);
 
-  // Une table occupée (scan du QR) n'a pas d'événement WebSocket dédié —
-  // contrairement à sa libération, qui en diffuse un (voir plus bas) — donc
-  // ce plan la rattrape par un sondage léger plutôt que de rester périmé
-  // jusqu'au prochain rechargement complet de l'écran.
-  useEffect(() => {
-    if (!restaurantId) return;
-    const tick = setInterval(loadPlan, 20_000);
-    return () => clearInterval(tick);
-  }, [restaurantId, loadPlan]);
-
-  const { status } = useReconnectingSocket(restaurantId ? staffWsUrl(`/ws/staff/${restaurantId}`) : null, (msg) => {
+  // Fabrique plutôt qu'URL figée (ROADMAP_PRODUCTION.md §P2.4) : le canal
+  // s'autorise par un billet à usage unique, il en faut donc un neuf à chaque
+  // reconnexion — sinon l'écran ne revient jamais après une coupure réseau.
+  const { status } = useReconnectingSocket(
+    restaurantId
+      ? { cle: `staff:${restaurantId}`, fabriquer: () => staffWsUrl(`/ws/staff/${restaurantId}`) }
+      : null,
+    (msg) => {
     if (msg.event === "order.pending_confirmation") {
       // Le message temps réel ne porte pas les articles (pensé léger, comme
       // les autres événements de ce canal) — la commande n'a rien à afficher
@@ -567,6 +564,11 @@ export default function StaffPage() {
         const { [msg.table_id]: _libere, ...reste } = prev;
         return reste;
       });
+    }
+    // Un client vient de scanner le QR (ROADMAP_PRODUCTION.md §P3.3, F18) —
+    // remplace le sondage du plan de salle toutes les 20 s.
+    if (msg.event === "table.occupied") {
+      setPlan((prev) => prev.map((t) => (t.id === msg.table_id ? { ...t, occupied_at: msg.occupied_at } : t)));
     }
   });
 

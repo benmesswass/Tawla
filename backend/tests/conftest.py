@@ -1,4 +1,14 @@
+import os
 import uuid
+
+# AVANT tout import de `app` : `settings` est construit au chargement de
+# `app/core/config.py`, et `env` vaut "production" par défaut depuis le
+# 2026-09-11 (voir le commentaire de `Settings.env`). Sans cette ligne, la
+# suite refuserait de démarrer en CI, où il n'y a pas de `backend/.env` pour
+# fournir les vrais secrets — et elle aurait raison : c'est exactement le
+# garde-fou qu'on vient d'armer. `setdefault` et non `[...]=` : un poste qui
+# pose déjà `ENV` garde sa valeur.
+os.environ.setdefault("ENV", "development")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +21,7 @@ from app.core.database import Base, get_db
 from app.core.etat_partage import magasin
 from app.main import app
 from app.modules.staff.models import Staff, StaffRole
+from app.modules.staff import ws_tickets
 from app.modules.staff.security import create_access_token, hash_password
 from app.modules.tenants.models import Restaurant, SubscriptionTier
 
@@ -199,6 +210,18 @@ def create_staff(restaurant_id: int, role: StaffRole = StaffRole.MANAGER, passwo
 def auth_headers(staff: Staff) -> dict[str, str]:
     token = create_access_token(staff.id, staff.restaurant_id, staff.role.value)
     return {"Authorization": f"Bearer {token}"}
+
+
+def ws_billet(staff: Staff) -> str:
+    """
+    Le billet à usage unique qui autorise un canal WebSocket du personnel
+    (ROADMAP_PRODUCTION.md §P2.4, `staff/ws_tickets.py`).
+
+    Délivré ici directement plutôt qu'en appelant `POST /auth/ws-ticket` :
+    c'est le socket qu'on teste, pas l'échange. Un seul par connexion — le
+    rejouer est précisément ce que la correction empêche.
+    """
+    return ws_tickets.creer_billet(staff.id)
 
 
 def order_headers(order: dict) -> dict[str, str]:

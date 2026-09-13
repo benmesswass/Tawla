@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.orders.models import Order
 from app.modules.staff.models import Staff, StaffRole
-from app.modules.staff.security import TOKEN_TYPE, decode_access_token
+from app.modules.staff.ws_tickets import consommer_billet
 from app.modules.tables.models import Table
 from app.modules.tenants.models import Restaurant
 
@@ -30,7 +30,7 @@ async def _reject(websocket: WebSocket) -> None:
 
 
 async def authenticate_staff_socket(
-    websocket: WebSocket, restaurant_id: int, token: str | None, db: Session, *roles: StaffRole
+    websocket: WebSocket, restaurant_id: int, billet: str | None, db: Session, *roles: StaffRole
 ) -> bool:
     """
     Canaux staff et cuisine : réservés au personnel de CE restaurant, et
@@ -41,27 +41,22 @@ async def authenticate_staff_socket(
     Ces canaux diffusaient jusqu'ici en clair, sans aucun contrôle, l'activité
     complète d'un établissement à qui connaissait son identifiant numérique
     (constat 5 de la revue du 2026-08-13).
+
+    **Ce n'est plus le JWT qui est présenté ici, mais un billet à usage unique**
+    (ROADMAP_PRODUCTION.md §P2.4, voir `staff/ws_tickets.py`) : le jeton long,
+    qui n'expire jamais par choix produit, ne doit plus jamais atterrir dans
+    une URL journalisée. Le billet ne dit qu'une chose — « c'est le membre du
+    personnel n° N » — et tous les contrôles qui suivent sont inchangés :
+    compte actif, bon restaurant, bon rôle, restaurant utilisable. Un billet
+    délivré à la cuisine n'ouvre donc pas plus l'écran serveur que le JWT ne le
+    permettait.
     """
-    if not token:
+    staff_id = consommer_billet(billet)
+    if staff_id is None:
         await _reject(websocket)
         return False
 
-    try:
-        payload = decode_access_token(token)
-    except Exception:
-        await _reject(websocket)
-        return False
-
-    # Défense en profondeur, même motif que `get_current_staff` : `sub` d'un
-    # token `platform_admin` (même secret de signature) est aussi un entier,
-    # donc `int(payload["sub"])` réussirait quand même — sans ce contrôle, un
-    # token admin dont l'ID coïncide avec celui d'un Staff authentifierait
-    # silencieusement ce canal comme CE membre du personnel.
-    if payload.get("type") != TOKEN_TYPE:
-        await _reject(websocket)
-        return False
-
-    staff = db.get(Staff, int(payload["sub"]))
+    staff = db.get(Staff, staff_id)
     if not staff or not staff.is_active or staff.restaurant_id != restaurant_id:
         await _reject(websocket)
         return False

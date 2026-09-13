@@ -39,10 +39,27 @@ from abc import ABC, abstractmethod
 
 from app.core.config import settings
 from app.core.logging import get_logger, log_event
+from app.core.markets import current_market
 
 logger = get_logger("etat_partage")
 
 SEPARATEUR_DE_RANG = "\x00"
+
+# Toutes les clés et tous les canaux Redis portent le code du marché.
+#
+# Ce n'est pas de la cosmétique : les clés sont construites à partir d'un
+# `table_id` (`roster:5`, `panier:5`, `partage:5`), qui est une clé primaire
+# **par base**, et l'ADR-0003 impose une base par marché. Deux marchés qui
+# partagent une instance Redis verraient donc la table 5 de Tunis et la table 5
+# de France écrire la même clé — rosters et paniers fusionnés entre deux
+# clientèles. Le canal de diffusion a le même défaut en pire : sans préfixe,
+# une commande passée à Tunis s'affiche sur un écran cuisine français.
+#
+# Le cas arrive dès qu'on branche le palier gratuit de Render, qui n'autorise
+# **qu'une instance par workspace**. Le préfixe le rend simplement impossible,
+# sans dépendre d'une permission de l'hébergeur (un index de base Redis par
+# marché aurait marché aussi, mais tous les hébergeurs ne l'autorisent pas).
+PREFIXE_MARCHE = f"{current_market.code}:"
 
 # Durée de vie des clés de table côté Redis. Un panier abandonné (table qui se
 # lève sans commander, téléphone qui ferme l'onglet) n'a aucune raison de
@@ -210,44 +227,63 @@ class MagasinRedis(MagasinPartage):
 
         self._r = redis.Redis.from_url(url, decode_responses=True)
         self._url = url
+        # Capturé à la construction, et non relu à chaque appel : un processus
+        # ne sert qu'un marché (`MARKET`), mais deux magasins de marchés
+        # différents doivent pouvoir coexister dans un même processus — sinon
+        # l'isolement n'est pas testable, et ce qui n'est pas testable ici ne
+        # se constate qu'en mélangeant deux clientèles en production.
+        self._prefixe = PREFIXE_MARCHE
+
+    def _k(self, cle: str) -> str:
+        """
+        Le préfixe est appliqué ici, et **uniquement** ici : les cinq usages
+        continuent de parler de `roster:5`, comme en mode mémoire. Un préfixe
+        recopié dans chaque appelant serait cinq occasions de l'oublier — et
+        l'oublier ne casse rien de visible, ça mélange juste deux marchés.
+        """
+        return f"{self._prefixe}{cle}"
 
     # --- champs ---------------------------------------------------------
 
     def lire(self, cle: str) -> dict[str, str]:
-        brut = self._r.hgetall(cle)
+        brut = self._r.hgetall(self._k(cle))
         ordonnes = sorted(brut.items(), key=lambda paire: _rang_de(paire[1]))
         return {champ: _valeur_de(valeur) for champ, valeur in ordonnes}
 
     def ecrire(self, cle: str, champ: str, valeur: str) -> None:
-        existant = self._r.hget(cle, champ)
+        k = self._k(cle)
+        existant = self._r.hget(k, champ)
         # Réécrire un champ existant (un convive qui corrige son prénom, une
         # quantité qui change) ne doit PAS le renvoyer en fin de liste.
-        rang = _rang_de(existant) if existant is not None else self._r.incr(f"{cle}:rang")
-        self._r.hset(cle, champ, f"{rang}{SEPARATEUR_DE_RANG}{valeur}")
+        rang = _rang_de(existant) if existant is not None else self._r.incr(f"{k}:rang")
+        self._r.hset(k, champ, f"{rang}{SEPARATEUR_DE_RANG}{valeur}")
         self._prolonger(cle)
 
     def retirer(self, cle: str, champ: str) -> None:
-        self._r.hdel(cle, champ)
+        self._r.hdel(self._k(cle), champ)
 
     def compter(self, cle: str) -> int:
-        return self._r.hlen(cle)
+        return self._r.hlen(self._k(cle))
 
     def vider(self, cle: str) -> None:
-        self._r.delete(cle, f"{cle}:rang")
+        k = self._k(cle)
+        self._r.delete(k, f"{k}:rang")
 
     def vider_et_lire(self, cle: str) -> dict[str, str]:
         # MULTI/EXEC : le HGETALL et le DEL partent ensemble, aucune autre
         # instance ne peut lire entre les deux.
+        k = self._k(cle)
         pipe = self._r.pipeline(transaction=True)
-        pipe.hgetall(cle)
-        pipe.delete(cle, f"{cle}:rang")
+        pipe.hgetall(k)
+        pipe.delete(k, f"{k}:rang")
         brut, _ = pipe.execute()
         ordonnes = sorted(brut.items(), key=lambda paire: _rang_de(paire[1]))
         return {champ: _valeur_de(valeur) for champ, valeur in ordonnes}
 
     def _prolonger(self, cle: str) -> None:
-        self._r.expire(cle, TTL_TABLE_SECONDES)
-        self._r.expire(f"{cle}:rang", TTL_TABLE_SECONDES)
+        k = self._k(cle)
+        self._r.expire(k, TTL_TABLE_SECONDES)
+        self._r.expire(f"{k}:rang", TTL_TABLE_SECONDES)
 
     # --- compteur -------------------------------------------------------
 
@@ -259,27 +295,37 @@ class MagasinRedis(MagasinPartage):
         brute-force choisirait. Même sémantique qu'en mémoire, donc.
         """
         maintenant = time.time()
+        k = self._k(cle)
         pipe = self._r.pipeline(transaction=True)
-        pipe.zremrangebyscore(cle, 0, maintenant - fenetre_secondes)
+        pipe.zremrangebyscore(k, 0, maintenant - fenetre_secondes)
         # Membre unique : deux requêtes dans la même milliseconde, sur la même
         # instance ou sur deux, ne doivent jamais compter pour une seule.
-        pipe.zadd(cle, {uuid4().hex: maintenant})
-        pipe.zcard(cle)
-        pipe.expire(cle, fenetre_secondes + 1)
+        pipe.zadd(k, {uuid4().hex: maintenant})
+        pipe.zcard(k)
+        pipe.expire(k, fenetre_secondes + 1)
         _, _, total, _ = pipe.execute()
         return total
 
     # --- diffusion ------------------------------------------------------
 
     def publier(self, canal: str, charge: str) -> None:
-        self._r.publish(canal, charge)
+        # Le canal est préfixé comme les clés. L'écoute fait le même calcul
+        # (`notifications/manager.py`) : les deux côtés doivent rester d'accord,
+        # sinon une instance publie dans le vide et cesse **silencieusement**
+        # d'être vue par les autres.
+        self._r.publish(self._k(canal), charge)
 
     @property
     def diffuse_entre_instances(self) -> bool:
         return True
 
     def reinitialiser(self) -> None:
-        self._r.flushdb()
+        # Volontairement PAS un `FLUSHDB` : sur une instance partagée par deux
+        # marchés, il emporterait l'état de l'autre. On ne supprime que ce
+        # qu'on a écrit.
+        lot = [cle for cle in self._r.scan_iter(match=f"{self._prefixe}*", count=500)]
+        if lot:
+            self._r.delete(*lot)
 
 
 def _rang_de(valeur_stockee: str) -> int:

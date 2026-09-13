@@ -2,9 +2,11 @@ from hashlib import sha256
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session, selectinload
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.core.logging import get_logger, log_event
+from app.core.stockage_photos import stockage_photos
 from app.core.subscription import require_tier
 from app.modules.menu import csv_import, options, regimes, schemas, suggestions
 from app.modules.menu.models import MenuItem, MenuItemOptionGroup, MenuRegime
@@ -335,12 +337,19 @@ async def upload_menu_item_image(
             detail={"code": "IMAGE_TOO_LARGE", "message": "image exceeds 3 MB"},
         )
 
-    item.image_data = contenu
-    item.image_content_type = file.content_type
     # L'empreinte du contenu dans l'URL : sans elle, une photo remplacée
     # resterait l'ancienne dans le cache du téléphone des clients, et le
     # manager croirait que son dépôt n'a pas fonctionné.
-    item.image_url = f"/api/v1/menu-items/{item.id}/image?v={sha256(contenu).hexdigest()[:12]}"
+    url_backend = f"/api/v1/menu-items/{item.id}/image?v={sha256(contenu).hexdigest()[:12]}"
+    # Remplacement : l'ancien objet part avec l'ancienne URL, sinon chaque
+    # photo corrigée laisse un orphelin payé à vie sur le bucket.
+    stockage_photos.retirer(item.image_url)
+    depot = await run_in_threadpool(
+        stockage_photos.deposer, f"menu-items/{item.id}", contenu, file.content_type, url_backend
+    )
+    item.image_data = depot.octets
+    item.image_content_type = depot.type_mime
+    item.image_url = depot.url
     db.commit()
     db.refresh(item)
 
@@ -372,6 +381,7 @@ def get_menu_item_image(item_id: int, db: Session = Depends(get_db)):
 def delete_menu_item_image(item_id: int, db: Session = Depends(get_db), staff: Staff = Depends(_MANAGER)):
     """Retirer une photo ratée sans avoir à en déposer une autre."""
     item = _get_item_in_scope(db, item_id, staff)
+    stockage_photos.retirer(item.image_url)
     item.image_data = None
     item.image_content_type = None
     item.image_url = None

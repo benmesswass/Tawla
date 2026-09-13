@@ -13,7 +13,26 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://postgres:postgres@localhost:5432/resto_qr"
-    env: str = "development"
+
+    # Défaut **"production"**, et c'est délibérément l'inverse de l'intuition.
+    #
+    # Ce réglage n'étiquette pas un environnement : c'est lui qui arme le
+    # garde-fou du bas de ce fichier. Tant qu'il valait "development" par
+    # défaut, ce garde-fou ne s'armait que sur les déploiements qui pensaient à
+    # poser `ENV` — c'est-à-dire jamais sur celui qui l'avait oublié, le seul
+    # qu'il fallait protéger.
+    #
+    # Ce n'est pas théorique : découvert le 2026-09-11 sur `tawla-backend-fr`,
+    # en ligne avec six variables au lieu de douze. Sans `ENV`, sans
+    # `JWT_SECRET`, sans `ADMIN_CREATION_SECRET` — donc en train de signer les
+    # jetons du personnel avec `_DEV_JWT_SECRET`, une constante lisible par
+    # tous dans un dépôt public. Le garde-fou existait, il dormait.
+    #
+    # Avec ce défaut, une variable oubliée fait **échouer le démarrage** au
+    # lieu de faire tourner un service en mode dev sans que personne ne le
+    # voie. Le dev local et `docker compose` posent déjà `ENV=development`
+    # dans `backend/.env` ; la suite de tests le pose dans `conftest.py`.
+    env: str = "production"
 
     # Dimensionnement du pool de connexions (ROADMAP_PRODUCTION.md §P1.3).
     # Laissés au défaut de SQLAlchemy (5 + 10, attente 30 s) jusqu'au
@@ -47,6 +66,20 @@ class Settings(BaseSettings):
     # temps réel sur Redis, ce qui est la condition pour faire tourner plus
     # d'une instance backend. Un pilote à un restaurant n'en a pas besoin.
     redis_url: str = ""
+
+    # Stockage objet des photos (ROADMAP_PRODUCTION.md §P2.2) — plats,
+    # bannière de couverture, logo. Les QUATRE doivent être renseignées pour
+    # basculer ; sinon les photos restent en base, exactement comme avant, et
+    # rien n'est à installer ni à payer. Cloudflare R2 en production :
+    # l'endpoint ressemble à https://<account>.r2.cloudflarestorage.com, et
+    # `photos_public_base_url` est le domaine public du bucket (ou le domaine
+    # personnalisé branché dessus) — jamais l'endpoint S3, qui exige une
+    # signature et n'est donc pas lisible par le navigateur d'un client.
+    photos_s3_endpoint: str = ""
+    photos_s3_bucket: str = ""
+    photos_s3_access_key: str = ""
+    photos_s3_secret_key: str = ""
+    photos_public_base_url: str = ""
 
     # Marché servi par cette instance ("tn" | "fr") — un déploiement par
     # marché (MARCHE_FRANCE.md §4, option B retenue), jamais les deux dans le
@@ -112,14 +145,63 @@ class Settings(BaseSettings):
     posthog_project_id: str = "263083"
 
     # Étiquette `env` posée sur chaque événement émis par ce backend (voir
-    # analytics.py) — délibérément SÉPARÉE de `env` ci-dessus, qui contrôle
-    # les garde-fous de sécurité (JWT_SECRET, etc.) et vaut déjà "production"
-    # sur tawla-backend-fr/tawla-backend.onrender.com. Ces deux backends sont
-    # bien "production" au sens sécurité, mais pas encore le vrai site public
-    # (juste les URLs Vercel actuelles) — donc "staging" ici tant que le vrai
-    # domaine n'est pas branché. Défaut "development" : une instance qui ne
-    # pose jamais cette variable ne se fait jamais passer pour du trafic réel.
+    # analytics.py) — délibérément SÉPARÉE de `env` ci-dessus, qui contrôle les
+    # garde-fous de sécurité. Les deux backends sont "production" au sens
+    # sécurité, mais pas encore le vrai site public (juste les URLs Vercel
+    # actuelles) — donc "staging" ici tant que le vrai domaine n'est pas
+    # branché. Défaut "development" : une instance qui ne pose jamais cette
+    # variable ne se fait jamais passer pour du trafic réel.
+    #
+    # Ce commentaire affirmait jusqu'au 2026-09-11 que `ENV` valait « déjà
+    # production sur tawla-backend-fr/tawla-backend.onrender.com ». C'était
+    # vrai pour le tunisien, faux pour le français, et personne n'avait de
+    # raison d'aller vérifier : un commentaire avait tenu lieu de preuve. D'où
+    # le défaut inversé plus haut — désormais c'est le démarrage qui vérifie.
     posthog_env: str = "development"
+
+    @property
+    def stockage_objet_configure(self) -> bool:
+        """
+        Tout ou rien : une configuration à moitié posée enverrait les photos
+        vers un bucket inaccessible et les rendrait invisibles chez le client,
+        sans erreur au démarrage. Le garde-fou ci-dessous refuse ce cas.
+        """
+        return all(
+            (
+                self.photos_s3_endpoint,
+                self.photos_s3_bucket,
+                self.photos_s3_access_key,
+                self.photos_s3_secret_key,
+                self.photos_public_base_url,
+            )
+        )
+
+    @model_validator(mode="after")
+    def _refuse_un_stockage_photos_incomplet(self) -> "Settings":
+        """
+        Même esprit que le garde-fou du JWT : une variable oubliée doit
+        empêcher le démarrage, pas produire une carte sans photos que personne
+        ne comprend. Vérifié au boot parce que c'est le seul moment où
+        quelqu'un regarde encore les logs de déploiement.
+        """
+        posees = [
+            nom
+            for nom, valeur in (
+                ("PHOTOS_S3_ENDPOINT", self.photos_s3_endpoint),
+                ("PHOTOS_S3_BUCKET", self.photos_s3_bucket),
+                ("PHOTOS_S3_ACCESS_KEY", self.photos_s3_access_key),
+                ("PHOTOS_S3_SECRET_KEY", self.photos_s3_secret_key),
+                ("PHOTOS_PUBLIC_BASE_URL", self.photos_public_base_url),
+            )
+            if valeur
+        ]
+        if posees and len(posees) != 5:
+            raise ValueError(
+                "Configuration du stockage photos incomplète : "
+                f"{', '.join(posees)} posée(s), il en faut les cinq. "
+                "Les laisser toutes vides garde les photos en base (comportement par défaut)."
+            )
+        return self
 
     @model_validator(mode="after")
     def _refuse_dev_secret_in_production(self) -> "Settings":

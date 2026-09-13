@@ -1196,14 +1196,38 @@ export function wsUrl(path: string): string {
 }
 
 /**
- * Canaux WebSocket staff et cuisine : authentifiés depuis la Phase 12.2. Le
- * token passe en paramètre de requête et non en en-tête — la poignée de main
- * WebSocket du navigateur ne permet pas d'en-tête personnalisé.
+ * Canaux WebSocket staff et cuisine : authentifiés depuis la Phase 12.2, et
+ * depuis P2.4 par un **billet à usage unique** plutôt que par le JWT.
+ *
+ * La poignée de main WebSocket du navigateur ne permet aucun en-tête
+ * personnalisé : ce qui autorise la connexion voyage donc forcément dans
+ * l'URL — et les URLs sont journalisées par Cloudflare et l'hébergeur. Le JWT
+ * du personnel n'expirant jamais (choix produit, 2026-09-09), l'y mettre
+ * revenait à semer un jeton éternel dans des logs. Le billet, lui, vaut 30
+ * secondes et une seule connexion.
+ *
+ * D'où une fonction **asynchrone** : elle demande un billet neuf à chaque
+ * appel, et doit donc être rappelée à chaque reconnexion — c'est ce que fait
+ * `useReconnectingSocket` avec une `FabriqueUrl`.
+ *
+ * Rend `null` quand aucune session ne permettra d'obtenir un billet (pas de
+ * jeton, jeton refusé) : le hook s'arrête alors au lieu de marteler. Lève en
+ * revanche sur une panne réseau, pour qu'il réessaie.
  */
-export function staffWsUrl(path: string): string | null {
-  const token = getToken();
-  if (!token) return null;
-  return `${wsUrl(path)}?token=${encodeURIComponent(token)}`;
+export async function staffWsUrl(path: string): Promise<string | null> {
+  if (!getToken()) return null;
+  let ticket: string;
+  try {
+    ticket = (await request<{ ticket: string; expire_dans: number }>("/api/v1/auth/ws-ticket", {
+      method: "POST",
+    })).ticket;
+  } catch (err) {
+    // Erreur d'API (jeton invalide, compte désactivé) : réessayer n'y changera
+    // rien, et `request` a déjà renvoyé vers /login si la session est perdue.
+    if (err instanceof ApiError) return null;
+    throw err;
+  }
+  return `${wsUrl(path)}?billet=${encodeURIComponent(ticket)}`;
 }
 
 /** Canal de suivi d'une commande : autorisé par son `public_token`. */

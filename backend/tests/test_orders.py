@@ -1,6 +1,6 @@
 from app.modules.orders.models import Order
 from app.modules.staff.models import StaffRole
-from tests.conftest import auth_headers, create_restaurant, create_staff
+from tests.conftest import auth_headers, create_restaurant, create_staff, ws_billet
 
 
 def _setup_restaurant_with_item(client, available=True, price=3.5):
@@ -167,10 +167,10 @@ def test_un_rejeu_ne_reveille_pas_une_seconde_fois_lecran_serveur(client):
     """
     restaurant, table, item, _headers = _setup_restaurant_with_item(client)
     waiter = create_staff(restaurant.id, StaffRole.WAITER)
-    token = auth_headers(waiter)["Authorization"].split()[1]
+    billet = ws_billet(waiter)
     rejoue = _panier(table, item, "panier-1")
 
-    with client.websocket_connect(f"/ws/staff/{restaurant.id}?token={token}") as ws:
+    with client.websocket_connect(f"/ws/staff/{restaurant.id}?billet={billet}") as ws:
         premier = client.post("/api/v1/orders", json=rejoue).json()
         assert ws.receive_json()["order_id"] == premier["id"]
 
